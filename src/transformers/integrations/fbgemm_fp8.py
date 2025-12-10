@@ -20,6 +20,7 @@ from ..quantizers.quantizers_utils import get_module_from_name, should_convert_m
 from ..utils import (
     is_accelerate_available,
     is_fbgemm_gpu_available,
+    is_kernels_available,
     is_torch_available,
     is_torch_xpu_available,
     logging,
@@ -38,13 +39,7 @@ _is_torch_xpu_available = is_torch_xpu_available()
 if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
-if _is_torch_xpu_available:
-    from kernels import get_kernel
-
-    fp8_fbgemm_kernels = get_kernel("kernels-community/fp8-fbgemm")
-    quantize_fp8_per_row = fp8_fbgemm_kernels.quantize_fp8_per_row
-else:
-    quantize_fp8_per_row = torch.ops.fbgemm.quantize_fp8_per_row
+quantize_fp8_per_row = None
 
 
 logger = logging.get_logger(__name__)
@@ -262,6 +257,21 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         return next_states.view(-1, self.hidden_size)
 
 
+def initialize_quantize_fp8_per_row():
+    global quantize_fp8_per_row
+    if quantize_fp8_per_row is None:
+        if _is_torch_xpu_available:
+            if not is_kernels_available():
+                raise ImportError("Loading an FP8 quantized model requires kernels (`pip install kernels`)")
+
+            from kernels import get_kernel
+
+            fp8_fbgemm_kernels = get_kernel("kernels-community/fp8-fbgemm")
+            quantize_fp8_per_row = fp8_fbgemm_kernels.quantize_fp8_per_row
+        else:
+            quantize_fp8_per_row = torch.ops.fbgemm.quantize_fp8_per_row
+
+
 def replace_with_fbgemm_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -284,6 +294,7 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert in `FP8Linear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
     """
+    initialize_quantize_fp8_per_row()
 
     has_been_replaced = False
     module_kwargs = {} if pre_quantized else {"dtype": None}
