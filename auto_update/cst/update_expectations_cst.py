@@ -68,6 +68,7 @@ class ExpectationsUpdater(cst.CSTTransformer):
         Visit assignment statements looking for:
         1. expectations_var = Expectations(...)
         2. variable = torch.tensor([...]) with any method chaining
+        3. variable = [...] or variable = {...}
 
         Uses line number to identify the exact assignment, then recursively
         finds and updates the target pattern regardless of nesting.
@@ -94,25 +95,37 @@ class ExpectationsUpdater(cst.CSTTransformer):
         if node_lineno != -1 and abs(node_lineno - self.expectations_lineno) > 3:
             return updated_node
 
-        # Now recursively search for either Expectations or torch.tensor in the value tree
+        # Now recursively search for Expectations, torch.tensor, or plain list/dict in the value tree
         pattern_type, pattern_node = self._find_pattern_in_tree(updated_node.value)
 
         if pattern_type == "expectations":
             return self._handle_expectations_pattern(original_node, updated_node, pattern_node, node_lineno)
         elif pattern_type == "torch.tensor":
             return self._handle_torch_tensor_pattern(original_node, updated_node, pattern_node, node_lineno)
+        elif pattern_type == "plain_list":
+            return self._handle_plain_list_pattern(original_node, updated_node, pattern_node, node_lineno)
+        elif pattern_type == "plain_dict":
+            return self._handle_plain_dict_pattern(original_node, updated_node, pattern_node, node_lineno)
 
         return updated_node
 
     def _find_pattern_in_tree(self, node: cst.BaseExpression) -> tuple:
         """
-        Recursively search for Expectations(...) or torch.tensor(...) patterns.
+        Recursively search for Expectations(...), torch.tensor(...), plain list, or plain dict patterns.
 
         Returns:
             Tuple of (pattern_type, pattern_node) where:
-            - pattern_type: "expectations", "torch.tensor", or None
-            - pattern_node: The Call node that matches the pattern
+            - pattern_type: "expectations", "torch.tensor", "plain_list", "plain_dict", or None
+            - pattern_node: The node that matches the pattern
         """
+        # Check for plain list [...]
+        if isinstance(node, cst.List):
+            return "plain_list", node
+
+        # Check for plain dict {...}
+        if isinstance(node, cst.Dict):
+            return "plain_dict", node
+
         if not isinstance(node, cst.Call):
             return None, None
 
@@ -198,6 +211,58 @@ class ExpectationsUpdater(cst.CSTTransformer):
             new_value = self._replace_node_in_tree(updated_node.value, tensor_call, new_tensor_call)
             self.updated = True
             return updated_node.with_changes(value=new_value)
+        else:
+            print("  ⚠️  DRY RUN - Not actually modifying")
+
+        return updated_node
+
+    def _handle_plain_list_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                   list_node: cst.List, node_lineno: int) -> cst.Assign:
+        """Handle the plain [...] pattern."""
+        self.found_expectations = True
+        print(f"\n✓ Found plain list assignment for variable '{self.expectations_var}' at line {node_lineno}")
+
+        old_value = list_node
+
+        print(f"  Old value: {self._format_value(old_value)}")
+        print(f"  New value: {self.new_value_str}")
+
+        self.matched_key = "plain_list"
+        self.old_value = self._format_value(old_value)
+
+        if not self.dry_run:
+            # Parse the new value and preserve indentation
+            new_value_node = cst.parse_expression(self.new_value_str)
+            new_value_node = self._preserve_indentation(old_value, new_value_node)
+
+            self.updated = True
+            return updated_node.with_changes(value=new_value_node)
+        else:
+            print("  ⚠️  DRY RUN - Not actually modifying")
+
+        return updated_node
+
+    def _handle_plain_dict_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                   dict_node: cst.Dict, node_lineno: int) -> cst.Assign:
+        """Handle the plain {...} pattern."""
+        self.found_expectations = True
+        print(f"\n✓ Found plain dict assignment for variable '{self.expectations_var}' at line {node_lineno}")
+
+        old_value = dict_node
+
+        print(f"  Old value: {self._format_value(old_value)}")
+        print(f"  New value: {self.new_value_str}")
+
+        self.matched_key = "plain_dict"
+        self.old_value = self._format_value(old_value)
+
+        if not self.dry_run:
+            # Parse the new value and preserve indentation
+            new_value_node = cst.parse_expression(self.new_value_str)
+            new_value_node = self._preserve_indentation(old_value, new_value_node)
+
+            self.updated = True
+            return updated_node.with_changes(value=new_value_node)
         else:
             print("  ⚠️  DRY RUN - Not actually modifying")
 
@@ -473,10 +538,16 @@ class ExpectationsFileProcessor:
         # Extract the variable name from the assertion
         # Pattern 1: assert_close(actual, expected_variable, ...)
         # Pattern 2: self.assertEqual(actual, expected_variable) or assertEqual(actual, expected_variable, ...)
-        assertion_match = re.search(r'assert_close\((.*?),\s*(\w+)\s*,', content, re.DOTALL)
+        # Pattern 3: self.assertListEqual(list1, list2)
+        # Also handle: expected_variable.to(...) or expected_variable[index] or other method calls
+        assertion_match = re.search(r'assert_close\((.*?),\s*(\w+)[\.\s,\[]', content, re.DOTALL)
         if not assertion_match:
             # Try assertEqual pattern - may have comma or closing paren after variable
-            assertion_match = re.search(r'assertEqual\(\s*(.*?),\s*(\w+)\s*[,\)]', content, re.DOTALL)
+            assertion_match = re.search(r'assertEqual\(\s*(.*?),\s*(\w+)[\.\s,\)\[]', content, re.DOTALL)
+
+        if not assertion_match:
+            # Try assertListEqual pattern
+            assertion_match = re.search(r'assertListEqual\(\s*(.*?),\s*(\w+)[\.\s,\)\[]', content, re.DOTALL)
 
         if not assertion_match:
             raise ValueError("Could not find assertion with variable name")
@@ -493,6 +564,11 @@ class ExpectationsFileProcessor:
                 r'argument name: `first`.*?argument value:\s*\n\s*\n(.+?)(?:\n\s*\n-+|========)',
                 content, re.DOTALL
             )
+        if not actual_section:
+            actual_section = re.search(
+                r'argument name: `list1`.*?argument value:\s*\n\s*\n(.+?)(?:\n\s*\n-+|========)',
+                content, re.DOTALL
+            )
 
         if not actual_section:
             raise ValueError("Could not find actual value in captured_info.txt")
@@ -506,14 +582,16 @@ class ExpectationsFileProcessor:
         """
         Find the variable assignment that needs updating.
 
-        Handles two patterns:
+        Handles three patterns:
         1. Expectations pattern: variable = torch.tensor(expectations.get_expectation())
         2. Direct tensor pattern: variable = torch.tensor([...])
+        3. Plain list/dict pattern: variable = [...] or variable = {...}
 
         Returns:
             Tuple of (variable_or_expectations_name, line_number) or None
             - For Expectations: returns ("expectations", line_of_Expectations_dict)
             - For direct tensor: returns (variable_name, line_of_assignment)
+            - For plain list/dict: returns (variable_name, line_of_assignment)
         """
         with open(file_path, 'r') as f:
             lines = f.readlines()
@@ -551,6 +629,16 @@ class ExpectationsFileProcessor:
                 print(f"✓ Found direct tensor pattern at line {lineno + 1}")
                 print(f"  Variable: {variable_name}")
                 # For direct pattern, we return the variable name and line number
+                # This signals to use direct replacement mode
+                return variable_name, lineno + 1
+
+            # Pattern 3: Plain list or dict pattern
+            # Look for: variable_name = [...] or variable_name = {...}
+            pattern = rf'^\s*{re.escape(variable_name)}\s*=\s*[\[\{{]'
+            if re.search(pattern, line):
+                print(f"✓ Found plain list/dict pattern at line {lineno + 1}")
+                print(f"  Variable: {variable_name}")
+                # For plain pattern, we return the variable name and line number
                 # This signals to use direct replacement mode
                 return variable_name, lineno + 1
 
