@@ -30,10 +30,11 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -43,9 +44,9 @@ from ...modeling_layers import (
 )
 from ...modeling_outputs import ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import auto_docstring
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import is_hadamard_available
 from .configuration_deepseek_v32 import DeepseekV32Config
@@ -118,19 +119,20 @@ class BaseModelOutputWithIndexer(ModelOutput):
     indexer_kl_targets: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
+@use_kernel_forward_from_hub("RMSNorm")
 class DeepseekV32RMSNorm(nn.Module):
-    """RMSNorm with meta device support for large model initialization.
+    """RMSNorm for DeepSeek V3.2, inherited from V3.
 
-    Uses torch.empty() instead of torch.ones() to respect ambient device context,
-    allowing initialization on meta device for memory-efficient model loading.
-    The weight is initialized to ones in _init_weights().
+    Per the V3.2 tech report, the only architectural difference from V3 is
+    DeepSeek Sparse Attention (DSA). All other components are identical.
     """
 
     def __init__(self, hidden_size, eps=1e-6):
+        """
+        DeepseekV32RMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        # Use torch.empty to respect meta device context
-        # Weight will be initialized to ones in _init_weights
-        self.weight = nn.Parameter(torch.empty(hidden_size))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
@@ -625,44 +627,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
     TODO let's just use the original freqcis computation to not have the view
@@ -823,76 +787,17 @@ class DeepseekV32Attention(nn.Module):
         # If not using sparse attention, use dense attention (V3 path)
         # This handles decode (seq_len=1) and when use_sparse_attention=False
         if not use_sparse:
-            # Dense attention path - duplicated from DeepseekV3Attention.forward()
-            # to avoid super() call issues with modular converter
-            query_shape_dense = (batch_size, seq_length, -1, self.qk_head_dim)
-            key_shape_dense = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-            if self.q_lora_rank is None:
-                q_states_dense = self.q_proj(hidden_states)
-            else:
-                q_states_dense = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-            q_states_dense = q_states_dense.view(query_shape_dense).transpose(1, 2)
-            q_pass_dense, q_rot_dense = torch.split(
-                q_states_dense, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
-            )
-
-            compressed_kv_dense = self.kv_a_proj_with_mqa(hidden_states)
-            k_pass_dense, k_rot_dense = torch.split(
-                compressed_kv_dense, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
-            )
-
-            k_pass_dense = self.kv_b_proj(self.kv_a_layernorm(k_pass_dense)).view(key_shape_dense).transpose(1, 2)
-            k_pass_dense, value_states_dense = torch.split(
-                k_pass_dense, [self.qk_nope_head_dim, self.v_head_dim], dim=-1
-            )
-
-            k_rot_dense = k_rot_dense.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
-            cos, sin = position_embeddings
-            if self.config.rope_interleave:
-                q_rot_dense, k_rot_dense = apply_rotary_pos_emb_interleave(q_rot_dense, k_rot_dense, cos, sin)
-            else:
-                from ..llama.modeling_llama import apply_rotary_pos_emb
-
-                q_rot_dense, k_rot_dense = apply_rotary_pos_emb(q_rot_dense, k_rot_dense, cos, sin)
-            k_rot_dense = k_rot_dense.expand(*k_pass_dense.shape[:-1], -1)
-
-            query_states_dense = torch.cat((q_pass_dense, q_rot_dense), dim=-1)
-            key_states_dense = torch.cat((k_pass_dense, k_rot_dense), dim=-1)
-
-            if past_key_values is not None:
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states_dense, value_states_dense = past_key_values.update(
-                    key_states_dense, value_states_dense, self.layer_idx, cache_kwargs
-                )
-
-            if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-                value_states_dense = F.pad(value_states_dense, [0, self.qk_head_dim - self.v_head_dim])
-
-            attention_interface: Callable = eager_attention_forward
-            if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-            attn_output_dense, attn_weights_dense = attention_interface(
+            # Call parent's dense attention and add None for indexer outputs
+            attn_output, attn_weights = DeepseekV3Attention.forward(
                 self,
-                query_states_dense,
-                key_states_dense,
-                value_states_dense,
-                attention_mask,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                scaling=self.scaling,
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
                 **kwargs,
             )
-
-            if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-                attn_output_dense = attn_output_dense[:, :, :, : self.v_head_dim]
-
-            attn_output_dense = attn_output_dense.reshape(batch_size, seq_length, -1).contiguous()
-            attn_output_dense = self.o_proj(attn_output_dense)
-
-            # Return with None for indexer outputs
-            return attn_output_dense, attn_weights_dense, None, None
+            return attn_output, attn_weights, None, None
 
         # Sparse attention path (eager computation, matching official DeepSeek code)
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
@@ -1098,18 +1003,12 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        from torch.nn import init
-
         super()._init_weights(module)
         if isinstance(module, DeepseekV32TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, DeepseekV32NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-        # Initialize RMSNorm weights to ones (they use torch.empty for meta device support)
-        if isinstance(module, DeepseekV32RMSNorm):
-            init.ones_(module.weight)
 
 
 # Custom argument documentation for the indexer-specific parameters
