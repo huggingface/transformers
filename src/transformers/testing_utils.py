@@ -4134,11 +4134,7 @@ def global_wrapper(rank, func, fsdp, tp, port, func_args, func_kwargs):
     world_size = fsdp * tp
     setup_dist_env(rank, world_size, port)
 
-    if torch.cuda.is_available():
-        torch.cuda.set_device(rank)
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -4146,12 +4142,12 @@ def global_wrapper(rank, func, fsdp, tp, port, func_args, func_kwargs):
     dist.destroy_process_group()
 
 
-def init_distributed(fsdp: int = 1, tp: int = 1):
+def init_distributed(fsdp_size: int = 1, tp_size: int = 1):
     def _init_distributed(func):
         def wrapper(*args, **kwargs):
-            world_size = fsdp * tp
+            world_size = fsdp_size * tp_size
             port = get_torch_dist_unique_port()
-            spawn_args = (func, fsdp, tp, port, args, kwargs)
+            spawn_args = (func, fsdp_size, tp_size, port, args, kwargs)
             mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
 
         return wrapper

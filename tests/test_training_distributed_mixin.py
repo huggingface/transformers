@@ -27,30 +27,35 @@ from transformers.testing_utils import (
     init_distributed,
     init_test_logger,
     is_training_distributed_test,
-    torch_device,
 )
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.multiprocessing as mp
+    from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 
 logger = logging.getLogger("transformers.training_test")
 
 
-# Standalone implementation function (outside the class) - this CAN be pickled
-def _test_training_distributed_overfit_impl(rank, config_dict, model_class_name, training_params):
-    """Implementation for distributed training overfit test."""
+def _test_training_distributed_overfit_impl(rank, fsdp_size, tp_size, config_dict, model_class_name, training_params):
+    """Implementation for distributed training overfit test.
+    
+    Note: `rank` is automatically passed by `global_wrapper` in testing_utils.py.
+    """
     init_test_logger()
-    logger.info(f"Starting test on rank {rank}")
-    logger.info(f"World size: {dist.get_world_size()}")
-    logger.info(f"Rank: {dist.get_rank()}")
-    
-    # Reconstruct config and model from picklable data
-    # ... your training logic here using the passed parameters ...
-    
-    dist.barrier()
 
+    # NOTE(3outeille): if want to handle DataParallel, create dp_replicate dims (do not mixed with dp_shard which is for FSDP)
+    # NOTE(3outeille): if other parallelism is added, order matters, it should be ["pp", "ddp", "fsdp", "cp", "tp"]
+    #TODO(3outeille): figure out EP
+    # from less costly to most costly (internode to intranode)
+    dims, names = [fsdp_size, tp_size], ["fsdp", "tp"]
+    mesh = init_device_mesh("cpu", dims, mesh_dim_names=names)
+    logger.info(f"Created DeviceMesh: {mesh}")
+    logger.info(f"FSDP mesh: {mesh['fsdp']}")
+    logger.info(f"TP mesh: {mesh['tp']}")
+    logger.info(f"FSDP mesh local rank: {mesh['fsdp'].get_local_rank()}")
+    logger.info(f"TP mesh local rank: {mesh['tp'].get_local_rank()}")
+    dist.barrier()
 
 class TrainingDistributedTesterMixin(ABC):
     """
@@ -158,7 +163,7 @@ class TrainingDistributedTesterMixin(ABC):
     # ============================================================
     # Shared distributed training test implementation
     # ============================================================
-    def _run_distributed_training_test(self, fsdp: int, tp: int):
+    def _run_distributed_training_test(self, fsdp_size: int, tp_size: int):
         """Shared implementation for distributed training tests."""
         config = self.model_tester.get_config()
         model_class = self._get_trainable_model_class()
@@ -172,29 +177,29 @@ class TrainingDistributedTesterMixin(ABC):
             "seq_length": self.training_overfit_seq_length,
         }
 
-        init_distributed(fsdp=fsdp, tp=tp)(_test_training_distributed_overfit_impl)(
-            config_dict, model_class_name, training_params
+        init_distributed(fsdp_size=fsdp_size, tp_size=tp_size)(_test_training_distributed_overfit_impl)(
+            fsdp_size, tp_size, config_dict, model_class_name, training_params
         )
 
     # ============================================================
     # Distributed training tests (FSDP x TP configurations)
     # ============================================================
-    @is_training_distributed_test
-    def test_training_fsdp1_tp1(self):
-        """Test distributed training with FSDP=1, TP=1 (1 total processes)."""
-        self._run_distributed_training_test(fsdp=1, tp=1)
+    # @is_training_distributed_test
+    # def test_training_fsdp1_tp1(self):
+    #     """Test distributed training with FSDP=1, TP=1 (1 total processes)."""
+    #     self._run_distributed_training_test(fsdp_size=1, tp_size=1)
 
     # @is_training_distributed_test
     # def test_training_fsdp1_tp2(self):
     #     """Test distributed training with FSDP=1, TP=2 (2 total processes)."""
-    #     self._run_distributed_training_test(fsdp=1, tp=2)
+    #     self._run_distributed_training_test(fsdp_size=1, tp_size=2)
 
     # @is_training_distributed_test
     # def test_training_fsdp1_tp4(self):
     #     """Test distributed training with FSDP=1, TP=4 (4 total processes)."""
-    #     self._run_distributed_training_test(fsdp=1, tp=4)
+    #     self._run_distributed_training_test(fsdp_size=1, tp_size=4)
 
-    # @is_training_distributed_test
-    # def test_training_fsdp2_tp2(self):
-    #     """Test distributed training with FSDP=2, TP=2 (4 total processes)."""
-    #     self._run_distributed_training_test(fsdp=2, tp=2)
+    @is_training_distributed_test
+    def test_training_fsdp2_tp2(self):
+        """Test distributed training with FSDP=2, TP=2 (4 total processes)."""
+        self._run_distributed_training_test(fsdp_size=2, tp_size=2)
