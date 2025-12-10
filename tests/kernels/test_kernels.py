@@ -321,7 +321,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
         with (
             patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj),
-            patch("transformers.integrations.hub_kernels.lazy_import_flash_attention", return_value=None),
+            patch("transformers.modeling_flash_attention_utils.lazy_import_flash_attention", return_value=None),
         ):
             attn_impl = "org/model"
             load_and_register_attn_kernel(attn_impl)
