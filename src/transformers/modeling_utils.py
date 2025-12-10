@@ -3359,6 +3359,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # only do contiguous after it's permuted correctly in case of TP
                 shard_state_dict[tensor_name] = tensor.contiguous()
 
+            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+            # so it's not possible for now....
             # Write the shard to disk
             safe_save_file(shard_state_dict, filename, metadata=metadata)
             # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
