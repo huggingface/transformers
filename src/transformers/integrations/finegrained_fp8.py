@@ -486,7 +486,7 @@ class FP8Linear(nn.Linear):
             if self.bias is not None:
                 output = output + self.bias
 
-            output = torch.nan_to_num(output, nan=0.0)
+#            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
