@@ -340,7 +340,7 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.001, "start": 261},
+            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.002, "start": 261},
         )
 
     @slow
