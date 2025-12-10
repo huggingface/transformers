@@ -653,6 +653,8 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 100295):
             The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 100296):
+            The video token index to encode the image prompt.
         vision_start_token_id (`int`, *optional*, defaults to 101305):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 101306):
@@ -678,12 +680,12 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
         text_config=None,
         vision_config=None,
         image_token_id=100295,
+        video_token_id=100296,
         vision_start_token_id=101305,
         vision_end_token_id=101306,
         **kwargs,
     ):
         super().__init__()
-        del self.video_token_id
 
 
 class PaddleOCRProjector(nn.Module):
