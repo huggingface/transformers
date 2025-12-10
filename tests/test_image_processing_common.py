@@ -341,9 +341,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -391,9 +392,10 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None, except for `default_to_square` and `data_format` which are only set in fast processors
+        # Fast processors filter None values from to_dict(), so differences should only be special keys
         self.assertTrue(
-            all(value is None for key, value in difference.items() if key not in ["default_to_square", "data_format"])
+            all(key in ["default_to_square", "data_format"] for key in difference.keys()),
+            f"Fast processors should only differ in special keys, found: {list(difference.keys())}",
         )
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
@@ -692,6 +694,17 @@ class ImageProcessingTestMixin:
             f"Model '{model_type}' (processor: {image_processor_name}) was added after the cutoff date and must have "
             f"a fast image processor implementation. Please implement the corresponding fast processor.",
         )
+
+    def test_fast_image_processor_to_dict_no_none_values(self):
+        """Test that fast image processors don't include None values in to_dict() output."""
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping test as fast image processor is not defined")
+
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        processor_dict = image_processor.to_dict()
+
+        none_values = [k for k, v in processor_dict.items() if v is None]
+        self.assertEqual(len(none_values), 0, f"Found None values in to_dict(): {none_values}")
 
 
 class AnnotationFormatTestMixin:

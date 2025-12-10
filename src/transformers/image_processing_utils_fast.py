@@ -937,6 +937,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def to_dict(self):
         encoder_dict = super().to_dict()
+
+        # Remove attributes with None values (potentially inherited from the base class but not used)
+        encoder_dict = {k: v for k, v in encoder_dict.items() if v is not None}
+
         encoder_dict.pop("_valid_processor_keys", None)
         encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
