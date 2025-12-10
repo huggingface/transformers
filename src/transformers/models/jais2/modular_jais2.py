@@ -23,9 +23,6 @@ from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
 )
@@ -215,24 +212,9 @@ class Jais2ForCausalLM(LlamaForCausalLM):
         return super().forward(**super_kwargs)
 
 
-class Jais2ForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class Jais2ForQuestionAnswering(LlamaForQuestionAnswering):
-    pass
-
-
-class Jais2ForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
 __all__ = [
     "Jais2Config",
     "Jais2Model",
     "Jais2ForCausalLM",
-    "Jais2ForSequenceClassification",
-    "Jais2ForQuestionAnswering",
-    "Jais2ForTokenClassification",
     "Jais2PreTrainedModel",
 ]

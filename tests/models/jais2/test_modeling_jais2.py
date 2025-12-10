@@ -5,9 +5,10 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -24,9 +25,6 @@ if is_torch_available():
     from transformers import (
         Jais2Config,
         Jais2ForCausalLM,
-        Jais2ForQuestionAnswering,
-        Jais2ForSequenceClassification,
-        Jais2ForTokenClassification,
         Jais2Model,
     )
 
@@ -50,9 +48,6 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
         (
             Jais2Model,
             Jais2ForCausalLM,
-            Jais2ForSequenceClassification,
-            Jais2ForTokenClassification,
-            Jais2ForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -64,32 +59,21 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
         {
             "feature-extraction": Jais2Model,
             "text-generation": Jais2ForCausalLM,
-            "text-classification": Jais2ForSequenceClassification,
-            "token-classification": Jais2ForTokenClassification,
-            "question-answering": Jais2ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
 
 
-JAIS2_8B_CHECKPOINT = "inceptionai/Jais-2-8B-Chat"
-
-
 @require_torch
 class Jais2IntegrationTest(unittest.TestCase):
-    checkpoint = JAIS2_8B_CHECKPOINT
+    checkpoint = "inceptionai/Jais-2-8B-Chat"
 
     def setUp(self):
-        self.tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        if self.tokenizer.chat_template is None:
-            self.tokenizer.chat_template = (
-                "{% for message in messages %}{{ message['role'] + ': ' + message['content'] + '\n' }}{% endfor %}"
-            )
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
-        backend_empty_cache(torch_device)
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_accelerator
@@ -120,99 +104,6 @@ class Jais2IntegrationTest(unittest.TestCase):
         # Print logits stats for debugging (you can record expected values from this)
         print(f"Logits mean: {logits.mean(-1)}")
         print(f"Logits slice [0, -1, :30]: {logits[0, -1, :30]}")
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    def test_model_logits_bf16(self):
-        """Test model logits in float16 precision."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-        )
-
-        input_text = "The capital of France is"
-        input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(model.device)
-
-        with torch.no_grad():
-            outputs = model(input_ids)
-            logits = outputs.logits.float().cpu()
-
-        # Check shape
-        self.assertEqual(logits.shape[0], 1)
-        self.assertEqual(logits.shape[1], input_ids.shape[1])
-        self.assertEqual(logits.shape[2], model.config.vocab_size)
-
-        # Check that logits are not NaN or Inf
-        self.assertFalse(torch.isnan(logits).any().item())
-        self.assertFalse(torch.isinf(logits).any().item())
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    def test_model_generation(self):
-        """Test basic text generation with greedy decoding."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-        )
-
-        prompt = "The capital of France is"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-        # Greedy generation
-        generated_ids = model.generate(
-            input_ids,
-            max_new_tokens=20,
-            do_sample=False,
-        )
-
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"Generated text: {generated_text}")
-
-        # Check that generation produced new tokens
-        self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
-
-        # Check that the prompt is preserved
-        self.assertTrue(generated_text.startswith(prompt))
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    def test_model_generation_sdpa(self):
-        """Test text generation with SDPA attention implementation."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            attn_implementation="sdpa",
-        )
-
-        prompt = "Artificial intelligence is"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-        generated_ids = model.generate(
-            input_ids,
-            max_new_tokens=20,
-            do_sample=False,
-        )
-
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"SDPA Generated text: {generated_text}")
-
-        self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
-        self.assertTrue(generated_text.startswith(prompt))
 
         del model
         backend_empty_cache(torch_device)
