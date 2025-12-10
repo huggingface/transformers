@@ -45,6 +45,7 @@ from ...modeling_rope_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.generic import maybe_autocast
 from .configuration_nemotron import NemotronConfig
 
 
@@ -87,7 +88,7 @@ class NemotronLayerNorm1P(nn.LayerNorm):
         args = _cast_if_autocast_enabled(
             device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps
         )
-        with torch.autocast(device_type=input.device.type, enabled=False):
+        with maybe_autocast(device_type=input.device.type, enabled=False):
             return F.layer_norm(*args)
 
 
@@ -151,7 +152,7 @@ class NemotronRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling

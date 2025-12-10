@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     torch_float,
 )
+from ...utils.generic import maybe_autocast
 from .configuration_imagegpt import ImageGPTConfig
 
 
@@ -150,7 +151,7 @@ class ImageGPTAttention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with torch.autocast(query.device.type, enabled=False):
+        with maybe_autocast(query.device.type, enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)

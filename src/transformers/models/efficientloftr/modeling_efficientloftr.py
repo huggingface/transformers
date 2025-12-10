@@ -33,7 +33,7 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
@@ -147,7 +147,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
             sin = emb.sin()
             cos = emb.cos()

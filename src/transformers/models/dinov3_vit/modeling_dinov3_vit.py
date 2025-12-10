@@ -36,7 +36,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -156,7 +156,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
             # the model was trained with random_scale, so it can process images of varying sizes.
             # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
