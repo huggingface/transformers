@@ -29,10 +29,12 @@ model = DeepseekV32ForCausalLM(config)
 
 ```python
 from transformers.models.deepseek_v32.modeling_deepseek_v32 import (
-    BaseModelOutputWithIndexer,      # For DeepseekV32Model
     CausalLMOutputWithIndexer,       # For DeepseekV32ForCausalLM
 )
+from transformers.modeling_outputs import BaseModelOutputWithPast  # For DeepseekV32Model
 ```
+
+**Note:** `DeepseekV32Model` returns standard `BaseModelOutputWithPast`. Indexer outputs (scores, KL targets) are stored internally on the model instance for use by `DeepseekV32ForCausalLM`.
 
 ---
 
@@ -106,26 +108,31 @@ outputs.logits           # [batch, seq, vocab_size]
 
 ### Indexer Training Outputs
 
-Two additional forward pass parameters expose indexer internals for training:
+The `CausalLMOutputWithIndexer` extends `CausalLMOutputWithPast` with two additional fields for training:
 
 ```python
-outputs = model(
-    input_ids=input_ids,
-    output_indexer_scores=True,      # Return raw indexer scores
-    output_indexer_kl_target=True,   # Return KL divergence target
-)
+outputs = model(input_ids, labels=labels)
 
-# Additional outputs:
-outputs.indexer_scores     # Tuple of [batch, seq, seq] per layer
-outputs.indexer_kl_targets # Tuple of [batch, seq, seq] per layer
+# Standard outputs (inherited from CausalLMOutputWithPast):
+outputs.loss             # Combined loss: lm_loss + indexer_kl_coef * indexer_kl_loss
+outputs.logits           # [batch, seq, vocab_size]
+outputs.past_key_values  # KV cache for generation
+outputs.hidden_states    # Optional tuple of hidden states
+outputs.attentions       # Optional tuple of attention weights
+
+# V3.2 specific outputs for training:
+outputs.lm_loss          # Pure language modeling loss
+outputs.indexer_kl_loss  # KL divergence loss (when indexer_kl_coef > 0)
 ```
 
-| Parameter | Type | Output Shape | Description |
-|-----------|------|--------------|-------------|
-| `output_indexer_scores` | bool | `[batch, seq, seq]` per layer | Raw indexer `I_{t,s}` scores before top-k selection |
-| `output_indexer_kl_target` | bool | `[batch, seq, seq]` per layer | KL target `p_{t,:}` (L1-normalized attention, detached) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `lm_loss` | `torch.FloatTensor` | Pure cross-entropy loss for language modeling |
+| `indexer_kl_loss` | `torch.FloatTensor` | KL divergence loss `D_KL(attention_dist \|\| indexer_dist)` |
 
-**Memory Note**: `output_indexer_kl_target` computes the target efficiently inside the forward pass. It sums attention across heads and L1-normalizes, returning only `[batch, seq, seq]` instead of the full `[batch, heads, seq, seq]`.
+**KL Loss Computation**: When `config.indexer_kl_coef > 0`, indexer scores and attention targets are computed internally during the forward pass and used to compute `indexer_kl_loss`. The combined loss is: `loss = lm_loss + indexer_kl_coef * indexer_kl_loss`.
+
+**Memory Note**: The KL target is computed efficiently by summing attention across heads and L1-normalizing, never storing the full `[batch, heads, seq, seq]` attention tensor.
 
 ---
 
@@ -199,18 +206,21 @@ outputs = model.generate(**inputs, max_new_tokens=50)
 print(tokenizer.decode(outputs[0]))
 ```
 
-### Example 2: Get Indexer Scores for Analysis
+### Example 2: Analyze Indexer Behavior
 
 ```python
-outputs = model(
-    input_ids,
-    output_indexer_scores=True,
-)
+# Enable KL loss to trigger indexer score computation
+model.config.indexer_kl_coef = 0.1
 
-# Analyze which tokens the indexer selects
-for layer_idx, scores in enumerate(outputs.indexer_scores):
-    topk_indices = scores.topk(k=64, dim=-1).indices
-    print(f"Layer {layer_idx}: top tokens = {topk_indices[0, 0, :10]}")
+outputs = model(input_ids, labels=labels)
+
+# Indexer scores are computed internally and used for KL loss
+# The KL loss indicates how well the indexer matches the full attention
+print(f"Indexer KL loss: {outputs.indexer_kl_loss.item():.4f}")
+print(f"LM loss: {outputs.lm_loss.item():.4f}")
+
+# For detailed analysis, use hooks on the indexer layers
+# (see DeepseekV32Indexer for the internal score computation)
 ```
 
 ### Example 3: Indexer Training with KL Loss
@@ -226,12 +236,11 @@ optimizer = torch.optim.AdamW(
     lr=1e-3
 )
 
+# Enable KL loss computation
+model.config.indexer_kl_coef = 1.0
+
 # Training step - KL loss is computed automatically
-outputs = model(
-    input_ids,
-    output_indexer_scores=True,
-    output_indexer_kl_target=True,
-)
+outputs = model(input_ids, labels=labels)
 kl_loss = outputs.indexer_kl_loss  # Use the automatically computed KL loss
 
 kl_loss.backward()
@@ -298,11 +307,8 @@ llm_optimizer = torch.optim.AdamW(llm_lora_params, lr=1e-4)
 indexer_optimizer = torch.optim.AdamW(indexer_lora_params, lr=1e-3)
 
 # Training step with dual gradient paths
-outputs = model_with_lora(
-    input_ids, labels=labels,
-    output_indexer_scores=True,
-    output_indexer_kl_target=True,
-)
+# indexer_kl_coef > 0 enables automatic KL loss computation
+outputs = model_with_lora(input_ids, labels=labels)
 
 # Get separate losses from output
 lm_loss = outputs.lm_loss
@@ -332,11 +338,13 @@ The indexer KL loss matches **Equation 3** from the DeepSeek V3.2 technical repo
 ```
 
 Where:
-- `I_{t,s}` = raw indexer output scores (returned by `output_indexer_scores=True`)
-- `p_{t,:}` = target distribution (returned by `output_indexer_kl_target=True`)
+- `I_{t,s}` = raw indexer output scores (computed internally)
+- `p_{t,:}` = target distribution (computed internally from attention weights)
 
 The target distribution `p_{t,:}` is computed per the tech report:
 > "for the t-th query token, we first aggregate the main attention scores by **summing across all attention heads**. This sum is then **L1-normalized** along the sequence dimension to produce a target distribution p_{t,:} ∈ ℝ^t"
+
+When `config.indexer_kl_coef > 0`, both `I_{t,s}` and `p_{t,:}` are computed automatically during the forward pass and used to compute `outputs.indexer_kl_loss`.
 
 ### Two Exposed Losses for LoRA Integration
 
@@ -352,19 +360,23 @@ The implementation exposes **separate losses** for flexible training:
 
 1. **Main model LoRA only** (frozen indexer, `indexer_kl_coef=0`):
    ```python
+   model.config.indexer_kl_coef = 0.0
+   outputs = model(input_ids, labels=labels)
    loss = outputs.loss  # Same as outputs.lm_loss when indexer_kl_coef=0
    ```
 
 2. **Indexer training only** (per tech report warm-up):
    ```python
-   outputs = model(input_ids, output_indexer_scores=True, output_indexer_kl_target=True)
+   model.config.indexer_kl_coef = 1.0
+   outputs = model(input_ids, labels=labels)
    kl_loss = outputs.indexer_kl_loss
    ```
 
 3. **Joint training** (main model + indexer LoRA):
    ```python
    # Option A: Use combined loss with config
-   config.indexer_kl_coef = 0.1
+   model.config.indexer_kl_coef = 0.1
+   outputs = model(input_ids, labels=labels)
    loss = outputs.loss  # lm_loss + 0.1 * indexer_kl_loss
 
    # Option B: Manual combination
@@ -373,6 +385,8 @@ The implementation exposes **separate losses** for flexible training:
 
 4. **Dual LoRA with separate backward passes**:
    ```python
+   model.config.indexer_kl_coef = 1.0  # Enable KL loss
+   outputs = model(input_ids, labels=labels)
    outputs.lm_loss.backward(retain_graph=True)  # -> LLM LoRA
    outputs.indexer_kl_loss.backward()            # -> Indexer LoRA
    ```
@@ -383,23 +397,25 @@ The indexer uses **non-interleaved** RoPE (different from MLA which uses interle
 
 ### Causal Masking
 
-Both `indexer_scores` and `indexer_kl_targets` are causally masked - position `t` can only attend to positions `s <= t`.
+Both indexer scores and KL targets (computed internally) are causally masked - position `t` can only attend to positions `s <= t`.
 
 ### Gradient Flow
 
-- `indexer_scores`: Gradients flow back to indexer parameters
-- `indexer_kl_targets`: **Detached** - serves as target, no gradient flow
-- When `output_indexer_kl_target=True`, full attention is computed for the target but not stored (memory efficient)
+- `indexer_kl_loss`: Gradients flow back to indexer parameters only
+- KL target (attention distribution): **Detached** - serves as target, no gradient flow
+- Internal computation: Indexer scores and attention targets are computed during forward pass but not exposed in outputs
 
 ### Memory Efficiency
 
-| Output | Memory per Layer |
-|--------|-----------------|
-| `indexer_scores` | `[B, S, S]` = `B × S² × 4 bytes` |
-| `indexer_kl_targets` | `[B, S, S]` = `B × S² × 4 bytes` |
-| Full attention (NOT returned) | `[B, H, S, S]` = `B × H × S² × 4 bytes` |
+The implementation avoids storing large intermediate tensors:
 
-For 128K context with 128 heads, returning full attention would require ~8TB per layer. The API returns only the aggregated target.
+| Internal Computation | Memory Usage |
+|---------------------|--------------|
+| Indexer scores (per layer) | `[B, S, S]` = `B × S² × 4 bytes` |
+| KL target (per layer) | `[B, S, S]` = `B × S² × 4 bytes` |
+| Full attention (NOT stored) | `[B, H, S, S]` = `B × H × S² × 4 bytes` |
+
+For 128K context with 128 heads, storing full attention would require ~8TB per layer. The implementation aggregates attention across heads immediately to compute the KL target efficiently.
 
 ---
 
@@ -413,10 +429,9 @@ For 128K context with 128 heads, returning full attention would require ~8TB per
 
 **Key exports from `modeling_deepseek_v32.py`:**
 - `DeepseekV32ForCausalLM` - Main model class
-- `DeepseekV32Model` - Base transformer model
+- `DeepseekV32Model` - Base transformer model (returns `BaseModelOutputWithPast`)
 - `DeepseekV32Config` - Configuration class
-- `BaseModelOutputWithIndexer` - Output dataclass for DeepseekV32Model
-- `CausalLMOutputWithIndexer` - Output dataclass for DeepseekV32ForCausalLM
+- `CausalLMOutputWithIndexer` - Output dataclass for DeepseekV32ForCausalLM (extends `CausalLMOutputWithPast`)
 
 ---
 
