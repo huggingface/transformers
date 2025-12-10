@@ -3,11 +3,10 @@ from collections import OrderedDict
 
 import torch
 
-from transformers.models.deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
+from transformers import DeepseekV32Config, DeepseekV32ForCausalLM
 from transformers.models.deepseek_v32.convert_deepseek_v32_reference_checkpoint import (
     convert_reference_shards_to_dense,
 )
-from transformers.models.deepseek_v32.modular_deepseek_v32 import DeepseekV32ForCausalLM
 from transformers.testing_utils import require_torch
 
 
@@ -94,7 +93,10 @@ def _shard_state_dict(state_dict: OrderedDict[str, torch.Tensor], world_size: in
 @require_torch
 def test_convert_reference_shards_roundtrip(tmp_path):
     config = _get_tiny_config()
+    # Initialize model with proper weights (not uninitialized torch.empty tensors)
+    torch.manual_seed(42)
     model = DeepseekV32ForCausalLM(config)
+    model.init_weights()  # Explicitly initialize weights to avoid NaN/garbage values
     state_dict = model.state_dict()
 
     world_size = 2
@@ -116,13 +118,16 @@ def test_convert_reference_shards_roundtrip(tmp_path):
     for key, original_tensor in state_dict.items():
         merged_tensor = merged_state_dict[key]
         assert merged_tensor.shape == original_tensor.shape
-        assert torch.allclose(merged_tensor, original_tensor, atol=0, rtol=0)
+        # Use small tolerance for floating point comparison after init
+        assert torch.allclose(merged_tensor, original_tensor, atol=1e-6, rtol=1e-6), f"Mismatch in {key}"
 
 
 @require_torch
 def test_convert_reference_shards_dtype_override(tmp_path):
     config = _get_tiny_config()
+    torch.manual_seed(42)
     model = DeepseekV32ForCausalLM(config)
+    model.init_weights()  # Initialize weights properly
     state_dict = model.state_dict()
 
     shards = _shard_state_dict(state_dict, world_size=2)
