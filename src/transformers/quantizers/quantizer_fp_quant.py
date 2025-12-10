@@ -118,7 +118,7 @@ class FPQuantHfQuantizer(HfQuantizer):
             )
         return trainable
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     def get_quantize_ops(self):
