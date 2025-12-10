@@ -23,12 +23,12 @@ from transformers import AutoTokenizer, Mistral3ForConditionalGeneration, is_tor
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 
 
@@ -102,7 +102,7 @@ class Ministral3IntegrationTest(unittest.TestCase):
     def test_model_3b_generation(self):
         EXPECTED_TEXT_COMPLETION = [
             "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
-            "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for", # XPU
+            "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",  # XPU
         ]
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
