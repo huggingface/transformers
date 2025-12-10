@@ -466,30 +466,26 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = input / scale
+                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+
                 else:
                     raise NotImplementedError("Not supported")
 
-                if self.activation_scheme == "static":
-                    # TODO: fix that so we don't have to upcast to bfloat16
-                    output = (
-                        F.linear(qinput.to(input.dtype), weight.to(input.dtype), self.bias) * scale * scale_inv
-                    )
-                else:
-                    output = w8a8_block_fp8_matmul_triton(
-                        qinput,
-                        weight,
-                        scale,
-                        scale_inv,
-                        self.block_size,
-                        output_dtype=input.dtype,
-                    )
+                output = w8a8_block_fp8_matmul_triton(
+                    qinput,
+                    weight,
+                    scale,
+                    scale_inv,
+                    self.block_size,
+                    output_dtype=input.dtype,
+                )
 
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
+
             output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
@@ -764,3 +760,11 @@ class Fp8Dequantize(ConversionOps):
         return {
             full_layer_name: dequantized.reshape(quantized.shape),
         }
+
+
+"""
+scale: tensor(0.5391, device='cuda:0')
+NaN detected in qinput at indices: (tensor([0, 0, 0], device='cuda:0'), tensor([0, 0, 0], device='cuda:0'), tensor([18154, 20734, 24657], device='cuda:0'))
+Corresponding input values: tensor([-266., -256.,  260.], device='cuda:0', dtype=torch.bfloat16)
+Corresponding qinput values: tensor([nan, nan, nan], device='cuda:0', dtype=torch.float8_e4m3fn)
+"""
