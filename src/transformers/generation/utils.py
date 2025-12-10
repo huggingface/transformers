@@ -1725,8 +1725,8 @@ class GenerationMixin(ContinuousMixin):
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
 
-        # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
-        # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
+        # If both `inputs_embeds` and `input_ids` are passed, we correct length with `inputs_tensor.shape`
+        # We need to get max_length = inputs_embeds_len + max_new_tokens
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
@@ -1734,11 +1734,10 @@ class GenerationMixin(ContinuousMixin):
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
-                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-                if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+            generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1771,6 +1770,7 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
+        # NOTE: doesn't make sense to allow kwargs and `generation_config`. Might be strict and make them mutually exclusive?
         # TODO (joao): per-model generation config classes.
 
         if generation_config is None:
@@ -1795,7 +1795,7 @@ class GenerationMixin(ContinuousMixin):
         _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         _ = generation_config.update(**global_defaults, defaults_only=True)
 
-        # Finally, if there are any kwargs, update the config with it -> highest priority
+        # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
 
         # Related to #40039: prior to this PR, models with sliding window attention were forced to have
@@ -2440,6 +2440,13 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
+        # Check length values before updating the config with defaults. We'll use it later in (# 6)
+        has_default_max_length = kwargs.get("max_length") is None and (
+            generation_config is None or generation_config.max_length is None
+        )
+        has_default_min_length = kwargs.get("min_length") is None and (
+            generation_config is None or generation_config.min_length is None
+        )
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
@@ -2557,8 +2564,6 @@ class GenerationMixin(ContinuousMixin):
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
             has_default_max_length=has_default_max_length,
