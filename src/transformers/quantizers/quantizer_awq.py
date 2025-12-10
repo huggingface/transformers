@@ -22,8 +22,8 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available, logging
-from ..utils.quantization_config import AWQLinearVersion
+from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
+from ..utils.quantization_config import AwqBackend
 
 
 if is_torch_available():
@@ -44,53 +44,11 @@ class AwqQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
-        if not is_auto_awq_available():
-            raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
+        if not is_gptqmodel_available():
+            raise ImportError("Loading an AWQ quantized model requires gptqmodel library (`pip install gptqmodel`)")
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
-
-        if (
-            self.quantization_config.version == AWQLinearVersion.GEMM
-            and not torch.cuda.is_available()
-            and not torch.xpu.is_available()
-        ):
-            logger.warning_once("No CUDA or XPU found, consider switching to the IPEX version for CPU-only execution.")
-            self.quantization_config.version = AWQLinearVersion.IPEX
-
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
-            if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
-                raise RuntimeError(
-                    "To use IPEX backend, you need autoawq>0.2.6. Please install the latest version or from source."
-                )
-            if device_map is None:
-                logger.warning_once(
-                    "You have loaded an AWQ model without setting device_map, please set 'cpu' or 'xpu' or 'auto'"
-                )
-            elif isinstance(device_map, dict) and "disk" in device_map.values():
-                raise ValueError(
-                    "You are attempting to load an IPEX version AWQ model with a device_map that contains disk device."
-                    " This is not supported. Please make sure only cpu and xpu in the device_map."
-                )
-        else:
-            if not torch.cuda.is_available() and not torch.xpu.is_available():
-                raise RuntimeError(
-                    "GPU is required to run AWQ quantized model. You can use IPEX version AWQ if you have an Intel CPU"
-                )
-
-            if device_map is None:
-                logger.warning_once(
-                    "You have loaded an AWQ model on CPU and have a CUDA/XPU device available, make sure to set "
-                    "your model on a GPU device in order to run your model."
-                )
-            elif device_map is not None:
-                if isinstance(device_map, dict) and any(
-                    forbidden in device_map.values() for forbidden in ("cpu", torch.device("cpu"), "disk")
-                ):
-                    raise ValueError(
-                        "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
-                        " This is not supported. Please remove the CPU or disk device from the device_map."
-                    )
 
     def update_dtype(self, dtype):
         if dtype is None:
@@ -115,7 +73,10 @@ class AwqQuantizer(HfQuantizer):
         )
 
         model, has_been_replaced = replace_with_awq_linear(
-            model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
+            model,
+            quantization_config=self.quantization_config,
+            modules_to_not_convert=self.modules_to_not_convert,
+            device_map=kwargs.get("device_map"),
         )
 
         model = replace_quantization_scales(model, model.config.model_type)
@@ -127,29 +88,12 @@ class AwqQuantizer(HfQuantizer):
             )
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if self.quantization_config.do_fuse:
-            from ..integrations import fuse_awq_modules
+        from gptqmodel.utils.model import hf_gptqmodel_post_init
 
-            model = fuse_awq_modules(model, self.quantization_config)
-            model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
+        hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
-            from ..integrations import post_init_awq_exllama_modules
-
-            model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
-
-        if self.quantization_config.version == AWQLinearVersion.IPEX:
-            from ..integrations import post_init_awq_ipex_modules
-
-            model = post_init_awq_ipex_modules(model)
-
-    def is_serializable(self):
-        # AWQ through auto-awq has been always serializable, except if the model is fused.
-        if self.quantization_config.do_fuse:
-            logger.warning("You cannot save an AWQ model that uses fused modules!")
-            return False
-
-        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+    def is_serializable(self, safe_serialization=None):
+        if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False
 
@@ -157,6 +101,4 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # AWQ supports PEFT fine-tuning from version 0.2.0
-        MIN_AWQ_VERSION_FOR_PEFT = "0.2.0"
-        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION_FOR_PEFT)
+        return version.parse(importlib.metadata.version("gptqmodel")) >= version.parse("5.0.0")
