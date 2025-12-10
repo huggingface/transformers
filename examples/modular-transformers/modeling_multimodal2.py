@@ -6,7 +6,6 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -26,7 +25,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     output_attentions: bool = True,
@@ -48,7 +47,7 @@ def eager_attention_forward(
 class Multimodal2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[Multimodal2VisionConfig, Multimodal2TextConfig]):
+    def __init__(self, config: Multimodal2VisionConfig | Multimodal2TextConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -71,10 +70,10 @@ class Multimodal2VisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -138,7 +137,7 @@ class Multimodal2VisionMLP(nn.Module):
 class Multimodal2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[Multimodal2VisionConfig, Multimodal2TextConfig]):
+    def __init__(self, config: Multimodal2VisionConfig | Multimodal2TextConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -161,10 +160,10 @@ class Multimodal2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -224,7 +223,7 @@ class Multimodal2VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -278,10 +277,10 @@ class Multimodal2VisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -443,10 +442,10 @@ class Multimodal2VisionTransformer(nn.Module):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        interpolate_pos_encoding: bool | None = False,
     ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -515,9 +514,9 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
