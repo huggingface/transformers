@@ -148,6 +148,28 @@ visualizer("UN Chief says there is no military solution in Syria")
     Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
     ```
 
+- NLLB stores its language codes as special tokens in the tokenizer. When you fine-tune on a new language, you can append a new code without removing any existing ones:
+
+    ```python
+    from transformers import NllbTokenizer
+
+    tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
+
+    new_codes = ["ami_Latn"]
+
+    # Append new language codes without removing existing ones
+    tokenizer.add_special_tokens(
+        {"extra_special_tokens": new_codes},
+        replace_extra_special_tokens=False,
+    )
+
+    # Optional: get the token ids for the new codes
+    token_ids = [tokenizer.convert_tokens_to_ids(code) for code in new_codes]
+    ```
+
+    > [!TIP]
+    > For Transformers versions earlier than 5.0, use the `additional_special_tokens` key and the `replace_additional_special_tokens` argument instead of `extra_special_tokens` and `replace_extra_special_tokens`.
+    
 ## NllbTokenizer
 
 [[autodoc]] NllbTokenizer
