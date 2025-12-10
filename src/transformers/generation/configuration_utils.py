@@ -618,7 +618,7 @@ class GenerationConfig(PushToHubMixin):
         # 2.1. detect sampling-only parameterization when not in sampling mode
         if self.do_sample is False:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set to not set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
+                "`do_sample` is set to set `False`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
                 "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
             if self.temperature is not None and self.temperature != 1.0:
@@ -691,7 +691,7 @@ class GenerationConfig(PushToHubMixin):
                     )
 
         # 2.6. other incorrect combinations
-        if self.return_dict_in_generate is False:
+        if self.return_dict_in_generate is not True:
             for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
                     minor_issues[extra_output_flag] = (

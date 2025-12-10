@@ -33,8 +33,6 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
-
-# from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -112,8 +110,6 @@ from .stopping_criteria import (
     StopStringCriteria,
 )
 
-
-PreTrainedConfig = None
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -1929,11 +1925,11 @@ class GenerationMixin(ContinuousMixin):
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
-            # if generation_config.cache_implementation is not None:
-            #    raise ValueError(
-            #        f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
-            #        "Cache object) is unsupported. Please use only one of the two."
-            #    )
+            if generation_config.cache_implementation is not None:
+               raise ValueError(
+                   f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
+                   "Cache object) is unsupported. Please use only one of the two."
+               )
             if isinstance(user_defined_cache, tuple):
                 raise ValueError(
                     "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
