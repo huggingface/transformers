@@ -466,17 +466,22 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                    qinput = (input / scale)
                 else:
                     raise NotImplementedError("Not supported")
-                output = w8a8_block_fp8_matmul_triton(
-                    qinput,
-                    weight,
-                    scale,
-                    scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
+
+                if self.activation_scheme == "static":
+                    # TODO: fix that so we don't have to upcast to bfloat16
+                    output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), self.bias) * scale * scale_inv
+                else:
+                    output = w8a8_block_fp8_matmul_triton(
+                        qinput,
+                        weight,
+                        scale,
+                        scale_inv,
+                        self.block_size,
+                        output_dtype=input.dtype,
+                    )
 
             # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
