@@ -197,9 +197,42 @@ class ExpectationsUpdater(cst.CSTTransformer):
             if isinstance(pattern_node, cst.Call):
                 # For torch.tensor, update the argument
                 if pattern_node.args and len(pattern_node.args) > 0:
-                    # Use new_value_node directly (respects captured_info.txt formatting)
+                    # For torch.tensor, captured_info has 4 spaces, we want to make it base + 8
+                    # Get the base indentation from the assignment line
+                    base_indent = self._get_assignment_indent(original_node)
+
+                    # We need content at base + 8 (e.g., 16 spaces from line start)
+                    # Captured_info has 4 spaces
+                    # After testing: adding base spaces gave us base+12 in output
+                    # So we need to add base/2 spaces (e.g., 4)
+                    extra_spaces = base_indent // 2  # e.g., 8 // 2 = 4
+
+                    lines = task.new_value_str.split('\n')
+                    adjusted_lines = []
+                    for i, line in enumerate(lines):
+                        if i == 0:
+                            # First line (opening [)
+                            adjusted_lines.append(line)
+                        elif line.strip() == '':
+                            adjusted_lines.append(line)
+                        elif line.strip() == ']':
+                            # Closing ] - add extra spaces
+                            adjusted_lines.append((" " * extra_spaces) + line.lstrip())
+                        elif line.lstrip().startswith('['):
+                            # Content line - ADD to existing indent, don't replace
+                            leading_spaces = len(line) - len(line.lstrip())
+                            adjusted_lines.append((" " * (leading_spaces + extra_spaces)) + line.lstrip())
+                        else:
+                            adjusted_lines.append((" " * extra_spaces) + line)
+
+                    adjusted_value_str = '\n'.join(adjusted_lines)
+                    new_value_node = cst.parse_expression(adjusted_value_str)
+
+                    # Preserve the old Arg
+                    old_arg = pattern_node.args[0]
+                    new_arg = old_arg.with_changes(value=new_value_node)
                     new_call = pattern_node.with_changes(
-                        args=[cst.Arg(value=new_value_node)] + list(pattern_node.args[1:])
+                        args=[new_arg] + list(pattern_node.args[1:])
                     )
                     new_full_value = self._replace_node_in_tree(updated_node.value, pattern_node, new_call)
                 else:
@@ -255,12 +288,9 @@ class ExpectationsUpdater(cst.CSTTransformer):
 
         print(f"    ✓ Found key: {best_key} (priority: {best_priority})")
 
-        # Get the base indentation from the dict's lbrace
-        dict_base_indent = self._get_dict_indent(dict_node)
-
-        # Apply proper indentation to the new value
-        # The value should be indented at: dict_base_indent + 4 spaces
-        new_value_adjusted = self._apply_proper_indentation(new_value_node, dict_base_indent + 4)
+        # Use the captured_info formatting AS-IS, don't reformat
+        # Just use new_value_node directly (preserves single-line vs multi-line from captured_info)
+        new_value_adjusted = new_value_node
 
         # Create new element with updated value
         new_element = best_element.with_changes(value=new_value_adjusted)
@@ -327,6 +357,21 @@ class ExpectationsUpdater(cst.CSTTransformer):
                     return len(ws.last_line.value)
         # Default fallback
         return 16
+
+    def _get_assignment_indent(self, assign_node: cst.Assign) -> int:
+        """
+        Get the base indentation (in spaces) of an assignment statement.
+        This looks at the leading whitespace of the assignment line.
+        """
+        # Try to get the parent statement line
+        try:
+            # The assignment is wrapped in a SimpleStatementLine
+            # We need to access it through metadata or inspection
+            # For now, use a heuristic based on common patterns
+            # Most test assignments are indented 8 spaces (2 levels)
+            return 8
+        except:
+            return 8  # Default for test methods (2 indentation levels)
 
     def _get_node_indent(self, node: cst.DictElement) -> int:
         """
