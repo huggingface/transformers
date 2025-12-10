@@ -29,8 +29,10 @@ jobs:
       - run: pip uninstall -y transformers
       - run: pip install dist/*.whl
 
-      - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
       - run: python -c "from transformers import *"
+
+      - run: pip install -e .[torch]
+      - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
 
   upload_package:
     if: startsWith(github.ref, 'refs/tags/')
