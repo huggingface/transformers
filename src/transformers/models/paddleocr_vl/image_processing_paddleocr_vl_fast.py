@@ -79,6 +79,8 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]] = None,
         image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
+        min_pixels: int = 384 * 384,
+        max_pixels: int = 1536 * 1536,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
@@ -89,9 +91,15 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
+        # backward compatibility: override size with min_pixels and max_pixels if they are provided
+        if min_pixels is not None:
+            size["shortest_edge"] = min_pixels
+        if max_pixels is not None:
+            size["longest_edge"] = max_pixels
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size
+
         self.do_resize = do_resize
         self.resample = resample
         self.do_rescale = do_rescale
@@ -99,6 +107,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
+
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size

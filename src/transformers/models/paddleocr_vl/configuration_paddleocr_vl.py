@@ -62,6 +62,10 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The size used for patches along the temporal dimension.
 
     Example:
 
