@@ -880,7 +880,7 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[matched_dtype_pattern.group()]
-            elif _dtype is None and empty_param is not None:
+            elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
             # 4. Handle TP sharding or device_map placement
