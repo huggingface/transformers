@@ -56,27 +56,12 @@ print(response)
 
 [[autodoc]] MiniMaxM2Config
 
-## MiniMaxM2ForCausalLM
-
-[[autodoc]] MiniMaxM2ForCausalLM
-    - forward
-
-## MiniMaxM2ForQuestionAnswering
-
-[[autodoc]] MiniMaxM2ForQuestionAnswering
-    - forward
-
 ## MiniMaxM2Model
 
 [[autodoc]] MiniMaxM2Model
     - forward
 
-## MiniMaxM2ForSequenceClassification
+## MiniMaxM2ForCausalLM
 
-[[autodoc]] MiniMaxM2ForSequenceClassification
-    - forward
-
-## MiniMaxM2ForTokenClassification
-
-[[autodoc]] MiniMaxM2ForTokenClassification
+[[autodoc]] MiniMaxM2ForCausalLM
     - forward

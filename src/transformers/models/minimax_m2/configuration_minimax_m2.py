@@ -43,7 +43,7 @@ class MiniMaxM2Config(PreTrainedConfig):
             `inputs_ids` passed when calling [`MiniMaxM2Model`]
         hidden_size (`Optional`, *optional*, defaults to 3072):
             Dimension of the hidden representations.
-        intermediate_size (`Optional`, *optional*, defaults to 14336):
+        intermediate_size (`Optional`, *optional*, defaults to 1536):
             Dimension of the MLP representations.
         num_hidden_layers (`Optional`, *optional*, defaults to 62):
             Number of hidden layers in the Transformer encoder.
@@ -60,7 +60,7 @@ class MiniMaxM2Config(PreTrainedConfig):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`Optional`, *optional*, defaults to `196608`):
+        max_position_embeddings (`Optional`, *optional*, defaults to 196608):
             The maximum sequence length that this model might ever be used with. MiniMaxM2's sliding window attention
             allows sequence of up to 196608 tokens.
         initializer_range (`Optional`, *optional*, defaults to 0.02):
