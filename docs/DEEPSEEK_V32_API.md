@@ -422,36 +422,79 @@ For 128K context with 128 heads, returning full attention would require ~8TB per
 
 ## Distributed Training
 
-### Expert Parallelism (EP)
+### FSDP / DeepSpeed ZeRO-3
 
-DeepSeek V3.2 supports Expert Parallelism following the [DeepSeek-V3 architecture](https://arxiv.org/abs/2412.19437). When `ep_size > 1`:
-- Experts are sharded across GPUs (each GPU has `num_experts // ep_size` experts)
-- Each GPU only computes outputs for its local experts
-- Results are gathered via `all_reduce` to combine partial outputs
+DeepSeek V3.2 uses an FSDP/ZeRO-3 compatible MoE implementation. Expert parameters are stored as `nn.ModuleList` of `nn.Linear` layers, enabling automatic parameter sharding by distributed training frameworks.
+
+#### Usage with FSDP
 
 ```python
-from transformers import DeepseekV32Config, DeepseekV32ForCausalLM
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.wrap import ModuleWrapPolicy
+from transformers import DeepseekV32ForCausalLM, DeepseekV32Expert
 
-# Single GPU (default)
-config = DeepseekV32Config(...)
 model = DeepseekV32ForCausalLM(config)
 
-# Expert Parallelism with 8 GPUs (32 experts per GPU for 256 total)
-config = DeepseekV32Config(..., ep_size=8)
-model = DeepseekV32ForCausalLM(config)
+# Option 1: Wrap entire model (parameters sharded across all GPUs)
+model = FSDP(model)
+
+# Option 2: Fine-grained wrapping - each expert wrapped separately
+model = FSDP(model, auto_wrap_policy=ModuleWrapPolicy({DeepseekV32Expert}))
 ```
 
-| Config Parameter | Type | Default | Description |
-|-----------------|------|---------|-------------|
-| `ep_size` | int | 1 | Number of GPUs for expert parallelism |
+#### Usage with DeepSpeed ZeRO-3
 
-**How EP works:**
-1. Each GPU holds `num_experts // ep_size` local experts
-2. All GPUs compute routing decisions identically (router is replicated)
-3. Each GPU processes tokens only through its local experts
-4. `all_reduce` sums partial outputs from all ranks
+```python
+import deepspeed
+from transformers import DeepseekV32ForCausalLM
 
-**Reference:** DeepSeek-V3 uses 32-way EP (EP32) in training and 64-way EP in inference.
+ds_config = {
+    "zero_optimization": {
+        "stage": 3,
+        "offload_param": {"device": "cpu"},  # Optional CPU offload
+    },
+    "bf16": {"enabled": True},
+    "train_batch_size": 8,
+    "gradient_accumulation_steps": 4,
+}
+
+model = DeepseekV32ForCausalLM(config)
+model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
+# ZeRO-3 will partition expert parameters automatically
+```
+
+#### Usage with HuggingFace Trainer
+
+```python
+from transformers import TrainingArguments, Trainer
+
+training_args = TrainingArguments(
+    output_dir="./output",
+    fsdp="full_shard",  # or use DeepSpeed config
+    fsdp_config={
+        "fsdp_auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
+    },
+    bf16=True,
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset,
+)
+trainer.train()
+```
+
+#### Key Design Decisions
+
+| Aspect | Implementation | Benefit |
+|--------|---------------|---------|
+| Expert storage | `nn.ModuleList[DeepseekV32Expert]` | FSDP can wrap/shard each expert |
+| Expert layers | Standard `nn.Linear` | ZeRO-3 can partition parameters |
+| Device management | No explicit `.to()` calls | Frameworks handle placement |
+| Gradient sync | Automatic via framework | No manual `all_reduce` needed |
+
+**Note:** The `DeepseekV32Expert` class is exported for use with FSDP's `ModuleWrapPolicy`.
 
 ### Gradient Checkpointing
 

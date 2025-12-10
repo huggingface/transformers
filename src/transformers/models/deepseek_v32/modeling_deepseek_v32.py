@@ -30,7 +30,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -235,80 +234,74 @@ class DeepseekV32TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV32NaiveMoe(nn.Module):
-    """Collection of expert weights stored as 3D tensors with multi-GPU support.
+class DeepseekV32Expert(nn.Module):
+    """A single MoE expert with gate_up and down projections.
 
-    This implementation supports both single-GPU and distributed Expert Parallelism (EP)
-    following the DeepSeek-V3 architecture (https://arxiv.org/abs/2412.19437).
-
-    Multi-GPU Support:
-        - **Expert Parallelism (EP)**: When `ep_size > 1`, experts are sharded across GPUs.
-          Each GPU holds `num_experts // ep_size` local experts and only computes outputs
-          for those experts. Results are gathered via `all_reduce` in the parent MoE class.
-        - **Pipeline/Device Parallelism**: Works with `dispatch_model` where layers may be
-          on different devices. Uses consistent device placement for gradient checkpointing.
-
-    Gradient Checkpointing:
-        - Uses `target_device = hidden_states.device` for consistent tensor placement
-        - Expert assignments are computed under `torch.no_grad()` for determinism
+    This is a FSDP/ZeRO-3 friendly implementation using standard nn.Linear layers
+    instead of 3D parameter tensors, allowing distributed training frameworks to
+    shard expert parameters across GPUs automatically.
     """
 
-    def __init__(self, config, ep_size: int = 1, ep_rank: int = 0):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_dim = config.hidden_size
+        self.intermediate_dim = config.intermediate_size
+        # Combined gate and up projection for efficiency
+        self.gate_up_proj = nn.Linear(self.hidden_dim, 2 * self.intermediate_dim, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_dim, self.hidden_dim, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Forward pass for a single expert.
+
+        Args:
+            hidden_states: Input tensor [num_tokens, hidden_dim]
+
+        Returns:
+            Output tensor [num_tokens, hidden_dim]
+        """
+        gate_up = self.gate_up_proj(hidden_states)
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.down_proj(self.act_fn(gate) * up)
+
+
+class DeepseekV32NaiveMoe(nn.Module):
+    """Collection of expert modules stored as nn.ModuleList for FSDP/ZeRO-3 compatibility.
+
+    This implementation uses nn.ModuleList of nn.Linear layers instead of 3D parameter
+    tensors, enabling automatic parameter sharding by FSDP, DeepSpeed ZeRO-3, and other
+    distributed training frameworks.
+
+    FSDP/ZeRO-3 Compatibility:
+        - Each expert is a separate nn.Module with standard nn.Linear layers
+        - FSDP can wrap and shard each expert independently
+        - ZeRO-3 can partition expert parameters across GPUs automatically
+        - No manual expert parallelism logic needed - let the framework handle it
+
+    Usage with FSDP:
+        ```python
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        model = DeepseekV32ForCausalLM(config)
+        model = FSDP(model, ...)  # FSDP will shard expert parameters
+        ```
+
+    Usage with DeepSpeed ZeRO-3:
+        ```python
+        model = DeepseekV32ForCausalLM(config)
+        model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
+        # ZeRO-3 will partition expert parameters automatically
+        ```
+    """
+
+    def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
 
-        # Expert parallelism configuration
-        self.ep_size = ep_size
-        self.ep_rank = ep_rank
-
-        # Compute local expert range for this rank
-        if self.ep_size > 1:
-            experts_per_rank = self.num_experts // self.ep_size
-            self.local_expert_start = self.ep_rank * experts_per_rank
-            self.local_expert_end = self.local_expert_start + experts_per_rank
-        else:
-            self.local_expert_start = 0
-            self.local_expert_end = self.num_experts
-
-    def _compute_expert_assignments(
-        self,
-        top_k_index: torch.Tensor,
-        target_device: torch.device,
-    ) -> list[tuple[int, torch.Tensor, torch.Tensor]]:
-        """Compute expert-to-token assignments for local experts only.
-
-        Returns a list of (expert_idx, top_k_pos, token_idx) tuples for each active
-        expert within this rank's local expert range [local_expert_start, local_expert_end).
-
-        This is computed under torch.no_grad() and is deterministic for gradient checkpointing.
-        """
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-
-            # Only process experts in our local range (for EP support)
-            assignments = []
-            for expert_idx_val in range(self.local_expert_start, self.local_expert_end):
-                # Check if this expert has any assigned tokens
-                expert_slice = expert_mask[expert_idx_val]
-                if expert_slice.sum() == 0:
-                    continue
-                top_k_pos, token_idx = torch.where(expert_slice)
-                # Move indices to target device for consistency
-                assignments.append(
-                    (
-                        expert_idx_val,
-                        top_k_pos.to(target_device),
-                        token_idx.to(target_device),
-                    )
-                )
-
-        return assignments
+        # Use nn.ModuleList for FSDP/ZeRO-3 compatibility
+        # Each expert can be independently wrapped/sharded by distributed frameworks
+        self.experts = nn.ModuleList([DeepseekV32Expert(config) for _ in range(self.num_experts)])
 
     def forward(
         self,
@@ -316,52 +309,80 @@ class DeepseekV32NaiveMoe(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
+        """Forward pass computing expert outputs for assigned tokens.
+
+        Args:
+            hidden_states: Input tensor [num_tokens, hidden_dim]
+            top_k_index: Expert indices for each token [num_tokens, top_k]
+            top_k_weights: Expert weights for each token [num_tokens, top_k]
+
+        Returns:
+            Output tensor [num_tokens, hidden_dim] with weighted expert contributions
+        """
         # Use float32 for accumulation to match DeepSeek reference implementation
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
 
-        # Use consistent device from input tensor for gradient checkpointing compatibility
-        target_device = hidden_states.device
+        # Compute expert assignments
+        # This is done under no_grad for determinism during gradient checkpointing
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            # expert_mask: [num_tokens, top_k, num_experts] -> [num_experts, top_k, num_tokens]
+            expert_mask = expert_mask.permute(2, 1, 0)
 
-        # Compute expert assignments for LOCAL experts only (supports EP)
-        assignments = self._compute_expert_assignments(top_k_index, target_device)
+        # Process each expert
+        for expert_idx in range(self.num_experts):
+            expert_slice = expert_mask[expert_idx]
+            if expert_slice.sum() == 0:
+                continue
 
-        for expert_idx, top_k_pos, token_idx in assignments:
-            current_state = hidden_states[token_idx].to(target_device)
-            gate_up_weight = self.gate_up_proj[expert_idx].to(target_device)
-            down_weight = self.down_proj[expert_idx].to(target_device)
+            # Get token indices and their positions in top_k
+            top_k_pos, token_idx = torch.where(expert_slice)
 
-            gate, up = nn.functional.linear(current_state, gate_up_weight).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, down_weight)
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None].to(target_device)
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.float())
+            # Get hidden states for tokens assigned to this expert
+            current_state = hidden_states[token_idx]
+
+            # Compute expert output
+            expert_output = self.experts[expert_idx](current_state)
+
+            # Weight by routing scores and accumulate
+            weighted_output = expert_output * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, weighted_output.float())
 
         return final_hidden_states
 
 
 class DeepseekV32MoE(nn.Module):
     """
-    A mixed expert module containing shared experts with multi-GPU support.
+    A mixed expert module containing shared experts, designed for FSDP/ZeRO-3 compatibility.
 
-    This implementation supports Expert Parallelism (EP) following the DeepSeek-V3
-    architecture (https://arxiv.org/abs/2412.19437). When `ep_size > 1`:
-    - Experts are sharded across GPUs (each GPU has `num_experts // ep_size` experts)
-    - Each GPU computes outputs only for its local experts
-    - Results are gathered via `all_reduce` to combine partial outputs
+    This implementation uses nn.ModuleList-based experts that can be automatically sharded
+    by FSDP, DeepSpeed ZeRO-3, and other distributed training frameworks. No manual expert
+    parallelism logic is needed - the framework handles parameter distribution.
 
-    The EP configuration can be set via:
-    - `config.ep_size`: Number of GPUs for expert parallelism (default: 1)
-    - Or automatically detected from `torch.distributed` if initialized
+    FSDP/ZeRO-3 Compatibility:
+        - Expert parameters are stored in standard nn.Linear layers within nn.ModuleList
+        - FSDP will automatically shard expert parameters across GPUs
+        - ZeRO-3 will partition and gather parameters as needed
+        - No manual all_reduce calls - gradient synchronization is handled by the framework
 
-    Example:
+    Usage with FSDP:
         ```python
-        # Single GPU (default)
-        config = DeepseekV32Config(...)
-        model = DeepseekV32ForCausalLM(config)
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 
-        # Expert Parallelism with 8 GPUs
-        config = DeepseekV32Config(..., ep_size=8)
         model = DeepseekV32ForCausalLM(config)
+        # Optionally wrap each expert separately for fine-grained sharding
+        model = FSDP(model, auto_wrap_policy=ModuleWrapPolicy({DeepseekV32Expert}))
+        ```
+
+    Usage with DeepSpeed ZeRO-3:
+        ```python
+        ds_config = {
+            "zero_optimization": {"stage": 3},
+            ...
+        }
+        model = DeepseekV32ForCausalLM(config)
+        model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
         ```
     """
 
@@ -369,19 +390,8 @@ class DeepseekV32MoE(nn.Module):
         super().__init__()
         self.config = config
 
-        # Expert parallelism configuration
-        # Can be set via config or auto-detected from torch.distributed
-        self.ep_size = getattr(config, "ep_size", 1)
-        if self.ep_size == 1 and torch.distributed.is_initialized():
-            # Auto-detect from distributed environment if not explicitly set
-            # Users can override by setting config.ep_size
-            pass  # Keep ep_size=1 unless explicitly configured
-
-        self.ep_rank = 0
-        if self.ep_size > 1 and torch.distributed.is_initialized():
-            self.ep_rank = torch.distributed.get_rank() % self.ep_size
-
-        self.experts = DeepseekV32NaiveMoe(config, ep_size=self.ep_size, ep_rank=self.ep_rank)
+        # Experts - using FSDP/ZeRO-3 compatible ModuleList-based implementation
+        self.experts = DeepseekV32NaiveMoe(config)
         self.gate = DeepseekV32TopkRouter(config)
         self.shared_experts = DeepseekV32MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
@@ -425,15 +435,12 @@ class DeepseekV32MoE(nn.Module):
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
-        # Compute expert outputs (each rank computes only its local experts in EP mode)
+        # Compute expert outputs
+        # With FSDP/ZeRO-3, parameters are gathered automatically before forward
+        # and gradients are synchronized during backward
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
 
-        # All-reduce to gather outputs from all EP ranks
-        # Following DeepSeek-V3 reference: dist.all_reduce(y)
-        if self.ep_size > 1 and torch.distributed.is_initialized():
-            torch.distributed.all_reduce(hidden_states)
-
-        # Add shared experts (not sharded, computed on all ranks)
+        # Add shared experts
         hidden_states = hidden_states.view(*orig_shape)
         hidden_states = hidden_states.type_as(residuals) + self.shared_experts(residuals)
         return hidden_states
@@ -1149,9 +1156,6 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
             - indexer_scores: Raw indexer scores I_{t,s} (optional, for KL loss)
             - indexer_kl_target: KL target distribution p_{t,:} (optional, for KL loss)
         """
-        # Cache input device for deterministic placement during gradient checkpointing
-        target_device = hidden_states.device
-
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -1168,15 +1172,15 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
             output_indexer_kl_target=output_indexer_kl_target,
             **kwargs,
         )
-        # Use target_device for deterministic placement during gradient checkpointing
-        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
+        # Let FSDP/ZeRO-3 manage device placement - no explicit .to() calls
+        hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        # Use target_device for deterministic placement during gradient checkpointing
-        hidden_states = residual.to(target_device) + hidden_states.to(target_device)
+        # Let FSDP/ZeRO-3 manage device placement - no explicit .to() calls
+        hidden_states = residual + hidden_states
 
         return hidden_states, attn_weights, indexer_scores, indexer_kl_target
 
@@ -1204,12 +1208,17 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        from torch.nn import init
+
+        # Call PreTrainedModel's _init_weights directly (skipping parent's MoE init)
         super()._init_weights(module)
+
         if isinstance(module, DeepseekV32TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, DeepseekV32NaiveMoe):
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV32Expert):
+            # Initialize individual expert's Linear layers
+            init.normal_(module.gate_up_proj.weight, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj.weight, mean=0.0, std=self.config.initializer_range)
 
 
 # Custom argument documentation for the indexer-specific parameters
@@ -1547,4 +1556,5 @@ __all__ = [
     "DeepseekV32ForCausalLM",
     "DeepseekV32ForSequenceClassification",
     "DeepseekV32ForTokenClassification",
+    "DeepseekV32Expert",
 ]

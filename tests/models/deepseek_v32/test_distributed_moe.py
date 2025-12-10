@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import torch
+import torch.nn as nn
 
 from transformers import DeepseekV32Config, DeepseekV32Model, DeepseekV32ForCausalLM
 
@@ -57,6 +58,8 @@ class DeepseekV32MoEBasicTest(unittest.TestCase):
 
         moe_layer = model.layers[1].mlp
         self.assertEqual(moe_layer.experts.num_experts, 16)
+        # With ModuleList, we should have 16 expert modules
+        self.assertEqual(len(moe_layer.experts.experts), 16)
 
     def test_moe_forward_pass(self):
         """Test MoE forward pass produces valid output."""
@@ -87,9 +90,11 @@ class DeepseekV32MoEBasicTest(unittest.TestCase):
 
         # Check that MoE expert weights have gradients
         moe_layer = model.model.layers[1].mlp
-        self.assertIsNotNone(moe_layer.experts.gate_up_proj.grad)
-        self.assertIsNotNone(moe_layer.experts.down_proj.grad)
-        self.assertTrue(moe_layer.experts.gate_up_proj.grad.abs().sum() > 0)
+        # With ModuleList, check individual expert gradients
+        expert = moe_layer.experts.experts[0]
+        self.assertIsNotNone(expert.gate_up_proj.weight.grad)
+        self.assertIsNotNone(expert.down_proj.weight.grad)
+        self.assertTrue(expert.gate_up_proj.weight.grad.abs().sum() > 0)
 
 
 class DeepseekV32MoEGradientCheckpointingTest(unittest.TestCase):
@@ -142,106 +147,169 @@ class DeepseekV32MoEGradientCheckpointingTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs1.loss, outputs2.loss))
 
 
-class DeepseekV32ExpertParallelismTest(unittest.TestCase):
-    """Test Expert Parallelism (EP) configuration."""
+class DeepseekV32FSDPCompatibilityTest(unittest.TestCase):
+    """Test FSDP/ZeRO-3 compatibility features."""
 
-    def test_ep_size_configuration(self):
-        """Test ep_size is correctly propagated."""
-        config = get_moe_test_config(ep_size=4)
+    def test_expert_is_module_list(self):
+        """Test that experts are stored in nn.ModuleList (FSDP friendly)."""
+        config = get_moe_test_config()
         model = DeepseekV32Model(config)
 
         moe_layer = model.layers[1].mlp
-        self.assertEqual(moe_layer.ep_size, 4)
-        self.assertEqual(moe_layer.experts.ep_size, 4)
+        self.assertIsInstance(moe_layer.experts.experts, nn.ModuleList)
 
-    def test_ep_local_expert_range(self):
-        """Test local expert range is computed correctly."""
-        config = get_moe_test_config(n_routed_experts=8, ep_size=2)
+    def test_expert_uses_linear_layers(self):
+        """Test that experts use nn.Linear (FSDP can shard these)."""
+        config = get_moe_test_config()
         model = DeepseekV32Model(config)
 
-        # ep_rank defaults to 0 when distributed is not initialized
+        moe_layer = model.layers[1].mlp
+        expert = moe_layer.experts.experts[0]
+
+        self.assertIsInstance(expert.gate_up_proj, nn.Linear)
+        self.assertIsInstance(expert.down_proj, nn.Linear)
+
+    def test_no_3d_parameter_tensors(self):
+        """Test that we don't have 3D parameter tensors (ZeRO-3 unfriendly)."""
+        config = get_moe_test_config()
+        model = DeepseekV32Model(config)
+
         moe_layer = model.layers[1].mlp
         experts = moe_layer.experts
 
-        # With ep_size=2, ep_rank=0, should have experts 0-3
-        self.assertEqual(experts.local_expert_start, 0)
-        self.assertEqual(experts.local_expert_end, 4)
+        # Should NOT have 3D gate_up_proj or down_proj parameters
+        self.assertFalse(hasattr(experts, 'gate_up_proj') and isinstance(experts.gate_up_proj, nn.Parameter))
+        self.assertFalse(hasattr(experts, 'down_proj') and isinstance(experts.down_proj, nn.Parameter))
 
-    def test_ep_disabled_by_default(self):
-        """Test EP is disabled (ep_size=1) by default."""
-        config = get_moe_test_config()  # No ep_size specified
+    def test_expert_parameter_shapes(self):
+        """Test that expert parameters have correct shapes."""
+        config = get_moe_test_config()
         model = DeepseekV32Model(config)
 
         moe_layer = model.layers[1].mlp
-        self.assertEqual(moe_layer.ep_size, 1)
-        # All experts should be local
-        self.assertEqual(moe_layer.experts.local_expert_start, 0)
-        self.assertEqual(moe_layer.experts.local_expert_end, 8)
+        expert = moe_layer.experts.experts[0]
 
-
-class DeepseekV32DistributedMoETest(unittest.TestCase):
-    @patch("transformers.models.deepseek_v32.modeling_deepseek_v32.rotate_activation", side_effect=lambda x: x)
-    def test_distributed_moe_all_reduce(self, mock_rotate):
-        config = DeepseekV32Config(
-            hidden_size=128,
-            intermediate_size=256,
-            moe_intermediate_size=64,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            n_routed_experts=8,
-            num_experts_per_tok=2,
-            n_group=2,
-            topk_group=1,  # Must be less than n_group
-            first_k_dense_replace=1,  # Layer 1, 2, 3 will be MoE
-            ep_size=2,  # Enable Expert Parallelism with 2 GPUs
+        # gate_up_proj should be (2 * intermediate_size, hidden_size)
+        self.assertEqual(
+            expert.gate_up_proj.weight.shape,
+            (2 * config.intermediate_size, config.hidden_size)
         )
+        # down_proj should be (hidden_size, intermediate_size)
+        self.assertEqual(
+            expert.down_proj.weight.shape,
+            (config.hidden_size, config.intermediate_size)
+        )
+
+    def test_expert_forward_produces_correct_shape(self):
+        """Test that expert forward produces correct output shape."""
+        config = get_moe_test_config()
         model = DeepseekV32Model(config)
 
-        # Layer 1 should be MoE with EP enabled
         moe_layer = model.layers[1].mlp
-        self.assertEqual(moe_layer.ep_size, 2)
+        expert = moe_layer.experts.experts[0]
 
-        input_ids = torch.LongTensor([[0, 1, 2]])
-        
-        # Mock distributed
-        with patch("torch.distributed.is_initialized", return_value=True), \
-             patch("torch.distributed.get_world_size", return_value=2), \
-             patch("torch.distributed.all_reduce") as mock_all_reduce:
-            
-            model(input_ids)
-            
-            # Check if all_reduce was called
-            # We have 3 MoE layers (1, 2, 3), so it should be called at least 3 times
-            self.assertTrue(mock_all_reduce.called)
-            self.assertGreaterEqual(mock_all_reduce.call_count, 3)
+        # Test forward on a single token
+        hidden_states = torch.randn(3, config.hidden_size)  # 3 tokens
+        output = expert(hidden_states)
 
-    @patch("transformers.models.deepseek_v32.modeling_deepseek_v32.rotate_activation", side_effect=lambda x: x)
-    def test_distributed_moe_disabled_by_default(self, mock_rotate):
-        config = DeepseekV32Config(
-            hidden_size=128,
-            intermediate_size=256,
-            moe_intermediate_size=64,
-            num_hidden_layers=4,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            n_routed_experts=8,
-            num_experts_per_tok=2,
-            n_group=2,
-            topk_group=1,  # Must be less than n_group
-            first_k_dense_replace=1,
-            # ep_size=1 by default (no EP)
-        )
+        self.assertEqual(output.shape, (3, config.hidden_size))
+
+    def test_moe_layer_no_ep_attributes(self):
+        """Test that MoE layer doesn't have old EP-specific attributes."""
+        config = get_moe_test_config()
         model = DeepseekV32Model(config)
-        
-        input_ids = torch.LongTensor([[0, 1, 2]])
-        
-        # Mock distributed to ensure it's not called even if env looks distributed
-        with patch("torch.distributed.is_initialized", return_value=True), \
-             patch("torch.distributed.get_world_size", return_value=2), \
-             patch("torch.distributed.all_reduce") as mock_all_reduce:
-            
-            model(input_ids)
-            
-            self.assertFalse(mock_all_reduce.called)
 
+        moe_layer = model.layers[1].mlp
+
+        # Old EP attributes should not exist
+        self.assertFalse(hasattr(moe_layer, 'ep_size'))
+        self.assertFalse(hasattr(moe_layer, 'ep_rank'))
+
+    def test_all_experts_are_used(self):
+        """Test that routing can potentially use all experts."""
+        config = get_moe_test_config(n_routed_experts=8, num_experts_per_tok=2)
+        model = DeepseekV32Model(config)
+        model.eval()
+
+        # With enough varied inputs, all experts should be touched
+        torch.manual_seed(123)
+        all_experts_touched = set()
+
+        # Run multiple forward passes with different inputs
+        for i in range(20):
+            input_ids = torch.randint(1, 99, (1, 10))
+            with torch.no_grad():
+                # Hook to capture which experts are used
+                moe_layer = model.layers[1].mlp
+
+                # Get routing logits
+                hidden = model.embed_tokens(input_ids)
+                hidden = model.layers[0](hidden, position_embeddings=model.rotary_emb(hidden, position_ids=torch.arange(10).unsqueeze(0)))[0]
+                hidden = model.layers[1].input_layernorm(hidden)
+
+                # Get attention output first
+                attn_out = model.layers[1].self_attn(
+                    hidden,
+                    position_embeddings=model.rotary_emb(hidden, position_ids=torch.arange(10).unsqueeze(0)),
+                    attention_mask=None,
+                )[0]
+                hidden = hidden + attn_out
+                hidden = model.layers[1].post_attention_layernorm(hidden)
+
+                router_logits = moe_layer.gate(hidden)
+                topk_indices, _ = moe_layer.route_tokens_to_experts(router_logits.view(-1, router_logits.shape[-1]))
+
+                for idx in topk_indices.flatten().tolist():
+                    all_experts_touched.add(idx)
+
+        # Should touch most experts
+        self.assertGreater(len(all_experts_touched), 4, "Should touch at least half of the experts")
+
+
+class DeepseekV32MoERoutingTest(unittest.TestCase):
+    """Test MoE routing functionality."""
+
+    def test_routing_produces_valid_indices(self):
+        """Test that routing produces valid expert indices."""
+        config = get_moe_test_config(n_routed_experts=8, num_experts_per_tok=2)
+        model = DeepseekV32Model(config)
+        model.eval()
+
+        moe_layer = model.layers[1].mlp
+
+        # Simulate routing
+        hidden = torch.randn(5, config.hidden_size)  # 5 tokens
+        router_logits = moe_layer.gate(hidden)
+        topk_indices, topk_weights = moe_layer.route_tokens_to_experts(router_logits)
+
+        # Check shapes
+        self.assertEqual(topk_indices.shape, (5, config.num_experts_per_tok))
+        self.assertEqual(topk_weights.shape, (5, config.num_experts_per_tok))
+
+        # Check indices are valid
+        self.assertTrue((topk_indices >= 0).all())
+        self.assertTrue((topk_indices < config.n_routed_experts).all())
+
+        # Check weights are positive (after sigmoid + scaling)
+        self.assertTrue((topk_weights > 0).all())
+
+    def test_routing_normalization(self):
+        """Test that routing weights are normalized when norm_topk_prob=True."""
+        config = get_moe_test_config(norm_topk_prob=True)
+        model = DeepseekV32Model(config)
+        model.eval()
+
+        moe_layer = model.layers[1].mlp
+
+        hidden = torch.randn(5, config.hidden_size)
+        router_logits = moe_layer.gate(hidden)
+        _, topk_weights = moe_layer.route_tokens_to_experts(router_logits)
+
+        # After normalization and scaling, weights should sum to routed_scaling_factor
+        expected_sum = config.routed_scaling_factor
+        actual_sums = topk_weights.sum(dim=-1)
+        self.assertTrue(torch.allclose(actual_sums, torch.full_like(actual_sums, expected_sum), atol=1e-5))
+
+
+if __name__ == "__main__":
+    unittest.main()
