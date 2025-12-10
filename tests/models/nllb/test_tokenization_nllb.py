@@ -325,3 +325,24 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(
             inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
         )
+
+    def test_add_language_codes_appends_and_deduplicates():
+        tok = NllbTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-600M",
+            src_lang="eng_Latn",
+            use_fast=False,
+        )
+        original_additional = list(tok.additional_special_tokens)
+    
+        # add two codes, one new, one existing
+        ids = tok.add_language_codes(["eng_Latn", "ami_Latn"])
+    
+        # eng_Latn still present, ami_Latn added at end
+        assert "eng_Latn" in tok.additional_special_tokens
+        assert "ami_Latn" in tok.additional_special_tokens
+        assert len(tok.additional_special_tokens) == len(original_additional) + 1
+    
+        # IDs round-trip
+        for code, tid in zip(["eng_Latn", "ami_Latn"], ids):
+            assert tok.convert_tokens_to_ids(code) == tid
+
