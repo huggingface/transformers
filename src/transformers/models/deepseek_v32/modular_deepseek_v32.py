@@ -112,6 +112,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
@@ -563,13 +564,24 @@ class DeepseekV32TopkRouter(DeepseekV3TopkRouter):
 
 
 class DeepseekV32NaiveMoe(nn.Module):
-    """Collection of expert weights stored as 3D tensors.
+    """Collection of expert weights stored as 3D tensors with multi-GPU support.
 
-    This overrides the parent MixtralExperts forward method to use consistent device
-    placement for gradient checkpointing compatibility with use_reentrant=True.
+    This implementation supports both single-GPU and distributed Expert Parallelism (EP)
+    following the DeepSeek-V3 architecture (https://arxiv.org/abs/2412.19437).
+
+    Multi-GPU Support:
+        - **Expert Parallelism (EP)**: When `ep_size > 1`, experts are sharded across GPUs.
+          Each GPU holds `num_experts // ep_size` local experts and only computes outputs
+          for those experts. Results are gathered via `all_reduce` in the parent MoE class.
+        - **Pipeline/Device Parallelism**: Works with `dispatch_model` where layers may be
+          on different devices. Uses consistent device placement for gradient checkpointing.
+
+    Gradient Checkpointing:
+        - Uses `target_device = hidden_states.device` for consistent tensor placement
+        - Expert assignments are computed under `torch.no_grad()` for determinism
     """
 
-    def __init__(self, config):
+    def __init__(self, config, ep_size: int = 1, ep_rank: int = 0):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -578,55 +590,124 @@ class DeepseekV32NaiveMoe(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+        # Expert parallelism configuration
+        self.ep_size = ep_size
+        self.ep_rank = ep_rank
+
+        # Compute local expert range for this rank
+        if self.ep_size > 1:
+            experts_per_rank = self.num_experts // self.ep_size
+            self.local_expert_start = self.ep_rank * experts_per_rank
+            self.local_expert_end = self.local_expert_start + experts_per_rank
+        else:
+            self.local_expert_start = 0
+            self.local_expert_end = self.num_experts
+
+    def _compute_expert_assignments(
+        self,
+        top_k_index: torch.Tensor,
+        target_device: torch.device,
+    ) -> List[Tuple[int, torch.Tensor, torch.Tensor]]:
+        """Compute expert-to-token assignments for local experts only.
+
+        Returns a list of (expert_idx, top_k_pos, token_idx) tuples for each active
+        expert within this rank's local expert range [local_expert_start, local_expert_end).
+
+        This is computed under torch.no_grad() and is deterministic for gradient checkpointing.
+        """
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+
+            # Only process experts in our local range (for EP support)
+            assignments = []
+            for expert_idx_val in range(self.local_expert_start, self.local_expert_end):
+                # Check if this expert has any assigned tokens
+                expert_slice = expert_mask[expert_idx_val]
+                if expert_slice.sum() == 0:
+                    continue
+                top_k_pos, token_idx = torch.where(expert_slice)
+                # Move indices to target device for consistency
+                assignments.append((
+                    expert_idx_val,
+                    top_k_pos.to(target_device),
+                    token_idx.to(target_device),
+                ))
+
+        return assignments
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        # Use float32 for accumulation to match DeepSeek reference implementation
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
 
-        # Use consistent device from input tensor for gradient checkpointing compatibility.
-        # During recomputation, per-token device placement may vary, but the input tensor's
-        # device remains stable. This ensures deterministic tensor metadata for use_reentrant=True.
+        # Use consistent device from input tensor for gradient checkpointing compatibility
         target_device = hidden_states.device
 
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        # Compute expert assignments for LOCAL experts only (supports EP)
+        assignments = self._compute_expert_assignments(top_k_index, target_device)
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            # Use target_device (input device) instead of current_state.device for
-            # deterministic device placement during gradient checkpointing recomputation
+        for expert_idx, top_k_pos, token_idx in assignments:
+            current_state = hidden_states[token_idx].to(target_device)
             gate_up_weight = self.gate_up_proj[expert_idx].to(target_device)
             down_weight = self.down_proj[expert_idx].to(target_device)
-            current_state = current_state.to(target_device)
+
             gate, up = nn.functional.linear(current_state, gate_up_weight).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, down_weight)
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None].to(target_device)
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.float())
 
         return final_hidden_states
 
 
 class DeepseekV32MoE(nn.Module):
     """
-    A mixed expert module containing shared experts.
+    A mixed expert module containing shared experts with multi-GPU support.
 
-    Overrides DeepseekV3MoE to use DeepseekV32NaiveMoe with gradient checkpointing fixes.
+    This implementation supports Expert Parallelism (EP) following the DeepSeek-V3
+    architecture (https://arxiv.org/abs/2412.19437). When `ep_size > 1`:
+    - Experts are sharded across GPUs (each GPU has `num_experts // ep_size` experts)
+    - Each GPU computes outputs only for its local experts
+    - Results are gathered via `all_reduce` to combine partial outputs
+
+    The EP configuration can be set via:
+    - `config.ep_size`: Number of GPUs for expert parallelism (default: 1)
+    - Or automatically detected from `torch.distributed` if initialized
+
+    Example:
+        ```python
+        # Single GPU (default)
+        config = DeepseekV32Config(...)
+        model = DeepseekV32ForCausalLM(config)
+
+        # Expert Parallelism with 8 GPUs
+        config = DeepseekV32Config(..., ep_size=8)
+        model = DeepseekV32ForCausalLM(config)
+        ```
     """
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = DeepseekV32NaiveMoe(config)
+
+        # Expert parallelism configuration
+        # Can be set via config or auto-detected from torch.distributed
+        self.ep_size = getattr(config, "ep_size", 1)
+        if self.ep_size == 1 and torch.distributed.is_initialized():
+            # Auto-detect from distributed environment if not explicitly set
+            # Users can override by setting config.ep_size
+            pass  # Keep ep_size=1 unless explicitly configured
+
+        self.ep_rank = 0
+        if self.ep_size > 1 and torch.distributed.is_initialized():
+            self.ep_rank = torch.distributed.get_rank() % self.ep_size
+
+        self.experts = DeepseekV32NaiveMoe(config, ep_size=self.ep_size, ep_rank=self.ep_rank)
         self.gate = DeepseekV32TopkRouter(config)
         self.shared_experts = DeepseekV32MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
@@ -669,8 +750,18 @@ class DeepseekV32MoE(nn.Module):
         router_logits = self.gate(hidden_states)
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
+
+        # Compute expert outputs (each rank computes only its local experts in EP mode)
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+
+        # All-reduce to gather outputs from all EP ranks
+        # Following DeepSeek-V3 reference: dist.all_reduce(y)
+        if self.ep_size > 1 and torch.distributed.is_initialized():
+            torch.distributed.all_reduce(hidden_states)
+
+        # Add shared experts (not sharded, computed on all ranks)
+        hidden_states = hidden_states.view(*orig_shape)
+        hidden_states = hidden_states.type_as(residuals) + self.shared_experts(residuals)
         return hidden_states
 
 

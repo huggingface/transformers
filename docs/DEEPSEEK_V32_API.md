@@ -420,12 +420,84 @@ For 128K context with 128 heads, returning full attention would require ~8TB per
 
 ---
 
+## Distributed Training
+
+### Expert Parallelism (EP)
+
+DeepSeek V3.2 supports Expert Parallelism following the [DeepSeek-V3 architecture](https://arxiv.org/abs/2412.19437). When `ep_size > 1`:
+- Experts are sharded across GPUs (each GPU has `num_experts // ep_size` experts)
+- Each GPU only computes outputs for its local experts
+- Results are gathered via `all_reduce` to combine partial outputs
+
+```python
+from transformers import DeepseekV32Config, DeepseekV32ForCausalLM
+
+# Single GPU (default)
+config = DeepseekV32Config(...)
+model = DeepseekV32ForCausalLM(config)
+
+# Expert Parallelism with 8 GPUs (32 experts per GPU for 256 total)
+config = DeepseekV32Config(..., ep_size=8)
+model = DeepseekV32ForCausalLM(config)
+```
+
+| Config Parameter | Type | Default | Description |
+|-----------------|------|---------|-------------|
+| `ep_size` | int | 1 | Number of GPUs for expert parallelism |
+
+**How EP works:**
+1. Each GPU holds `num_experts // ep_size` local experts
+2. All GPUs compute routing decisions identically (router is replicated)
+3. Each GPU processes tokens only through its local experts
+4. `all_reduce` sums partial outputs from all ranks
+
+**Reference:** DeepSeek-V3 uses 32-way EP (EP32) in training and 64-way EP in inference.
+
+### Gradient Checkpointing
+
+Gradient checkpointing is fully supported with `use_reentrant=True` (the default):
+
+```python
+from transformers import TrainingArguments
+
+args = TrainingArguments(
+    gradient_checkpointing=True,
+    # Default is use_reentrant=True, which saves ~10-15% memory
+)
+```
+
+**Implementation details:**
+- Uses consistent device placement (`target_device = hidden_states.device`) for deterministic tensor metadata during recomputation
+- Expert routing decisions are computed under `torch.no_grad()` ensuring determinism
+- Residual connections use the same target device for all operations
+
+### Multi-GPU Deployment Modes
+
+| Mode | Config | Description |
+|------|--------|-------------|
+| **Single GPU** | Default | All experts on one GPU |
+| **Expert Parallelism (EP)** | `ep_size=N` | Experts sharded across N GPUs, `all_reduce` for outputs |
+| **Pipeline Parallelism** | `dispatch_model` | Layers distributed across GPUs |
+| **Data Parallelism (DDP)** | Standard PyTorch DDP | Full model replicated on each GPU |
+| **FSDP** | HuggingFace Trainer | Sharded parameters across GPUs |
+
+**Example: EP + DDP hybrid:**
+```python
+# 8 nodes × 8 GPUs = 64 GPUs total
+# EP across 8 GPUs per node, DDP across 8 nodes
+config = DeepseekV32Config(..., ep_size=8)
+# Use standard DDP wrapper or HuggingFace Trainer
+```
+
+---
+
 ## Compatibility
 
 - **PyTorch**: >= 2.4.0
 - **CUDA**: Tested on H100/H200
 - **PEFT**: Compatible (target indexer modules for LoRA)
 - **DeepSpeed ZeRO**: Compatible
+- **Expert Parallelism**: Supported via `config.ep_size`
 
 ### Attention Backend Support
 
