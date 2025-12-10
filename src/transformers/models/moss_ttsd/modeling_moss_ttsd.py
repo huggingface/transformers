@@ -433,7 +433,7 @@ class MossTTSDModel(MossTTSDPretrainedModel):
 class MossTTSDForCausalLM(MossTTSDPretrainedModel, MossTTSDGenerationMixin):
     """MOSS-TTSD model for causal language modeling with multi-channel support."""
 
-    _tied_weights_keys = []
+    _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -442,7 +442,9 @@ class MossTTSDForCausalLM(MossTTSDPretrainedModel, MossTTSDGenerationMixin):
         self.model = MossTTSDModel(config)
         self.channels = config.channels
         self.weights = [1 for _ in range(self.channels)]
-        self._tied_weights_keys = [f"lm_heads.{i}.weight" for i in range(self.channels)]
+        self._tied_weights_keys = {
+            f"lm_heads.{i}.weight": f"model.embedding_list.{i}.weight" for i in range(self.channels)
+        }
         self.vocab_size = config.vocab_size
         self.lm_heads = nn.ModuleList([])
         self.lm_heads.append(nn.Linear(config.hidden_size, config.vocab_size, bias=False))
@@ -462,10 +464,11 @@ class MossTTSDForCausalLM(MossTTSDPretrainedModel, MossTTSDGenerationMixin):
         """Check if tokens are speech tokens."""
         return (tokens >= self.config.speech_token_range[0]) & (tokens < self.config.speech_token_range[1])
 
-    def tie_weights(self):
+    def tie_weights(self, recompute_mapping: bool = True):
         """Tie the weights between input embeddings and output embeddings."""
-        for i in range(self.config.channels):
-            self._tie_or_clone_weights(self.lm_heads[i], self.model.embedding_list[i])
+        if self.config.tie_word_embeddings:
+            for i in range(self.config.channels):
+                self._tie_or_clone_weights(self.lm_heads[i], self.model.embedding_list[i])
 
     def set_input_embeddings(self, value: nn.Embedding):
         """Set the input embeddings for the model."""
