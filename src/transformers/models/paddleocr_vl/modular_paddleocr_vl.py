@@ -871,6 +871,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         pixel_values: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         """
         Args:
@@ -1044,6 +1045,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         cu_seqlens: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[list[Union[tuple[int, int, int], list[tuple[int, int, int]]]]] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         """
         Args:
