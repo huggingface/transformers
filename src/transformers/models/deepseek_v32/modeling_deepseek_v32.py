@@ -337,6 +337,41 @@ class DeepseekV32MoE(nn.Module):
         return hidden_states
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def hadamard_transform_fallback(x: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
     """
     Pure PyTorch Fast Walsh-Hadamard Transform fallback.
@@ -397,62 +432,6 @@ def rotate_activation(x: torch.Tensor) -> torch.Tensor:
         return hadamard_transform(x.contiguous(), scale=scale)
     else:
         return hadamard_transform_fallback(x, scale=scale)
-
-
-def apply_rotary_pos_emb_non_interleave(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    unsqueeze_dim: int = 2,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Applies Rotary Position Embedding with NON-INTERLEAVED layout.
-
-    This is specifically for the Indexer, which requires non-interleaved RoPE
-    (different from the MLA which uses interleaved RoPE).
-
-    The difference is in how dimensions are paired:
-    - Interleaved: pairs (0,1), (2,3), (4,5), ...
-    - Non-interleaved: pairs (0, dim/2), (1, dim/2+1), ...
-
-    For non-interleaved RoPE, the rotation is applied to pairs of elements at positions
-    (i, i+dim/2) rather than adjacent pairs. This means cos/sin should have dimension
-    dim/2 to match the split halves of q and k.
-
-    Args:
-        q: Query tensor of shape (batch, seq_len, heads, head_dim)
-        k: Key tensor of shape (batch, seq_len, heads, head_dim) or (batch, seq_len, 1, head_dim)
-        cos: Cosine of rotary angles, shape (batch, seq_len, rope_dim)
-        sin: Sine of rotary angles, shape (batch, seq_len, rope_dim)
-        unsqueeze_dim: Dimension to unsqueeze cos/sin for broadcasting (default 2 for heads dim)
-
-    Returns:
-        Tuple of rotated (query, key) tensors
-    """
-    # Non-interleaved: split in half and rotate
-    # q = [q1, q2] where q1 is first half, q2 is second half
-    # rotated = [q1 * cos - q2 * sin, q1 * sin + q2 * cos]
-    q1, q2 = q.chunk(2, dim=-1)
-    k1, k2 = k.chunk(2, dim=-1)
-
-    # For non-interleaved RoPE, cos/sin should match the dimension of q1/q2
-    # If cos/sin have full dimension (from standard RoPE), slice to half
-    half_dim = q1.shape[-1]
-    if cos.shape[-1] != half_dim:
-        cos = cos[..., :half_dim]
-        sin = sin[..., :half_dim]
-
-    # cos/sin shape: (batch, seq, half_dim)
-    # For q/k with shape (batch, seq, heads, half_dim), unsqueeze at dim 2
-    # Result: (batch, seq, 1, half_dim) which broadcasts with (batch, seq, heads, half_dim)
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    q_embed = torch.cat([q1 * cos - q2 * sin, q1 * sin + q2 * cos], dim=-1)
-    k_embed = torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], dim=-1)
-
-    return q_embed, k_embed
 
 
 class DeepseekV32Indexer(nn.Module):
@@ -543,9 +522,10 @@ class DeepseekV32Indexer(nn.Module):
 
         k_rope, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # Apply NON-INTERLEAVED RoPE (critical difference from MLA!)
+        # Apply RoPE (Llama's apply_rotary_pos_emb is non-interleaved by default)
+        # unsqueeze_dim=2 for shape [B, S, heads, dim]
         k_rope = k_rope.unsqueeze(2)  # [B, S, 1, rope_dim]
-        q_rope, k_rope = apply_rotary_pos_emb_non_interleave(q_rope, k_rope, cos, sin)
+        q_rope, k_rope = apply_rotary_pos_emb(q_rope, k_rope, cos, sin, unsqueeze_dim=2)
         k_rope = k_rope.squeeze(2)  # [B, S, rope_dim]
 
         # Concatenate back
@@ -590,41 +570,6 @@ class DeepseekV32Indexer(nn.Module):
         if output_scores:
             return topk_indices, index_scores
         return topk_indices
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
