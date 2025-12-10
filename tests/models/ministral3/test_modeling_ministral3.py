@@ -90,7 +90,11 @@ class Ministral3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]])
+        EXPECTED_MEAN = (
+            torch.tensor([[-0.9800, -2.4773, -0.2386, -1.0664, -1.8994, -1.3792, -1.0531, -1.8832]])
+            if model.device.type == "xpu"
+            else torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]])
+        )
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
 
         del model
