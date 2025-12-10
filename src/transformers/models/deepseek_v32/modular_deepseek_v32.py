@@ -46,38 +46,19 @@ The model supports two-stage training following the DeepSeek V3.2 technical repo
     Train the indexer to match the attention distribution using KL divergence loss.
     Two approaches are supported:
 
-    *Option A: Joint training with combined loss*
     ```python
     model.config.indexer_kl_coef = 0.1  # Enable KL loss
     outputs = model(input_ids, labels=labels)
     loss = outputs.loss  # lm_loss + 0.1 * indexer_kl_loss
-    loss.backward()
+    loss.backward()  # Single backward updates both LM and indexer params
     ```
 
-    *Option B: Dual LoRA with separate backward passes (for PEFT/verl)*
+    For dual LoRA with separate optimizers (e.g., different learning rates):
     ```python
-    # Create separate optimizers for LLM and indexer parameters
-    llm_optimizer = AdamW([p for n, p in model.named_parameters() if "indexer" not in n])
-    indexer_optimizer = AdamW([p for n, p in model.named_parameters() if "indexer" in n])
-
-    # Forward pass with explicit indexer output request
-    model.config.indexer_kl_coef = 1.0  # Or set output_indexer_* explicitly
-    outputs = model(
-        input_ids,
-        labels=labels,
-        output_indexer_scores=True,
-        output_indexer_kl_target=True,
-    )
-
-    # Backward pass 1: LM loss -> LLM parameters
-    llm_optimizer.zero_grad()
+    outputs = model(input_ids, labels=labels)
+    # Access separate losses for independent backward passes
     outputs.lm_loss.backward(retain_graph=True)
-    llm_optimizer.step()
-
-    # Backward pass 2: KL loss -> Indexer parameters
-    indexer_optimizer.zero_grad()
     outputs.indexer_kl_loss.backward()
-    indexer_optimizer.step()
     ```
 
 Output Fields
@@ -757,12 +738,15 @@ class DeepseekV32DecoderLayer(DeepseekV3DecoderLayer):
     DeepSeek V3.2 decoder layer.
 
     Only difference from V3: uses DeepseekV32Attention with Lightning Indexer.
-    The forward() is overridden to handle the additional indexer outputs.
+
+    Note: forward() must be overridden because V3.2 attention returns 4 values
+    (hidden_states, attn_weights, indexer_scores, indexer_kl_target) vs V3's 2 values.
+    This signature change propagates up, requiring a full forward override.
+    The MLP logic (4 lines) is duplicated but factoring it out would add complexity.
     """
 
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Override attention with V3.2 sparse attention
         self.self_attn = DeepseekV32Attention(config=config, layer_idx=layer_idx)
 
     def forward(
