@@ -187,11 +187,47 @@ from transformers import AutoModelForImageTextToText
 model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2")
 ```
 
-## PaddleOCRVLConfig
-
-[[autodoc]] PaddleOCRVLConfig
-
 ## PaddleOCRVLForConditionalGeneration
 
 [[autodoc]] PaddleOCRVLForConditionalGeneration
     - forward
+
+## PaddleOCRVLConfig
+
+[[autodoc]] PaddleOCRVLConfig
+
+## PaddleOCRVisionConfig
+
+[[autodoc]] PaddleOCRVisionConfig
+
+## PaddleOCRTextConfig
+
+[[autodoc]] PaddleOCRTextConfig
+
+## PaddleOCRTextModel
+
+[[autodoc]] PaddleOCRTextModel
+
+## PaddleOCRVisionModel
+
+[[autodoc]] PaddleOCRVisionModel
+
+## PaddleOCRVLImageProcessor
+
+[[autodoc]] PaddleOCRVLImageProcessor
+
+## PaddleOCRVLImageProcessorFast
+
+[[autodoc]] PaddleOCRVLImageProcessorFast
+
+## PaddleOCRVLModel
+
+[[autodoc]] PaddleOCRVLModel
+
+## PaddleOCRVLProcessor
+
+[[autodoc]] PaddleOCRVLProcessor
+
+## PaddleOCRVisionTransformer
+
+[[autodoc]] PaddleOCRVisionTransformer
