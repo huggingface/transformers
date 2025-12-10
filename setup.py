@@ -57,7 +57,6 @@ To create the package for pypi.
    Check you can run the following commands:
    python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
    python -c "from transformers import *"
-   python utils/check_build.py --check_lib
 
    If making a patch release, double check the bug you are patching is indeed resolved.
 
