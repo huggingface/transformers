@@ -165,48 +165,72 @@ class Lfm2VlProcessor(ProcessorMixin):
         image_sizes: list[list[int]],
         use_image_special_tokens: bool,
         **images_kwargs,
-    ):
-        prompt_strings = []
+    ) -> list[str]:
+        use_thumbnail = images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
+        image_data = iter(zip(image_rows, image_cols, image_sizes))
 
-        image_data = iter(zip(*[image_rows, image_cols, image_sizes]))
+        prompt_strings = []
         for sample_text, sample_images in zip(text, images):
-            split_sample = sample_text.split(self.image_token)
-            sample_text_with_image_tokens = ""
-            i = 0
-            for image in sample_images:
-                sample_text_with_image_tokens += split_sample[i]
-                if use_image_special_tokens:
-                    sample_text_with_image_tokens += self.image_start_token
+            text_parts = sample_text.split(self.image_token)
+            result_parts = []
+
+            for i, _ in enumerate(sample_images):
+                result_parts.append(text_parts[i])
 
                 rows, cols, image_size = next(image_data)
-                use_thumbnail = images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
                 tokens_per_tile, tokens_for_image = self._get_image_num_tokens(image_size, **images_kwargs)
+                image_tokens = self._build_image_tokens(
+                    rows,
+                    cols,
+                    tokens_per_tile,
+                    tokens_for_image,
+                    use_thumbnail,
+                    use_image_special_tokens,
+                )
+                result_parts.append(image_tokens)
 
-                is_multi_tile = rows > 1 or cols > 1
-                if is_multi_tile:
-                    for row in range(rows):
-                        for col in range(cols):
-                            if use_image_special_tokens:
-                                sample_text_with_image_tokens += f"<|img_row_{row + 1}_col_{col + 1}|>"
-                            sample_text_with_image_tokens += self.image_token * tokens_per_tile
+            # Add remaining text after the last image
+            if len(sample_images) < len(text_parts):
+                result_parts.append(text_parts[-1])
 
-                    if use_thumbnail:
-                        if use_image_special_tokens:
-                            sample_text_with_image_tokens += self.image_thumbnail_token
-                        sample_text_with_image_tokens += self.image_token * tokens_for_image
-                else:
-                    sample_text_with_image_tokens += self.image_token * tokens_for_image
-
-                if use_image_special_tokens:
-                    sample_text_with_image_tokens += self.image_end_token
-                i += 1
-
-            # add the remaining text
-            if i < len(split_sample):
-                sample_text_with_image_tokens += split_sample[i]
-            prompt_strings.append(sample_text_with_image_tokens)
+            prompt_strings.append("".join(result_parts))
 
         return prompt_strings
+
+    def _build_image_tokens(
+        self,
+        rows: int,
+        cols: int,
+        tokens_per_tile: int,
+        tokens_for_image: int,
+        use_thumbnail: bool,
+        use_image_special_tokens: bool,
+    ) -> str:
+        """Build the expanded token string for a single image."""
+        parts = []
+
+        if use_image_special_tokens:
+            parts.append(self.image_start_token)
+
+        is_multi_tile = rows > 1 or cols > 1
+        if is_multi_tile:
+            for row in range(rows):
+                for col in range(cols):
+                    if use_image_special_tokens:
+                        parts.append(f"<|img_row_{row + 1}_col_{col + 1}|>")
+                    parts.append(self.image_token * tokens_per_tile)
+
+            if use_thumbnail:
+                if use_image_special_tokens:
+                    parts.append(self.image_thumbnail_token)
+                parts.append(self.image_token * tokens_for_image)
+        else:
+            parts.append(self.image_token * tokens_for_image)
+
+        if use_image_special_tokens:
+            parts.append(self.image_end_token)
+
+        return "".join(parts)
 
     def _compute_tokens_per_tile(self, tile_size: int, encoder_patch_size: int, downsample_factor: int) -> int:
         """Compute the number of tokens for a single tile."""
