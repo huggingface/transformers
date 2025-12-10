@@ -38,6 +38,7 @@ import types
 import unittest
 from collections import UserDict, defaultdict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
@@ -72,7 +73,9 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
+    WEIGHTS_INDEX_NAME,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
@@ -218,6 +221,9 @@ _COMMON_MODEL_NAMES_MAP = {
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
+
+    from .modeling_utils import PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -4313,3 +4319,48 @@ def build_cpu_memory_monitor(logger_instance: logging.Logger | None = None) -> C
         else:
             logger_instance.warning("psutil not available, memory monitoring disabled")
     return monitor
+
+
+def convert_all_safetensors_to_bins(folder: str):
+    """Convert all safetensors files into torch bin files, to mimic saving with torch (since we still support loading
+    bin files, but not saving them anymore)"""
+    for file in os.listdir(folder):
+        path = os.path.join(folder, file)
+        if file.endswith(".safetensors"):
+            new_path = path.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            state_dict = load_file(path)
+            os.remove(path)
+            torch.save(state_dict, new_path)
+        # Adapt the index as well
+        elif file == SAFE_WEIGHTS_INDEX_NAME:
+            new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
+            with open(path) as f:
+                index = json.loads(f.read())
+            os.remove(path)
+            if "weight_map" in index.keys():
+                weight_map = index["weight_map"]
+                new_weight_map = {}
+                for k, v in weight_map.items():
+                    new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            index["weight_map"] = new_weight_map
+            with open(new_path, "w") as f:
+                f.write(json.dumps(index, indent=4))
+
+
+@contextmanager
+def force_serialization_as_bin_files():
+    """Since we don't support saving with torch `.bin` files anymore, but still support loading them, we use this context
+    to easily create the bin files and try to load them back"""
+    try:
+        # Monkey patch the method to save as bin files
+        original_save = PreTrainedModel.save_pretrained
+
+        def new_save(self, save_directory, *args, **kwargs):
+            original_save(self, save_directory, *args, **kwargs)
+            convert_all_safetensors_to_bins(save_directory)
+
+        PreTrainedModel.save_pretrained = new_save
+
+        yield
+    finally:
+        PreTrainedModel.save_pretrained = original_save
