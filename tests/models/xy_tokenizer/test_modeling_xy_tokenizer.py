@@ -134,8 +134,7 @@ class XYTokenizerModelTester:
                 "rvq_dim": self.code_dim,
                 "output_dim": self.code_dim,  # Output back to code_dim for post_rvq_adapter
                 "codebook_size": self.codebook_size,
-                "codebook_dim": self.code_dim
-                // self.num_quantizers,  # Each quantizer uses rvq_dim/num_quantizers dimensional codes
+                "codebook_dim": self.code_dim,
             },
             "post_rvq_adapter_kwargs": {
                 "input_dim": self.code_dim,  # Input from quantizer
