@@ -1484,7 +1484,9 @@ class ProcessorMixin(PushToHubMixin):
 
         if is_primary:
             # Primary tokenizer: load from root
-            tokenizer = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = auto_processor_class.from_pretrained(
+                pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+            )
         else:
             # Additional tokenizer: load from subfolder (e.g., "decoder_tokenizer")
             tokenizer_subfolder = os.path.join(subfolder, sub_processor_type) if subfolder else sub_processor_type
