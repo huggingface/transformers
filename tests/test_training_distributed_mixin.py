@@ -24,53 +24,16 @@ from transformers import is_torch_available, set_seed
 from transformers.testing_utils import (
     Colors,
     build_cpu_memory_monitor,
-    get_torch_dist_unique_port,
+    init_distributed,
     init_test_logger,
     is_training_distributed_test,
+    torch_device,
 )
-
 
 if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
-
-
-def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
-
-    if torch.cuda.is_available():
-        torch.cuda.set_device(rank)
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-
-    func(rank, *func_args, **func_kwargs)
-
-    dist.barrier()
-    dist.destroy_process_group()
-
-
-def init_distributed(tp: int):
-    def _init_distributed(func):
-        def wrapper(*args, **kwargs):
-            world_size = tp
-            port = get_torch_dist_unique_port()
-            spawn_args = (func, tp, port, args, kwargs)
-            mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
-
-        return wrapper
-
-    return _init_distributed
-
 
 logger = logging.getLogger("transformers.training_test")
 
@@ -192,14 +155,14 @@ class TrainingDistributedTesterMixin(ABC):
         # Fall back to first model class
         return self.all_model_classes[0]
 
-    @is_training_distributed_test
-    def test_training_distributed_overfit(self):
-        """Test that a tiny model can overfit on a fixed batch."""
-        # Extract all needed data into picklable objects BEFORE spawning
+    # ============================================================
+    # Shared distributed training test implementation
+    # ============================================================
+    def _run_distributed_training_test(self, fsdp: int, tp: int):
+        """Shared implementation for distributed training tests."""
         config = self.model_tester.get_config()
         model_class = self._get_trainable_model_class()
-        
-        # Prepare picklable arguments (dicts, strings, primitives - NOT self)
+
         config_dict = config.to_dict()
         model_class_name = model_class.__name__
         training_params = {
@@ -208,8 +171,30 @@ class TrainingDistributedTesterMixin(ABC):
             "learning_rate": self.training_overfit_learning_rate,
             "seq_length": self.training_overfit_seq_length,
         }
-        
-        # Call the standalone function with the decorator
-        init_distributed(tp=2)(_test_training_distributed_overfit_impl)(
+
+        init_distributed(fsdp=fsdp, tp=tp)(_test_training_distributed_overfit_impl)(
             config_dict, model_class_name, training_params
         )
+
+    # ============================================================
+    # Distributed training tests (FSDP x TP configurations)
+    # ============================================================
+    @is_training_distributed_test
+    def test_training_fsdp1_tp1(self):
+        """Test distributed training with FSDP=1, TP=1 (1 total processes)."""
+        self._run_distributed_training_test(fsdp=1, tp=1)
+
+    # @is_training_distributed_test
+    # def test_training_fsdp1_tp2(self):
+    #     """Test distributed training with FSDP=1, TP=2 (2 total processes)."""
+    #     self._run_distributed_training_test(fsdp=1, tp=2)
+
+    # @is_training_distributed_test
+    # def test_training_fsdp1_tp4(self):
+    #     """Test distributed training with FSDP=1, TP=4 (4 total processes)."""
+    #     self._run_distributed_training_test(fsdp=1, tp=4)
+
+    # @is_training_distributed_test
+    # def test_training_fsdp2_tp2(self):
+    #     """Test distributed training with FSDP=2, TP=2 (4 total processes)."""
+    #     self._run_distributed_training_test(fsdp=2, tp=2)
