@@ -411,9 +411,7 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
                 patch_size,
             )
             patches = patches.permute(0, 1, 4, 6, 3, 2, 5, 7)
-            flatten_patches = patches.reshape(
-                batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size
-            )
+            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
 
             processed_images_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
@@ -549,7 +547,54 @@ class PaddleOCRTextConfig(Ernie4_5Config):
 
 
 class PaddleOCRVLConfig(Qwen2VLConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PaddleOCRVLForConditionalGeneration`]. It is used to instantiate a
+    PaddleOCRVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    PaddleOCRVL [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 100295):
+            The image token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 101305):
+            The token index to denote start of vision input.
+        vision_end_token_id (`int`, *optional*, defaults to 101306):
+            The token index to denote end of vision input.
+
+    ```python
+    >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
+
+    >>> # Initializing a PaddleOCRVL style configuration
+    >>> configuration = PaddleOCRVLConfig()
+
+    >>> # Initializing a model from the PaddleOCRVL style configuration
+    >>> model = PaddleOCRVLForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=100295,
+        vision_start_token_id=101305,
+        vision_end_token_id=101306,
+        **kwargs,
+    ):
+        super().__init__()
+        del self.video_token_id
 
 
 class PaddleOCRProjector(nn.Module):

@@ -256,27 +256,25 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
 class PaddleOCRVLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PaddleOCRVLModel`]. It is used to instantiate a
-    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PaddleOCRVLForConditionalGeneration`]. It is used to instantiate a
+    PaddleOCRVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+    PaddleOCRVL [PaddlePaddle/PaddleOCR-VL](https://huggingface.co/PaddlePaddle/PaddleOCR-VL).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRVLTextConfig`):
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `PaddleOCRTextConfig`):
             The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVLVisionConfig`):
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `PaddleOCRVisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
+        image_token_id (`int`, *optional*, defaults to 100295):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
-            The video token index to encode the image prompt.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
+        vision_start_token_id (`int`, *optional*, defaults to 101305):
             The token index to denote start of vision input.
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
+        vision_end_token_id (`int`, *optional*, defaults to 101306):
             The token index to denote end of vision input.
 
     ```python
@@ -285,7 +283,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     >>> # Initializing a PaddleOCRVL style configuration
     >>> configuration = PaddleOCRVLConfig()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> # Initializing a model from the PaddleOCRVL style configuration
     >>> model = PaddleOCRVLForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -293,6 +291,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "paddleocr_vl"
+
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -300,10 +299,9 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        image_token_id=151655,
-        video_token_id=151656,
-        vision_start_token_id=151652,
-        vision_end_token_id=151653,
+        image_token_id=100295,
+        vision_start_token_id=101305,
+        vision_end_token_id=101306,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -322,7 +320,6 @@ class PaddleOCRVLConfig(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**text_config)
 
         self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
