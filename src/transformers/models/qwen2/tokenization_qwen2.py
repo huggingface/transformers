@@ -14,10 +14,11 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
+from typing import Optional, Union
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
-from ...tokenization_utils_base import generate_merges
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -38,33 +39,30 @@ PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p
 class Qwen2Tokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         vocab_file=None,
         merges_file=None,
-        unk_token="<|endoftext|>",
+        unk_token: str = "<|endoftext|>",
         bos_token=None,
-        eos_token="<|endoftext|>",
-        pad_token="<|endoftext|>",
+        eos_token: str = "<|endoftext|>",
+        pad_token: str = "<|endoftext|>",
         add_prefix_space=None,
-        vocab=None,
-        merges=None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space if add_prefix_space is not None else False
-
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        self._vocab = (
+            vocab
+            if vocab is not None
+            else {
                 "<|endoftext|>": 0,
             }
-        self._merges = merges if merges is not None else generate_merges(self._vocab)
-
+        )
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -92,12 +90,10 @@ class Qwen2Tokenizer(TokenizersBackend):
                 ),
             ]
         )
-        tokenizer_object = self._tokenizer
 
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
