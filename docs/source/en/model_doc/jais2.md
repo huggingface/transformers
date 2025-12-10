@@ -38,18 +38,3 @@ Jais2 a next-generation Arabic open-weight LLM trained on the richest Arabic-fir
 
 [[autodoc]] Jais2ForCausalLM
     - forward
-
-## Jais2ForSequenceClassification
-
-[[autodoc]] Jais2ForSequenceClassification
-    - forward
-
-## Jais2ForTokenClassification
-
-[[autodoc]] Jais2ForTokenClassification
-    - forward
-
-## Jais2ForQuestionAnswering
-
-[[autodoc]] Jais2ForQuestionAnswering
-    - forward
