@@ -10,7 +10,7 @@ env:
   PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_DIST }}
 
 jobs:
-  build:
+  build_and_test:
     name: build release
     # only run on push to main and on release
     runs-on: ubuntu-latest
@@ -26,19 +26,9 @@ jobs:
       - run: pip install -e .
       - run: make build-release
 
-  test_release:
-    runs-on: ubuntu-latest
-    name: Test release
-    needs: [build]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
+      - run: pip uninstall transformers
       - run: pip install dist/*.whl
+
       - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
       - run: python -c "from transformers import *"
 
