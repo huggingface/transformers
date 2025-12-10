@@ -536,23 +536,30 @@ class ExpectationsFileProcessor:
         test_file = test_file_raw.split('/transformers/', 1)[-1] if '/transformers/' in test_file_raw else test_file_raw
 
         # Extract the variable name from the assertion
-        # Pattern 1: assert_close(actual, expected_variable, ...)
-        # Pattern 2: self.assertEqual(actual, expected_variable) or assertEqual(actual, expected_variable, ...)
-        # Pattern 3: self.assertListEqual(list1, list2)
-        # Also handle: expected_variable.to(...) or expected_variable[index] or other method calls
-        assertion_match = re.search(r'assert_close\((.*?),\s*(\w+)[\.\s,\[]', content, re.DOTALL)
+        # We need to find the second argument (expected value) after the first comma
+        # But the first argument may contain commas inside brackets like logits[0, 0, :10]
+        # Strategy: Find the pattern after closing paren/bracket followed by comma and space
+
+        # For assert_close: look for ), space, identifier or ], space, identifier
+        assertion_match = re.search(r'assert_close\([^)]+\),\s+(\w+)[\.\s,\[]', content, re.DOTALL)
         if not assertion_match:
-            # Try assertEqual pattern - may have comma or closing paren after variable
-            assertion_match = re.search(r'assertEqual\(\s*(.*?),\s*(\w+)[\.\s,\)\[]', content, re.DOTALL)
+            # Try without the closing paren (in case there are nested calls)
+            # Look for a word after a comma that's NOT inside brackets
+            # Simpler: after 'assert_close(', skip to first ', <word>' where word is not a number
+            assertion_match = re.search(r'assert_close\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\[]', content, re.DOTALL)
+
+        if not assertion_match:
+            # Try assertEqual pattern
+            assertion_match = re.search(r'assertEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
 
         if not assertion_match:
             # Try assertListEqual pattern
-            assertion_match = re.search(r'assertListEqual\(\s*(.*?),\s*(\w+)[\.\s,\)\[]', content, re.DOTALL)
+            assertion_match = re.search(r'assertListEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
 
         if not assertion_match:
             raise ValueError("Could not find assertion with variable name")
 
-        variable_name = assertion_match.group(2).strip()
+        variable_name = assertion_match.group(1).strip()
 
         # Extract the actual value (new value to use)
         actual_section = re.search(
