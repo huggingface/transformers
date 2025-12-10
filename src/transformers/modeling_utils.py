@@ -16,7 +16,6 @@
 import collections
 import copy
 import functools
-import gc
 import importlib.metadata
 import inspect
 import json
@@ -27,6 +26,7 @@ import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -48,6 +48,7 @@ from . import initialization as init
 from .configuration_utils import PreTrainedConfig
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
+    GLOBAL_WORKERS,
     WeightConverter,
     WeightRenaming,
     convert_and_load_state_dict_in_model,
@@ -401,6 +402,86 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
         else:
             shared_tensors.append(shared)
     return shared_tensors, identical
+
+
+def remove_tied_weights_from_state_dict(
+    state_dict: dict[str, torch.Tensor], model: "PreTrainedModel"
+) -> dict[str, torch.Tensor]:
+    """
+    Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
+    will expect when reloading (even if we know tie weights symmetrically, it's better to keep the intended one).
+    This is because `safetensors` does not allow tensor aliasing - so we're going to remove aliases before saving.
+    """
+    # To avoid any potential mistakes and mismatches between config and actual tied weights, here we check the pointers
+    # of the Tensors themselves -> we are guaranteed to find all the actual tied weights
+    ptrs = collections.defaultdict(list)
+    for name, tensor in state_dict.items():
+        if not isinstance(tensor, torch.Tensor):
+            # Sometimes in the state_dict we have non-tensor objects.
+            # e.g. in bitsandbytes we have some `str` objects in the state_dict
+            # In the non-tensor case, fall back to the pointer of the object itself
+            ptrs[id(tensor)].append(name)
+
+        elif tensor.device.type == "meta":
+            # In offloaded cases, there may be meta tensors in the state_dict.
+            # For these cases, key by the pointer of the original tensor object
+            # (state_dict tensors are detached and therefore no longer shared)
+            tensor = SpecificPreTrainedModelType.get_parameter(name)
+            ptrs[id(tensor)].append(name)
+
+        else:
+            ptrs[id_tensor_storage(tensor)].append(name)
+
+    shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+
+    # Recursively descend to find tied weight keys
+    all_potential_tied_weights_keys = set(_get_tied_weight_keys(model))
+    error_names = []
+    to_delete_names = set()
+    # Removing the keys which are declared as known duplicates on load. This allows to make sure the name which is
+    # kept is consistent
+    if all_potential_tied_weights_keys is not None:
+        for names in shared_ptrs.values():
+            found = 0
+            for name in sorted(names):
+                matches_pattern = any(re.search(pat, name) for pat in all_potential_tied_weights_keys)
+                if matches_pattern and name in state_dict:
+                    found += 1
+                    if found < len(names):
+                        to_delete_names.add(name)
+    # We are entering a place where the weights and the transformers configuration do NOT match.
+    shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
+    # Those are actually tensor sharing but disjoint from each other, we can safely clone them
+    # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
+    for name in disjoint_names:
+        state_dict[name] = state_dict[name].clone()
+
+    # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+    # If the link between tensors was done at runtime then `from_pretrained` will not get
+    # the key back leading to random tensor. A proper warning will be shown
+    # during reload (if applicable), but since the file is not necessarily compatible with
+    # the config, better show a proper warning.
+    shared_names, identical_names = _find_identical(shared_names, state_dict)
+    # delete tensors that have identical storage
+    for inames in identical_names:
+        known = inames.intersection(to_delete_names)
+        for name in known:
+            del state_dict[name]
+        unknown = inames.difference(to_delete_names)
+        if len(unknown) > 1:
+            error_names.append(unknown)
+
+    if shared_names:
+        error_names.extend(shared_names)
+
+    if len(error_names) > 0:
+        raise RuntimeError(
+            f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. "
+            f"We found all the potential target tied weights keys to be: {all_potential_tied_weights_keys}.\n"
+            "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
+        )
+
+    return state_dict
 
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
@@ -3158,10 +3239,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 current_peft_config.save_pretrained(save_directory)
 
         # for offloaded modules
-        module_map = {}
+        module_map = None
 
         # Save the model
         if state_dict is None:
+            # Get the model state_dict
+            state_dict = model_to_save.state_dict()
+
             # if any model parameters are offloaded, make module map
             if (
                 hasattr(self, "hf_device_map")
@@ -3169,8 +3253,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
             ):
                 warnings.warn(
-                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
+                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
+                    "exceeds the `shard_size` (50GB default)"
                 )
+                module_map = {}
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -3178,7 +3264,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                     for key in module_state_dict:
                         module_map[name + f".{key}"] = module
-            state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -3196,76 +3281,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self._tp_size is not None:
             state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
-        # Safetensors does not allow tensor aliasing - we're going to remove aliases before saving
-        ptrs = collections.defaultdict(list)
-        for name, tensor in state_dict.items():
-            if not isinstance(tensor, torch.Tensor):
-                # Sometimes in the state_dict we have non-tensor objects.
-                # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                # In the non-tensor case, fall back to the pointer of the object itself
-                ptrs[id(tensor)].append(name)
-
-            elif tensor.device.type == "meta":
-                # In offloaded cases, there may be meta tensors in the state_dict.
-                # For these cases, key by the pointer of the original tensor object
-                # (state_dict tensors are detached and therefore no longer shared)
-                tensor = self.get_parameter(name)
-                ptrs[id(tensor)].append(name)
-
-            else:
-                ptrs[id_tensor_storage(tensor)].append(name)
-
-        shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-
-        # Recursively descend to find tied weight keys
-        _tied_weights_keys = set(_get_tied_weight_keys(self))
-        error_names = []
-        to_delete_names = set()
-        for names in shared_ptrs.values():
-            # Removing the keys which are declared as known duplicates on
-            # load. This allows to make sure the name which is kept is consistent.
-            if _tied_weights_keys is not None:
-                found = 0
-                for name in sorted(names):
-                    matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
-                    if matches_pattern and name in state_dict:
-                        found += 1
-                        if found < len(names):
-                            to_delete_names.add(name)
-        # We are entering a place where the weights and the transformers configuration do NOT match.
-        shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
-        # Those are actually tensor sharing but disjoint from each other, we can safely clone them
-        # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
-        for name in disjoint_names:
-            state_dict[name] = state_dict[name].clone()
-
-        # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-        # If the link between tensors was done at runtime then `from_pretrained` will not get
-        # the key back leading to random tensor. A proper warning will be shown
-        # during reload (if applicable), but since the file is not necessarily compatible with
-        # the config, better show a proper warning.
-        shared_names, identical_names = _find_identical(shared_names, state_dict)
-        # delete tensors that have identical storage
-        for inames in identical_names:
-            known = inames.intersection(to_delete_names)
-            for name in known:
-                del state_dict[name]
-            unknown = inames.difference(to_delete_names)
-            if len(unknown) > 1:
-                error_names.append(unknown)
-
-        if shared_names:
-            error_names.extend(shared_names)
-
-        if len(error_names) > 0:
-            raise RuntimeError(
-                f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
-                "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
-            )
+        # Remove tied weights as safetensors do not handle them
+        state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
 
         # Revert all renaming and/or weight operations
         if save_original_format:
-            state_dict = revert_weight_conversion(self, state_dict)
+            state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -3305,23 +3326,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
+
+        # We use threading to write the different shards, but only if we have more than 1 and no offloading
+        num_shards = len(state_dict_split.filename_to_tensors)
+        thread_pool = None
+        if num_shards > 1 and module_map is None:
+            thread_pool = ThreadPoolExecutor(max_workers=min(GLOBAL_WORKERS, num_shards))
+
         # Save the model
-        filename_to_tensors = state_dict_split.filename_to_tensors.items()
-        if module_map:
-            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
-        for shard_file, tensors in filename_to_tensors:
+        for shard_file, tensor_names in state_dict_split.filename_to_tensors.items():
+            filename = os.path.join(save_directory, shard_file)
             shard = {}
-            for tensor in tensors:
-                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
-                    full_tensor = state_dict[tensor].full_tensor()
+            for tensor_name in tensor_names:
+                tensor = state_dict.pop(tensor_name)
+                if _is_dtensor_available and isinstance(tensor, DTensor):
+                    tensor = tensor.full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
-                        full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
-                    shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
-                else:
-                    shard[tensor] = state_dict[tensor].contiguous()
-                # delete reference, see https://github.com/huggingface/transformers/pull/34890
-                del state_dict[tensor]
+                    if _get_parameter_tp_plan(tensor_name, self._tp_plan) == "local_packed_rowwise":
+                        tensor = repack_weights(tensor, -1, self._tp_size, 2)
+                # only do contiguous after it's permuted correctly in case of TP
+                shard[tensor_name] = tensor.contiguous()
 
             # remake shard with onloaded parameters if necessary
             if module_map:
@@ -3338,14 +3362,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 # assign shard to be the completed state dict
                 shard = shard_state_dict
-                del shard_state_dict
-                gc.collect()
 
-            # TODO: we should def parallelize this we are otherwise just waiting
-            # too much before scheduling the next write when its in a different file
-            safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
+            # Schedule the write and move on to the next shard to write
+            if thread_pool is not None:
+                thread_pool.submit(safe_save_file, shard, filename, metadata=metadata)
+            else:
+                safe_save_file(shard, filename, metadata=metadata)
 
-        del state_dict
+        # Wait for all writes to be done
+        if thread_pool is not None:
+            thread_pool.shutdown(wait=True)
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
