@@ -72,7 +72,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return False
 
     @property
