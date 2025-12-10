@@ -103,6 +103,10 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         **kwargs,
     ):
+        # TODO: This restriction is in-place because of LasrCTCConfig.inputs_to_logits_ratio. It should be removed
+        # after AutomaticSpeechRecognitionPipeline has a more flexible way of handling inputs_to_logits_ratio.
+        if hop_length != 160:
+            raise ValueError("Only hop_length==160 is supported.")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
         self.hop_length = hop_length

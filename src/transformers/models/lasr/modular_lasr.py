@@ -291,6 +291,12 @@ class LasrCTCConfig(ParakeetCTCConfig):
             **kwargs,
         )
 
+    @property
+    def inputs_to_logits_ratio(self) -> int:
+        # Guaranteed by a check in LasrFeatureExtractor.__init__().
+        hop_length = 160
+        return hop_length * self.encoder_config.subsampling_conv_stride**2
+
 
 class LasrEncoderSubsampling(nn.Module):
     def __init__(self, config: LasrEncoderConfig):
