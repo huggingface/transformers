@@ -135,8 +135,8 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"],
                 )
                 stacked_images = self.resize(
                     image=stacked_images,

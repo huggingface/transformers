@@ -439,6 +439,11 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    _can_record_outputs = {
+        "hidden_states": PaddleOCRDecoderLayer,
+        "attentions": PaddleOCRAttention,
+    }
+
 
 @auto_docstring
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
@@ -1308,6 +1313,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=return_dict,
+            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1363,8 +1369,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
@@ -1428,14 +1432,14 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             use_cache=use_cache,
             return_dict=True,
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            rope_deltas=rope_deltas,
             cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
 
-        logits = self.lm_head(hidden_states)
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
