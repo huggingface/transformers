@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     slow,
     torch_device,
+    require_deterministic_for_xpu,
 )
 
 
@@ -97,10 +98,12 @@ class Ministral3IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_3b_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in"
-        )
+        EXPECTED_TEXT_COMPLETION = [
+            "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
+            "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for", # XPU
+        ]
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -111,7 +114,7 @@ class Ministral3IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        self.assertIn(text, EXPECTED_TEXT_COMPLETION)
 
         del model
         backend_empty_cache(torch_device)
