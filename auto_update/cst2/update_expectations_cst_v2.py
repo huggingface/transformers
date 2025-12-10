@@ -54,10 +54,10 @@ class ExpectationsUpdater(cst.CSTTransformer):
         self.update_tasks = update_tasks
         self.target_keys = target_keys
         self.dry_run = dry_run
-        
+
         # Build a map of line_number -> UpdateTask for quick lookup
         self.updates_by_line = {task.expectations_lineno: task for task in update_tasks}
-        
+
         # Track results
         self.successful_updates = []
         self.failed_updates = []
@@ -152,7 +152,8 @@ class ExpectationsUpdater(cst.CSTTransformer):
             self.failed_updates.append((task, "No dictionary argument in Expectations"))
             return updated_node
 
-        dict_arg = pattern_node.args[0].value
+        old_arg = pattern_node.args[0]  # Get the full Arg, not just the value
+        dict_arg = old_arg.value
         if not isinstance(dict_arg, cst.Dict):
             self.failed_updates.append((task, "Expectations argument is not a dictionary"))
             return updated_node
@@ -163,9 +164,10 @@ class ExpectationsUpdater(cst.CSTTransformer):
             self.failed_updates.append((task, "Could not find matching key"))
             return updated_node
 
-        # Reconstruct the tree with updated dict
+        # Reconstruct the tree with updated dict, preserving the Arg's whitespace
+        new_arg = old_arg.with_changes(value=new_dict)  # This preserves whitespace_after_arg!
         new_call = pattern_node.with_changes(
-            args=[cst.Arg(value=new_dict)]
+            args=[new_arg] + list(pattern_node.args[1:])  # Preserve any other args
         )
 
         # Replace the pattern node in the tree
@@ -188,25 +190,57 @@ class ExpectationsUpdater(cst.CSTTransformer):
     ) -> cst.Assign:
         """Handle direct torch.tensor, plain list, or plain dict pattern."""
         try:
-            # Parse the new value
+            # Parse the new value - this already has the formatting from captured_info.txt
             new_value_node = cst.parse_expression(task.new_value_str)
 
-            # Preserve indentation
+            # Use the formatting from captured_info.txt
             if isinstance(pattern_node, cst.Call):
                 # For torch.tensor, update the argument
                 if pattern_node.args and len(pattern_node.args) > 0:
-                    old_arg = pattern_node.args[0].value
-                    new_arg = self._preserve_indentation(old_arg, new_value_node)
+                    # For torch.tensor, captured_info has 4 spaces, we want to make it base + 8
+                    # Get the base indentation from the assignment line
+                    base_indent = self._get_assignment_indent(original_node)
+
+                    # We need content at base + 8 (e.g., 16 spaces from line start)
+                    # Captured_info has 4 spaces
+                    # After testing: adding base spaces gave us base+12 in output
+                    # So we need to add base/2 spaces (e.g., 4)
+                    extra_spaces = base_indent // 2  # e.g., 8 // 2 = 4
+
+                    lines = task.new_value_str.split('\n')
+                    adjusted_lines = []
+                    for i, line in enumerate(lines):
+                        if i == 0:
+                            # First line (opening [)
+                            adjusted_lines.append(line)
+                        elif line.strip() == '':
+                            adjusted_lines.append(line)
+                        elif line.strip() == ']':
+                            # Closing ] - add extra spaces
+                            adjusted_lines.append((" " * extra_spaces) + line.lstrip())
+                        elif line.lstrip().startswith('['):
+                            # Content line - ADD to existing indent, don't replace
+                            leading_spaces = len(line) - len(line.lstrip())
+                            adjusted_lines.append((" " * (leading_spaces + extra_spaces)) + line.lstrip())
+                        else:
+                            adjusted_lines.append((" " * extra_spaces) + line)
+
+                    adjusted_value_str = '\n'.join(adjusted_lines)
+                    new_value_node = cst.parse_expression(adjusted_value_str)
+
+                    # Preserve the old Arg
+                    old_arg = pattern_node.args[0]
+                    new_arg = old_arg.with_changes(value=new_value_node)
                     new_call = pattern_node.with_changes(
-                        args=[cst.Arg(value=new_arg)] + list(pattern_node.args[1:])
+                        args=[new_arg] + list(pattern_node.args[1:])
                     )
                     new_full_value = self._replace_node_in_tree(updated_node.value, pattern_node, new_call)
                 else:
                     self.failed_updates.append((task, "No arguments in torch.tensor call"))
                     return updated_node
             else:
-                # For plain list/dict, replace directly
-                new_full_value = self._preserve_indentation(pattern_node, new_value_node)
+                # For plain list/dict, use new_value_node directly (respects captured_info.txt formatting)
+                new_full_value = new_value_node
 
             if not self.dry_run:
                 self.successful_updates.append((task, pattern_type))
@@ -221,7 +255,7 @@ class ExpectationsUpdater(cst.CSTTransformer):
 
     def _update_dict(self, dict_node: cst.Dict, task: UpdateTask) -> Optional[cst.Dict]:
         """Update the dictionary with priority-based key selection."""
-        # Parse new value
+        # Parse new value - this has minimal formatting from captured_info.txt
         try:
             new_value_node = cst.parse_expression(task.new_value_str)
         except Exception as e:
@@ -254,12 +288,12 @@ class ExpectationsUpdater(cst.CSTTransformer):
 
         print(f"    ✓ Found key: {best_key} (priority: {best_priority})")
 
-        # Preserve indentation from old value
-        old_value = best_element.value
-        new_value_preserved = self._preserve_indentation(old_value, new_value_node)
+        # Use the captured_info formatting AS-IS, don't reformat
+        # Just use new_value_node directly (preserves single-line vs multi-line from captured_info)
+        new_value_adjusted = new_value_node
 
         # Create new element with updated value
-        new_element = best_element.with_changes(value=new_value_preserved)
+        new_element = best_element.with_changes(value=new_value_adjusted)
 
         # Replace in dictionary
         new_elements = []
@@ -269,6 +303,7 @@ class ExpectationsUpdater(cst.CSTTransformer):
             else:
                 new_elements.append(element)
 
+        # Preserve the original dict's brace formatting
         return dict_node.with_changes(elements=new_elements)
 
     def _match_key(self, key_node: cst.BaseExpression) -> Optional[Tuple]:
@@ -310,18 +345,440 @@ class ExpectationsUpdater(cst.CSTTransformer):
             return False
         return True
 
-    def _preserve_indentation(self, old_node: Any, new_node: Any) -> Any:
-        """Copy whitespace from old node to new node."""
+    def _get_dict_indent(self, dict_node: cst.Dict) -> int:
+        """
+        Get the base indentation (in spaces) of dict elements by examining
+        the dict's lbrace whitespace.
+        """
+        if hasattr(dict_node.lbrace, 'whitespace_after'):
+            ws = dict_node.lbrace.whitespace_after
+            if isinstance(ws, cst.ParenthesizedWhitespace) and hasattr(ws, 'last_line'):
+                if hasattr(ws.last_line, 'value'):
+                    return len(ws.last_line.value)
+        # Default fallback
+        return 16
+
+    def _get_assignment_indent(self, assign_node: cst.Assign) -> int:
+        """
+        Get the base indentation (in spaces) of an assignment statement.
+        This looks at the leading whitespace of the assignment line.
+        """
+        # Try to get the parent statement line
+        try:
+            # The assignment is wrapped in a SimpleStatementLine
+            # We need to access it through metadata or inspection
+            # For now, use a heuristic based on common patterns
+            # Most test assignments are indented 8 spaces (2 levels)
+            return 8
+        except:
+            return 8  # Default for test methods (2 indentation levels)
+
+    def _get_node_indent(self, node: cst.DictElement) -> int:
+        """
+        Get the indentation level (in spaces) of a DictElement.
+        We need to examine the source code to determine this.
+        """
+        # Try to get position from metadata if available
+        # For now, use a heuristic: check the dict's lbrace whitespace
+        # This is tricky without access to the full tree context
+        # Return a reasonable default that will be adjusted
+        return 12  # Will be adjusted based on actual context
+
+    def _apply_proper_indentation(self, node: Any, base_indent_spaces: int) -> Any:
+        """
+        Apply proper indentation to a parsed node.
+        base_indent_spaces: The starting indentation in spaces for the first level.
+        """
+        indent_str = " " * base_indent_spaces
+
+        if isinstance(node, cst.List):
+            # Set up proper bracket whitespace
+            new_lbracket = cst.LeftSquareBracket(
+                whitespace_after=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str)
+                )
+            )
+
+            # The closing bracket should be at base_indent_spaces - 4
+            closing_indent = " " * max(0, base_indent_spaces - 4)
+            new_rbracket = cst.RightSquareBracket(
+                whitespace_before=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(closing_indent)
+                )
+            )
+
+            # Process elements
+            new_elements = []
+            for i, element in enumerate(node.elements):
+                # For list elements, the value uses the same indent level
+                # (not base_indent_spaces + 4, that's already applied to the list itself)
+                new_value = element.value  # Don't recursively indent simple values
+
+                # Set up comma with newline and indent for next element
+                if i < len(node.elements) - 1:
+                    new_comma = cst.Comma(
+                        whitespace_before=cst.SimpleWhitespace(""),
+                        whitespace_after=cst.ParenthesizedWhitespace(
+                            first_line=cst.TrailingWhitespace(
+                                whitespace=cst.SimpleWhitespace(""),
+                                newline=cst.Newline(value=None)
+                            ),
+                            indent=True,
+                            last_line=cst.SimpleWhitespace(indent_str)
+                        )
+                    )
+                else:
+                    # Last element - no trailing comma or use the original
+                    new_comma = element.comma if hasattr(element, 'comma') else cst.MaybeSentinel.DEFAULT
+
+                new_element = element.with_changes(value=new_value, comma=new_comma)
+                new_elements.append(new_element)
+
+            return node.with_changes(
+                lbracket=new_lbracket,
+                rbracket=new_rbracket,
+                elements=new_elements
+            )
+
+        elif isinstance(node, cst.Dict):
+            # Similar logic for dicts
+            new_lbrace = cst.LeftCurlyBrace(
+                whitespace_after=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str)
+                )
+            )
+
+            closing_indent = " " * max(0, base_indent_spaces - 4)
+            new_rbrace = cst.RightCurlyBrace(
+                whitespace_before=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(closing_indent)
+                )
+            )
+
+            # Process elements
+            new_elements = []
+            for i, element in enumerate(node.elements):
+                if isinstance(element, cst.DictElement):
+                    new_key = self._apply_proper_indentation(element.key, base_indent_spaces + 4)
+                    new_value = self._apply_proper_indentation(element.value, base_indent_spaces + 4)
+
+                    if i < len(node.elements) - 1:
+                        new_comma = cst.Comma(
+                            whitespace_before=cst.SimpleWhitespace(""),
+                            whitespace_after=cst.ParenthesizedWhitespace(
+                                first_line=cst.TrailingWhitespace(
+                                    whitespace=cst.SimpleWhitespace(""),
+                                    newline=cst.Newline(value=None)
+                                ),
+                                indent=True,
+                                last_line=cst.SimpleWhitespace(indent_str)
+                            )
+                        )
+                    else:
+                        new_comma = element.comma
+
+                    new_element = element.with_changes(key=new_key, value=new_value, comma=new_comma)
+                    new_elements.append(new_element)
+
+            return node.with_changes(
+                lbrace=new_lbrace,
+                rbrace=new_rbrace,
+                elements=new_elements
+            )
+
+        # For other types, return as-is
+        return node
+
+    def _copy_indentation_structure(self, old_node: Any, new_node: Any) -> Any:
+        """
+        Copy the indentation structure from old_node to new_node.
+        This preserves the original file's formatting while updating values.
+        """
         if isinstance(old_node, cst.List) and isinstance(new_node, cst.List):
-            return new_node.with_changes(
+            # Copy the bracket whitespace
+            new_node = new_node.with_changes(
                 lbracket=old_node.lbracket,
                 rbracket=old_node.rbracket
             )
+
+            # If element counts match, copy per-element formatting
+            if len(old_node.elements) == len(new_node.elements):
+                new_elements = []
+                for old_el, new_el in zip(old_node.elements, new_node.elements):
+                    # Recursively copy structure for the value
+                    new_value = self._copy_indentation_structure(old_el.value, new_el.value)
+                    # Copy the comma whitespace
+                    new_element = new_el.with_changes(
+                        value=new_value,
+                        comma=old_el.comma
+                    )
+                    new_elements.append(new_element)
+                new_node = new_node.with_changes(elements=new_elements)
+
+            return new_node
+
         elif isinstance(old_node, cst.Dict) and isinstance(new_node, cst.Dict):
-            return new_node.with_changes(
+            # Copy the brace whitespace
+            new_node = new_node.with_changes(
                 lbrace=old_node.lbrace,
                 rbrace=old_node.rbrace
             )
+
+            # If element counts match, copy per-element formatting
+            if len(old_node.elements) == len(new_node.elements):
+                new_elements = []
+                for old_el, new_el in zip(old_node.elements, new_node.elements):
+                    if isinstance(old_el, cst.DictElement) and isinstance(new_el, cst.DictElement):
+                        # Recursively copy structure
+                        new_key = self._copy_indentation_structure(old_el.key, new_el.key)
+                        new_value = self._copy_indentation_structure(old_el.value, new_el.value)
+                        # Copy comma and colon whitespace
+                        new_element = new_el.with_changes(
+                            key=new_key,
+                            value=new_value,
+                            comma=old_el.comma,
+                            whitespace_before_colon=old_el.whitespace_before_colon,
+                            whitespace_after_colon=old_el.whitespace_after_colon
+                        )
+                        new_elements.append(new_element)
+                new_node = new_node.with_changes(elements=new_elements)
+
+            return new_node
+
+        # For other types (strings, numbers, etc.), return new value as-is
+        return new_node
+
+    def _get_indent_level(self, node: Any) -> int:
+        """
+        Detect the indentation level of a node by examining its whitespace.
+        Returns the number of 4-space indents.
+        """
+        if isinstance(node, cst.List):
+            # Check the lbracket's whitespace_after
+            if hasattr(node.lbracket, 'whitespace_after'):
+                ws = node.lbracket.whitespace_after
+                if isinstance(ws, cst.ParenthesizedWhitespace) and hasattr(ws, 'last_line'):
+                    indent_str = ws.last_line.value if hasattr(ws.last_line, 'value') else ""
+                    # Count spaces and divide by 4
+                    return len(indent_str) // 4
+        elif isinstance(node, cst.Dict):
+            # Similar for dicts
+            if hasattr(node.lbrace, 'whitespace_after'):
+                ws = node.lbrace.whitespace_after
+                if isinstance(ws, cst.ParenthesizedWhitespace) and hasattr(ws, 'last_line'):
+                    indent_str = ws.last_line.value if hasattr(ws.last_line, 'value') else ""
+                    return len(indent_str) // 4
+
+        # Default: assume 5 levels for Expectations values (typical case)
+        return 5
+
+    def _adjust_indentation(self, new_node: Any, target_indent_level: int) -> Any:
+        """
+        Adjust the indentation of a parsed node to match the target context.
+
+        Args:
+            new_node: The parsed CST node (from captured_info.txt)
+            target_indent_level: Number of 4-space indents needed
+
+        Returns:
+            Node with adjusted indentation
+        """
+        indent_str = "    " * target_indent_level
+
+        if isinstance(new_node, cst.List):
+            # Adjust list bracket whitespace
+            new_lbracket = cst.LeftSquareBracket(
+                whitespace_after=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str)
+                )
+            )
+            new_rbracket = cst.RightSquareBracket(
+                whitespace_before=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str[:-4] if target_indent_level > 0 else "")
+                )
+            )
+
+            # Adjust each element's comma whitespace
+            new_elements = []
+            for i, element in enumerate(new_node.elements):
+                # Recursively adjust nested structures
+                new_value = self._adjust_indentation(element.value, target_indent_level + 1)
+
+                # Set comma with newline and indent for next element
+                if i < len(new_node.elements) - 1:
+                    new_comma = cst.Comma(
+                        whitespace_before=cst.SimpleWhitespace(""),
+                        whitespace_after=cst.ParenthesizedWhitespace(
+                            first_line=cst.TrailingWhitespace(
+                                whitespace=cst.SimpleWhitespace(""),
+                                newline=cst.Newline(value=None)
+                            ),
+                            indent=True,
+                            last_line=cst.SimpleWhitespace(indent_str)
+                        )
+                    )
+                else:
+                    # Last element - no comma or just comma without newline
+                    new_comma = cst.MaybeSentinel.DEFAULT
+
+                new_element = element.with_changes(value=new_value, comma=new_comma)
+                new_elements.append(new_element)
+
+            return new_node.with_changes(
+                lbracket=new_lbracket,
+                rbracket=new_rbracket,
+                elements=new_elements
+            )
+
+        elif isinstance(new_node, cst.Dict):
+            # Similar logic for dicts
+            new_lbrace = cst.LeftCurlyBrace(
+                whitespace_after=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str)
+                )
+            )
+            new_rbrace = cst.RightCurlyBrace(
+                whitespace_before=cst.ParenthesizedWhitespace(
+                    first_line=cst.TrailingWhitespace(
+                        whitespace=cst.SimpleWhitespace(""),
+                        newline=cst.Newline(value=None)
+                    ),
+                    indent=True,
+                    last_line=cst.SimpleWhitespace(indent_str[:-4] if target_indent_level > 0 else "")
+                )
+            )
+
+            new_elements = []
+            for i, element in enumerate(new_node.elements):
+                if isinstance(element, cst.DictElement):
+                    new_key = self._adjust_indentation(element.key, target_indent_level + 1)
+                    new_value = self._adjust_indentation(element.value, target_indent_level + 1)
+
+                    if i < len(new_node.elements) - 1:
+                        new_comma = cst.Comma(
+                            whitespace_before=cst.SimpleWhitespace(""),
+                            whitespace_after=cst.ParenthesizedWhitespace(
+                                first_line=cst.TrailingWhitespace(
+                                    whitespace=cst.SimpleWhitespace(""),
+                                    newline=cst.Newline(value=None)
+                                ),
+                                indent=True,
+                                last_line=cst.SimpleWhitespace(indent_str)
+                            )
+                        )
+                    else:
+                        new_comma = cst.MaybeSentinel.DEFAULT
+
+                    new_element = element.with_changes(key=new_key, value=new_value, comma=new_comma)
+                    new_elements.append(new_element)
+
+            return new_node.with_changes(
+                lbrace=new_lbrace,
+                rbrace=new_rbrace,
+                elements=new_elements
+            )
+
+        # For other types (strings, numbers), return as-is
+        return new_node
+
+    def _preserve_indentation(self, old_node: Any, new_node: Any) -> Any:
+        """
+        Copy formatting from old node to new node, including multi-line structure.
+
+        This recursively applies formatting from the original file to the parsed
+        new value, preserving indentation, line breaks, and structure.
+        """
+        if isinstance(old_node, cst.List) and isinstance(new_node, cst.List):
+            # Copy bracket whitespace
+            new_node = new_node.with_changes(
+                lbracket=old_node.lbracket,
+                rbracket=old_node.rbracket
+            )
+
+            # If both have same number of elements, copy per-element formatting
+            if len(old_node.elements) == len(new_node.elements):
+                new_elements = []
+                for old_el, new_el in zip(old_node.elements, new_node.elements):
+                    # Recursively preserve formatting for the element value
+                    new_value = self._preserve_indentation(old_el.value, new_el.value)
+                    # Copy the comma and whitespace
+                    new_element = new_el.with_changes(
+                        value=new_value,
+                        comma=old_el.comma
+                    )
+                    new_elements.append(new_element)
+                new_node = new_node.with_changes(elements=new_elements)
+
+            return new_node
+
+        elif isinstance(old_node, cst.Dict) and isinstance(new_node, cst.Dict):
+            # Copy brace whitespace
+            new_node = new_node.with_changes(
+                lbrace=old_node.lbrace,
+                rbrace=old_node.rbrace
+            )
+
+            # If both have same number of elements, copy per-element formatting
+            if len(old_node.elements) == len(new_node.elements):
+                new_elements = []
+                for old_el, new_el in zip(old_node.elements, new_node.elements):
+                    # Recursively preserve formatting for key and value
+                    new_key = self._preserve_indentation(old_el.key, new_el.key)
+                    new_value = self._preserve_indentation(old_el.value, new_el.value)
+                    # Copy the comma and whitespace
+                    new_element = new_el.with_changes(
+                        key=new_key,
+                        value=new_value,
+                        comma=old_el.comma
+                    )
+                    new_elements.append(new_element)
+                new_node = new_node.with_changes(elements=new_elements)
+
+            return new_node
+
+        elif isinstance(old_node, cst.SimpleString) and isinstance(new_node, cst.SimpleString):
+            # Preserve quote style
+            return new_node
+
+        elif isinstance(old_node, cst.Integer) and isinstance(new_node, cst.Integer):
+            # Numbers don't have formatting to preserve
+            return new_node
+
         return new_node
 
     def _replace_node_in_tree(self, tree: Any, old_node: Any, new_node: Any) -> Any:
@@ -379,13 +836,13 @@ class ExpectationsFileProcessor:
 
         # Split by the separator line
         sections = re.split(r'={70,}', content)
-        
+
         test_contexts = []
-        
+
         for section in sections:
             if not section.strip():
                 continue
-                
+
             # Try to extract test info from this section
             try:
                 # Extract test file and line number
@@ -398,7 +855,7 @@ class ExpectationsFileProcessor:
 
                 # Extract variable name from assertion
                 variable_name = None
-                
+
                 # Try different assertion patterns
                 patterns = [
                     r'assert_close\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\[\]]',
@@ -406,7 +863,7 @@ class ExpectationsFileProcessor:
                     r'assertListEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]',
                     r'assertDictEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]',
                 ]
-                
+
                 for pattern in patterns:
                     match = re.search(pattern, section, re.DOTALL)
                     if match:
@@ -443,7 +900,8 @@ class ExpectationsFileProcessor:
 
         return test_contexts
 
-    def find_expectations_variable(self, file_path: Path, variable_name: str, assertion_line: int) -> Optional[Tuple[str, int]]:
+    def find_expectations_variable(self, file_path: Path, variable_name: str, assertion_line: int) -> Optional[
+        Tuple[str, int]]:
         """Find the variable assignment that needs updating."""
         with open(file_path, 'r') as f:
             lines = f.readlines()
@@ -511,7 +969,7 @@ class ExpectationsFileProcessor:
         # Step 2: Group by test file
         print("\n[2] Grouping updates by file...")
         updates_by_file: Dict[str, List[UpdateTask]] = {}
-        
+
         for test_file, assertion_line, variable_name, new_value_str in test_contexts:
             file_path = Path(test_file)
             if not file_path.exists():
@@ -544,14 +1002,14 @@ class ExpectationsFileProcessor:
 
         # Step 3: Process each file
         all_successful = True
-        
+
         for file_path, tasks in updates_by_file.items():
             print(f"\n[3] Processing {file_path}...")
             print(f"  {len(tasks)} update(s) to apply")
-            
+
             # Sort tasks by line number (descending) for safety
             tasks.sort(key=lambda t: t.expectations_lineno, reverse=True)
-            
+
             # Parse file with CST
             try:
                 with open(file_path, 'r') as f:
