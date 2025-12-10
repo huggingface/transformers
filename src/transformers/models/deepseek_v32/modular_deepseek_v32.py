@@ -158,13 +158,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForSequenceClassification,
     DeepseekV3ForTokenClassification,
     DeepseekV3Model,
-    DeepseekV3MLP,
-    DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
-    DeepseekV3TopkRouter,
     apply_rotary_pos_emb_interleave,
     yarn_get_mscale,
 )
@@ -360,20 +356,10 @@ class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class DeepseekV32MLP(DeepseekV3MLP):
-    pass
-
-
-class DeepseekV32TopkRouter(DeepseekV3TopkRouter):
-    pass
-
-
-class DeepseekV32NaiveMoe(DeepseekV3NaiveMoe):
-    pass
-
-
-class DeepseekV32MoE(DeepseekV3MoE):
-    pass
+# Note: DeepseekV32MLP, DeepseekV32MoE, DeepseekV32TopkRouter, DeepseekV32NaiveMoe
+# are NOT needed because DeepseekV32DecoderLayer uses super().__init__() which
+# creates the MLP/MoE from the V3 parent class. The only architectural difference
+# from V3 is the Lightning Indexer in attention.
 
 
 class DeepseekV32Indexer(nn.Module):
