@@ -465,6 +465,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -600,6 +601,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -716,6 +718,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -850,6 +853,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -963,6 +967,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):

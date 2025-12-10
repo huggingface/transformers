@@ -80,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -448,7 +449,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device == "hpu":
+            elif torch_device in ["hpu", "npu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -1995,7 +1996,7 @@ class ModelTesterMixin:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
-                    model_tied.save_pretrained(d, safe_serialization=True)
+                    model_tied.save_pretrained(d)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
                 with self.subTest(model_class):
@@ -2379,7 +2380,10 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
 
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for CLIP."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -37,6 +37,10 @@ class CLIPTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
+        vocab (`str`, `dict` or `list`, *optional*):
+            Vocabulary dict to use for the tokenizer.
+        merges (`str` or `list`, *optional*):
+            Merges list to use for the BPE tokenizer.
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -46,53 +50,38 @@ class CLIPTokenizer(TokenizersBackend):
             The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        vocab (`dict`, *optional*):
-            Vocabulary dict to use for the tokenizer.
-        merges (`list`, *optional*):
-            Merges list to use for the BPE tokenizer.
-        vocab_file (`str`, *optional*):
-            Path to the vocabulary file.
-        merges_file (`str`, *optional*):
-            Path to the merges file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|startoftext|>",
         eos_token: str = "<|endoftext|>",
         pad_token: str = "<|endoftext|>",
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
-
-        if vocab is not None:
-            _vocab = {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-        else:
-            _vocab = {
+        _vocab = (
+            vocab
+            if vocab is not None
+            else {
                 str(bos_token): 0,
                 str(eos_token): 1,
                 str(pad_token): 2,
             }
+        )
 
-        if merges is not None:
-            _merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            _merges = []
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=_vocab,
-                merges=_merges,
+                merges=self._merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="</w>",
@@ -120,20 +109,7 @@ class CLIPTokenizer(TokenizersBackend):
 
         self._tokenizer.decoder = decoders.ByteLevel()
 
-        bos_token_id = _vocab.get(str(bos_token), 0)
-        eos_token_id = _vocab.get(str(eos_token), 1)
-
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), eos_token_id),
-            cls=(str(bos_token), bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
-        )
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -141,14 +117,16 @@ class CLIPTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-        if hasattr(self, "_post_init"):
-            self._post_init()
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(str(eos_token), self.eos_token_id),
+            cls=(str(bos_token), self.bos_token_id),
+            add_prefix_space=False,
+            trim_offsets=False,
+        )
 
-    def _post_init(self):
-        super()._post_init()
+        # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
         self._wrap_decode_method_backend_tokenizer()
 
-    # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872
     def _wrap_decode_method_backend_tokenizer(self):
         orig_decode_method = self.backend_tokenizer.decode
 

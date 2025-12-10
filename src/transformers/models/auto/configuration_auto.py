@@ -221,6 +221,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
+        ("lasr_ctc", "LasrCTCConfig"),
+        ("lasr_encoder", "LasrEncoderConfig"),
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
         ("layoutlmv3", "LayoutLMv3Config"),
@@ -663,6 +665,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("kosmos-2", "KOSMOS-2"),
         ("kosmos-2.5", "KOSMOS-2.5"),
         ("kyutai_speech_to_text", "KyutaiSpeechToText"),
+        ("lasr", "Lasr"),
+        ("lasr_ctc", "Lasr"),
+        ("lasr_encoder", "LasrEncoder"),
         ("layoutlm", "LayoutLM"),
         ("layoutlmv2", "LayoutLMv2"),
         ("layoutlmv3", "LayoutLMv3"),
@@ -979,6 +984,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
         ("parakeet_ctc", "parakeet"),
+        ("lasr_encoder", "lasr"),
+        ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )

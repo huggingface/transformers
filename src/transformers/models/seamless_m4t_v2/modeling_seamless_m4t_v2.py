@@ -1812,6 +1812,7 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1995,6 +1996,7 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SeamlessM4Tv2TextToUnitDecoderOutput]:
         r"""
         Args:
@@ -2122,6 +2124,7 @@ class SeamlessM4Tv2TextToUnitModel(SeamlessM4Tv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2556,7 +2559,7 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TCodeHifiGan.forward with SeamlessM4T->SeamlessM4Tv2, spkr_id->speaker_id
     def forward(
-        self, input_ids: torch.LongTensor, speaker_id: torch.Tensor, lang_id: torch.Tensor
+        self, input_ids: torch.LongTensor, speaker_id: torch.Tensor, lang_id: torch.Tensor, **kwargs
     ) -> tuple[torch.Tensor]:
         """
         Args:
@@ -3214,6 +3217,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
