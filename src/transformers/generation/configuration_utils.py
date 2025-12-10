@@ -346,11 +346,11 @@ class GenerationConfig(PushToHubMixin):
         self.stop_strings = kwargs.pop("stop_strings", None)
 
         # Parameters that control the generation strategy used
-        self.do_sample = kwargs.pop("do_sample", None)
+        self.do_sample = kwargs.pop("do_sample", False)
         self.num_beams = kwargs.pop("num_beams", None)
 
         # Parameters that control the cache
-        self.use_cache = kwargs.pop("use_cache", None)
+        self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
@@ -368,24 +368,24 @@ class GenerationConfig(PushToHubMixin):
         self.length_penalty = kwargs.pop("length_penalty", None)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", None)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.renormalize_logits = kwargs.pop("renormalize_logits", None)
+        self.renormalize_logits = kwargs.pop("renormalize_logits", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
-        self.remove_invalid_values = kwargs.pop("remove_invalid_values", None)
+        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
-        self.token_healing = kwargs.pop("token_healing", None)
+        self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", None)
-        self.output_attentions = kwargs.pop("output_attentions", None)
-        self.output_hidden_states = kwargs.pop("output_hidden_states", None)
-        self.output_scores = kwargs.pop("output_scores", None)
-        self.output_logits = kwargs.pop("output_logits", None)
-        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", None)
+        self.output_attentions = kwargs.pop("output_attentions", False)
+        self.output_hidden_states = kwargs.pop("output_hidden_states", False)
+        self.output_scores = kwargs.pop("output_scores", False)
+        self.output_logits = kwargs.pop("output_logits", False)
+        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
         # Special tokens that can be used at generation time
         self.pad_token_id = kwargs.pop("pad_token_id", None)
@@ -397,7 +397,7 @@ class GenerationConfig(PushToHubMixin):
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
-        self.is_assistant = kwargs.pop("is_assistant", None)
+        self.is_assistant = kwargs.pop("is_assistant", False)
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", None)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", None)
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
@@ -409,7 +409,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
-        self.disable_compile = kwargs.pop("disable_compile", None)
+        self.disable_compile = kwargs.pop("disable_compile", False)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)

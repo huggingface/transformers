@@ -333,8 +333,10 @@ class Seq2SeqTrainer(Trainer):
             self.model.generation_config._from_model_config = False
 
         # Retrieves GenerationConfig from model.generation_config
+        # Update with defaults because earlier the generation config used ot be init
+        # with default values. Now we init it with `None` and keep defaults for BC
         gen_config = self.model.generation_config
-        default_gen_config = self.config._get_global_generation_defaults()
+        default_gen_config = self.model.config._get_global_generation_defaults()
         gen_config.update(**default_gen_config, defaults_only=True)
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_config.max_length:

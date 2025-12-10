@@ -59,11 +59,13 @@ if is_torch_available():
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
+# FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
+# but we can't configure cache through `generate()`
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name != "offloaded_hybrid"
+    if cache_name not in ["offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 

@@ -1760,6 +1760,7 @@ class GenerationMixin(ContinuousMixin):
     def _prepare_generation_config(
         self,
         generation_config: GenerationConfig | None,
+        assistant_model: Optional["PreTrainedModel"] = None,
         **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
@@ -1770,6 +1771,7 @@ class GenerationMixin(ContinuousMixin):
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
         # TODO (joao): per-model generation config classes.
 
+        global_defaults = PreTrainedConfig._get_global_generation_defaults()
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1779,18 +1781,30 @@ class GenerationMixin(ContinuousMixin):
                     " This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
                     " (see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
                 )
+            generation_config = GenerationConfig()
 
-            generation_config = self.generation_config
+        # First update assistant config with the kwargs if needed. Allows users to set
+        # `num_assistant_tokens`, etc. right from the `generate()` call
+        if assistant_model is not None:
+            kwargs_copy = kwargs.copy()
+            assistant_config = assistant_model.generation_config
+            _ = assistant_config.update(**generation_config.to_dict())
+            _ = assistant_config.update(**global_defaults, defaults_only=True)
+            _ = assistant_config.update(**kwargs_copy)
+            assistant_model.generation_config = assistant_config
+            kwargs["assistant_model"] = assistant_model
 
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
 
-        # Set default generation values (BC) if not already re-set by users
-        global_defaults = PreTrainedConfig._get_global_generation_defaults()
-        generation_config.update(**global_defaults, defaults_only=True)
+        # First set values from the loaded `self.generation_config` then set defauls for BC
+        # Do not update any values that aren't `None`, i.e. set by users explicitly and passed
+        # to `generate()`. Thus the `defaults_only=True`
+        _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        _ = generation_config.update(**global_defaults, defaults_only=True)
 
+        # Finally, if there are any kwargs, update the config with it -> highest priority
         model_kwargs = generation_config.update(**kwargs)
 
         # Related to #40039: prior to this PR, models with sliding window attention were forced to have
@@ -1799,10 +1813,6 @@ class GenerationMixin(ContinuousMixin):
         # (if we're inside this branch, then it is because we're using default values from the Hub)
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
-
-        # TODO: fixme tmrw, rn lets see what tests can fails except for cache related tests
-        if generation_config.cache_implementation is not None and generation_config.use_cache is None:
-            generation_config.use_cache = True
 
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
@@ -1928,11 +1938,11 @@ class GenerationMixin(ContinuousMixin):
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting `generate` arguments
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
-            if generation_config.cache_implementation is not None:
-                raise ValueError(
-                    f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
-                    "Cache object) is unsupported. Please use only one of the two."
-                )
+            # if generation_config.cache_implementation is not None:
+            #    raise ValueError(
+            #        f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
+            #        "Cache object) is unsupported. Please use only one of the two."
+            #    )
             if isinstance(user_defined_cache, tuple):
                 raise ValueError(
                     "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
@@ -2439,7 +2449,11 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
-        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, assistant_model=assistant_model, **kwargs
+        )
+        assistant_model = model_kwargs.pop("assistant_model", assistant_model)
+
         generation_mode = generation_config.get_generation_mode(assistant_model)
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate

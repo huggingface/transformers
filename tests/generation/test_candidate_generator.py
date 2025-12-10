@@ -237,8 +237,13 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.target_config = AutoConfig.from_pretrained(self.target_name)
         self.assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
         self.assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
+        self.assistant_model.generation_config.num_assistant_tokens = 20
+        self.assistant_model.generation_config.assistant_confidence_threshold = 0.4
+        self.assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        self.assistant_model.generation_config.target_lookbehind = 10
+        self.assistant_model.generation_config.assistant_lookbehind = 10
 
-        self.generation_config = GenerationConfig()
+        self.generation_config = GenerationConfig(max_length=20, min_length=0)
 
         # Ensure required tokens exist
         if self.target_tokenizer.pad_token_id is None:
