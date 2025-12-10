@@ -221,7 +221,7 @@ IMAGE_PROCESSORS = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
-    r"backbone.0.encoder.encoder": r"backbone.model",
+    r"backbone.0.encoder.encoder": r"backbone.backbone",
     r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).(weight|bias)":                                            r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.\4",
     r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).conv.(weight|bias)":                                       r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.conv.\4",
     r"backbone.0.projector.stages_sampling.(\d+).(\d+).(\d+).bn":                                                       r"backbone.projector.scale_layers.\1.sampling_layers.\2.layers.\3.norm",
@@ -287,11 +287,11 @@ def backbone_read_in_q_k_v(state_dict, config):
         ])
 
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"backbone.model.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size:2*hidden_size, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"backbone.backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
     return state_dict
 
 def backbone_convert(state_dict):
@@ -300,7 +300,7 @@ def backbone_convert(state_dict):
         if key.startswith("model.backbone.0.encoder.encoder"):
             # backbone.0.encoder.encoder.embeddings...
             # backbone.0.encoder.encoder.encoder.layer...
-            new_key = key.replace("model.backbone.0.encoder.encoder", "model.backbone.model")
+            new_key = key.replace("model.backbone.0.encoder.encoder", "model.backbone.backbone")
         else:
             new_key = key
         new_state_dict[new_key] = value
