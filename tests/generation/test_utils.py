@@ -4873,7 +4873,8 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
             self.assertEqual(
-                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, self.original_threshold
+                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold,
+                self.original_threshold,
             )
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])

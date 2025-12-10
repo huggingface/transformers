@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from huggingface_hub import create_repo
 
 from .. import __version__
-from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
@@ -38,6 +37,7 @@ from ..utils import (
 
 
 if TYPE_CHECKING:
+    from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
 
 
@@ -530,6 +530,45 @@ class GenerationConfig(PushToHubMixin):
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
         return generation_mode
+
+    @staticmethod
+    def _get_default_generation_params() -> dict[str, Any]:
+        return {
+            "max_length": 20,
+            "min_length": 0,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "typical_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "encoder_no_repeat_ngram_size": 0,
+            "bad_words_ids": None,
+            "num_return_sequences": 1,
+            "output_scores": False,
+            "return_dict_in_generate": False,
+            "forced_bos_token_id": None,
+            "forced_eos_token_id": None,
+            "remove_invalid_values": False,
+            "exponential_decay_length_penalty": None,
+            "suppress_tokens": None,
+            "begin_suppress_tokens": None,
+            "epsilon_cutoff": 0.0,
+            "eta_cutoff": 0.0,
+            "encoder_repetition_penalty": 1.0,
+            "num_assistant_tokens": 20,
+            "num_assistant_tokens_schedule": "constant",
+            "assistant_confidence_threshold": 0.4,
+            "assistant_lookbehind": 10,
+            "target_lookbehind": 10,
+            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
+        }
 
     def validate(self, strict=False):
         """

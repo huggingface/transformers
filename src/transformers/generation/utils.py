@@ -33,7 +33,8 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
-from ..configuration_utils import PreTrainedConfig
+
+# from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -111,6 +112,8 @@ from .stopping_criteria import (
     StopStringCriteria,
 )
 
+
+PreTrainedConfig = None
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -1788,7 +1791,7 @@ class GenerationMixin(ContinuousMixin):
         # First set values from the loaded `self.generation_config` then set defauls for BC
         # Do not update any values that aren't `None`, i.e. set by users explicitly and passed
         # to `generate()`. Thus the `defaults_only=True`
-        global_defaults = PreTrainedConfig._get_global_generation_defaults()
+        global_defaults = self.generation_config._get_default_generation_params()
         _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         _ = generation_config.update(**global_defaults, defaults_only=True)
 

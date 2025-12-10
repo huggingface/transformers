@@ -25,6 +25,7 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
+from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
@@ -310,7 +311,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
-        for parameter_name in self._get_global_generation_defaults().keys():
+        for parameter_name in GenerationConfig._get_default_generation_params().keys():
             kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
@@ -430,45 +431,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     @rope_scaling.setter
     def rope_scaling(self, value):
         self.rope_parameters = value
-
-    @staticmethod
-    def _get_global_generation_defaults() -> dict[str, Any]:
-        return {
-            "max_length": 20,
-            "min_length": 0,
-            "do_sample": False,
-            "early_stopping": False,
-            "num_beams": 1,
-            "temperature": 1.0,
-            "top_k": 50,
-            "top_p": 1.0,
-            "typical_p": 1.0,
-            "repetition_penalty": 1.0,
-            "length_penalty": 1.0,
-            "no_repeat_ngram_size": 0,
-            "encoder_no_repeat_ngram_size": 0,
-            "bad_words_ids": None,
-            "num_return_sequences": 1,
-            "output_scores": False,
-            "return_dict_in_generate": False,
-            "forced_bos_token_id": None,
-            "forced_eos_token_id": None,
-            "remove_invalid_values": False,
-            "exponential_decay_length_penalty": None,
-            "suppress_tokens": None,
-            "begin_suppress_tokens": None,
-            "epsilon_cutoff": 0.0,
-            "eta_cutoff": 0.0,
-            "encoder_repetition_penalty": 1.0,
-            "num_assistant_tokens": 20,
-            "num_assistant_tokens_schedule": "constant",
-            "assistant_confidence_threshold": 0.4,
-            "assistant_lookbehind": 10,
-            "target_lookbehind": 10,
-            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
-        }
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
@@ -1106,7 +1068,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         """
         generation_params = {}
         default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
-        for key in self._get_global_generation_defaults().keys():
+        for key in GenerationConfig._get_default_generation_params().keys():
             if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
                 generation_params[key] = getattr(self, key)
 
