@@ -39,7 +39,10 @@ if is_torch_available():
     import torch
 
     from transformers import XYTokenizer
-    from transformers.models.xy_tokenizer.modeling_xy_tokenizer import XYTokenizerDecoderOutput, XYTokenizerEncoderOutput
+    from transformers.models.xy_tokenizer.modeling_xy_tokenizer import (
+        XYTokenizerDecoderOutput,
+        XYTokenizerEncoderOutput,
+    )
 
 
 @require_torch

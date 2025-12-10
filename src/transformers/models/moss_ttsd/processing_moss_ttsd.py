@@ -21,8 +21,9 @@ from __future__ import annotations
 import math
 import os
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -85,8 +86,8 @@ class MossTTSDChatSample:
             Dictionary containing metadata for debugging and tracking purposes.
     """
 
-    input_ids_2d: "torch.LongTensor"
-    label_ids_2d: Optional["torch.LongTensor"]
+    input_ids_2d: torch.LongTensor
+    label_ids_2d: Optional[torch.LongTensor]
     meta: dict
 
 
@@ -104,9 +105,9 @@ class MossTTSDBatchInput:
             Optional shape (B, T, C) tensor containing label token IDs for training.
     """
 
-    input_ids: "torch.LongTensor"
-    attention_mask: "torch.LongTensor"
-    labels: Optional["torch.LongTensor"]
+    input_ids: torch.LongTensor
+    attention_mask: torch.LongTensor
+    labels: Optional[torch.LongTensor]
 
 
 @dataclass
@@ -394,7 +395,7 @@ class MossTTSDSampleProcessor:
         return "".join(out)
 
     @staticmethod
-    def _load_single_audio(audio_input: Union[str, tuple["torch.Tensor", int]]):
+    def _load_single_audio(audio_input: Union[str, tuple[torch.Tensor, int]]):
         """
         Load audio from file path or tensor tuple.
 
@@ -421,7 +422,7 @@ class MossTTSDSampleProcessor:
         raise ValueError(f"Unsupported audio input format: {type(audio_input)}")
 
     @staticmethod
-    def _resample(audio: "torch.Tensor", sr: int, target_sr: int) -> tuple["torch.Tensor", int]:
+    def _resample(audio: torch.Tensor, sr: int, target_sr: int) -> tuple[torch.Tensor, int]:
         """
         Resample audio to target sample rate and convert to mono if needed.
 
@@ -443,8 +444,8 @@ class MossTTSDSampleProcessor:
 
     @classmethod
     def _load_audio_data(
-        cls, audio_input: Union[str, tuple["torch.Tensor", int]], target_sample_rate: int
-    ) -> tuple["torch.Tensor", int]:
+        cls, audio_input: Union[str, tuple[torch.Tensor, int]], target_sample_rate: int
+    ) -> tuple[torch.Tensor, int]:
         """
         Load and resample audio data to target sample rate.
 
@@ -461,10 +462,10 @@ class MossTTSDSampleProcessor:
     @classmethod
     def _merge_speaker_audios(
         cls,
-        wav1: Union[str, tuple["torch.Tensor", int]],
-        wav2: Union[str, tuple["torch.Tensor", int]],
+        wav1: Union[str, tuple[torch.Tensor, int]],
+        wav2: Union[str, tuple[torch.Tensor, int]],
         target_sample_rate: int,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Merge two speaker audio inputs by concatenation.
 
@@ -482,8 +483,8 @@ class MossTTSDSampleProcessor:
 
     @classmethod
     def _process_audio_data(
-        cls, prompt_audio: Optional[Union[str, dict[str, Any], tuple["torch.Tensor", int]]], target_sample_rate: int
-    ) -> Optional["torch.Tensor"]:
+        cls, prompt_audio: Optional[Union[str, dict[str, Any], tuple[torch.Tensor, int]]], target_sample_rate: int
+    ) -> Optional[torch.Tensor]:
         """
         Process audio data from various input formats.
 
@@ -506,7 +507,7 @@ class MossTTSDSampleProcessor:
     def _build_inputs(
         self,
         text: str,
-        audio_data: Optional["torch.Tensor"],
+        audio_data: Optional[torch.Tensor],
         apply_chat_template: Callable[[str, dict], str],
         silence_duration: float,
         **kwargs,
@@ -797,10 +798,10 @@ class MossTTSDProcessor(ProcessorMixin):
 
     def shifting_outputs(
         self,
-        output_ids: "torch.Tensor",
+        output_ids: torch.Tensor,
         speech_token_range: list[int],
         max_channels: int = 8,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """
         Restore time-shifted layout to per-timestep C-channel arrangement and reverse-offset first codebook.
 
@@ -825,7 +826,7 @@ class MossTTSDProcessor(ProcessorMixin):
                 speech_ids[..., j] = speech_ids[..., j] - speech_token_range[0]
         return speech_ids
 
-    def _find_max_valid_positions(self, data: "torch.Tensor", invalid_value: int = 1024):
+    def _find_max_valid_positions(self, data: torch.Tensor, invalid_value: int = 1024):
         """
         Locate continuous valid audio segment intervals in each sequence (all non-text channels valid simultaneously).
 
@@ -860,7 +861,7 @@ class MossTTSDProcessor(ProcessorMixin):
                 result[gid].append(data[gid, s:e, :])
         return result
 
-    def batch_decode(self, token_ids: "torch.Tensor", *args, **kwargs):
+    def batch_decode(self, token_ids: torch.Tensor, *args, **kwargs):
         """
         Decode a batch of token sequences into text and audio outputs.
 
@@ -892,7 +893,7 @@ class MossTTSDProcessor(ProcessorMixin):
                 decode_audio.append([])
         return text, decode_audio
 
-    def decode(self, token_ids: "torch.Tensor", *args, **kwargs) -> MossTTSDResponse:
+    def decode(self, token_ids: torch.Tensor, *args, **kwargs) -> MossTTSDResponse:
         """
         Decode a single sequence of token IDs into text and audio.
 
