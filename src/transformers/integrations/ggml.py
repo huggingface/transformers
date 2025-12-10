@@ -313,6 +313,15 @@ GGUF_TOKENIZER_MAPPING = {
     },
 }
 
+GGUF_CONFIG_DEFAULTS_MAPPING = {
+    "qwen3_moe": {
+        # NOTE: Qwen3MoeConfig defaults to false but llama.cpp needs this to be true.
+        # See: https://github.com/ggml-org/llama.cpp/blob/b7345/src/models/qwen3moe.cpp#L85-L96
+        #      (the parameter right after LLM_FFN_SILU corresponds to norm_topk_prob)
+        "norm_topk_prob": True,
+    },
+}
+
 
 def _gguf_parse_value(_value, data_type):
     if not isinstance(data_type, list):
