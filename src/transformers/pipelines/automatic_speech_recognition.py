@@ -196,6 +196,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # set the model type so we can check we have the right pre- and post-processing parameters
         if model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
+        elif model.config.model_type == "lasr_ctc":
+            self.type = "lasr_ctc"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
         elif (
@@ -448,9 +450,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
             align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
-            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
-            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
-            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
+
+            if self.type == "lasr_ctc":
+                # TODO: find a standard for that but not easy because input length -> mel length depends on the feature extractor
+                # specific way of doing it
+                # means the model take mel features as input, we align according to the hop length
+                align_to *= self.feature_extractor.hop_length
+
+            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to))
+            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to))
+            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to))
 
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
