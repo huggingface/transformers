@@ -67,9 +67,10 @@ class ExpectationsUpdater(cst.CSTTransformer):
         """
         Visit assignment statements looking for:
         1. expectations_var = Expectations(...)
-        2. variable = torch.tensor([...])
-        3. variable = torch.tensor([...]).to(device)  # with method chaining
-        Only update the one that matches the expected line number.
+        2. variable = torch.tensor([...]) with any method chaining
+
+        Uses line number to identify the exact assignment, then recursively
+        finds and updates the target pattern regardless of nesting.
         """
         # Check if this is an assignment we care about
         if not isinstance(updated_node.targets[0], cst.AssignTarget):
@@ -93,47 +94,85 @@ class ExpectationsUpdater(cst.CSTTransformer):
         if node_lineno != -1 and abs(node_lineno - self.expectations_lineno) > 3:
             return updated_node
 
-        # Check what kind of assignment this is
-        if not isinstance(updated_node.value, cst.Call):
-            return updated_node
+        # Now recursively search for either Expectations or torch.tensor in the value tree
+        pattern_type, pattern_node = self._find_pattern_in_tree(updated_node.value)
 
-        # Pattern 1: Expectations(...)
-        if isinstance(updated_node.value.func, cst.Name) and updated_node.value.func.value == "Expectations":
-            return self._handle_expectations_pattern(original_node, updated_node, node_lineno)
-
-        # Pattern 2: torch.tensor(...)
-        if isinstance(updated_node.value.func, cst.Attribute):
-            # Could be torch.tensor(...) or torch.tensor(...).to(...)
-            func_attr = updated_node.value.func
-
-            # Check if it's .to() chained after torch.tensor()
-            if (isinstance(func_attr.value, cst.Call) and
-                    isinstance(func_attr.value.func, cst.Attribute) and
-                    isinstance(func_attr.value.func.value, cst.Name) and
-                    func_attr.value.func.value.value == "torch" and
-                    func_attr.value.func.attr.value == "tensor"):
-                # This is torch.tensor(...).to(...)
-                return self._handle_torch_tensor_with_to(original_node, updated_node, node_lineno)
-
-            # Direct torch.tensor(...)
-            if (isinstance(func_attr.value, cst.Name) and
-                    func_attr.value.value == "torch" and
-                    func_attr.attr.value == "tensor"):
-                return self._handle_torch_tensor_pattern(original_node, updated_node, node_lineno)
+        if pattern_type == "expectations":
+            return self._handle_expectations_pattern(original_node, updated_node, pattern_node, node_lineno)
+        elif pattern_type == "torch.tensor":
+            return self._handle_torch_tensor_pattern(original_node, updated_node, pattern_node, node_lineno)
 
         return updated_node
 
-    def _handle_torch_tensor_with_to(self, original_node: cst.Assign, updated_node: cst.Assign,
-                                     node_lineno: int) -> cst.Assign:
-        """Handle the torch.tensor([...]).to(device) pattern."""
+    def _find_pattern_in_tree(self, node: cst.BaseExpression) -> tuple:
+        """
+        Recursively search for Expectations(...) or torch.tensor(...) patterns.
+
+        Returns:
+            Tuple of (pattern_type, pattern_node) where:
+            - pattern_type: "expectations", "torch.tensor", or None
+            - pattern_node: The Call node that matches the pattern
+        """
+        if not isinstance(node, cst.Call):
+            return None, None
+
+        # Check if this is Expectations(...)
+        if isinstance(node.func, cst.Name) and node.func.value == "Expectations":
+            return "expectations", node
+
+        # Check if this is torch.tensor(...)
+        if isinstance(node.func, cst.Attribute):
+            if (isinstance(node.func.value, cst.Name) and
+                    node.func.value.value == "torch" and
+                    node.func.attr.value == "tensor"):
+                return "torch.tensor", node
+
+        # Recursively search in nested calls (for method chaining)
+        # Check if func is an Attribute with a Call as its value
+        if isinstance(node.func, cst.Attribute) and isinstance(node.func.value, cst.Call):
+            pattern_type, pattern_node = self._find_pattern_in_tree(node.func.value)
+            if pattern_type:
+                return pattern_type, pattern_node
+
+        return None, None
+
+    def _handle_expectations_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                     expectations_call: cst.Call, node_lineno: int) -> cst.Assign:
+        """Handle the Expectations({...}) pattern."""
         self.found_expectations = True
-        print(f"\n✓ Found torch.tensor().to() assignment for variable '{self.expectations_var}' at line {node_lineno}")
+        print(f"\n✓ Found Expectations assignment for variable '{self.expectations_var}' at line {node_lineno}")
 
-        # The outer call is .to(), the inner call is torch.tensor()
-        to_call = updated_node.value
-        tensor_call = to_call.func.value  # This is the torch.tensor() call
+        # The argument should be a dictionary
+        if not expectations_call.args:
+            return updated_node
 
-        # Get the tensor argument
+        arg = expectations_call.args[0]
+        if not isinstance(arg.value, cst.Dict):
+            return updated_node
+
+        # Update the dictionary
+        dict_node = arg.value
+        updated_dict = self._update_dict(dict_node)
+
+        if updated_dict is not dict_node and not self.dry_run:
+            # Create new Call with updated dictionary
+            new_arg = arg.with_changes(value=updated_dict)
+            new_expectations_call = expectations_call.with_changes(args=[new_arg])
+
+            # Replace in the tree - we need to replace expectations_call with new_expectations_call
+            # Since expectations_call is the pattern_node we found, we need to update the tree
+            new_value = self._replace_node_in_tree(updated_node.value, expectations_call, new_expectations_call)
+            return updated_node.with_changes(value=new_value)
+
+        return updated_node
+
+    def _handle_torch_tensor_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                     tensor_call: cst.Call, node_lineno: int) -> cst.Assign:
+        """Handle the torch.tensor([...]) pattern with any method chaining."""
+        self.found_expectations = True
+        print(f"\n✓ Found torch.tensor assignment for variable '{self.expectations_var}' at line {node_lineno}")
+
+        # The argument should be a list
         if not tensor_call.args:
             return updated_node
 
@@ -151,80 +190,37 @@ class ExpectationsUpdater(cst.CSTTransformer):
             new_value_node = cst.parse_expression(self.new_value_str)
             new_value_node = self._preserve_indentation(old_value, new_value_node)
 
-            # Replace the argument in the tensor call
+            # Replace the argument
             new_arg = arg.with_changes(value=new_value_node)
             new_tensor_call = tensor_call.with_changes(args=(new_arg,) + tensor_call.args[1:])
 
-            # Update the .to() call's func.value with the new tensor call
-            new_func = to_call.func.with_changes(value=new_tensor_call)
-            new_to_call = to_call.with_changes(func=new_func)
-
+            # Replace in the tree
+            new_value = self._replace_node_in_tree(updated_node.value, tensor_call, new_tensor_call)
             self.updated = True
-            return updated_node.with_changes(value=new_to_call)
+            return updated_node.with_changes(value=new_value)
         else:
             print("  ⚠️  DRY RUN - Not actually modifying")
 
         return updated_node
 
-    def _handle_expectations_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
-                                     node_lineno: int) -> cst.Assign:
-        """Handle the Expectations({...}) pattern."""
-        self.found_expectations = True
-        print(f"\n✓ Found Expectations assignment for variable '{self.expectations_var}' at line {node_lineno}")
+    def _replace_node_in_tree(self, tree: cst.BaseExpression, old_node: cst.Call,
+                              new_node: cst.Call) -> cst.BaseExpression:
+        """
+        Recursively replace old_node with new_node in the tree.
+        This handles method chaining like torch.tensor(...).to().cuda()
+        """
+        if tree == old_node:
+            return new_node
 
-        # The argument should be a dictionary
-        if not updated_node.value.args:
-            return updated_node
+        if isinstance(tree, cst.Call):
+            # Check if the func contains the old_node
+            if isinstance(tree.func, cst.Attribute) and isinstance(tree.func.value, cst.Call):
+                new_func_value = self._replace_node_in_tree(tree.func.value, old_node, new_node)
+                if new_func_value != tree.func.value:
+                    new_func = tree.func.with_changes(value=new_func_value)
+                    return tree.with_changes(func=new_func)
 
-        arg = updated_node.value.args[0]
-        if not isinstance(arg.value, cst.Dict):
-            return updated_node
-
-        # Update the dictionary
-        dict_node = arg.value
-        updated_dict = self._update_dict(dict_node)
-
-        if updated_dict is not dict_node and not self.dry_run:
-            new_arg = arg.with_changes(value=updated_dict)
-            new_call = updated_node.value.with_changes(args=[new_arg])
-            return updated_node.with_changes(value=new_call)
-
-        return updated_node
-
-    def _handle_torch_tensor_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
-                                     node_lineno: int) -> cst.Assign:
-        """Handle the torch.tensor([...]) pattern."""
-        self.found_expectations = True  # Reuse this flag to mean "found target"
-        print(f"\n✓ Found torch.tensor assignment for variable '{self.expectations_var}' at line {node_lineno}")
-
-        # The argument should be a list
-        if not updated_node.value.args:
-            return updated_node
-
-        arg = updated_node.value.args[0]
-        old_value = arg.value
-
-        print(f"  Old value: {self._format_value(old_value)}")
-        print(f"  New value: {self.new_value_str}")
-
-        # Mark this as found (use matched_key to signal success even though there's no key)
-        self.matched_key = "direct"
-        self.old_value = self._format_value(old_value)
-
-        if not self.dry_run:
-            # Parse the new value and preserve indentation
-            new_value_node = cst.parse_expression(self.new_value_str)
-            new_value_node = self._preserve_indentation(old_value, new_value_node)
-
-            # Replace the argument
-            new_arg = arg.with_changes(value=new_value_node)
-            new_call = updated_node.value.with_changes(args=(new_arg,) + updated_node.value.args[1:])
-            self.updated = True
-            return updated_node.with_changes(value=new_call)
-        else:
-            print("  ⚠️  DRY RUN - Not actually modifying")
-
-        return updated_node
+        return tree
 
     def _update_dict(self, dict_node: cst.Dict) -> cst.Dict:
         """
