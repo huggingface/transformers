@@ -96,6 +96,10 @@ class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     ):
         super().__init__(**kwargs)
 
+    def set_image_size(self, image_size):
+        """Set the image size for the prompt encoder."""
+        self.image_size = image_size
+
 
 class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
     pass
@@ -352,6 +356,23 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
         super().__init__(**kwargs)
+
+    def set_image_size(self, image_size):
+        """Set the image size and propagate to sub-configs. Calculates feature sizes based on patch_size."""
+        self.image_size = image_size
+        self.prompt_encoder_config.set_image_size(image_size)
+        self.vision_config.set_image_size(image_size)
+
+        patch_size = self.vision_config.backbone_config.patch_size
+        self.vision_config.backbone_feature_sizes = [
+            [4 * image_size // patch_size, 4 * image_size // patch_size],
+            [2 * image_size // patch_size, 2 * image_size // patch_size],
+            [image_size // patch_size, image_size // patch_size],
+        ]
+        self.memory_attention_rope_feat_sizes = [
+            image_size // patch_size,
+            image_size // patch_size,
+        ]
 
 
 class Sam3TrackerVideoInferenceCache(Sam2VideoInferenceCache):
