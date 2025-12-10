@@ -315,7 +315,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Generate candidates. Run prefill-specific logic in first generation and prepare model kwargs.
         # Some models prepare inputs differently depending on first vs subsequent iterations.(e.g. VLMs)
         # Assisted generation however calls internally `self.generate()` many times and technically will
-        # lead to many `ifirst_iteration's`. This way we can call prefill only once per assistant model
+        # lead to many `is_first_iteration's`. This way we can call prefill only once per assistant model
         if is_first_iteration:
             generation_args = self.assistant_model._get_initial_cache_position(
                 input_ids.shape[1], input_ids.device, self.assistant_kwargs.copy()

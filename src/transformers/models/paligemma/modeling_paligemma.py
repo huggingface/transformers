@@ -605,7 +605,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values,
             position_ids,
             token_type_ids,
-            is_first_iteration,
+            is_first_iteration=is_first_iteration,
             **{k: v for k, v in kwargs.items() if k != "pixel_values"},
         )
 

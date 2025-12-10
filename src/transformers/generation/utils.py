@@ -593,7 +593,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
-        is_first_iteration: Optional[bool] = False,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         """
