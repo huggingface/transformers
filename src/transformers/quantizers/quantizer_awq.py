@@ -43,8 +43,8 @@ class AwqQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, **kwargs):
-        if not is_gptqmodel_available() or is_llm_awq_available():
-            raise ImportError("Loading an AWQ quantized model requires either gptqmodel or llmawq library. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq")
+        if not is_gptqmodel_available() :
+            raise ImportError("Loading an AWQ quantized model requires either gptqmodel. Please install it with `pip install gptqmodel`")
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")

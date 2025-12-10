@@ -80,54 +80,38 @@ def replace_with_awq_linear(
         device_map (`Union[str, dict]`, *optional*, defaults to `None`):
             The device map that maps the parameters to the device
     """
-    backend = quantization_config.backend
-    if backend != AwqBackend.LLMAWQ:
-        from gptqmodel.quantization import METHOD
-        from gptqmodel.utils.importer import hf_select_quant_linear_v2
+    from gptqmodel.quantization import METHOD
+    from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
-        target_cls = hf_select_quant_linear_v2(
-            bits=quantization_config.bits,
-            group_size=quantization_config.group_size,
-            desc_act=False,
-            sym=False,
-            format=quantization_config.format,
-            backend=quantization_config.backend,
-            device_map=device_map,
-            quant_method=METHOD.AWQ,
-            zero_point=quantization_config.zero_point,
-            pack=False,
-        )
-    else:
-        from awq.quantize.qmodule import WQLinear
-
-        target_cls = WQLinear
+    target_cls = hf_select_quant_linear_v2(
+        bits=quantization_config.bits,
+        group_size=quantization_config.group_size,
+        desc_act=False,
+        sym=False,
+        format=quantization_config.format,
+        backend=quantization_config.backend,
+        device_map=device_map,
+        quant_method=METHOD.AWQ,
+        zero_point=quantization_config.zero_point,
+        pack=False,
+    )
 
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         with init_empty_weights():
             if isinstance(module, nn.Linear):
-                if backend != AwqBackend.LLMAWQ:
-                    new_module = target_cls(
-                        bits=quantization_config.bits,
-                        sym=quantization_config.sym,
-                        desc_act=quantization_config.desc_act,
-                        group_size=quantization_config.group_size,
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        dev=module.weight.device,
-                        register_buffers=True,
-                    )
-                else:
-                    new_module = target_cls(
-                        w_bit=quantization_config.bits,
-                        group_size=quantization_config.group_size,
-                        in_features=module.in_features,
-                        out_features=module.out_features,
-                        bias=module.bias is not None,
-                        dev=module.weight.device,
-                    )
+                new_module = target_cls(
+                    bits=quantization_config.bits,
+                    sym=quantization_config.sym,
+                    desc_act=quantization_config.desc_act,
+                    group_size=quantization_config.group_size,
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    dev=module.weight.device,
+                    register_buffers=True,
+                )
                 new_module.requires_grad_(False)
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
