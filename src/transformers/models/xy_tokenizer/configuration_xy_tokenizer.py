@@ -75,7 +75,10 @@ class XYTokenizerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.use_cache = use_cache
 
-        self.params = kwargs
+        if "params" in kwargs:
+            self.params = kwargs.pop("params")
+        else:
+            self.params = kwargs.copy()
 
         super().__init__(**kwargs)
 
