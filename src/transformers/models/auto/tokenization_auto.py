@@ -389,8 +389,6 @@ def load_merges(merges_file):
 
 
 def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
-    if class_name == "BloomTokenizer":
-        return TokenizersBackend
     if class_name in REGISTERED_FAST_ALIASES:
         return REGISTERED_FAST_ALIASES[class_name]
 
