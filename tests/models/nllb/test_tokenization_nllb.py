@@ -333,7 +333,6 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             use_fast=False,
         )
 
-        # In v5, language codes live in `extra_special_tokens`
         original_extra = list(tok.extra_special_tokens or [])
 
         # Add two codes, one existing, one new
