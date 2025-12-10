@@ -346,113 +346,25 @@ class DeepseekV32Config(DeepseekV3Config):
 
     DeepSeek V3.2 extends DeepSeek V3 with DeepSeek Sparse Attention (DSA), which uses a Lightning Indexer
     to select top-k tokens for sparse attention, reducing complexity from O(L^2) to O(L*k).
+    Per the tech report, DSA is the ONLY architectural difference from V3.
 
-    This config inherits all parameters from [`DeepseekV3Config`] and adds V3.2-specific parameters
-    for the Lightning Indexer.
+    V3.2-specific Args (see [`DeepseekV3Config`] for inherited parameters):
+        index_n_heads (`int`, *optional*, defaults to 64): Number of heads in the Lightning Indexer.
+        index_head_dim (`int`, *optional*, defaults to 128): Dimension of each indexer head.
+        index_topk (`int`, *optional*, defaults to 2048): Number of tokens to select for sparse attention.
+        use_sparse_attention (`bool`, *optional*, defaults to `True`): Whether to use sparse attention.
+        detach_indexer_input (`bool`, *optional*, defaults to `False`): Detach indexer input from graph.
+        indexer_kl_coef (`float`, *optional*, defaults to 0.0): Coefficient for indexer KL loss.
+        scoring_func (`str`, *optional*, defaults to `"sigmoid"`): V3.2 uses sigmoid scoring.
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 129280):
-            Vocabulary size of the DeepSeek V3.2 model.
-        hidden_size (`int`, *optional*, defaults to 7168):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 18432):
-            Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 61):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 128):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 128):
-            Number of key_value heads for Grouped Query Attention.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts (always active).
-        n_routed_experts (`int`, *optional*, defaults to 256):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
-            Scaling factor for routed experts.
-        kv_lora_rank (`int`, *optional*, defaults to 512):
-            Rank of the LoRA matrices for key and value projections.
-        q_lora_rank (`int`, *optional*, defaults to 1536):
-            Rank of the LoRA matrices for query projections.
-        qk_rope_head_dim (`int`, *optional*, defaults to 64):
-            Dimension of query/key heads that use rotary position embeddings.
-        v_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of the value heads.
-        qk_nope_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of query/key heads without rotary position embeddings.
-        n_group (`int`, *optional*, defaults to 8):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 4):
-            Number of groups selected per token for expert routing.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of experts activated per token.
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
-            Number of dense layers before switching to MoE layers.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-            Scoring function for expert routing. The official V3.2 config uses "sigmoid".
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings.
-        rope_interleave (`bool`, *optional*, defaults to `True`):
-            Whether to interleave the rotary position embeddings (for MLA).
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in attention layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        index_n_heads (`int`, *optional*, defaults to 64):
-            Number of heads in the Lightning Indexer.
-        index_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each indexer head.
-        index_topk (`int`, *optional*, defaults to 2048):
-            Number of tokens to select for sparse attention.
-        use_sparse_attention (`bool`, *optional*, defaults to `True`):
-            Whether to use sparse attention. Set to `False` for dense attention
-            (useful for the dense warm-up training stage).
-        detach_indexer_input (`bool`, *optional*, defaults to `False`):
-            Whether to detach the indexer input from the computational graph.
-            Used in Stage 2 training for separate optimization of indexer.
-        indexer_kl_coef (`float`, *optional*, defaults to 0.0):
-            Coefficient for the indexer KL loss. When > 0, the KL loss is computed
-            and added to the total loss: loss = lm_loss + indexer_kl_coef * indexer_kl_loss.
-            Set to 0.0 for Stage 1 (SFT) training, and > 0 for Stage 2 (indexer training).
-
-    Example:
-
-    ```python
-    >>> from transformers import DeepseekV32Model, DeepseekV32Config
-
-    >>> # Initializing a DeepSeek V3.2 configuration
-    >>> configuration = DeepseekV32Config()
-
-    >>> # Initializing a model from the configuration
-    >>> model = DeepseekV32Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-
-    Reference:
-        - Technical Report: https://api-docs.deepseek.com/news/news251201
-        - Official Code: https://github.com/deepseek-ai/DeepSeek-V3.2-Exp
+    Reference: https://api-docs.deepseek.com/news/news251201
     """
 
     model_type = "deepseek_v32"
 
     def __init__(
         self,
-        # Inherited from DeepseekV3Config
+        # Inherited from DeepseekV3Config (required for modular converter)
         vocab_size: int = 129280,
         hidden_size: int = 7168,
         intermediate_size: int = 18432,
@@ -494,8 +406,7 @@ class DeepseekV32Config(DeepseekV3Config):
         use_sparse_attention: bool = True,
         detach_indexer_input: bool = False,
         indexer_kl_coef: float = 0.0,
-        # V3.2 uses sigmoid scoring (explicit in official config: score_func)
-        scoring_func: str = "sigmoid",
+        scoring_func: str = "sigmoid",  # V3.2 uses sigmoid
         **kwargs,
     ):
         super().__init__(
@@ -535,42 +446,24 @@ class DeepseekV32Config(DeepseekV3Config):
             attention_dropout=attention_dropout,
             **kwargs,
         )
-
-        # DeepSeek V3.2 specific: Lightning Indexer
+        # V3.2 specific: Lightning Indexer
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
         self.use_sparse_attention = use_sparse_attention
         self.detach_indexer_input = detach_indexer_input
         self.indexer_kl_coef = indexer_kl_coef
-        # V3.2 official config has "score_func": "sigmoid"
         self.scoring_func = scoring_func
 
 
-class DeepseekV32RMSNorm(nn.Module):
-    """RMSNorm with meta device support for large model initialization.
+class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
+    """RMSNorm for DeepSeek V3.2, inherited from V3.
 
-    Uses torch.empty() instead of torch.ones() to respect ambient device context,
-    allowing initialization on meta device for memory-efficient model loading.
-    The weight is initialized to ones in _init_weights().
+    Per the V3.2 tech report, the only architectural difference from V3 is
+    DeepSeek Sparse Attention (DSA). All other components are identical.
     """
 
-    def __init__(self, hidden_size, eps=1e-6):
-        super().__init__()
-        # Use torch.empty to respect meta device context
-        # Weight will be initialized to ones in _init_weights
-        self.weight = nn.Parameter(torch.empty(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+    pass
 
 
 class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
@@ -861,69 +754,17 @@ class DeepseekV32Attention(DeepseekV3Attention):
         # If not using sparse attention, use dense attention (V3 path)
         # This handles decode (seq_len=1) and when use_sparse_attention=False
         if not use_sparse:
-            # Dense attention path - duplicated from DeepseekV3Attention.forward()
-            # to avoid super() call issues with modular converter
-            query_shape_dense = (batch_size, seq_length, -1, self.qk_head_dim)
-            key_shape_dense = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
-
-            if self.q_lora_rank is None:
-                q_states_dense = self.q_proj(hidden_states)
-            else:
-                q_states_dense = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-            q_states_dense = q_states_dense.view(query_shape_dense).transpose(1, 2)
-            q_pass_dense, q_rot_dense = torch.split(q_states_dense, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-            compressed_kv_dense = self.kv_a_proj_with_mqa(hidden_states)
-            k_pass_dense, k_rot_dense = torch.split(compressed_kv_dense, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-
-            k_pass_dense = self.kv_b_proj(self.kv_a_layernorm(k_pass_dense)).view(key_shape_dense).transpose(1, 2)
-            k_pass_dense, value_states_dense = torch.split(k_pass_dense, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-            k_rot_dense = k_rot_dense.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
-            cos, sin = position_embeddings
-            if self.config.rope_interleave:
-                q_rot_dense, k_rot_dense = apply_rotary_pos_emb_interleave(q_rot_dense, k_rot_dense, cos, sin)
-            else:
-                from ..llama.modeling_llama import apply_rotary_pos_emb
-                q_rot_dense, k_rot_dense = apply_rotary_pos_emb(q_rot_dense, k_rot_dense, cos, sin)
-            k_rot_dense = k_rot_dense.expand(*k_pass_dense.shape[:-1], -1)
-
-            query_states_dense = torch.cat((q_pass_dense, q_rot_dense), dim=-1)
-            key_states_dense = torch.cat((k_pass_dense, k_rot_dense), dim=-1)
-
-            if past_key_values is not None:
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states_dense, value_states_dense = past_key_values.update(
-                    key_states_dense, value_states_dense, self.layer_idx, cache_kwargs
-                )
-
-            if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-                value_states_dense = F.pad(value_states_dense, [0, self.qk_head_dim - self.v_head_dim])
-
-            attention_interface: Callable = eager_attention_forward
-            if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-            attn_output_dense, attn_weights_dense = attention_interface(
+            # Call parent's dense attention and add None for indexer outputs
+            attn_output, attn_weights = DeepseekV3Attention.forward(
                 self,
-                query_states_dense,
-                key_states_dense,
-                value_states_dense,
-                attention_mask,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                scaling=self.scaling,
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
                 **kwargs,
             )
-
-            if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
-                attn_output_dense = attn_output_dense[:, :, :, : self.v_head_dim]
-
-            attn_output_dense = attn_output_dense.reshape(batch_size, seq_length, -1).contiguous()
-            attn_output_dense = self.o_proj(attn_output_dense)
-
-            # Return with None for indexer outputs
-            return attn_output_dense, attn_weights_dense, None, None
+            return attn_output, attn_weights, None, None
 
         # Sparse attention path (eager computation, matching official DeepSeek code)
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
@@ -1112,16 +953,8 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     config_class = DeepseekV32Config
     _no_split_modules = ["DeepseekV32DecoderLayer"]
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        from torch.nn import init
-
-        # Call parent's _init_weights (handles MoE classes via inheritance)
-        super()._init_weights(module)
-
-        # Initialize RMSNorm weights to ones (they use torch.empty for meta device support)
-        if isinstance(module, DeepseekV32RMSNorm):
-            init.ones_(module.weight)
+    # No custom _init_weights needed - V3.2 inherits from V3 which handles
+    # RMSNorm (uses torch.ones), TopkRouter, and NaiveMoe initialization
 
 
 class DeepseekV32Model(DeepseekV3Model):

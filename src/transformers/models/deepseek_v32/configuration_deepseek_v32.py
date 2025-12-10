@@ -32,106 +32,18 @@ class DeepseekV32Config(PreTrainedConfig):
 
     DeepSeek V3.2 extends DeepSeek V3 with DeepSeek Sparse Attention (DSA), which uses a Lightning Indexer
     to select top-k tokens for sparse attention, reducing complexity from O(L^2) to O(L*k).
+    Per the tech report, DSA is the ONLY architectural difference from V3.
 
-    This config inherits all parameters from [`DeepseekV3Config`] and adds V3.2-specific parameters
-    for the Lightning Indexer.
+    V3.2-specific Args (see [`DeepseekV3Config`] for inherited parameters):
+        index_n_heads (`int`, *optional*, defaults to 64): Number of heads in the Lightning Indexer.
+        index_head_dim (`int`, *optional*, defaults to 128): Dimension of each indexer head.
+        index_topk (`int`, *optional*, defaults to 2048): Number of tokens to select for sparse attention.
+        use_sparse_attention (`bool`, *optional*, defaults to `True`): Whether to use sparse attention.
+        detach_indexer_input (`bool`, *optional*, defaults to `False`): Detach indexer input from graph.
+        indexer_kl_coef (`float`, *optional*, defaults to 0.0): Coefficient for indexer KL loss.
+        scoring_func (`str`, *optional*, defaults to `"sigmoid"`): V3.2 uses sigmoid scoring.
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 129280):
-            Vocabulary size of the DeepSeek V3.2 model.
-        hidden_size (`int`, *optional*, defaults to 7168):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 18432):
-            Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 61):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 128):
-            Number of attention heads for each attention layer.
-        num_key_value_heads (`int`, *optional*, defaults to 128):
-            Number of key_value heads for Grouped Query Attention.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts (always active).
-        n_routed_experts (`int`, *optional*, defaults to 256):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
-            Scaling factor for routed experts.
-        kv_lora_rank (`int`, *optional*, defaults to 512):
-            Rank of the LoRA matrices for key and value projections.
-        q_lora_rank (`int`, *optional*, defaults to 1536):
-            Rank of the LoRA matrices for query projections.
-        qk_rope_head_dim (`int`, *optional*, defaults to 64):
-            Dimension of query/key heads that use rotary position embeddings.
-        v_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of the value heads.
-        qk_nope_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of query/key heads without rotary position embeddings.
-        n_group (`int`, *optional*, defaults to 8):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 4):
-            Number of groups selected per token for expert routing.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            Number of experts activated per token.
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
-            Number of dense layers before switching to MoE layers.
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-            Scoring function for expert routing. The official V3.2 config uses "sigmoid".
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to return the last key/values attentions.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings.
-        rope_interleave (`bool`, *optional*, defaults to `True`):
-            Whether to interleave the rotary position embeddings (for MLA).
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in attention layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        index_n_heads (`int`, *optional*, defaults to 64):
-            Number of heads in the Lightning Indexer.
-        index_head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each indexer head.
-        index_topk (`int`, *optional*, defaults to 2048):
-            Number of tokens to select for sparse attention.
-        use_sparse_attention (`bool`, *optional*, defaults to `True`):
-            Whether to use sparse attention. Set to `False` for dense attention
-            (useful for the dense warm-up training stage).
-        detach_indexer_input (`bool`, *optional*, defaults to `False`):
-            Whether to detach the indexer input from the computational graph.
-            Used in Stage 2 training for separate optimization of indexer.
-        indexer_kl_coef (`float`, *optional*, defaults to 0.0):
-            Coefficient for the indexer KL loss. When > 0, the KL loss is computed
-            and added to the total loss: loss = lm_loss + indexer_kl_coef * indexer_kl_loss.
-            Set to 0.0 for Stage 1 (SFT) training, and > 0 for Stage 2 (indexer training).
-
-    Example:
-
-    ```python
-    >>> from transformers import DeepseekV32Model, DeepseekV32Config
-
-    >>> # Initializing a DeepSeek V3.2 configuration
-    >>> configuration = DeepseekV32Config()
-
-    >>> # Initializing a model from the configuration
-    >>> model = DeepseekV32Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-
-    Reference:
-        - Technical Report: https://api-docs.deepseek.com/news/news251201
-        - Official Code: https://github.com/deepseek-ai/DeepSeek-V3.2-Exp
+    Reference: https://api-docs.deepseek.com/news/news251201
     """
 
     model_type = "deepseek_v32"
@@ -158,7 +70,7 @@ class DeepseekV32Config(PreTrainedConfig):
 
     def __init__(
         self,
-        # Inherited from DeepseekV3Config
+        # Inherited from DeepseekV3Config (required for modular converter)
         vocab_size: int = 129280,
         hidden_size: int = 7168,
         intermediate_size: int = 18432,
@@ -200,8 +112,7 @@ class DeepseekV32Config(PreTrainedConfig):
         use_sparse_attention: bool = True,
         detach_indexer_input: bool = False,
         indexer_kl_coef: float = 0.0,
-        # V3.2 uses sigmoid scoring (explicit in official config: score_func)
-        scoring_func: str = "sigmoid",
+        scoring_func: str = "sigmoid",  # V3.2 uses sigmoid
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -249,15 +160,13 @@ class DeepseekV32Config(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # DeepSeek V3.2 specific: Lightning Indexer
+        # V3.2 specific: Lightning Indexer
         self.index_n_heads = index_n_heads
         self.index_head_dim = index_head_dim
         self.index_topk = index_topk
         self.use_sparse_attention = use_sparse_attention
         self.detach_indexer_input = detach_indexer_input
         self.indexer_kl_coef = indexer_kl_coef
-        # V3.2 official config has "score_func": "sigmoid"
         self.scoring_func = scoring_func
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
