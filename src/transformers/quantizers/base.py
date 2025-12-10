@@ -301,12 +301,12 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+    def get_state_dict_and_metadata(self, model):
         """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
         return None, {}
 
     @abstractmethod
-    def is_serializable(self, safe_serialization=None): ...
+    def is_serializable(self): ...
 
     @property
     @abstractmethod
