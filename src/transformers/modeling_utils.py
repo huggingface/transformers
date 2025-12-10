@@ -425,7 +425,7 @@ def remove_tied_weights_from_state_dict(
             # In offloaded cases, there may be meta tensors in the state_dict.
             # For these cases, key by the pointer of the original tensor object
             # (state_dict tensors are detached and therefore no longer shared)
-            tensor = SpecificPreTrainedModelType.get_parameter(name)
+            tensor = model.get_parameter(name)
             ptrs[id(tensor)].append(name)
 
         else:
@@ -3347,7 +3347,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     for parent_name in modules_to_check:
                         parent = model_to_save.get_submodule(parent_name)
                         if hasattr(parent, "_hf_hook"):
-                            truncated_tensor_name = tensor_name.replace(parent_name, "")
+                            truncated_tensor_name = tensor_name.replace(
+                                f"{parent_name}." if parent_name != "" else parent_name, ""
+                            )
                             break
                     # If we did not break the loop, something is wrong
                     else:
