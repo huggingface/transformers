@@ -48,12 +48,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        if is_torch_xpu_available() and not is_kernels_available():
-            raise ImportError("Loading an FP8 fbgemm quantized model on XPU requires kernels (`pip install kernels`)")
-
-        if not is_fbgemm_gpu_available() and not is_torch_xpu_available():
-            raise ImportError(
-                "Using fbgemm fp8 quantization requires fbgemm-gpu library"
+        if not is_torch_cuda_available() and not is_torch_xpu_available():
+            raise ImportError("Using fbgemm fp8 quantization requires a GPU or XPU")
+        if is_torch_cuda_available() and not is_kernels_available():
+            raise ImportError("Using FP8 fbgemm on XPU requires kernels (`pip install kernels`)")
+        if is_torch_cuda_available() and not is_fbgemm_gpu_available():
+            raise ImportError("Loading an FP8 fbgemm quantized model on CUDA requires fbgemm-gpu library"
                 "Please install the latest version of fbgemm-gpu library by following : https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries"
             )
         if not is_accelerate_available():

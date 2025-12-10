@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from typing import Optional
+from functools import lru_cache
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
@@ -37,9 +38,6 @@ _is_torch_xpu_available = is_torch_xpu_available()
 
 if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
-
-quantize_fp8_per_row = None
-
 
 logger = logging.get_logger(__name__)
 
@@ -256,16 +254,12 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         return next_states.view(-1, self.hidden_size)
 
 
-def initialize_quantize_fp8_per_row():
-    global quantize_fp8_per_row
-    if quantize_fp8_per_row is None:
-        if _is_torch_xpu_available:
-            from kernels import get_kernel
-
-            fp8_fbgemm_kernels = get_kernel("kernels-community/fp8-fbgemm")
-            quantize_fp8_per_row = fp8_fbgemm_kernels.quantize_fp8_per_row
-        else:
-            quantize_fp8_per_row = torch.ops.fbgemm.quantize_fp8_per_row
+@lru_cache(maxsize=1)
+def get_quantize_fp8_per_row():
+    if _is_torch_xpu_available:
+        from kernels import get_kernel
+        return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
+    return torch.ops.fbgemm.quantize_fp8_per_row
 
 
 def replace_with_fbgemm_fp8_linear(
@@ -290,7 +284,8 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert in `FP8Linear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
     """
-    initialize_quantize_fp8_per_row()
+    global quantize_fp8_per_row
+    quantize_fp8_per_row = get_quantize_fp8_per_row()
 
     has_been_replaced = False
     module_kwargs = {} if pre_quantized else {"dtype": None}
