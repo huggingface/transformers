@@ -542,6 +542,7 @@ def main():
     eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
 
     # Optimizer
+    # Split weights in two groups, one with weight decay and the other not.
     forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
     decay_parameters = get_parameter_names(
         model, [nn.LayerNorm], forbidden_layer_names=forbidden_name_patterns
