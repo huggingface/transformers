@@ -346,6 +346,3 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         # IDs round-trip
         for code, tid in zip(["eng_Latn", "ami_Latn"], ids):
             assert tok.convert_tokens_to_ids(code) == tid
-
-
-
