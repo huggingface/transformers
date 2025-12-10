@@ -593,7 +593,7 @@ class T5PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["wo"]
 
     _can_record_outputs = {
-        "hidden_states": [OutputRecorder(T5Block, index=0, layer_name="block")]
+        "hidden_states": [OutputRecorder(T5Block, index=0, layer_name="block")],
         "attentions": [OutputRecorder(T5LayerSelfAttention, index=-1, layer_name="self_attn")],
         "cross_attentions": [OutputRecorder(T5LayerCrossAttention, index=-1, layer_name="cross_attn")],
     }
