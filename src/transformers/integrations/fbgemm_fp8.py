@@ -20,7 +20,6 @@ from ..quantizers.quantizers_utils import get_module_from_name, should_convert_m
 from ..utils import (
     is_accelerate_available,
     is_fbgemm_gpu_available,
-    is_kernels_available,
     is_torch_available,
     is_torch_xpu_available,
     logging,
@@ -261,9 +260,6 @@ def initialize_quantize_fp8_per_row():
     global quantize_fp8_per_row
     if quantize_fp8_per_row is None:
         if _is_torch_xpu_available:
-            if not is_kernels_available():
-                raise ImportError("Loading an FP8 quantized model requires kernels (`pip install kernels`)")
-
             from kernels import get_kernel
 
             fp8_fbgemm_kernels = get_kernel("kernels-community/fp8-fbgemm")

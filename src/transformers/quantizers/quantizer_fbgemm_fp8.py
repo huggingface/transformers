@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 from ..utils import (
     is_accelerate_available,
     is_fbgemm_gpu_available,
+    is_kernels_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_xpu_available,
@@ -47,8 +48,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
-        if not is_torch_cuda_available() and not is_torch_xpu_available():
-            raise RuntimeError("Using fbgemm fp8 quantization only works on CUDA or XPU devices.")
+        if is_torch_xpu_available() and not is_kernels_available():
+            raise ImportError("Loading an FP8 fbgemm quantized model on XPU requires kernels (`pip install kernels`)")
 
         if not is_fbgemm_gpu_available() and not is_torch_xpu_available():
             raise ImportError(
