@@ -107,6 +107,7 @@ from .utils import (
     copy_func,
     has_file,
     is_accelerate_available,
+    is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
@@ -3319,7 +3320,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # We use threading to write the different shards, but only if we have more than 1 and no offloading
         num_shards = len(state_dict_split.filename_to_tensors)
         thread_pool = None
-        if num_shards > 1 and not is_offloaded:
+        if num_shards > 1 and not is_offloaded and not is_env_variable_true("HF_DEACTIVATE_ASYNC_SAVE"):
             thread_pool = ThreadPoolExecutor(max_workers=min(GLOBAL_WORKERS, num_shards))
 
         # Save the model
@@ -3370,6 +3371,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 thread_pool.submit(safe_save_file, shard_state_dict, filename, metadata=metadata)
             else:
                 safe_save_file(shard_state_dict, filename, metadata=metadata)
+                # If we don't use threading, we can cleanup the data before next loop (important with offloading,
+                # so we don't blowup cpu RAM)
+                del shard_state_dict
 
         # Wait for all writes to be done
         if thread_pool is not None:
