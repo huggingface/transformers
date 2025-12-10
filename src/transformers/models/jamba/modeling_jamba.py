@@ -33,6 +33,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -40,20 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 from .configuration_jamba import JambaConfig
-
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
 
 
 logger = logging.get_logger(__name__)
@@ -304,6 +292,21 @@ class JambaAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+causal_conv1d = lazy_load_kernel("causal-conv1d")
+causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+mamba_ssm = lazy_load_kernel("mamba-ssm")
+mamba_ssm_ops = getattr(mamba_ssm, "ops", None)
+mamba_ssm_triton = getattr(mamba_ssm_ops, "triton", None)
+selective_state_update = getattr(
+    getattr(mamba_ssm_triton, "selective_state_update", None), "selective_state_update", None
+)
+selective_scan_interface = getattr(mamba_ssm_ops, "selective_scan_interface", None)
+mamba_inner_fn = getattr(selective_scan_interface, "mamba_inner_fn", None)
+selective_scan_fn = getattr(selective_scan_interface, "selective_scan_fn", None)
 
 
 is_fast_path_available = all(
