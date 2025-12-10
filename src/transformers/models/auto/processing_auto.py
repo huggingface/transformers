@@ -147,6 +147,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
         ("vibevoice", "VibeVoiceProcessor"),
+        ("vibevoice_realtime", "VibeVoiceRealTimeProcessor"),
         ("video_llava", "VideoLlavaProcessor"),
         ("vilt", "ViltProcessor"),
         ("vipllava", "LlavaProcessor"),
