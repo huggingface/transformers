@@ -1760,7 +1760,6 @@ class GenerationMixin(ContinuousMixin):
     def _prepare_generation_config(
         self,
         generation_config: GenerationConfig | None,
-        assistant_model: Optional["PreTrainedModel"] = None,
         **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
@@ -1771,7 +1770,6 @@ class GenerationMixin(ContinuousMixin):
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
         # TODO (joao): per-model generation config classes.
 
-        global_defaults = PreTrainedConfig._get_global_generation_defaults()
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1783,17 +1781,6 @@ class GenerationMixin(ContinuousMixin):
                 )
             generation_config = GenerationConfig()
 
-        # First update assistant config with the kwargs if needed. Allows users to set
-        # `num_assistant_tokens`, etc. right from the `generate()` call
-        if assistant_model is not None:
-            kwargs_copy = kwargs.copy()
-            assistant_config = assistant_model.generation_config
-            _ = assistant_config.update(**generation_config.to_dict())
-            _ = assistant_config.update(**global_defaults, defaults_only=True)
-            _ = assistant_config.update(**kwargs_copy)
-            assistant_model.generation_config = assistant_config
-            kwargs["assistant_model"] = assistant_model
-
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
@@ -1801,6 +1788,7 @@ class GenerationMixin(ContinuousMixin):
         # First set values from the loaded `self.generation_config` then set defauls for BC
         # Do not update any values that aren't `None`, i.e. set by users explicitly and passed
         # to `generate()`. Thus the `defaults_only=True`
+        global_defaults = PreTrainedConfig._get_global_generation_defaults()
         _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         _ = generation_config.update(**global_defaults, defaults_only=True)
 
@@ -2449,10 +2437,7 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, assistant_model=assistant_model, **kwargs
-        )
-        assistant_model = model_kwargs.pop("assistant_model", assistant_model)
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
         if isinstance(custom_generate, Callable):
