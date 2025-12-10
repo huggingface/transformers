@@ -1237,7 +1237,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             default_dtype = torch.get_default_dtype()
             self.config.dtype = default_dtype
             for sub_config_key in self.config.sub_configs:
-                if (sub_config := getattr(self.config, sub_config_key)) is not None and getattr(sub_config, "dtype", None) is None:
+                if (sub_config := getattr(self.config, sub_config_key)) is not None and getattr(
+                    sub_config, "dtype", None
+                ) is None:
                     sub_config.dtype = default_dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
