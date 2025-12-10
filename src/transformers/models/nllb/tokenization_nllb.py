@@ -315,7 +315,7 @@ class NllbTokenizer(TokenizersBackend):
         keep_mask_token_last: bool = True,
     ) -> list[int]:
         """
-        Register one or more language codes as additional special tokens.
+        Register one or more language codes as extra special tokens.
 
         This is a convenience wrapper around
         [`~transformers.PreTrainedTokenizerBase.add_special_tokens`] that:
@@ -326,6 +326,21 @@ class NllbTokenizer(TokenizersBackend):
 
         It is primarily useful when fine-tuning NLLB on language codes that are
         not part of the built-in ``FAIRSEQ_LANGUAGE_CODES`` list.
+
+        Args:
+            language_codes (`str` or `list[str]`):
+                One or more language codes such as `"eng_Latn"` or `"ami_Latn"`.
+            replace_additional_special_tokens (`bool`, *optional*, defaults to `False`):
+                When `False` (default), new codes are appended to the existing
+                language-code list. When `True`, the provided codes replace the
+                current list in one shot.
+            keep_mask_token_last (`bool`, *optional*, defaults to `True`):
+                If `True` and the mask token is present in the extra special
+                tokens, ensure it remains the last entry after updating the list.
+
+        Returns:
+            `list[int]`: The token ids corresponding to each entry in
+            ``language_codes`` in the updated vocabulary.
         """
         if isinstance(language_codes, str):
             language_codes = [language_codes]
@@ -333,7 +348,7 @@ class NllbTokenizer(TokenizersBackend):
         if not language_codes:
             return []
 
-        # The new tokenizer base exposes language codes through `extra_special_tokens`
+        # v5 exposes the language-code list via `extra_special_tokens`
         existing_list = list(self.extra_special_tokens or [])
         existing_special = set(existing_list)
 
@@ -341,29 +356,31 @@ class NllbTokenizer(TokenizersBackend):
         new_codes = [code for code in language_codes if code not in existing_special]
 
         if new_codes:
-            # Important part: do NOT blow away FAIRSEQ_LANGUAGE_CODES
+            # Important: do NOT blow away FAIRSEQ_LANGUAGE_CODES
+            # `add_special_tokens` still expects "additional_special_tokens" as the key,
+            # but the replacement flag is now `replace_extra_special_tokens`.
             self.add_special_tokens(
                 {"additional_special_tokens": new_codes},
-                replace_additional_special_tokens=replace_additional_special_tokens,
+                replace_extra_special_tokens=replace_additional_special_tokens,
             )
             # Refresh after mutation
             existing_list = list(self.extra_special_tokens or [])
 
-        # Optional: keep mask token (if it is mapped as an extra special token)
+        # Optional: keep mask token last, if it lives in the extra special list
         if keep_mask_token_last and self.mask_token is not None and existing_list:
             mask_str = str(self.mask_token)
             without_mask = [tok for tok in existing_list if tok != mask_str]
             mask_tokens = [tok for tok in existing_list if tok == mask_str]
 
             if mask_tokens and without_mask + mask_tokens != existing_list:
-                # Re-assign the ordered list with mask last
                 self.add_special_tokens(
                     {"additional_special_tokens": without_mask + mask_tokens},
-                    replace_additional_special_tokens=True,
+                    replace_extra_special_tokens=True,
                 )
 
         # Return ids for *all* requested codes (including ones that already existed)
         return [self.convert_tokens_to_ids(code) for code in language_codes]
+
 
 
 

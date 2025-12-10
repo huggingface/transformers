@@ -333,13 +333,13 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             use_fast=False,
         )
 
-        # extra_special_tokens is the public attribute in the new tokenizer base
+        # In v5, language codes live in `extra_special_tokens`
         original_extra = list(tok.extra_special_tokens or [])
 
-        # add two codes, one new, one existing
+        # Add two codes, one existing, one new
         ids = tok.add_language_codes(["eng_Latn", "ami_Latn"])
 
-        # eng_Latn still present, ami_Latn added at end
+        # eng_Latn still present, ami_Latn added at end, no duplicates
         assert "eng_Latn" in tok.extra_special_tokens
         assert "ami_Latn" in tok.extra_special_tokens
         assert len(tok.extra_special_tokens) == len(original_extra) + 1
@@ -347,5 +347,6 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         # IDs round-trip
         for code, tid in zip(["eng_Latn", "ami_Latn"], ids):
             assert tok.convert_tokens_to_ids(code) == tid
+
 
 
