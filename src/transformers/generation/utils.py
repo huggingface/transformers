@@ -1788,9 +1788,9 @@ class GenerationMixin(ContinuousMixin):
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
-        # First set values from the loaded `self.generation_config` then set defauls for BC
-        # Do not update any values that aren't `None`, i.e. set by users explicitly and passed
-        # to `generate()`. Thus the `defaults_only=True`
+        # First set values from the loaded `self.generation_config`, then set default values (BC)
+        # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
+        # to `generate()`. Thus the `defaults_only=True` is used
         global_defaults = self.generation_config._get_default_generation_params()
         _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         _ = generation_config.update(**global_defaults, defaults_only=True)
