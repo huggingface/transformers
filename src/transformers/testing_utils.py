@@ -4202,8 +4202,9 @@ class ColoredFormatter(logging.Formatter):
     # Loggers that should be dimmed (less important/verbose)
     DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
 
-    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None, rank_prefix: str = ""):
         super().__init__(fmt, datefmt)
+        self.rank_prefix = rank_prefix
 
     def format(self, record: logging.LogRecord) -> str:
         # Check if this logger should be dimmed
@@ -4213,7 +4214,7 @@ class ColoredFormatter(logging.Formatter):
             # Dim the entire log line for httpx and similar
             timestamp = self.formatTime(record, self.datefmt)
             message = record.getMessage()
-            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {self.rank_prefix}{message}{Colors.RESET}"
 
         # Get color for this level
         color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
@@ -4231,7 +4232,7 @@ class ColoredFormatter(logging.Formatter):
         # Get message
         message = record.getMessage()
 
-        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {self.rank_prefix}{message}"
 
 
 _warn_once_logged: set[str] = set()
@@ -4242,26 +4243,34 @@ def init_test_logger() -> logging.Logger:
 
     Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
     Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    Automatically includes rank in log format when distributed is initialized.
     """
     logger = logging.getLogger("transformers.training_test")
     logger.setLevel(logging.INFO)
 
-    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
-    if not logger.handlers:
-        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
-        ch = logging.StreamHandler(sys.stderr)
-        ch.setLevel(logging.INFO)
+    # Clear existing handlers to update format (e.g., when dist becomes initialized)
+    logger.handlers.clear()
 
-        # Use colored formatter if terminal supports it, plain otherwise
-        if sys.stderr.isatty():
-            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
-        else:
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-            )
+    # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+    ch = logging.StreamHandler(sys.stderr)
+    ch.setLevel(logging.INFO)
 
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
+    # Build format string - include rank if distributed is initialized
+    rank_prefix = ""
+    if dist.is_initialized():
+        rank = dist.get_rank()
+        rank_prefix = f"[rank{rank}] "
+
+    # Use colored formatter if terminal supports it, plain otherwise
+    if sys.stderr.isatty():
+        formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S", rank_prefix=rank_prefix)
+    else:
+        formatter = logging.Formatter(
+            f"%(asctime)s - %(name)s - %(levelname)s - {rank_prefix}%(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
     return logger
