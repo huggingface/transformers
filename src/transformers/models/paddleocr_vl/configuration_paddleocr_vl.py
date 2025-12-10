@@ -64,8 +64,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
 
     Example:
 
@@ -99,7 +97,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         spatial_merge_size=2,
-        temporal_patch_size=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -115,7 +112,6 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
 
 
 class PaddleOCRTextConfig(PreTrainedConfig):
