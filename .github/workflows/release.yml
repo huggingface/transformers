@@ -1,0 +1,74 @@
+name: Release
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - v*
+
+env:
+  PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_DIST }}
+
+jobs:
+  build:
+    name: build release
+    # only run on push to main and on release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install -U twine
+      - run: make build-release
+
+  test_release:
+    runs-on: ubuntu-latest
+    name: Test release
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install dist/*.whl
+      - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
+      - run: python -c "from transformers import *"
+
+  upload_package:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Should only run on tags"
+
+
+#  upload_package:
+#    name: Upload package to PyPi
+#    runs-on: ubuntu-latest
+#    needs: [build]
+#
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Install Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.13"
+#          architecture: x64
+#
+#      - uses: actions/download-artifact@v4
+#        with:
+#          path: ./bindings/python/dist
+#          merge-multiple: true
+#          # Temporary deactivation while testing abi3 CI
+#          # - name: Upload to PyPi
+#          #   working-directory: ./bindings/python
+#          #   run: |
+#          #     pip install twine
+#          #     twine upload dist/* -u __token__ -p "$PYPI_TOKEN"
