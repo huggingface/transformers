@@ -722,13 +722,13 @@ class BaseSerializationTest(unittest.TestCase):
                         self.assertTrue(v0 == v1)
 
         # comparing forward() outputs
-        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt", return_token_type_ids=False).to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
         torch.testing.assert_close(out_0["logits"], out_1["logits"], rtol=0.05, atol=0.05)
 
         # comparing generate() outputs
-        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt", return_token_type_ids=False).to(torch_device)
         output_sequences_0 = model_0.generate(**encoded_input, max_new_tokens=10)
         output_sequences_1 = model_1.generate(**encoded_input, max_new_tokens=10)
 

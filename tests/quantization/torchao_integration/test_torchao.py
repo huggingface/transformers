@@ -677,7 +677,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
 
 
-@require_torchao_version_greater_or_equal("0.11.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 @slow
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
