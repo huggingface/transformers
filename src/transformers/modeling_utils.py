@@ -1834,6 +1834,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attn_implementation
 
+    def _check_and_adjust_moe_implementation(self, moe_implementation: Optional[str]) -> str:
+        return self.get_correct_moe_implementation(moe_implementation)
+
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
@@ -1868,6 +1871,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attention
 
+    def get_correct_moe_implementation(self, requested_moe: Optional[str]) -> str:
+        applicable_moe = "eager" if requested_moe is None else requested_moe
+        if applicable_moe not in ["eager"] + ALL_MOE_FUNCTIONS.valid_keys():
+            raise ValueError(
+                f'Specified `moe_implementation="{applicable_moe}"` is not supported. The only possible arguments are '
+                '`moe_implementation="eager"`, `moe_implementation="batched_mm"` and `moe_implementation="grouped_mm"`.'
+            )
+        return applicable_moe
+
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
@@ -1884,6 +1896,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
+            return True
+
+    @classmethod
+    def _can_set_moe_implementation(cls) -> bool:
+        """Detect whether the class supports setting its MoE implementation dynamically. It is an ugly check based on
+        opening the file, but avoids maintaining yet another property flag.
+        """
+        class_file = sys.modules[cls.__module__].__file__
+        with open(class_file, "r") as f:
+            code = f.read()
+        # heuristic -> if we find those patterns, the model uses the correct interface
+        if re.search(r"class \w+Experts\(nn.Module\)", code):
+            return "eager_moe_forward" in code and "ALL_MOE_FUNCTIONS[self.config._moe_implementation]" in code
+        else:
+            # If no MoE layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
@@ -1984,29 +2011,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
-
-    def _check_and_adjust_moe_implementation(self, moe_implementation: Optional[str]) -> str:
-        """
-        Check that the `moe_implementation` exists and is supported by the models.
-
-        Args:
-            moe_implementation (`str` or `None`):
-                The MoE implementation to check for existence/validity.
-        Returns:
-            `str`: The final MoE implementation to use.
-        """
-        applicable_moe_implementation = moe_implementation or "eager"
-        if applicable_moe_implementation not in ["eager", "batched_mm", "grouped_mm"]:
-            raise ValueError(
-                f'Specified `moe_implementation="{applicable_moe_implementation}"` is not supported. The only possible arguments are '
-                '`moe_implementation="eager"`, `moe_implementation="batched_mm"` and `moe_implementation="grouped_mm"`.'
-            )
-
-        # Default to eager
-        if moe_implementation is None:
-            applicable_moe_implementation = "eager"
-
-        return applicable_moe_implementation
 
     def set_moe_implementation(self, moe_implementation: str):
         """

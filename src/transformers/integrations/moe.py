@@ -1,3 +1,17 @@
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from collections.abc import Callable
 
 import torch
@@ -98,27 +112,23 @@ def batched_mm_moe_forward(
     return final_hidden_states
 
 
-def _pad_dim_end(t: torch.Tensor, dim: int, pad_elems: int):
-    if pad_elems == 0:
+def _make_stride_multiple_of_16(t: torch.Tensor, dim: int):
+    stride = t.stride(dim)
+    if stride % 16 == 0:
+        return t
+    elem_size = t.element_size()
+    align_elems = max(1, 16 // elem_size)
+    k = t.shape[dim]
+    pad = (-k) % align_elems
+    if pad == 0:
         return t
     new_shape = list(t.shape)
-    new_shape[dim] += pad_elems
+    new_shape[dim] += pad
     padded = t.new_zeros(*new_shape)
     idx = [slice(None)] * t.dim()
     idx[dim] = slice(0, t.shape[dim])
     padded[tuple(idx)] = t
     return padded
-
-
-def _make_stride_multiple_of(t: torch.Tensor, dim: int, multiple: int):
-    stride = t.stride(dim)
-    if stride % multiple == 0:
-        return t
-    elem_size = t.element_size()
-    align_elems = max(1, multiple // elem_size)
-    k = t.shape[dim]
-    pad = (-k) % align_elems
-    return _pad_dim_end(t, dim, pad)
 
 
 def grouped_mm_moe_forward(
@@ -176,10 +186,11 @@ def grouped_mm_moe_forward(
     mat_a_up = current_states_g
     mat_b_up = gate_up_proj.transpose(-2, -1)
 
-    if mat_a_up.stride(1) % 16 != 0:
-        mat_a_up = _make_stride_multiple_of(mat_a_up, 1, 16)
-    if mat_b_up.stride(1) % 16 != 0:
-        mat_b_up = _make_stride_multiple_of(mat_b_up, 1, 16)
+    # https://github.com/pytorch/pytorch/blob/23761d4f8149aaa16649c5494e57d53f192cf0f2/aten/src/ATen/native/GroupedMMUtils.h#L19
+    if mat_a_up.stride(1) % (16 // mat_a_up.element_size()) != 0:
+        mat_a_up = _make_stride_multiple_of_16(mat_a_up, 1)
+    if mat_b_up.stride(1) % (16 // mat_b_up.element_size()) != 0:
+        mat_b_up = _make_stride_multiple_of_16(mat_b_up, 1)
 
     gate_up_out = torch._grouped_mm(mat_a_up, mat_b_up, offs=offsets).to(current_states_g.dtype)
 
@@ -190,10 +201,11 @@ def grouped_mm_moe_forward(
     mat_a_down = hidden_after_activation
     mat_b_down = down_proj.transpose(-2, -1)
 
-    if mat_a_down.stride(1) % 16 != 0:
-        mat_a_down = _make_stride_multiple_of(mat_a_down, 1, 16)
-    if mat_b_down.stride(1) % 16 != 0:
-        mat_b_down = _make_stride_multiple_of(mat_b_down, 1, 16)
+    # https://github.com/pytorch/pytorch/blob/23761d4f8149aaa16649c5494e57d53f192cf0f2/aten/src/ATen/native/GroupedMMUtils.h#L19
+    if mat_a_down.stride(1) % (16 // mat_a_down.element_size()) != 0:
+        mat_a_down = _make_stride_multiple_of_16(mat_a_down, 1)
+    if mat_b_down.stride(1) % (16 // mat_b_down.element_size()) != 0:
+        mat_b_down = _make_stride_multiple_of_16(mat_b_down, 1)
 
     out_per_sample_g = torch._grouped_mm(mat_a_down, mat_b_down, offs=offsets).to(current_states_g.dtype)
 
