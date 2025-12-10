@@ -26,6 +26,11 @@ rendered properly in your Markdown viewer.
 [LW-DETR](https://huggingface.co/papers/2407.17140) proposes a light-weight Detection Transformer (DETR) architecture designed to compete with and surpass the dominant YOLO series for real-time object detection. It achieves a new state-of-the-art balance between speed (latency) and accuracy (mAP) by combining recent transformer advances with efficient design choices.
 
 The LW-DETR architecture is characterized by its simple and efficient structure: a plain ViT Encoder, a Projector, and a shallow DETR Decoder.
+It enhances the DETR architecture for efficiency and speed using the following core modifications:
+1. Efficient ViT Encoder: Uses a plain ViT with interleaved window/global attention and a window-major organization to drastically reduce attention complexity and latency.
+2. Richer Input: Aggregates multi-level features from the encoder and uses a C2f Projector (YOLOv8) to pass two-scale features ($1/8$ and $1/32$).
+3. Faster Decoder: Employs a shallow 3-layer DETR decoder with deformable cross-attention for lower latency and faster convergence.
+4. Optimized Queries: Uses a mixed-query scheme combining learnable content queries and generated spatial queries.
 
 You can find all the available Deformable DETR checkpoints under the [stevenbucaille](https://huggingface.co/stevenbucaille) organization.
 The original code can be found [here](https://github.com/Atten4Vis/LW-DETR).
