@@ -1193,7 +1193,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) >= version.parse("4.57.3"):
+                elif transformers_version and version.parse(transformers_version) > version.parse("4.57.3"):
                     return tokenizer
 
                 mistral_config_detected = True
