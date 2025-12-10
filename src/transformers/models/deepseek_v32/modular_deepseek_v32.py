@@ -112,7 +112,6 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
@@ -204,6 +203,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3MLP,
     DeepseekV3MoE,
+    DeepseekV3NaiveMoe,
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
@@ -581,214 +581,16 @@ class DeepseekV32MLP(DeepseekV3MLP):
     pass
 
 
-class DeepseekV32TopkRouter(nn.Module):
-    """Top-K router with meta device support for large model initialization.
-
-    Uses torch.empty() for both weight and buffer to respect ambient device context,
-    allowing initialization on meta device for memory-efficient model loading.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-
-        # Use torch.empty to respect meta device context
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        # Buffer also uses torch.empty - will be zeroed in _init_weights
-        self.register_buffer("e_score_correction_bias", torch.empty(self.n_routed_experts))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
+class DeepseekV32TopkRouter(DeepseekV3TopkRouter):
+    pass
 
 
-class DeepseekV32NaiveMoe(nn.Module):
-    """Collection of expert weights stored as 3D tensors.
-
-    This is the standard HuggingFace MoE pattern used by Mixtral, Qwen2-MoE, DeepSeek V3,
-    and other MoE models. It is fully compatible with FSDP and DeepSpeed ZeRO-3.
-
-    FSDP/ZeRO-3 Compatibility:
-        - Expert parameters are stored as 3D tensors: [num_experts, dim1, dim2]
-        - FSDP shards the entire 3D tensor across GPUs (not individual experts)
-        - ZeRO-3 partitions the 3D tensors across GPUs automatically
-        - Indexing tensor[expert_idx] retrieves a slice without triggering AllGather
-        - This avoids the collective synchronization issues that occur with nn.ModuleList
-
-    Why 3D tensors work better than nn.ModuleList for MoE:
-        - With nn.ModuleList, each expert.forward() triggers FSDP AllGather
-        - If different ranks skip different experts (due to routing), ranks deadlock
-        - With 3D tensors, the entire tensor is sharded, and slicing is local
-
-    Usage with FSDP:
-        ```python
-        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-        model = DeepseekV32ForCausalLM(config)
-        model = FSDP(model)  # FSDP shards the 3D expert tensors
-        ```
-
-    Usage with DeepSpeed ZeRO-3:
-        ```python
-        model = DeepseekV32ForCausalLM(config)
-        model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
-        # ZeRO-3 partitions the 3D expert tensors automatically
-        ```
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
-
-        # 3D tensors for expert weights - standard HuggingFace MoE pattern
-        # Shape: [num_experts, output_dim, input_dim] for use with F.linear
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        """Forward pass computing expert outputs for assigned tokens.
-
-        Args:
-            hidden_states: Input tensor [num_tokens, hidden_dim]
-            top_k_index: Expert indices for each token [num_tokens, top_k]
-            top_k_weights: Expert weights for each token [num_tokens, top_k]
-
-        Returns:
-            Output tensor [num_tokens, hidden_dim] with weighted expert contributions
-        """
-        # Use float32 for accumulation to match DeepSeek reference implementation
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
-
-        # Compute expert assignments under no_grad for determinism during gradient checkpointing
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            # expert_mask: [num_tokens, top_k, num_experts] -> [num_experts, top_k, num_tokens]
-            expert_mask = expert_mask.permute(2, 1, 0)
-            # Find which experts have at least one token assigned
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        # Process only experts that have tokens assigned
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-
-            # Get token indices and their positions in top_k
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-
-            # Get hidden states for tokens assigned to this expert
-            current_state = hidden_states[token_idx]
-
-            # Compute expert output using F.linear with 3D tensor slices
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            # Weight by routing scores and accumulate
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.float())
-
-        return final_hidden_states
+class DeepseekV32NaiveMoe(DeepseekV3NaiveMoe):
+    pass
 
 
-class DeepseekV32MoE(nn.Module):
-    """
-    A mixed expert module containing shared experts.
-
-    This implementation uses 3D tensor expert weights (the standard HuggingFace MoE pattern)
-    which is fully compatible with FSDP and DeepSpeed ZeRO-3.
-
-    FSDP/ZeRO-3 Compatibility:
-        - Expert parameters are stored as 3D tensors: [num_experts, dim1, dim2]
-        - FSDP shards the entire 3D tensor across GPUs
-        - ZeRO-3 partitions the 3D tensors automatically
-        - No manual all_reduce calls - gradient synchronization is handled by the framework
-
-    Usage with FSDP:
-        ```python
-        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-
-        model = DeepseekV32ForCausalLM(config)
-        model = FSDP(model)  # FSDP shards expert tensors automatically
-        ```
-
-    Usage with DeepSpeed ZeRO-3:
-        ```python
-        ds_config = {
-            "zero_optimization": {"stage": 3},
-            ...
-        }
-        model = DeepseekV32ForCausalLM(config)
-        model, optimizer, _, _ = deepspeed.initialize(model=model, config=ds_config)
-        ```
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-
-        # Experts - using 3D tensor weights (standard HuggingFace MoE pattern)
-        self.experts = DeepseekV32NaiveMoe(config)
-        self.gate = DeepseekV32TopkRouter(config)
-        self.shared_experts = DeepseekV32MLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
-        )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
-
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-
-        # Compute expert outputs
-        # With FSDP/ZeRO-3, the 3D expert tensors are sharded and gradients are synchronized
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
-
-        # Add shared experts
-        hidden_states = hidden_states.view(*orig_shape)
-        hidden_states = hidden_states.type_as(residuals) + self.shared_experts(residuals)
-        return hidden_states
+class DeepseekV32MoE(DeepseekV3MoE):
+    pass
 
 
 class DeepseekV32Indexer(nn.Module):
@@ -1313,22 +1115,13 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         from torch.nn import init
-        from ...modeling_utils import PreTrainedModel
 
-        # Call PreTrainedModel's _init_weights directly (skipping parent's MoE init)
-        PreTrainedModel._init_weights(self, module)
+        # Call parent's _init_weights (handles MoE classes via inheritance)
+        super()._init_weights(module)
 
         # Initialize RMSNorm weights to ones (they use torch.empty for meta device support)
         if isinstance(module, DeepseekV32RMSNorm):
             init.ones_(module.weight)
-        elif isinstance(module, DeepseekV32TopkRouter):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Initialize buffer to zeros (uses torch.empty for meta device support)
-            init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, DeepseekV32NaiveMoe):
-            # Initialize 3D expert tensors
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV32Model(DeepseekV3Model):

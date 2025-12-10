@@ -568,14 +568,16 @@ The implementation uses `torch.empty()` instead of `torch.ones()` / `torch.zeros
 |-----------|---------|----------------|
 | `DeepseekV32RMSNorm.weight` | `torch.empty(hidden_size)` | ✅ |
 | `DeepseekV32TopkRouter.weight` | `torch.empty(n_experts, hidden_size)` | ✅ |
-| `DeepseekV32TopkRouter.e_score_correction_bias` | `torch.empty(n_experts)` | ✅ |
+| `DeepseekV32TopkRouter.e_score_correction_bias` | `torch.zeros(n_experts)` | ✅ (inherited from V3) |
 | `DeepseekV32NaiveMoe.gate_up_proj` | `torch.empty(n_experts, 2*intermediate, hidden)` | ✅ |
 | `DeepseekV32NaiveMoe.down_proj` | `torch.empty(n_experts, hidden, intermediate)` | ✅ |
+
+**Note:** The MoE classes (`DeepseekV32TopkRouter`, `DeepseekV32NaiveMoe`, `DeepseekV32MoE`) inherit directly from the corresponding DeepSeek V3 classes. This ensures identical behavior for FSDP/ZeRO-3 sharding.
 
 The `_init_weights()` method properly initializes these tensors:
 - RMSNorm weights → initialized to 1s
 - Router weights → initialized with normal distribution
-- Router bias buffer → initialized to 0s
+- Router bias buffer → initialized to 0s (already zero from constructor)
 - Expert tensors → initialized with normal distribution
 
 #### Verifying Meta Device Support
