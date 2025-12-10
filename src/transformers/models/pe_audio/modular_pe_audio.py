@@ -112,7 +112,6 @@ class PEAudioConfig(PretrainedConfig):
         text_config=None,
         audio_config=None,
         projection_dim=1024,
-        nth_text_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -137,7 +136,6 @@ class PEAudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         self.projection_dim = projection_dim
-        self.nth_text_layer = nth_text_layer
 
 
 # TODO: not sure about the typing for text_model_output
@@ -306,6 +304,22 @@ class PEAudioRMSNorm(Qwen3RMSNorm): ...
 class PEAudioRotaryEmbedding(Qwen3RotaryEmbedding): ...
 
 
+def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
+    dim = cos.size(-1)
+    cos = cos.narrow(-1, 0, dim // 2)
+    sin = sin.narrow(-1, 0, dim // 2)
+    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
+    return freqs_cis
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    freqs_cis = stack_freqs(cos, sin)
+    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
+    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
+    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
+    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
+
+
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -446,11 +460,11 @@ class PEAudioModel(PEAudioPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = PEAudioEncoder(config.audio_config)
 
-        self.text_audio_head = nn.Linear(config.text_config.hidden_size, config.projection_dim)
+        self.text_audio_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
         self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.projection_dim)
 
-        self.logit_scale = nn.Parameter(torch.zeros(1))
-        self.logit_bias = nn.Parameter(torch.zeros(1))
+        self.audio_logit_scale = nn.Parameter(torch.zeros(1))
+        self.audio_logit_bias = nn.Parameter(torch.zeros(1))
 
         self.post_init()
 
@@ -462,11 +476,8 @@ class PEAudioModel(PEAudioPretrainedModel):
             return_dict=True,
         )
 
-        if self.config.nth_text_layer is not None:
-            text_features = text_outputs.hidden_states[self.config.nth_text_layer]
-        else:
-            text_features = text_outputs.last_hidden_state
-
+    
+        text_features = text_outputs.last_hidden_state
         text_features = self.text_head(text_features)
         return text_features
 
@@ -490,7 +501,6 @@ class PEAudioModel(PEAudioPretrainedModel):
         return_loss: Optional[bool] = None,
         **kwargs,
     ) -> PEAudioOutput:
-
         audio_output: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
@@ -501,21 +511,19 @@ class PEAudioModel(PEAudioPretrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
         )
 
+        # here is the only diff when doing frame-level
+        # audio_embeds = audio_output.last_hidden_state
         audio_embeds = audio_output.pooler_output
-        if self.config.nth_audio_layer is not None:
-            text_embeds = text_output.hidden_states[self.config.nth_audio_layer]
-        else:
-            text_embeds = text_output.last_hidden_state
-
         audio_embeds = self.audio_head(audio_embeds)
-        text_embeds = self.text_head_audio(text_embeds)
 
-        # TODO: something is wrong in the logic here, should be using pooler?
-        logits_per_text = text_embeds @ audio_embeds.t()
-        logits_per_text = logits_per_text * self.logit_scale + self.logit_bias
-        # TODO: there is not logits per audio?
+        text_embeds = text_output.hidden_states[-1][:, 0]
+        text_embeds = self.text_audio_head(text_embeds)
+
+        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
 
         loss = None
         if return_loss:
@@ -523,12 +531,13 @@ class PEAudioModel(PEAudioPretrainedModel):
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
         return PEAudioOutput(
-            loss=loss,
-            logits_per_text=logits_per_text,
+            logits_per_text=logits_per_audio.transpose(0, 1),
+            logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
             text_model_output=text_output,
             audio_model_output=audio_output,
+            loss=loss,
         )
 
 

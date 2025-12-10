@@ -721,314 +721,203 @@ class PEAudioVideoModel(PEAudioVideoPretrainedModel):
             config.audio_video_config.hidden_size, config.projection_dim
         )
 
-        self.logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
-        self.logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+        self.audio_video_logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
+        self.audio_video_logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+
+        self.audio_logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
+        self.audio_logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+
+        self.video_logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
+        self.video_logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
+
+        self.audio_video_text_logit_scale = nn.Parameter(torch.tensor([config.logit_scale_init_value]).log())
+        self.audio_video_text_logit_bias = nn.Parameter(torch.tensor([config.logit_bias_init_value]))
 
         self.post_init()
 
-    def _get_text_output(self, input_ids, attention_mask):
-        nth_layer = self.config.nth_text_layer
-        output = self.text_model(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=nth_layer is not None
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        pixel_values_videos: torch.Tensor,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_loss=False,
+        **kwargs,
+    ) -> PEAudioVideoTextOutput:
+        # Audio-video encoding
+        audio_video_outputs = self.audio_video_encoder(
+            input_values=input_values,
+            pixel_values_videos=pixel_values_videos,
+            padding_mask=padding_mask,
+            padding_mask_videos=padding_mask_videos,
+            **{**kwargs, "return_dict": True},
         )
-        if nth_layer is None:
-            text_model_output = output.last_hidden_state
-        else:
-            text_model_output = output.hidden_states[nth_layer]
+        audio_video_embeds = audio_video_outputs.pooler_output
+        audio_video_embeds = self.audio_video_head(audio_video_embeds)
 
-        return BaseModelOutputWithPooling(last_hidden_state=text_model_output, pooler_output=text_model_output[:, 0])
+        # Text encoding
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_head_audio_video(text_embeds)
 
-    def _maybe_compute_loss(
-        self, embeds1: Optional[torch.Tensor], embeds2: Optional[torch.Tensor], return_loss: bool
-    ) -> Optional[torch.Tensor]:
-        if return_loss and embeds1 is not None and embeds2 is not None:
-            logits = embeds1 @ embeds2.t()
-            logits = logits * self.logit_scale + self.logit_bias
-            labels = torch.eye(embeds1.size(0), device=embeds1.device)
-            return -F.logsigmoid(labels * logits).sum() / embeds1.size(0)
-        return None
-
-    def get_video_features(
-        self, pixel_values_videos: torch.Tensor, padding_mask_videos: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
-                The input video frames tensor.
-            padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-                Mask indicating non-padded frames in the video input.
-        Returns:
-            video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video embedding
-                obtained by applying the projection layer to the pooled output of the video encoder.
-
-        Example:
-            ```python
-            from transformers import AutoModel, AutoProcessor
-
-            model = AutoModel.from_pretrained("facebook/pe-av-large")
-            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
-
-            inputs = processor(
-                videos=["<path to video file>"],
-                padding=True,
-                return_tensors="pt",
-            )
-
-            with torch.inference_mode():
-                video_features = model.get_video_features(**inputs)
-            ```
-        """
-
-        return self.video_head(
-            self.audio_video_encoder.video_encoder(
-                pixel_values_videos, padding_mask_videos=padding_mask_videos
-            ).pooler_output
+        # Compute logits
+        logits_per_audio_video = audio_video_embeds @ text_embeds.T
+        logits_per_audio_video = (
+            logits_per_audio_video * self.audio_video_text_logit_scale + self.audio_video_text_logit_bias
         )
 
-    def get_audio_features(
-        self, input_values: torch.Tensor, padding_mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        """
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input audio waveform tensor.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        # Compute loss
+        loss = None
+        if return_loss:
+            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
+            loss = -F.logsigmoid(labels * logits_per_audio_video).sum() / text_embeds.shape[0]
 
-        Returns:
-            audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio embedding
-                obtained by applying the projection layer to the pooled output of the audio encoder.
-
-        Example:
-            ```python
-            from transformers import AutoModel, AutoProcessor
-
-            model = AutoModel.from_pretrained("facebook/pe-av-large")
-            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
-
-            inputs = processor(
-                audio=["<path to audio file>"],
-                padding=True,
-                return_tensors="pt",
-            )
-
-            with torch.inference_mode():
-                audio_features = model.get_audio_features(**inputs)
-            ```
-        """
-
-        return self.audio_head(
-            self.audio_video_encoder.audio_encoder(input_values, padding_mask=padding_mask).pooler_output
+        return PEAudioVideoTextOutput(
+            logits_per_text=logits_per_audio_video.t(),
+            logits_per_audio_video_text=logits_per_audio_video,
+            text_embeds=text_embeds,
+            audio_video_embeds=audio_video_embeds,
+            audio_video_model_output=audio_video_outputs,
+            text_model_output=text_outputs,
+            loss=loss,
         )
 
-    def get_audio_video_features(
+    def forward_text_audio(
+        self,
+        input_ids: torch.Tensor,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_loss: bool = False,
+        **kwargs,
+    ) -> PEAudioVideoTextOutput:
+        # Audio encoding
+        audio_outputs = self.audio_video_encoder.audio_encoder(input_values, padding_mask=padding_mask)
+        audio_embeds = audio_outputs.pooler_output
+        audio_embeds = self.audio_head(audio_embeds)
+
+        # Text encoding
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_head_audio(text_embeds)
+
+        # Compute logits
+        logits_per_audio = audio_embeds @ text_embeds.T
+        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+
+        # Compute loss
+        loss = None
+        if return_loss:
+            labels = torch.eye(audio_embeds.shape[0], device=audio_embeds.device)
+            loss = -F.logsigmoid(labels * logits_per_audio).sum() / audio_embeds.shape[0]
+
+        return PEAudioVideoTextOutput(
+            logits_per_text=logits_per_audio.t(),
+            logits_per_audio_text=logits_per_audio,
+            text_embeds=text_embeds,
+            audio_embeds=audio_embeds,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
+            loss=loss,
+        )
+
+    def forward_text_video(
+        self,
+        input_ids: torch.Tensor,
+        pixel_values_videos: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
+        return_loss: bool = False,
+        **kwargs,
+    ) -> PEAudioVideoTextOutput:
+        # Video encoding
+        video_outputs = self.audio_video_encoder.video_encoder(
+            pixel_values_videos, padding_mask_videos=padding_mask_videos
+        )
+        video_embeds = video_outputs.pooler_output
+        video_embeds = self.video_head(video_embeds)
+
+        # Text encoding
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_head_video(text_embeds)
+
+        # Compute logits
+        logits_per_video = video_embeds @ text_embeds.T
+        logits_per_video = logits_per_video * self.video_logit_scale + self.video_logit_bias
+
+        # Compute loss
+        loss = None
+        if return_loss:
+            labels = torch.eye(video_embeds.shape[0], device=video_embeds.device)
+            loss = -F.logsigmoid(labels * logits_per_video).sum() / video_embeds.shape[0]
+
+        return PEAudioVideoTextOutput(
+            logits_per_text=logits_per_video.t(),
+            logits_per_video_text=logits_per_video,
+            text_embeds=text_embeds,
+            video_embeds=video_embeds,
+            text_model_output=text_outputs,
+            video_model_output=video_outputs,
+            loss=loss,
+        )
+
+    def forward_audio_video(
         self,
         input_values: torch.Tensor,
         pixel_values_videos: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input audio waveform tensor.
-            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
-                The input video frames tensor.
-            padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the audio input.
-            padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
-                Mask indicating non-padded frames in the video input.
-
-        Returns:
-            audio_video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video embedding
-                obtained by applying the projection layer to the pooled output of the audio-video encoder.
-
-        Provides a single embedding representing both the audio and video
-
-        Example:
-            ```python
-            from transformers import AutoModel, AutoProcessor
-
-            model = AutoModel.from_pretrained("facebook/pe-av-large")
-            processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
-
-            inputs = processor(
-                audio=["<path to audio file>"],
-                videos=["<path to video file>"],
-                padding=True,
-                return_tensors="pt",
-            )
-
-            with torch.inference_mode():
-                audio_video_features = model.get_audio_video_features(**inputs)
-            ```
-        """
-        output = self.audio_video_encoder(
-            input_values=input_values,
-            pixel_values_videos=pixel_values_videos,
-            padding_mask=padding_mask,
-            padding_mask_videos=padding_mask_videos,
-        )
-        return self.audio_video_head(output.pooler_output)
-
-    def get_audio_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
-        r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
-
-        Returns:
-            audio_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-text embedding
-                obtained by applying the projection layer to the pooled output of the text encoder
-
-        This embedding is suitable for retrieving audios from a text description, but if you want to specifically
-        retrieve video from text, you should use `get_video_text_features` instead.
-
-        ```python
-        from transformers import AutoModel, AutoProcessor
-
-        model = AutoModel.from_pretrained("facebook/pe-av-large")
-        processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
-
-        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
-
-        with torch.inference_mode():
-            audio_text_features = model.get_audio_text_features(**inputs)
-        ```
-        """
-        return self.text_head_audio(self._get_text_output(input_ids, attention_mask).pooler_output)
-
-    def get_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
-        r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
-
-        Returns:
-            video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the video-text embedding
-                obtained by applying the projection layer to the pooled output of the text encoder
-
-        This embedding is suitable for retrieving videos from a text description, but if you want to specifically
-        retrieve audio from text, you should use `get_audio_text_features` instead.
-
-        ```python
-        from transformers import AutoModel, AutoProcessor
-
-        model = AutoModel.from_pretrained("facebook/pe-av-large")
-        processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
-
-        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
-
-        with torch.inference_mode():
-            video_text_features = model.get_video_text_features(**inputs)
-        ```
-        """
-        return self.text_head_video(self._get_text_output(input_ids, attention_mask).pooler_output)
-
-    def get_audio_video_text_features(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
-        r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
-                The input token ids for the text encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask indicating non-padded elements in the input for the text encoder.
-
-        Returns:
-            audio_video_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`): the audio-video text
-                embedding obtained by applying the projection layer to the pooled output of the text encoder
-
-        This is a good general purpose text embedding for, but if you want to specifically retrieve audio from
-        a text description, you should use `get_audio_text_features` instead (and similarly `get_video_text_features` for video).
-
-        ```python
-        from transformers import AutoModel, AutoProcessor
-
-        model = AutoModel.from_pretrained("facebook/pe-av-large)
-        processor = AutoProcessor.from_pretrained("facebook/pe-av-large)
-
-        inputs = processor(text=["<text>"], return_tensors="pt", padding=True)
-
-        with torch.inference_mode():
-            audio_video_text_features = model.get_audio_video_text_features(**inputs)
-        ```
-        """
-        return self.text_head_audio_video(self._get_text_output(input_ids, attention_mask).pooler_output)
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids,
-        pixel_values_videos,
-        input_values,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_loss=False,
+        return_loss: bool = False,
+        **kwargs,
     ) -> PEAudioVideoTextOutput:
-        # text embeddings
-        audio_text_embeds = video_text_embeds = audio_video_text_embeds = None
-        # media embeddings (audio, video, audio_video)
-        audio_embeds = video_embeds = audio_video_embeds = None
-        # model outputs
-        audio_outputs = video_outputs = audio_video_outputs = text_outputs = None
+        # Audio encoding
+        audio_outputs = self.audio_video_encoder.audio_encoder(input_values, padding_mask=padding_mask)
+        audio_embeds = audio_outputs.pooler_output
+        audio_embeds = self.audio_head(audio_embeds)
 
-        # Compute model outputs and embeddings for each modality
-        if input_ids is not None:
-            text_outputs = self._get_text_output(input_ids, attention_mask)
-        if input_values is not None and pixel_values_videos is not None:
-            # If we compute audio/video outputs, then extract the intermediate audio and video outputs
-            audio_video_outputs = self.audio_video_encoder(
-                input_values, pixel_values_videos, padding_mask=padding_mask, padding_mask_videos=padding_mask_videos
-            )
-            # Get intermediate audio and video outputs
-            audio_outputs = self.audio_video_encoder.audio_encoder(input_values, padding_mask=padding_mask)
-            video_outputs = self.audio_video_encoder.video_encoder(
-                pixel_values_videos, padding_mask_videos=padding_mask_videos
-            )
+        # Video encoding
+        video_outputs = self.audio_video_encoder.video_encoder(
+            pixel_values_videos, padding_mask_videos=padding_mask_videos
+        )
+        video_embeds = video_outputs.pooler_output
+        video_embeds = self.video_head(video_embeds)
 
-            audio_embeds = self.audio_head(audio_outputs.pooler_output)
-            video_embeds = self.video_head(video_outputs.pooler_output)
-            audio_video_embeds = self.audio_video_head(audio_video_outputs.pooler_output)
-            if text_outputs is not None:
-                # Compute the corresponding text embeddings
-                audio_text_embeds = self.text_head_audio(text_outputs.pooler_output)
-                video_text_embeds = self.text_head_video(text_outputs.pooler_output)
-                audio_video_text_embeds = self.text_head_audio_video(text_outputs.pooler_output)
-        else:
-            if pixel_values_videos is not None:
-                video_outputs = self.audio_video_encoder.video_encoder(
-                    pixel_values_videos, padding_mask_videos=padding_mask_videos
-                )
-                video_embeds = self.video_head(video_outputs.pooler_output)
-                if text_outputs is not None:
-                    video_text_embeds = self.text_head_video(text_outputs.pooler_output)
-            elif input_values is not None:
-                audio_outputs = self.audio_video_encoder.audio_encoder(input_values, padding_mask=padding_mask)
-                audio_embeds = self.audio_head(audio_outputs.pooler_output)
-                if text_outputs is not None:
-                    audio_text_embeds = self.text_head_audio(text_outputs.pooler_output)
-            elif text_outputs is not None:
-                # If text is supplied, but no audio or video, use audio_video_text as the default embedding
-                audio_video_text_embeds = self.text_head_audio_video(text_outputs.pooler_output)
+        # Compute logits
+        logits_audio_video = audio_embeds @ video_embeds.T
+        logits_audio_video = logits_audio_video * self.audio_video_logit_scale + self.audio_video_logit_bias
+
+        # Compute loss
+        loss = None
+        if return_loss:
+            labels = torch.eye(audio_embeds.shape[0], device=audio_embeds.device)
+            loss = -F.logsigmoid(labels * logits_audio_video).sum() / audio_embeds.shape[0]
 
         return PEAudioVideoTextOutput(
-            audio_video_loss=self._maybe_compute_loss(audio_embeds, video_embeds, return_loss),
-            text_audio_loss=self._maybe_compute_loss(audio_text_embeds, audio_embeds, return_loss),
-            text_audio_video_loss=self._maybe_compute_loss(audio_video_text_embeds, audio_video_embeds, return_loss),
-            text_video_loss=self._maybe_compute_loss(video_text_embeds, video_embeds, return_loss),
+            logits_per_audio_video=logits_audio_video,
             audio_embeds=audio_embeds,
-            audio_video_embeds=audio_video_embeds,
             video_embeds=video_embeds,
-            audio_text_embeds=audio_text_embeds,
-            audio_video_text_embeds=audio_video_text_embeds,
-            video_text_embeds=video_text_embeds,
             audio_model_output=audio_outputs,
-            audio_video_model_output=audio_video_outputs,
-            text_model_output=text_outputs,
             video_model_output=video_outputs,
+            loss=loss,
         )
 
 

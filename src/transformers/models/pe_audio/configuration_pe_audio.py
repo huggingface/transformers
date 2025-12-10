@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pe_audio.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -240,7 +241,6 @@ class PEAudioConfig(PretrainedConfig):
         text_config=None,
         audio_config=None,
         projection_dim=1024,
-        nth_text_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -263,7 +263,6 @@ class PEAudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         self.projection_dim = projection_dim
-        self.nth_text_layer = nth_text_layer
 
 
 __all__ = ["PEAudioEncoderConfig", "PEAudioConfig"]
