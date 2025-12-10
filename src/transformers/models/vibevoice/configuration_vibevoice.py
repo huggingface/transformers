@@ -238,11 +238,11 @@ class VibeVoiceConfig(PretrainedConfig):
 
     @property
     def weight_init_value(self) -> float:
-        return self.semantic_tokenizer_config.weight_init_value
+        return self.acoustic_tokenizer_config.weight_init_value
 
     @property
     def layer_scale_init_value(self) -> float:
-        return self.semantic_tokenizer_config.layer_scale_init_value
+        return self.acoustic_tokenizer_config.layer_scale_init_value
 
     @property
     def intermediate_size(self) -> int:
