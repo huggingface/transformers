@@ -994,7 +994,7 @@ def is_optimum_available() -> bool:
 
 
 @lru_cache
-def is_auto_awq_available() -> bool:
+def is_llm_awq_available() -> bool:
     return _is_package_available("awq")
 
 
@@ -1029,11 +1029,6 @@ def is_qutlass_available():
 @lru_cache
 def is_compressed_tensors_available() -> bool:
     return _is_package_available("compressed_tensors")
-
-
-@lru_cache
-def is_auto_gptq_available() -> bool:
-    return _is_package_available("auto_gptq")
 
 
 @lru_cache
