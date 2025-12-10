@@ -22,6 +22,7 @@ The script will:
 import re
 import argparse
 import libcst as cst
+from libcst.metadata import PositionProvider
 from pathlib import Path
 from typing import Optional, Tuple, Any, Union
 
@@ -29,9 +30,12 @@ from typing import Optional, Tuple, Any, Union
 class ExpectationsUpdater(cst.CSTTransformer):
     """CST transformer that updates Expectations dictionary values."""
 
+    METADATA_DEPENDENCIES = (PositionProvider,)
+
     def __init__(
             self,
             expectations_var: str,
+            expectations_lineno: int,
             target_keys: list,
             new_value_str: str,
             dry_run: bool = True
@@ -41,12 +45,14 @@ class ExpectationsUpdater(cst.CSTTransformer):
 
         Args:
             expectations_var: Name of the Expectations variable (e.g., "expectations")
+            expectations_lineno: Line number of the specific Expectations assignment to update
             target_keys: List of keys to try in order of preference
             new_value_str: New value as a string (preserves formatting)
             dry_run: If True, don't actually modify, just report what would change
         """
         super().__init__()
         self.expectations_var = expectations_var
+        self.expectations_lineno = expectations_lineno
         self.target_keys = target_keys
         self.new_value_str = new_value_str
         self.dry_run = dry_run
@@ -60,6 +66,7 @@ class ExpectationsUpdater(cst.CSTTransformer):
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.Assign:
         """
         Visit assignment statements looking for: expectations_var = Expectations(...)
+        Only update the one that matches the expected line number.
         """
         # Check if this is our Expectations assignment
         if not isinstance(updated_node.targets[0], cst.AssignTarget):
@@ -82,8 +89,21 @@ class ExpectationsUpdater(cst.CSTTransformer):
         if updated_node.value.func.value != "Expectations":
             return updated_node
 
+        # Get the line number using metadata
+        try:
+            pos = self.get_metadata(PositionProvider, original_node)
+            node_lineno = pos.start.line
+        except:
+            # Fallback if metadata not available
+            node_lineno = -1
+
+        # Only process if this is close to our target line
+        # Allow some tolerance (±3 lines) for comments and whitespace
+        if node_lineno != -1 and abs(node_lineno - self.expectations_lineno) > 3:
+            return updated_node
+
         self.found_expectations = True
-        print(f"\n✓ Found Expectations assignment for variable '{self.expectations_var}'")
+        print(f"\n✓ Found Expectations assignment for variable '{self.expectations_var}' at line {node_lineno}")
 
         # The argument should be a dictionary
         if not updated_node.value.args:
@@ -144,6 +164,11 @@ class ExpectationsUpdater(cst.CSTTransformer):
             if i == best_idx and not self.dry_run:
                 # Parse the new value as CST
                 new_value_node = cst.parse_expression(self.new_value_str)
+
+                # Preserve indentation from the old value
+                old_value = best_element.value
+                new_value_node = self._preserve_indentation(old_value, new_value_node)
+
                 # Replace the value while keeping the key
                 new_element = element.with_changes(value=new_value_node)
                 new_elements.append(new_element)
@@ -155,6 +180,38 @@ class ExpectationsUpdater(cst.CSTTransformer):
             print("  ⚠️  DRY RUN - Not actually modifying")
 
         return dict_node.with_changes(elements=new_elements)
+
+    def _preserve_indentation(self, old_node: cst.BaseExpression, new_node: cst.BaseExpression) -> cst.BaseExpression:
+        """
+        Preserve exact whitespace structure from old node to new node.
+        Currently just copies the structure directly.
+
+        TODO: In future, implement smart re-indentation based on captured_info.txt format.
+        """
+        if not isinstance(old_node, cst.List) or not isinstance(new_node, cst.List):
+            return new_node
+
+        # Copy the bracket whitespace
+        new_node = new_node.with_changes(
+            lbracket=old_node.lbracket,
+            rbracket=old_node.rbracket
+        )
+
+        # Copy whitespace from old elements to new elements
+        new_elements = []
+        for i, new_elem in enumerate(new_node.elements):
+            if not isinstance(new_elem, cst.Element):
+                new_elements.append(new_elem)
+                continue
+
+            if i < len(old_node.elements):
+                old_elem = old_node.elements[i]
+                if isinstance(old_elem, cst.Element):
+                    new_elem = new_elem.with_changes(comma=old_elem.comma)
+
+            new_elements.append(new_elem)
+
+        return new_node.with_changes(elements=new_elements)
 
     def _match_key(self, key_node: cst.BaseExpression) -> Optional[tuple]:
         """
@@ -318,11 +375,11 @@ class ExpectationsFileProcessor:
 
         # Extract the variable name from the assertion
         # Pattern 1: assert_close(actual, expected_variable, ...)
-        # Pattern 2: self.assertEqual(actual, expected_variable)
+        # Pattern 2: self.assertEqual(actual, expected_variable) or assertEqual(actual, expected_variable, ...)
         assertion_match = re.search(r'assert_close\((.*?),\s*(\w+)\s*,', content, re.DOTALL)
         if not assertion_match:
-            # Try assertEqual pattern
-            assertion_match = re.search(r'assertEqual\((.*?),\s*(\w+)\s*\)', content, re.DOTALL)
+            # Try assertEqual pattern - may have comma or closing paren after variable
+            assertion_match = re.search(r'assertEqual\(\s*(.*?),\s*(\w+)\s*[,\)]', content, re.DOTALL)
 
         if not assertion_match:
             raise ValueError("Could not find assertion with variable name")
@@ -347,21 +404,24 @@ class ExpectationsFileProcessor:
 
         return test_file, assertion_line, variable_name, new_value_str
 
-    def find_expectations_variable(self, file_path: Path, variable_name: str, assertion_line: int) -> Optional[str]:
+    def find_expectations_variable(self, file_path: Path, variable_name: str, assertion_line: int) -> Optional[
+        Tuple[str, int]]:
         """
-        Find the Expectations variable name that feeds into the test variable.
+        Find the Expectations variable name and line number that feeds into the test variable.
 
         Searches backward from assertion line to find:
         1. variable_name = torch.tensor(something.get_expectation())...
         2. Extracts "something" as the expectations variable name
+        3. Finds the line where expectations = Expectations({...})
 
         Returns:
-            Expectations variable name (e.g., "expectations") or None
+            Tuple of (expectations_variable_name, line_number) or None
         """
         with open(file_path, 'r') as f:
             lines = f.readlines()
 
-        # Search backward from assertion line
+        # Step 1: Find the variable assignment to get expectations variable name
+        expectations_var = None
         for lineno in range(assertion_line - 1, max(0, assertion_line - 50), -1):
             line = lines[lineno]
 
@@ -374,7 +434,21 @@ class ExpectationsFileProcessor:
                 print(f"✓ Found variable assignment at line {lineno + 1}")
                 print(f"  Variable: {variable_name}")
                 print(f"  Expectations variable: {expectations_var}")
-                return expectations_var
+                break
+
+        if not expectations_var:
+            return None
+
+        # Step 2: Find the Expectations assignment line
+        for lineno in range(assertion_line - 1, max(0, assertion_line - 100), -1):
+            line = lines[lineno]
+
+            # Look for: expectations_var = Expectations({
+            pattern = rf'^\s*{re.escape(expectations_var)}\s*=\s*Expectations\('
+            if re.search(pattern, line):
+                expectations_lineno = lineno + 1  # Convert to 1-indexed
+                print(f"  Expectations assignment at line: {expectations_lineno}")
+                return expectations_var, expectations_lineno
 
         return None
 
@@ -405,17 +479,19 @@ class ExpectationsFileProcessor:
             print(f"❌ Error parsing captured_info.txt: {e}")
             return False
 
-        # Step 2: Find Expectations variable
+        # Step 2: Find Expectations variable and its line number
         print("\n[2] Finding Expectations variable...")
         file_path = Path(test_file)
         if not file_path.exists():
             print(f"❌ Test file not found: {file_path}")
             return False
 
-        expectations_var = self.find_expectations_variable(file_path, variable_name, assertion_line)
-        if not expectations_var:
+        result = self.find_expectations_variable(file_path, variable_name, assertion_line)
+        if not result:
             print(f"❌ Could not find Expectations variable for '{variable_name}'")
             return False
+
+        expectations_var, expectations_lineno = result
 
         # Step 3: Parse the file with CST
         print("\n[3] Parsing file with LibCST...")
@@ -423,7 +499,7 @@ class ExpectationsFileProcessor:
             with open(file_path, 'r') as f:
                 source_code = f.read()
 
-            tree = cst.parse_module(source_code)
+            wrapper = cst.MetadataWrapper(cst.parse_module(source_code))
             print("✓ File parsed successfully")
         except Exception as e:
             print(f"❌ Error parsing file: {e}")
@@ -431,16 +507,18 @@ class ExpectationsFileProcessor:
 
         # Step 4: Transform the tree
         print(f"\n[4] {'Updating' if apply else 'Analyzing'} Expectations dictionary...")
+        print(f"  Target line: {expectations_lineno}")
         print(f"  Target keys (in order): {self.target_keys}")
 
         transformer = ExpectationsUpdater(
             expectations_var=expectations_var,
+            expectations_lineno=expectations_lineno,
             target_keys=self.target_keys,
             new_value_str=new_value_str,
             dry_run=not apply
         )
 
-        new_tree = tree.visit(transformer)
+        new_tree = wrapper.visit(transformer)
 
         # Step 5: Report results
         print("\n[5] Results:")
