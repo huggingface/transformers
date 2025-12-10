@@ -65,10 +65,13 @@ class ExpectationsUpdater(cst.CSTTransformer):
 
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.Assign:
         """
-        Visit assignment statements looking for: expectations_var = Expectations(...)
+        Visit assignment statements looking for:
+        1. expectations_var = Expectations(...)
+        2. variable = torch.tensor([...])
+        3. variable = torch.tensor([...]).to(device)  # with method chaining
         Only update the one that matches the expected line number.
         """
-        # Check if this is our Expectations assignment
+        # Check if this is an assignment we care about
         if not isinstance(updated_node.targets[0], cst.AssignTarget):
             return updated_node
 
@@ -79,29 +82,93 @@ class ExpectationsUpdater(cst.CSTTransformer):
         if target.value != self.expectations_var:
             return updated_node
 
-        # Check if the value is a Call to Expectations
-        if not isinstance(updated_node.value, cst.Call):
-            return updated_node
-
-        if not isinstance(updated_node.value.func, cst.Name):
-            return updated_node
-
-        if updated_node.value.func.value != "Expectations":
-            return updated_node
-
         # Get the line number using metadata
         try:
             pos = self.get_metadata(PositionProvider, original_node)
             node_lineno = pos.start.line
         except:
-            # Fallback if metadata not available
             node_lineno = -1
 
         # Only process if this is close to our target line
-        # Allow some tolerance (±3 lines) for comments and whitespace
         if node_lineno != -1 and abs(node_lineno - self.expectations_lineno) > 3:
             return updated_node
 
+        # Check what kind of assignment this is
+        if not isinstance(updated_node.value, cst.Call):
+            return updated_node
+
+        # Pattern 1: Expectations(...)
+        if isinstance(updated_node.value.func, cst.Name) and updated_node.value.func.value == "Expectations":
+            return self._handle_expectations_pattern(original_node, updated_node, node_lineno)
+
+        # Pattern 2: torch.tensor(...)
+        if isinstance(updated_node.value.func, cst.Attribute):
+            # Could be torch.tensor(...) or torch.tensor(...).to(...)
+            func_attr = updated_node.value.func
+
+            # Check if it's .to() chained after torch.tensor()
+            if (isinstance(func_attr.value, cst.Call) and
+                    isinstance(func_attr.value.func, cst.Attribute) and
+                    isinstance(func_attr.value.func.value, cst.Name) and
+                    func_attr.value.func.value.value == "torch" and
+                    func_attr.value.func.attr.value == "tensor"):
+                # This is torch.tensor(...).to(...)
+                return self._handle_torch_tensor_with_to(original_node, updated_node, node_lineno)
+
+            # Direct torch.tensor(...)
+            if (isinstance(func_attr.value, cst.Name) and
+                    func_attr.value.value == "torch" and
+                    func_attr.attr.value == "tensor"):
+                return self._handle_torch_tensor_pattern(original_node, updated_node, node_lineno)
+
+        return updated_node
+
+    def _handle_torch_tensor_with_to(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                     node_lineno: int) -> cst.Assign:
+        """Handle the torch.tensor([...]).to(device) pattern."""
+        self.found_expectations = True
+        print(f"\n✓ Found torch.tensor().to() assignment for variable '{self.expectations_var}' at line {node_lineno}")
+
+        # The outer call is .to(), the inner call is torch.tensor()
+        to_call = updated_node.value
+        tensor_call = to_call.func.value  # This is the torch.tensor() call
+
+        # Get the tensor argument
+        if not tensor_call.args:
+            return updated_node
+
+        arg = tensor_call.args[0]
+        old_value = arg.value
+
+        print(f"  Old value: {self._format_value(old_value)}")
+        print(f"  New value: {self.new_value_str}")
+
+        self.matched_key = "direct"
+        self.old_value = self._format_value(old_value)
+
+        if not self.dry_run:
+            # Parse the new value and preserve indentation
+            new_value_node = cst.parse_expression(self.new_value_str)
+            new_value_node = self._preserve_indentation(old_value, new_value_node)
+
+            # Replace the argument in the tensor call
+            new_arg = arg.with_changes(value=new_value_node)
+            new_tensor_call = tensor_call.with_changes(args=(new_arg,) + tensor_call.args[1:])
+
+            # Update the .to() call's func.value with the new tensor call
+            new_func = to_call.func.with_changes(value=new_tensor_call)
+            new_to_call = to_call.with_changes(func=new_func)
+
+            self.updated = True
+            return updated_node.with_changes(value=new_to_call)
+        else:
+            print("  ⚠️  DRY RUN - Not actually modifying")
+
+        return updated_node
+
+    def _handle_expectations_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                     node_lineno: int) -> cst.Assign:
+        """Handle the Expectations({...}) pattern."""
         self.found_expectations = True
         print(f"\n✓ Found Expectations assignment for variable '{self.expectations_var}' at line {node_lineno}")
 
@@ -113,15 +180,49 @@ class ExpectationsUpdater(cst.CSTTransformer):
         if not isinstance(arg.value, cst.Dict):
             return updated_node
 
-        # Now we need to update the dictionary
+        # Update the dictionary
         dict_node = arg.value
         updated_dict = self._update_dict(dict_node)
 
         if updated_dict is not dict_node and not self.dry_run:
-            # Create new Call with updated dictionary
             new_arg = arg.with_changes(value=updated_dict)
             new_call = updated_node.value.with_changes(args=[new_arg])
             return updated_node.with_changes(value=new_call)
+
+        return updated_node
+
+    def _handle_torch_tensor_pattern(self, original_node: cst.Assign, updated_node: cst.Assign,
+                                     node_lineno: int) -> cst.Assign:
+        """Handle the torch.tensor([...]) pattern."""
+        self.found_expectations = True  # Reuse this flag to mean "found target"
+        print(f"\n✓ Found torch.tensor assignment for variable '{self.expectations_var}' at line {node_lineno}")
+
+        # The argument should be a list
+        if not updated_node.value.args:
+            return updated_node
+
+        arg = updated_node.value.args[0]
+        old_value = arg.value
+
+        print(f"  Old value: {self._format_value(old_value)}")
+        print(f"  New value: {self.new_value_str}")
+
+        # Mark this as found (use matched_key to signal success even though there's no key)
+        self.matched_key = "direct"
+        self.old_value = self._format_value(old_value)
+
+        if not self.dry_run:
+            # Parse the new value and preserve indentation
+            new_value_node = cst.parse_expression(self.new_value_str)
+            new_value_node = self._preserve_indentation(old_value, new_value_node)
+
+            # Replace the argument
+            new_arg = arg.with_changes(value=new_value_node)
+            new_call = updated_node.value.with_changes(args=(new_arg,) + updated_node.value.args[1:])
+            self.updated = True
+            return updated_node.with_changes(value=new_call)
+        else:
+            print("  ⚠️  DRY RUN - Not actually modifying")
 
         return updated_node
 
@@ -407,48 +508,55 @@ class ExpectationsFileProcessor:
     def find_expectations_variable(self, file_path: Path, variable_name: str, assertion_line: int) -> Optional[
         Tuple[str, int]]:
         """
-        Find the Expectations variable name and line number that feeds into the test variable.
+        Find the variable assignment that needs updating.
 
-        Searches backward from assertion line to find:
-        1. variable_name = torch.tensor(something.get_expectation())...
-        2. Extracts "something" as the expectations variable name
-        3. Finds the line where expectations = Expectations({...})
+        Handles two patterns:
+        1. Expectations pattern: variable = torch.tensor(expectations.get_expectation())
+        2. Direct tensor pattern: variable = torch.tensor([...])
 
         Returns:
-            Tuple of (expectations_variable_name, line_number) or None
+            Tuple of (variable_or_expectations_name, line_number) or None
+            - For Expectations: returns ("expectations", line_of_Expectations_dict)
+            - For direct tensor: returns (variable_name, line_of_assignment)
         """
         with open(file_path, 'r') as f:
             lines = f.readlines()
 
-        # Step 1: Find the variable assignment to get expectations variable name
-        expectations_var = None
+        # Search backward from assertion line to find the variable assignment
         for lineno in range(assertion_line - 1, max(0, assertion_line - 50), -1):
             line = lines[lineno]
 
+            # Pattern 1: Expectations pattern
             # Look for: variable_name = torch.tensor(something.get_expectation())
             pattern = rf'^\s*{re.escape(variable_name)}\s*=.*?(\w+)\.get_expectation\(\)'
             match = re.search(pattern, line)
 
             if match:
                 expectations_var = match.group(1)
-                print(f"✓ Found variable assignment at line {lineno + 1}")
+                print(f"✓ Found Expectations pattern at line {lineno + 1}")
                 print(f"  Variable: {variable_name}")
                 print(f"  Expectations variable: {expectations_var}")
-                break
 
-        if not expectations_var:
-            return None
+                # Now find the Expectations assignment
+                for search_line in range(assertion_line - 1, max(0, assertion_line - 100), -1):
+                    search_text = lines[search_line]
+                    exp_pattern = rf'^\s*{re.escape(expectations_var)}\s*=\s*Expectations\('
+                    if re.search(exp_pattern, search_text):
+                        expectations_lineno = search_line + 1
+                        print(f"  Expectations assignment at line: {expectations_lineno}")
+                        return expectations_var, expectations_lineno
 
-        # Step 2: Find the Expectations assignment line
-        for lineno in range(assertion_line - 1, max(0, assertion_line - 100), -1):
-            line = lines[lineno]
+                return None
 
-            # Look for: expectations_var = Expectations({
-            pattern = rf'^\s*{re.escape(expectations_var)}\s*=\s*Expectations\('
+            # Pattern 2: Direct tensor pattern
+            # Look for: variable_name = torch.tensor([...])
+            pattern = rf'^\s*{re.escape(variable_name)}\s*=\s*torch\.tensor\('
             if re.search(pattern, line):
-                expectations_lineno = lineno + 1  # Convert to 1-indexed
-                print(f"  Expectations assignment at line: {expectations_lineno}")
-                return expectations_var, expectations_lineno
+                print(f"✓ Found direct tensor pattern at line {lineno + 1}")
+                print(f"  Variable: {variable_name}")
+                # For direct pattern, we return the variable name and line number
+                # This signals to use direct replacement mode
+                return variable_name, lineno + 1
 
         return None
 
@@ -523,9 +631,11 @@ class ExpectationsFileProcessor:
         # Step 5: Report results
         print("\n[5] Results:")
         if not transformer.found_expectations:
-            print(f"❌ Could not find Expectations assignment for '{expectations_var}'")
+            print(f"❌ Could not find target assignment for '{expectations_var}'")
             return False
 
+        # For direct tensor pattern, matched_key will be "direct"
+        # For Expectations pattern, matched_key will be the actual key tuple
         if not transformer.matched_key:
             print(f"❌ Could not find matching key in dictionary")
             print(f"  Tried: {self.target_keys}")
@@ -536,12 +646,18 @@ class ExpectationsFileProcessor:
             with open(file_path, 'w') as f:
                 f.write(new_tree.code)
             print(f"✅ Successfully updated {file_path}")
-            print(f"  Key: {transformer.matched_key}")
+            if transformer.matched_key == "direct":
+                print(f"  Pattern: Direct torch.tensor assignment")
+            else:
+                print(f"  Key: {transformer.matched_key}")
             print(f"  Old value: {transformer.old_value}")
             print(f"  New value: {new_value_str}")
         else:
             print("  ⚠️  DRY RUN - No changes made")
-            print(f"  Would update key: {transformer.matched_key}")
+            if transformer.matched_key == "direct":
+                print(f"  Would update: Direct torch.tensor assignment")
+            else:
+                print(f"  Would update key: {transformer.matched_key}")
 
         print("\n" + "=" * 80)
         if apply:
