@@ -127,7 +127,7 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 
 To do point prompting, pass the input point to the processor, then take the processor output
 and pass it to the model for inference. To post-process the model output, pass the outputs and
-`original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these
+`original_sizes` we take from the processor's initial output. We need to pass these
 since the processor resizes the image, and the output needs to be extrapolated.
 
 ```python
@@ -136,7 +136,7 @@ input_points = [[[2592, 1728]]] # point location of the bee
 inputs = processor(image, input_points=input_points, return_tensors="pt").to(device)
 with torch.no_grad():
     outputs = model(**inputs)
-masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu())
+masks = processor.image_processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"].cpu())
 ```
 
 We can visualize the three masks in the `masks` output.
@@ -192,7 +192,6 @@ with torch.no_grad():
 mask = processor.image_processor.post_process_masks(
     outputs.pred_masks.cpu(),
     inputs["original_sizes"].cpu(),
-    inputs["reshaped_input_sizes"].cpu()
 )[0][0][0].numpy()
 ```
 
@@ -356,7 +355,6 @@ def collate_fn(batch, target_hw=(256, 256)):
 
     pixel_values = torch.cat([item["pixel_values"] for item in batch], dim=0)
     original_sizes = torch.stack([item["original_sizes"] for item in batch])
-    reshaped_input_sizes = torch.stack([item["reshaped_input_sizes"] for item in batch])
     input_boxes = torch.cat([item["input_boxes"] for item in batch], dim=0)
     ground_truth_masks = torch.cat([
         F.interpolate(
@@ -370,7 +368,6 @@ def collate_fn(batch, target_hw=(256, 256)):
     return {
         "pixel_values": pixel_values,
         "original_sizes": original_sizes,
-        "reshaped_input_sizes": reshaped_input_sizes,
         "input_boxes": input_boxes,
         "ground_truth_mask": ground_truth_masks,
         "original_image_size": torch.stack([item["original_image_size"] for item in batch]),
@@ -394,7 +391,6 @@ for k,v in batch.items():
 
 # pixel_values torch.Size([4, 3, 1024, 1024])
 # original_sizes torch.Size([4, 1, 2])
-# reshaped_input_sizes torch.Size([4, 1, 2])
 # input_boxes torch.Size([4, 1, 4])
 # ground_truth_mask torch.Size([4, 1, 256, 256])
 #original_image_size torch.Size([4, 2])
@@ -419,6 +415,33 @@ import monai
 optimizer = Adam(model.mask_decoder.parameters(), lr=1e-5, weight_decay=0)
 seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
 ```
+
+Let's see how the model performs before training.
+
+```python
+import matplotlib.pyplot as plt
+
+item = val_ds[1]
+img = item["image"]
+bbox = json.loads(item["prompt"])["bbox"]
+inputs = processor(images=img, input_boxes=[[bbox]], return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+  outputs = model(**inputs)
+
+masks = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+preds = masks.squeeze(0)
+mask = (preds[0] > 0).cpu().numpy()
+
+overlay = np.asarray(img, dtype=np.uint8).copy()
+overlay[mask] = 0.55 * overlay[mask] + 0.45 * np.array([0, 255, 0], dtype=np.float32)
+
+plt.imshow(overlay)
+plt.axis("off")
+plt.show()
+```
+
+![SAM2 result after training](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam2_before_training.png)
 
 We need to log our predictions to trackio so we can monitor the model improvement in the middle of the training. 
 
@@ -496,3 +519,34 @@ for epoch in range(num_epochs):
 
 trackio.finish()
 ```
+
+
+Let's put the trained model to test.
+
+```python
+import matplotlib.pyplot as plt
+
+item = val_ds[1]
+img = item["image"]
+bbox = json.loads(item["prompt"])["bbox"]
+
+inputs = processor(images=img, input_boxes=[[bbox]], return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+  outputs = model(**inputs)
+
+preds = processor.post_process_masks(outputs.pred_masks.cpu(), inputs["original_sizes"])[0]
+
+preds = preds.squeeze(0)
+mask = (preds[0] > 0).cpu().numpy()
+
+overlay = np.asarray(img, dtype=np.uint8).copy()
+overlay[mask] = 0.55 * overlay[mask] + 0.45 * np.array([0, 255, 0], dtype=np.float32)
+
+plt.imshow(overlay)
+plt.axis("off")
+plt.show()
+```
+Great improvement after only training for 20 epochs on a small dataset!
+
+![SAM2 result after training](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam2_after_training.png)
