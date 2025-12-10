@@ -180,21 +180,10 @@ class LightOnOCRProcessor(ProcessorMixin):
         self.image_break_token = getattr(tokenizer, "image_break_token", "<|vision_pad|>")
         self.image_end_token = getattr(tokenizer, "image_end_token", "<|vision_end|>")
 
-        # Get token IDs from tokenizer special attributes or convert from token strings
-        if hasattr(tokenizer, "image_token_id"):
-            self.image_token_id = tokenizer.image_token_id
-        else:
-            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-
-        if hasattr(tokenizer, "image_break_token_id"):
-            self.image_break_token_id = tokenizer.image_break_token_id
-        else:
-            self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
-
-        if hasattr(tokenizer, "image_end_token_id"):
-            self.image_end_token_id = tokenizer.image_end_token_id
-        else:
-            self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        # Get token IDs by converting from token strings
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
 
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
@@ -215,8 +204,6 @@ class LightOnOCRProcessor(ProcessorMixin):
         )
 
         if images is not None:
-            # Like pixtral
-            output_kwargs["images_kwargs"]["patch_size"] = self.effective_patch_size
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
