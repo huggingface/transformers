@@ -121,11 +121,11 @@ class ExpectationsUpdater(cst.CSTTransformer):
         # Check for plain list [...]
         if isinstance(node, cst.List):
             return "plain_list", node
-
+        
         # Check for plain dict {...}
         if isinstance(node, cst.Dict):
             return "plain_dict", node
-
+        
         if not isinstance(node, cst.Call):
             return None, None
 
@@ -539,7 +539,7 @@ class ExpectationsFileProcessor:
         # We need to find the second argument (expected value) after the first comma
         # But the first argument may contain commas inside brackets like logits[0, 0, :10]
         # Strategy: Find the pattern after closing paren/bracket followed by comma and space
-
+        
         # For assert_close: look for ), space, identifier or ], space, identifier
         assertion_match = re.search(r'assert_close\([^)]+\),\s+(\w+)[\.\s,\[]', content, re.DOTALL)
         if not assertion_match:
@@ -547,15 +547,15 @@ class ExpectationsFileProcessor:
             # Look for a word after a comma that's NOT inside brackets
             # Simpler: after 'assert_close(', skip to first ', <word>' where word is not a number
             assertion_match = re.search(r'assert_close\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\[]', content, re.DOTALL)
-
+        
         if not assertion_match:
             # Try assertEqual pattern
             assertion_match = re.search(r'assertEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
-
+        
         if not assertion_match:
             # Try assertListEqual pattern
             assertion_match = re.search(r'assertListEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
-
+        
         if not assertion_match:
             # Try assertDictEqual pattern
             assertion_match = re.search(r'assertDictEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
