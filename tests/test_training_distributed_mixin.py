@@ -31,24 +31,189 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
     import torch.distributed as dist
+    from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
+    from torch.distributed.device_mesh import DeviceMesh
 
 logger = logging.getLogger("transformers.training_test")
 
 
-def _test_training_distributed_overfit_impl(mesh, config_dict, model_class_name, training_params):
+def apply_fsdp(
+    model: nn.Module,
+    dp_mesh: DeviceMesh,
+    param_dtype: torch.dtype,
+    reduce_dtype: torch.dtype,
+    pp_enabled: bool,
+    cpu_offload: bool = False,
+    reshard_after_forward_policy: str = "default",
+):
+    """
+    Apply data parallelism (via FSDP2) to the model.
+
+    Args:
+        model (nn.Module): The model to apply data parallelism to.
+        dp_mesh (DeviceMesh): The device mesh to use for data parallelism.
+        param_dtype (torch.dtype): The data type to use for model parameters.
+        reduce_dtype (torch.dtype): The data type to use for reduction operations.
+        pp_enabled (bool): Whether pipeline parallelism is enabled.
+        cpu_offload (bool, optional): Whether to offload model parameters to CPU. Defaults to False.
+        reshard_after_forward_policy (str, optional): The policy to use for resharding after forward pass. Defaults to "default".
+            Other options: "never", "always".
+            - "default" applies default resharding behavior, implementing "smart defaults" for known optimal scenarios.
+            - "always" will enable `reshard_after_forward` for all forward passes.
+            - "never" will disable `reshard_after_forward` for all forward passes.
+
+    """
+    mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    fsdp_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
+    if cpu_offload:
+        fsdp_config["offload_policy"] = CPUOffloadPolicy()
+
+    match reshard_after_forward_policy:
+        case "always":
+            reshard_after_forward = True
+        case "never":
+            reshard_after_forward = False
+        case "default":
+            # For PP, by default do not reshard after forward to avoid per-microbatch
+            # all-gathers, which can be expensive and non-overlapped
+            reshard_after_forward = not pp_enabled
+        case _:
+            raise ValueError(
+                f"Invalid reshard_after_forward_policy: {reshard_after_forward_policy}."
+            )
+
+    if model.tok_embeddings is not None:
+        fully_shard(
+            model.tok_embeddings,
+            **fsdp_config,
+            reshard_after_forward=reshard_after_forward,
+        )
+
+    for transformer_block in model.layers:
+        fully_shard(
+            transformer_block,
+            **fsdp_config,
+            reshard_after_forward=reshard_after_forward,
+        )
+
+    # As an optimization, do not reshard_after_forward the last layers by default
+    # since FSDP would prefetch them immediately after the forward pass
+    if model.norm is not None and model.output is not None:
+        fully_shard(
+            [model.norm, model.output],
+            **fsdp_config,
+            reshard_after_forward=reshard_after_forward_policy == "always",
+        )
+
+    fully_shard(model, **fsdp_config)
+
+    # forward
+    transformer_blocks = list(model.layers.values())
+    next_transformer_blocks = transformer_blocks[1:] + [None]
+
+    if model.tok_embeddings is not None and model.layers is not None:
+        model.tok_embeddings.set_modules_to_forward_prefetch([transformer_blocks[0]])
+
+    for transformer_block, next_transformer_block in zip(
+        transformer_blocks, next_transformer_blocks
+    ):
+        if next_transformer_block is not None:
+            if next_transformer_block.moe_enabled:
+                transformer_block.set_modules_to_forward_prefetch(
+                    [next_transformer_block, next_transformer_block.mlp.experts]
+                )
+            else:
+                transformer_block.set_modules_to_forward_prefetch(
+                    [next_transformer_block]
+                )
+        elif model.norm is not None and model.output is not None:
+            transformer_block.set_modules_to_forward_prefetch(
+                [model.norm, model.output]
+            )
+
+    # backward
+    reversed_transformer_blocks = list(reversed(model.layers.values()))
+    prev_transformer_blocks = reversed_transformer_blocks[1:] + [None]
+
+    if model.norm is not None and model.output is not None and model.layers is not None:
+        model.output.set_modules_to_backward_prefetch([reversed_transformer_blocks[0]])
+
+    for transformer_block, prev_transformer_block in zip(
+        reversed_transformer_blocks, prev_transformer_blocks
+    ):
+        if prev_transformer_block is not None:
+            if prev_transformer_block.moe_enabled:
+                transformer_block.set_modules_to_backward_prefetch(
+                    [prev_transformer_block, prev_transformer_block.mlp.experts]
+                )
+            else:
+                transformer_block.set_modules_to_backward_prefetch(
+                    [prev_transformer_block]
+                )
+        elif model.tok_embeddings is not None:
+            transformer_block.set_modules_to_backward_prefetch([model.tok_embeddings])
+
+def _test_training_distributed_overfit_impl(mesh, config_class, model_class, training_params):
     """Implementation for distributed training overfit test.
     
     Note: `mesh` is automatically created and passed by `global_wrapper` in testing_utils.py.
+    
+    Args:
+        mesh: DeviceMesh created by global_wrapper
+        config_class: The config class (e.g., LlamaConfig)
+        model_class: The model class (e.g., LlamaForCausalLM)
+        training_params: Dict with 'config_dict', 'steps', 'batch_size', 'learning_rate', 'seq_length', 'log_freq'
     """
     init_test_logger()
+    is_rank_0 = dist.get_rank() == 0
 
-    logger.info(f"Created DeviceMesh: {mesh}")
-    logger.info(f"FSDP mesh: {mesh['fsdp']}")
-    logger.info(f"TP mesh: {mesh['tp']}")
-    logger.info(f"FSDP mesh local rank: {mesh['fsdp'].get_local_rank()}")
-    logger.info(f"TP mesh local rank: {mesh['tp'].get_local_rank()}")
+    if is_rank_0:
+        logger.info(f"Created DeviceMesh: {mesh}")
+        logger.info(f"FSDP mesh: {mesh['fsdp']}")
+        logger.info(f"TP mesh: {mesh['tp']}")
+        logger.info(f"FSDP mesh local rank: {mesh['fsdp'].get_local_rank()}")
+        logger.info(f"TP mesh local rank: {mesh['tp'].get_local_rank()}")
     dist.barrier()
+
+    memory_monitor = build_cpu_memory_monitor(logger)
+
+    if is_rank_0:
+        logger.info("=" * 70)
+        logger.info("Starting distributed training overfit test")
+        logger.info("=" * 70)
+
+        # Configuration
+        logger.info(f"{Colors.BOLD}Job Configuration:{Colors.RESET}")
+        logger.info(f"  {Colors.CYAN}total_steps:{Colors.RESET} {training_params['steps']}")
+        logger.info(f"  {Colors.CYAN}batch_size:{Colors.RESET} {training_params['batch_size']}")
+        logger.info(f"  {Colors.CYAN}learning_rate:{Colors.RESET} {training_params['learning_rate']}")
+        logger.info(f"  {Colors.CYAN}seq_length:{Colors.RESET} {training_params['seq_length']}")
+        logger.info(f"  {Colors.CYAN}log_freq:{Colors.RESET} {training_params['log_freq']}")
+        logger.info(f"  {Colors.CYAN}device:{Colors.RESET} cpu")
+
+    set_seed(42)
+
+    if is_rank_0:
+        logger.info("-" * 70)
+        logger.info(f"{Colors.BOLD}Building model{Colors.RESET}")
+
+    load_start = time.perf_counter()
+
+    # Reconstruct config and model from passed classes
+    config = config_class.from_dict(training_params['config_dict'])
+    model = model_class(config)
+    model.train()
+
+    # TODO: Apply FSDP
+    # apply_fsdp(
+    #     model,
+    #     mesh["fsdp"],
+    #     param_dtype=torch.float32,
+    #     reduce_dtype=torch.float32,
+    #     pp_enabled=False,
+    # )
 
 class TrainingDistributedTesterMixin(ABC):
     """
@@ -160,18 +325,19 @@ class TrainingDistributedTesterMixin(ABC):
         """Shared implementation for distributed training tests."""
         config = self.model_tester.get_config()
         model_class = self._get_trainable_model_class()
+        config_class = type(config)
 
-        config_dict = config.to_dict()
-        model_class_name = model_class.__name__
         training_params = {
+            "config_dict": config.to_dict(),
             "steps": self.training_overfit_steps,
             "batch_size": self.training_overfit_batch_size,
             "learning_rate": self.training_overfit_learning_rate,
             "seq_length": self.training_overfit_seq_length,
+            "log_freq": self.training_overfit_log_freq,
         }
 
         init_distributed(fsdp_size=fsdp_size, tp_size=tp_size)(_test_training_distributed_overfit_impl)(
-            config_dict, model_class_name, training_params
+            config_class, model_class, training_params
         )
 
     # ============================================================
@@ -182,17 +348,17 @@ class TrainingDistributedTesterMixin(ABC):
     #     """Test distributed training with FSDP=1, TP=1 (1 total processes)."""
     #     self._run_distributed_training_test(fsdp_size=1, tp_size=1)
 
-    # @is_training_distributed_test
-    # def test_training_fsdp1_tp2(self):
-    #     """Test distributed training with FSDP=1, TP=2 (2 total processes)."""
-    #     self._run_distributed_training_test(fsdp_size=1, tp_size=2)
+    @is_training_distributed_test
+    def test_training_fsdp1_tp2(self):
+        """Test distributed training with FSDP=1, TP=2 (2 total processes)."""
+        self._run_distributed_training_test(fsdp_size=1, tp_size=2)
 
     # @is_training_distributed_test
     # def test_training_fsdp1_tp4(self):
     #     """Test distributed training with FSDP=1, TP=4 (4 total processes)."""
     #     self._run_distributed_training_test(fsdp_size=1, tp_size=4)
 
-    @is_training_distributed_test
-    def test_training_fsdp2_tp2(self):
-        """Test distributed training with FSDP=2, TP=2 (4 total processes)."""
-        self._run_distributed_training_test(fsdp_size=2, tp_size=2)
+    # @is_training_distributed_test
+    # def test_training_fsdp2_tp2(self):
+    #     """Test distributed training with FSDP=2, TP=2 (4 total processes)."""
+    #     self._run_distributed_training_test(fsdp_size=2, tp_size=2)
