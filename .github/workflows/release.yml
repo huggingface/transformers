@@ -26,7 +26,7 @@ jobs:
       - run: pip install -e .
       - run: make build-release
 
-      - run: pip uninstall transformers
+      - run: pip uninstall -y transformers
       - run: pip install dist/*.whl
 
       - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
