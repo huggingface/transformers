@@ -165,6 +165,8 @@ If you want something even higher up the stack, then `PreTrainedTokenizerBase` i
 - `save_pretrained`
 - among a few others
 
+**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure during conversion. This is useful if the model requires specific token ordering or additional tokens. See existing converter classes in `convert_slow_tokenizer.py` for examples.
+
 ### API Changes
 
 #### 1. Direct tokenizer initialization with vocab and merges
@@ -192,7 +194,9 @@ tokenizer = LlamaTokenizer(vocab=vocab, merges=merges)
 
 This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary. This allows comparing different tokenizer classes with the same vocab; therefore enabling the comparison of different pre-tokenizers, normalizers, etc.
 
-⚠️ The `vocab_file` (as in, a path towards a file containing the vocabulary) cannot be used to initialize the `LlamaTokenizer` as loading from files is reserved to the `from_pretrained` method.
+**Simplified file loading:** Support is added for passing`vocab_file` and `merges_file` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provdied but no merges, merges will be automatically generated (excluding special tokens).
+
+Note: Loading from file paths with `vocab_file` is supported during initialization, but it is recommended to load saved tokenizers using `from_pretrained`.
 
 #### 2. Simplified decoding API
 
@@ -243,6 +247,9 @@ We simplify the serialization of tokenization attributes:
 - `special_tokens_map.json` - special tokens are now stored in `tokenizer_config.json`.
 - `added_tokens.json` - added tokens are now stored in `tokenizer.json`.
 - `added_tokens_decoder` is only stored when there is no `tokenizer.json`.
+- `add_bos_token` and `add_eos_token` - these are no longer saved in `tokenizer_config.json`. When a `tokenizer.json` file exists, these settings are defined in the tokenizer class or `tokenizer.json` itself.
+
+**Backend synchronization removed:** The automatic synchronization logic that updated backend tokenizer settings (like `add_prefix_space`, `do_lower_case`, `strip_accents`, `tokenize_chinese_chars`) after initialization has been removed. Tokenizer behavior is now fully determined by the `tokenizer.json` file or class definition at initialization time. 
 
 When loading older tokenizers, these files are still read for backward compatibility, but new saves use the consolidated format. We're gradually moving towards consolidating attributes to fewer files so that other libraries and implementations may depend on them more reliably.
 
@@ -256,7 +263,7 @@ Several models that had identical tokenizers now import from their base implemen
 - **LXMert** → uses BertTokenizer
 - **MT5** → uses T5Tokenizer
 - **MVP** → uses BartTokenizer
-
+for
 These modules will eventually be removed altogether.
 
 **Removed T5-specific workarounds**
