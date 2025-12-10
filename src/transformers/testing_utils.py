@@ -54,6 +54,8 @@ from packaging import version
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+#TODO(3outeille): guarding to protect against missing import
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import logging as transformers_logging
 
@@ -4123,7 +4125,7 @@ def read_json_file(file):
 # Training CI Utilities - Logging and Memory Monitoring
 # =============================================================================
 
-def global_wrapper(rank, func, fsdp, tp, port, func_args, func_kwargs):
+def global_wrapper(rank, func, fsdp_size, tp_size, port, func_args, func_kwargs):
     def setup_dist_env(rank, world_size, port):
         os.environ["WORLD_SIZE"] = str(world_size)
         os.environ["RANK"] = str(rank)
@@ -4131,12 +4133,19 @@ def global_wrapper(rank, func, fsdp, tp, port, func_args, func_kwargs):
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = str(port)
 
-    world_size = fsdp * tp
+    world_size = fsdp_size * tp_size
     setup_dist_env(rank, world_size, port)
 
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    func(rank, *func_args, **func_kwargs)
+    # NOTE(3outeille): if want to handle DataParallel, create dp_replicate dims (do not mixed with dp_shard which is for FSDP)
+    # NOTE(3outeille): if other parallelism is added, order matters, it should be ["pp", "ddp", "fsdp", "cp", "tp"]
+    # TODO(3outeille): figure out EP
+    # from less costly to most costly (internode to intranode)
+    dims, names = [fsdp_size, tp_size], ["fsdp", "tp"]
+    mesh = init_device_mesh("cpu", dims, mesh_dim_names=names)
+
+    func(mesh, *func_args, **func_kwargs)
 
     dist.barrier()
     dist.destroy_process_group()

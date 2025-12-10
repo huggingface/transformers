@@ -32,24 +32,17 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 
 logger = logging.getLogger("transformers.training_test")
 
 
-def _test_training_distributed_overfit_impl(rank, fsdp_size, tp_size, config_dict, model_class_name, training_params):
+def _test_training_distributed_overfit_impl(mesh, config_dict, model_class_name, training_params):
     """Implementation for distributed training overfit test.
     
-    Note: `rank` is automatically passed by `global_wrapper` in testing_utils.py.
+    Note: `mesh` is automatically created and passed by `global_wrapper` in testing_utils.py.
     """
     init_test_logger()
 
-    # NOTE(3outeille): if want to handle DataParallel, create dp_replicate dims (do not mixed with dp_shard which is for FSDP)
-    # NOTE(3outeille): if other parallelism is added, order matters, it should be ["pp", "ddp", "fsdp", "cp", "tp"]
-    #TODO(3outeille): figure out EP
-    # from less costly to most costly (internode to intranode)
-    dims, names = [fsdp_size, tp_size], ["fsdp", "tp"]
-    mesh = init_device_mesh("cpu", dims, mesh_dim_names=names)
     logger.info(f"Created DeviceMesh: {mesh}")
     logger.info(f"FSDP mesh: {mesh['fsdp']}")
     logger.info(f"TP mesh: {mesh['tp']}")
@@ -178,7 +171,7 @@ class TrainingDistributedTesterMixin(ABC):
         }
 
         init_distributed(fsdp_size=fsdp_size, tp_size=tp_size)(_test_training_distributed_overfit_impl)(
-            fsdp_size, tp_size, config_dict, model_class_name, training_params
+            config_dict, model_class_name, training_params
         )
 
     # ============================================================
