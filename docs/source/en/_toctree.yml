@@ -1115,6 +1115,8 @@
         title: OneFormer
       - local: model_doc/ovis2
         title: Ovis2
+      - local: model_doc/ovis2_5
+        title: Ovis2.5
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/owlv2
