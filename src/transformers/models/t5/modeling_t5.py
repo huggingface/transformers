@@ -48,6 +48,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_t5 import T5Config
 
 
@@ -254,10 +255,12 @@ class T5Attention(nn.Module):
         config: T5Config,
         has_relative_attention_bias=False,
         layer_idx: Optional[int] = None,
+        is_causal: bool = False,
     ):
         super().__init__()
         self.config = config
         self.is_decoder = config.is_decoder
+        self.is_causal = is_causal
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -392,8 +395,9 @@ class T5Attention(nn.Module):
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
+        is_causal = config.is_decoder
         self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
+            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx, is_causal=is_causal
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -407,6 +411,7 @@ class T5LayerSelfAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
         cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -417,6 +422,7 @@ class T5LayerSelfAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -426,7 +432,7 @@ class T5LayerSelfAttention(nn.Module):
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
+        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -441,6 +447,7 @@ class T5LayerCrossAttention(nn.Module):
         query_length=None,
         output_attentions=False,
         cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -453,6 +460,7 @@ class T5LayerCrossAttention(nn.Module):
             query_length=query_length,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -584,6 +592,12 @@ class T5PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
 
+    _can_record_outputs = {
+        "hidden_states": [OutputRecorder(T5Block, index=0, layer_name="block")]
+        "attentions": [OutputRecorder(T5LayerSelfAttention, index=-1, layer_name="self_attn")],
+        "cross_attentions": [OutputRecorder(T5LayerCrossAttention, index=-1, layer_name="cross_attn")],
+    }
+
     @property
     def dummy_inputs(self):
         input_ids = torch.tensor(DUMMY_INPUTS)
@@ -692,6 +706,7 @@ class T5Stack(T5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,
