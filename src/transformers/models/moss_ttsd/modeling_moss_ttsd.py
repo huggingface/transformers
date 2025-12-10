@@ -464,12 +464,6 @@ class MossTTSDForCausalLM(MossTTSDPretrainedModel, MossTTSDGenerationMixin):
         """Check if tokens are speech tokens."""
         return (tokens >= self.config.speech_token_range[0]) & (tokens < self.config.speech_token_range[1])
 
-    def tie_weights(self, recompute_mapping: bool = True):
-        """Tie the weights between input embeddings and output embeddings."""
-        if self.config.tie_word_embeddings:
-            for i in range(self.config.channels):
-                self._tie_or_clone_weights(self.lm_heads[i], self.model.embedding_list[i])
-
     def set_input_embeddings(self, value: nn.Embedding):
         """Set the input embeddings for the model."""
         self.model.embedding_list[0] = value
