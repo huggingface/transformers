@@ -185,7 +185,7 @@ class LasrCTCConfig(PreTrainedConfig):
             encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
                 The config object or dictionary of the encoder.
             pad_token_id (`int`, *optional*, defaults to 0):
-                Padding token id. Also used as blank token id..
+                Padding token id. Also used as blank token id.
     Example:
         ```python
         >>> from transformers import LasrForCTC, LasrCTCConfig
