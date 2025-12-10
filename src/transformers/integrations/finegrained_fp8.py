@@ -473,7 +473,7 @@ class FP8Linear(nn.Linear):
                 if self.activation_scheme == "static":
                     # TODO: fix that so we don't have to upcast to bfloat16
                     output = (
-                        F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), self.bias) * scale * scale_inv
+                        F.linear(qinput.to(input.dtype), weight.to(input.dtype), self.bias) * scale * scale_inv
                     )
                 else:
                     output = w8a8_block_fp8_matmul_triton(
