@@ -466,13 +466,15 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale)
+                    qinput = input / scale
                 else:
                     raise NotImplementedError("Not supported")
 
                 if self.activation_scheme == "static":
                     # TODO: fix that so we don't have to upcast to bfloat16
-                    output = F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), self.bias) * scale * scale_inv
+                    output = (
+                        F.linear(qinput.to(torch.bfloat16), weight.to(torch.bfloat16), self.bias) * scale * scale_inv
+                    )
                 else:
                     output = w8a8_block_fp8_matmul_triton(
                         qinput,
