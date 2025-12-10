@@ -377,7 +377,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
-    model.save_pretrained(model_path, safe_serialization=True)
+    model.save_pretrained(model_path)
 
     # Load and save the processor
     tokenizer = LlamaTokenizerFast(
