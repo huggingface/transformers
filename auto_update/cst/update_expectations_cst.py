@@ -557,6 +557,10 @@ class ExpectationsFileProcessor:
             assertion_match = re.search(r'assertListEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
 
         if not assertion_match:
+            # Try assertDictEqual pattern
+            assertion_match = re.search(r'assertDictEqual\(.*?,\s+([a-zA-Z_]\w*)[\.\s,\)\[]', content, re.DOTALL)
+
+        if not assertion_match:
             raise ValueError("Could not find assertion with variable name")
 
         variable_name = assertion_match.group(1).strip()
@@ -574,6 +578,11 @@ class ExpectationsFileProcessor:
         if not actual_section:
             actual_section = re.search(
                 r'argument name: `list1`.*?argument value:\s*\n\s*\n(.+?)(?:\n\s*\n-+|========)',
+                content, re.DOTALL
+            )
+        if not actual_section:
+            actual_section = re.search(
+                r'argument name: `d1`.*?argument value:\s*\n\s*\n(.+?)(?:\n\s*\n-+|========)',
                 content, re.DOTALL
             )
 
