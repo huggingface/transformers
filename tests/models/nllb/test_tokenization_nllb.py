@@ -332,17 +332,20 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
             src_lang="eng_Latn",
             use_fast=False,
         )
-        original_additional = list(tok.additional_special_tokens)
-    
+
+        # extra_special_tokens is the public attribute in the new tokenizer base
+        original_extra = list(tok.extra_special_tokens or [])
+
         # add two codes, one new, one existing
         ids = tok.add_language_codes(["eng_Latn", "ami_Latn"])
-    
+
         # eng_Latn still present, ami_Latn added at end
-        assert "eng_Latn" in tok.additional_special_tokens
-        assert "ami_Latn" in tok.additional_special_tokens
-        assert len(tok.additional_special_tokens) == len(original_additional) + 1
-    
+        assert "eng_Latn" in tok.extra_special_tokens
+        assert "ami_Latn" in tok.extra_special_tokens
+        assert len(tok.extra_special_tokens) == len(original_extra) + 1
+
         # IDs round-trip
         for code, tid in zip(["eng_Latn", "ami_Latn"], ids):
             assert tok.convert_tokens_to_ids(code) == tid
+
 
