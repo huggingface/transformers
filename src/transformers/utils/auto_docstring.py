@@ -1302,18 +1302,17 @@ def _process_parameter_type(param, param_name, func):
             optional = True
             out_str.append("None")
             continue
-        subtype = str(subtype)
-        if "typing" in subtype:
-            subtype = "".join(subtype.split("typing.")).replace("transformers.", "~")
-        elif hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
-            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '')}.{subtype.__name__}".removeprefix(
+        if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
+            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
                 "."
             )
+        else:
+            subtype = str(subtype)  # Just give up
         if "ForwardRef" in subtype:
             subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
         out_str.append(subtype)
 
-    param_type = " | ".join(out_str)
+    param_type = " or ".join(out_str)
 
     return param_type, optional
 
