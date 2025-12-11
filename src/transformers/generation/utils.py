@@ -1766,7 +1766,7 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
-        # NOTE: doesn't make sense to allow kwargs and `generation_config`. Might be strict and make them mutually exclusive?
+        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
         if generation_config is None:

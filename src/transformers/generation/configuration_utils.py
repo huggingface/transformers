@@ -483,7 +483,7 @@ class GenerationConfig(PushToHubMixin):
         if self.constraints is not None or self.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
         elif self.num_beams is None or self.num_beams == 1:
-            if self.do_sample is not True:
+            if not self.do_sample:
                 if (
                     self.top_k is not None
                     and self.top_k > 1
@@ -498,7 +498,7 @@ class GenerationConfig(PushToHubMixin):
         else:
             if self.num_beam_groups is not None and self.num_beam_groups > 1:
                 generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif self.do_sample is True:
+            elif self.do_sample:
                 generation_mode = GenerationMode.BEAM_SAMPLE
             else:
                 generation_mode = GenerationMode.BEAM_SEARCH
@@ -1166,7 +1166,7 @@ class GenerationConfig(PushToHubMixin):
                         setattr(generation_config, attr, decoder_config_dict[attr])
 
         # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
-        if generation_config.return_dict_in_generate is False:
+        if not generation_config.return_dict_in_generate:
             if any(
                 getattr(generation_config, extra_output_flag, False)
                 for extra_output_flag in generation_config.extra_output_flags
