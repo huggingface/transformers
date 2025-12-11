@@ -1294,10 +1294,12 @@ def _process_parameter_type(param, param_name, func):
         param_type = param.annotation
         if "typing" in str(param_type):
             param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-        elif hasattr(param_type, "__module__"):
+        elif hasattr(param_type, "__module__") and hasattr(param_type, "__name__"):
             param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
             if param_type[0] == ".":
                 param_type = param_type[1:]
+        elif isinstance(param_type, type(int | None)):  # types.UnionType
+            param_type = str(param_type).replace("transformers.", "~")
         else:
             if False:
                 print(
