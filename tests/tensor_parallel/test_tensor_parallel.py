@@ -26,7 +26,7 @@ import warnings
 from safetensors import safe_open
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
+from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -307,7 +307,9 @@ def _test_model_dense_backward_pass_impl(rank):
             if isinstance(param_tp.data, dist.tensor.DTensor):
                 placement = param_tp.data.placements[0]
                 if hasattr(placement, "dim") and placement.dim is not None:
-                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
+                    dim = placement.dim
+                    world_size = param_tp.data.device_mesh.size()
+                    grad_shard = grad.chunk(world_size, dim=dim)[rank]
                 else:
                     grad_shard = grad
             else:
@@ -573,7 +575,9 @@ def _test_model_moe_backward_pass_impl(rank):
             if isinstance(param_tp.data, dist.tensor.DTensor):
                 placement = param_tp.data.placements[0]
                 if hasattr(placement, "dim") and placement.dim is not None:
-                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
+                    dim = placement.dim
+                    world_size = param_tp.data.device_mesh.size()
+                    grad_shard = grad.chunk(world_size, dim=dim)[rank]
                 else:
                     grad_shard = grad
             else:
