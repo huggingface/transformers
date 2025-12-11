@@ -254,6 +254,7 @@ except ImportError:
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
     "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
