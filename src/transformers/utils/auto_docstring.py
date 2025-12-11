@@ -1281,7 +1281,7 @@ def _get_model_info(func, parent_class):
     return model_name_lowercase, class_name, config_class
 
 
-def _process_parameter_type(param, param_name, func):
+def _process_parameter_type(param):
     """
     Process and format a parameter's type annotation.
 
@@ -1399,7 +1399,7 @@ def _process_regular_parameters(
             continue
 
         # Process parameter type and optional status
-        param_type, optional = _process_parameter_type(param, param_name, func)
+        param_type, optional = _process_parameter_type(param)
 
         # Check for default value
         param_default = ""
