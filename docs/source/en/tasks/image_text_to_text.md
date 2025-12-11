@@ -67,7 +67,7 @@ The image inputs look like the following.
 </div>
 
 
-Below is an example of the chat template. For single prompt, we can create our chat template like below, providing image URLs directly with text prompt.
+Structure your conversation as shown below for a single prompt with image and text inputs.
 
 ```python
 messages = [
