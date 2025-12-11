@@ -69,7 +69,7 @@ Learn in more detail the concepts underlying 8-bit quantization in the [Gentle I
 
 Set up a [`BitsAndBytesConfig`] and set `load_in_4bit=True` to load a model in 4-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
 
-Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map=“auto”`.
+Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map="auto"`.
 
 Place all inputs on the same device as the model.
 
@@ -137,34 +137,6 @@ result = pipeline("Both the music and visual were astounding, not to mention the
 
 Learn more details about using ORT with Optimum in the [Accelerated inference on NVIDIA GPUs](https://hf.co/docs/optimum/onnxruntime/usage_guides/gpu#accelerated-inference-on-nvidia-gpus) and [Accelerated inference on AMD GPUs](https://hf.co/docs/optimum/onnxruntime/usage_guides/amdgpu#accelerated-inference-on-amd-gpus) guides.
 
-### BetterTransformer
-
-[BetterTransformer](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) is a *fastpath* execution of specialized Transformers functions directly on the hardware level such as a GPU. There are two main components of the fastpath execution.
-
-- fusing multiple operations into a single kernel for faster and more efficient execution
-- skipping unnecessary computation of padding tokens with nested tensors
-
-> [!WARNING]
-> Some BetterTransformer features are being upstreamed to Transformers with default support for native [torch.nn.functional.scaled_dot_product_attention](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA). BetterTransformer has a wider coverage than the Transformers SDPA integration, but you can expect more and more architectures to natively support SDPA in Transformers.
-
-BetterTransformer is available through Optimum with [`~PreTrainedModel.to_bettertransformer`].
-
-```py
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom")
-model = model.to_bettertransformer()
-```
-
-Call [`~PreTrainedModel.reverse_bettertransformer`] and save it first to return the model to the original Transformers model.
-
-```py
-model = model.reverse_bettertransformer()
-model.save_pretrained("saved_model")
-```
-
-Refer to the benchmarks in [Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0](https://pytorch.org/blog/out-of-the-box-acceleration/) for BetterTransformer and scaled dot product attention performance. The [BetterTransformer](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) blog post also discusses fastpath execution in greater detail if you're interested in learning more.
-
 ## Scaled dot product attention (SDPA)
 
 PyTorch's [torch.nn.functional.scaled_dot_product_attention](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) is a native implementation of the scaled dot product attention mechanism. SDPA is a more efficient and optimized version of the attention mechanism used in transformer models.
@@ -175,7 +147,7 @@ There are three supported implementations available.
 - [xFormers](https://github.com/facebookresearch/xformers) or Memory-Efficient Attention is able to support models with the fp32 torch type.
 - C++ implementation of scaled dot product attention
 
-SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `head_mask` and `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
+SDPA is used by default for PyTorch v2.1.1. and greater when an implementation is available. You could explicitly enable SDPA by setting `attn_implementation="sdpa"` in [`~PreTrainedModel.from_pretrained`] though. Certain attention parameters, such as `output_attentions=True`, are unsupported and returns a warning that Transformers will fall back to the (slower) eager implementation.
 
 Refer to the [AttentionInterface](./attention_interface) guide to learn how to change the attention implementation after loading a model.
 

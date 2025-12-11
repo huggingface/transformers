@@ -87,8 +87,6 @@ class ShieldGemma2Processor(Gemma3Processor):
         self,
         images: Optional[ImageInput] = None,
         text=None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[ShieldGemma2ProcessorKwargs],
     ) -> BatchFeature:
         """Generates a batch of inputs from the provided images.
@@ -120,8 +118,6 @@ class ShieldGemma2Processor(Gemma3Processor):
             `(len(images) * len(policies), )`, and the order within the batch will be
             img1_policy1, ... img1_policyN, ... imgM_policyN.
         """
-        del text, videos, audio
-
         if not images:
             raise ValueError("ShieldGemma 2 needs images to classify")
         elif not isinstance(images, Sequence):
@@ -129,6 +125,10 @@ class ShieldGemma2Processor(Gemma3Processor):
 
         if not self.chat_template:
             raise ValueError("ShieldGemma 2 requires the use of a specific chat template")
+
+        common_kwargs = kwargs.setdefault("common_kwargs", {})
+        if "return_tensors" in kwargs:
+            common_kwargs["return_tensors"] = kwargs.pop("return_tensors")
 
         # Disable pan and scan
         images_kwargs = kwargs.setdefault("images_kwargs", {})

@@ -284,7 +284,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
     text_config = Emu3TextConfig(
         max_position_embeddings=model_llm.config.max_position_embeddings,
-        rope_scaling={"rope_type": "default"},
+        rope_parameters={"rope_type": "default"},
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
@@ -303,7 +303,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     state_dict = convert_state_dict_to_hf(model_vqgan.state_dict(), state_dict)
 
     model.load_state_dict(state_dict, assign=True, strict=True)
-    model.save_pretrained(output_dir, safe_serialization=True)
+    model.save_pretrained(output_dir)
 
     if hub_model_id is not None:
         model.push_to_hub(hub_model_id)

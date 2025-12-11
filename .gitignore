@@ -13,6 +13,7 @@ tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/
+reports/
 
 # Distribution / packaging
 .Python
@@ -97,6 +98,7 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.venv*
 env/
 venv/
 ENV/
@@ -170,3 +172,7 @@ tags
 
 # modular conversion
 *.modular_backup
+
+# Cursor IDE files
+.cursor/
+test-results/

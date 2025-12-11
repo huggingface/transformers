@@ -60,11 +60,6 @@ class VideoLlavaProcessor(ProcessorMixin):
             extra tokens appended, no need to set this arg.
     """
 
-    attributes = ["image_processor", "video_processor", "tokenizer"]
-    image_processor_class = "VideoLlavaImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
@@ -93,8 +88,8 @@ class VideoLlavaProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         videos: Optional[ImageInput] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length=None,
+        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
+        max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
@@ -133,10 +128,8 @@ class VideoLlavaProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

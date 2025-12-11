@@ -16,10 +16,11 @@
 
 import argparse
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 import timm
 import torch
@@ -200,20 +201,12 @@ def convert_weight_and_push(
     assert torch.allclose(from_output, our_output), "The model logits don't match the original one."
 
     if push_to_hub:
-        our_model.push_to_hub(
-            repo_path_or_name=save_directory / name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        our_model.push_to_hub(repo_id=name)
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
         image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
-        image_processor.push_to_hub(
-            repo_path_or_name=save_directory / name,
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        image_processor.push_to_hub(repo_id=name)
 
         print(f"Pushed {name}")
 
@@ -224,11 +217,9 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)

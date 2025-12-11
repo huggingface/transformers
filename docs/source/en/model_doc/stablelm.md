@@ -44,8 +44,9 @@ We also provide StableLM Zephyr 3B, an instruction fine-tuned version of the mod
 The following code snippet demonstrates how to use `StableLM 3B 4E1T` for inference:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device, set_seed
->>> device = infer_device() # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator, set_seed
+>>> device = Accelerator().device # the device to load the model onto
 
 >>> set_seed(0)
 
@@ -75,8 +76,9 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device, set_seed
->>> device = infer_device() # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator, set_seed
+>>> device = Accelerator().device # the device to load the model onto
 
 >>> set_seed(0)
 
@@ -91,7 +93,6 @@ Now, to run the model with Flash Attention 2, refer to the snippet below:
 >>> responses  # doctest: +SKIP
 ['The weather is always wonderful in Costa Rica, which makes it a prime destination for retirees. That’s where the Pensionado program comes in, offering']
 ```
-
 
 ## StableLmConfig
 

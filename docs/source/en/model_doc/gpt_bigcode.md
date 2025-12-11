@@ -36,6 +36,7 @@ The model is an optimized [GPT2 model](https://huggingface.co/docs/transformers/
 ## Implementation details
 
 The main differences compared to GPT2.
+
 - Added support for Multi-Query Attention.
 - Use `gelu_pytorch_tanh` instead of classic `gelu`.
 - Avoid unnecessary synchronizations (this has since been added to GPT2 in #20061, but wasn't in the reference codebase).
@@ -47,11 +48,7 @@ The main differences compared to GPT2.
 - Merge the key and value caches into one (this changes the format of layer_past/ present, does it risk creating problems?)
 - Use the memory layout (self.num_heads, 3, self.head_dim) instead of `(3, self.num_heads, self.head_dim)` for the QKV tensor with MHA. (prevents an overhead with the merged key and values, but makes the checkpoints incompatible with the original openai-community/gpt2 model).
 
-
 You can read more about the optimizations in the [original pull request](https://github.com/huggingface/transformers/pull/22575)
-
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Combining Starcoder and Flash Attention 2
 
@@ -67,8 +64,9 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
 >>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
->>> device = infer_device() # the device to load the model onto
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
+>>> device = Accelerator().device # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")
@@ -90,7 +88,6 @@ Below is a expected speedup diagram that compares pure inference time between th
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/starcoder-speedup.png">
 </div>
-
 
 ## GPTBigCodeConfig
 

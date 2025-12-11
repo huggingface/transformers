@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import Optional, Union
 
 import torch
@@ -48,7 +49,6 @@ class VoxtralPreTrainedModel(Qwen2AudioPreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    _supports_attention_backend = True
     _no_split_modules = None
 
 
@@ -86,7 +86,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"Qwen2Audio expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"Voxtral expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
@@ -102,7 +102,6 @@ class VoxtralEncoder(Qwen2AudioEncoder):
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                layer_head_mask=None,
             )
             hidden_states = layer_outputs[0]
 
@@ -133,9 +132,6 @@ class VoxtralMultiModalProjector(nn.Module):
     """
 )
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
     def __init__(self, config):
@@ -166,7 +162,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_embeds(self, input_features: torch.FloatTensor):
+    def get_audio_features(self, input_features: torch.FloatTensor):
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
         Args:
@@ -186,6 +182,12 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
+
+    def get_audio_embeds(self, input_features: torch.FloatTensor):
+        warnings.warn(
+            "The method `get_audio_embeds` is deprecated. Please use `get_audio_features` instead.", FutureWarning
+        )
+        return self.get_audio_features(input_features)
 
     @can_return_tuple
     @auto_docstring
@@ -240,7 +242,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_embeds(input_features)
+            audio_embeds = self.get_audio_features(input_features)
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)

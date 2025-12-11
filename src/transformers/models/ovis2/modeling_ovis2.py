@@ -20,13 +20,15 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
@@ -47,8 +49,7 @@ from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -73,8 +74,7 @@ class Ovis2CausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -85,7 +85,7 @@ class Ovis2CausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -418,6 +418,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -517,12 +518,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -596,7 +591,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -670,7 +665,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
 @auto_docstring
 class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
@@ -687,27 +682,8 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Not needed for Ovis2")
 
     @can_return_tuple
     @auto_docstring
@@ -717,7 +693,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

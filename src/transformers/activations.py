@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import math
 from collections import OrderedDict
 
 import torch
 from torch import Tensor, nn
 
+from .integrations.hub_kernels import use_kernel_forward_from_hub
 from .utils import logging
 from .utils.import_utils import is_torchdynamo_compiling
 
@@ -25,7 +27,8 @@ from .utils.import_utils import is_torchdynamo_compiling
 logger = logging.get_logger(__name__)
 
 
-class PytorchGELUTanh(nn.Module):
+@use_kernel_forward_from_hub("GeluTanh")
+class GELUTanh(nn.Module):
     """
     A fast C implementation of the tanh approximation of the GeLU activation function. See
     https://huggingface.co/papers/1606.08415.
@@ -34,10 +37,25 @@ class PytorchGELUTanh(nn.Module):
     match due to rounding errors.
     """
 
+    def __init__(self, use_gelu_tanh_python: bool = False):
+        super().__init__()
+        if use_gelu_tanh_python:
+            self.act = self._gelu_tanh_python
+        else:
+            self.act = functools.partial(nn.functional.gelu, approximate="tanh")
+
+    def _gelu_tanh_python(self, input: Tensor) -> Tensor:
+        return input * 0.5 * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+
     def forward(self, input: Tensor) -> Tensor:
-        return nn.functional.gelu(input, approximate="tanh")
+        return self.act(input)
 
 
+# Added for compatibility with autoawq which is archived now and imports PytorchGELUTanh from activations.py
+PytorchGELUTanh = GELUTanh
+
+
+@use_kernel_forward_from_hub("NewGELU")
 class NewGELUActivation(nn.Module):
     """
     Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
@@ -48,6 +66,7 @@ class NewGELUActivation(nn.Module):
         return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
 
 
+@use_kernel_forward_from_hub("GeLU")
 class GELUActivation(nn.Module):
     """
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
@@ -70,6 +89,21 @@ class GELUActivation(nn.Module):
         return self.act(input)
 
 
+@use_kernel_forward_from_hub("SiLU")
+class SiLUActivation(nn.Module):
+    """
+    See Gaussian Error Linear Units (Hendrycks et al., https://arxiv.org/abs/1606.08415) where the SiLU (Sigmoid Linear
+    Unit) was originally introduced and coined, and see Sigmoid-Weighted Linear Units for Neural Network Function
+    Approximation in Reinforcement Learning (Elfwing et al., https://arxiv.org/abs/1702.03118) and Swish: a Self-Gated
+    Activation Function (Ramachandran et al., https://arxiv.org/abs/1710.05941v1) where the SiLU was experimented with
+    later.
+    """
+
+    def forward(self, input: Tensor) -> Tensor:
+        return nn.functional.silu(input)
+
+
+@use_kernel_forward_from_hub("FastGELU")
 class FastGELUActivation(nn.Module):
     """
     Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
@@ -79,6 +113,7 @@ class FastGELUActivation(nn.Module):
         return 0.5 * input * (1.0 + torch.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
 
+@use_kernel_forward_from_hub("QuickGELU")
 class QuickGELUActivation(nn.Module):
     """
     Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
@@ -204,9 +239,9 @@ class XIELUActivation(nn.Module):
         with_vector_loads=False,
     ):
         super().__init__()
-        self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
+        self.alpha_p = nn.Parameter(torch.log(torch.expm1(torch.tensor(alpha_p_init, dtype=dtype))).unsqueeze(0))
         self.alpha_n = nn.Parameter(
-            torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0)
+            torch.log(torch.expm1(torch.tensor(alpha_n_init - beta, dtype=dtype))).unsqueeze(0)
         )
         self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
@@ -262,8 +297,8 @@ class XIELUActivation(nn.Module):
             )
         result = self._xielu_cuda_obj.forward(
             x,
-            self.alpha_p,
-            self.alpha_n,
+            self.alpha_p.to(x.dtype),
+            self.alpha_n.to(x.dtype),
             # Temporary until xIELU CUDA fully implemented -> self.{beta,eps}.item()
             self._beta_scalar,
             self._eps_scalar,
@@ -286,7 +321,8 @@ ACT2CLS = {
     "gelu_fast": FastGELUActivation,
     "gelu_new": NewGELUActivation,
     "gelu_python": (GELUActivation, {"use_gelu_python": True}),
-    "gelu_pytorch_tanh": PytorchGELUTanh,
+    "gelu_pytorch_tanh": GELUTanh,
+    "gelu_python_tanh": (GELUTanh, {"use_gelu_tanh_python": True}),
     "gelu_accurate": AccurateGELUActivation,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
@@ -297,7 +333,7 @@ ACT2CLS = {
     "relu2": ReLUSquaredActivation,
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
-    "silu": nn.SiLU,
+    "silu": SiLUActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,

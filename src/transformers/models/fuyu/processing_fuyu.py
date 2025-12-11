@@ -71,7 +71,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
     }
 
 
@@ -338,19 +337,15 @@ class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
-    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`TokenizersBackend`]. See the
     [`~FuyuProcessor.__call__`] and [`~FuyuProcessor.decode`] for more information.
 
     Args:
         image_processor ([`FuyuImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
+        tokenizer ([`TokenizersBackend`]):
             The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FuyuImageProcessor"
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
@@ -487,13 +482,11 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
+        and `kwargs` arguments to TokenizersBackend's [`~TokenizersBackend.__call__`] if `text` is not `None` to
         encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
@@ -534,7 +527,6 @@ class FuyuProcessor(ProcessorMixin):
 
         if text is not None and images is None:
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             return text_encoding
 

@@ -67,7 +67,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 - [Multiple choice task guide](../tasks/multiple_choice)
 
-
 ## FunnelConfig
 
 [[autodoc]] FunnelConfig
@@ -75,9 +74,7 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
 ## FunnelTokenizer
 
 [[autodoc]] FunnelTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## FunnelTokenizerFast

@@ -7,10 +7,13 @@
 import pathlib
 from typing import Any, Optional, Union
 
+import torch
+from torchvision.io import read_image
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -23,65 +26,14 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_v2_available():
-    from torchvision.io import read_image
-    from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
-    from torchvision.io import read_image
-    from torchvision.transforms import functional as F
-
-
-logger = logging.get_logger(__name__)
-
-
-class YolosFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the YOLOS model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
-    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-        Whether to return segmentation masks.
-    """
-
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
-    return_segmentation_masks: Optional[bool]
+from .image_processing_yolos import YolosImageProcessorKwargs
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -347,22 +299,13 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = YolosFastImageProcessorKwargs
+    valid_kwargs = YolosImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[YolosFastImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+    def __init__(self, **kwargs: Unpack[YolosImageProcessorKwargs]) -> None:
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", self.do_pad))
 
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
+        max_size = None if size is None else kwargs.pop("max_size", 1333)
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
@@ -373,20 +316,6 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `YolosImageProcessorFast.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -497,13 +426,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = (
-            interpolation
-            if interpolation is not None
-            else F.InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else F.InterpolationMode.NEAREST
-        )
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST_EXACT
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
@@ -613,45 +536,6 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[YolosFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
-
-        return super().preprocess(images, annotations, masks_path, **kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -668,7 +552,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
+        pad_size: Optional[SizeDict],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -737,7 +621,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 
@@ -767,51 +651,6 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                 BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
             ]
         return encoded_inputs
-
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`YolosObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation). For visualization, this should be the image size
-                after data augment, but before padding.
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        logger.warning_once(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-        )
-
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
-
-        if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
-
-        # and from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
 
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100

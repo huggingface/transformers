@@ -26,6 +26,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -89,6 +90,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 class PerceptionLMPreTrainedModel(PreTrainedModel):
     config: PerceptionLMConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -109,8 +111,7 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
 class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -140,8 +141,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -155,7 +155,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -179,12 +179,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -256,7 +250,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -323,7 +317,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 @auto_docstring
 class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
@@ -340,12 +334,6 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -355,7 +343,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

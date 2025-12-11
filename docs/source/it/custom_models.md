@@ -37,11 +37,11 @@ Configurazioni differenti ci daranno quindi i differenti possibili tipi di ResNe
 dopo averne controllato la validità.
 
 ```python
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 from typing import List
 
 
-class ResnetConfig(PretrainedConfig):
+class ResnetConfig(PreTrainedConfig):
     model_type = "resnet"
 
     def __init__(
@@ -75,12 +75,12 @@ class ResnetConfig(PretrainedConfig):
 ```
 
 Le tre cose più importanti da ricordare quando scrivi le tue configurazioni sono le seguenti:
-- Devi ereditare da `Pretrainedconfig`,
-- Il metodo `__init__` del tuo `Pretrainedconfig` deve accettare i kwargs,
+- Devi ereditare da `PreTrainedConfig`,
+- Il metodo `__init__` del tuo `PreTrainedConfig` deve accettare i kwargs,
 - I `kwargs` devono essere passati alla superclass `__init__`
 
 L’eredità è importante per assicurarsi di ottenere tutte le funzionalità della libreria 🤗 transformers, 
-mentre gli altri due vincoli derivano dal fatto che un `Pretrainedconfig` ha più campi di quelli che stai settando. 
+mentre gli altri due vincoli derivano dal fatto che un `PreTrainedConfig` ha più campi di quelli che stai settando. 
 Quando ricarichi una config da un metodo `from_pretrained`, questi campi devono essere accettati dalla tua config e
 poi inviati alla superclasse.
 
@@ -102,7 +102,7 @@ config con il metodo `from_pretrained`.
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-Puoi anche usare qualunque altro metodo della classe [`PretrainedConfig`], come [`~PretrainedConfig.push_to_hub`]
+Puoi anche usare qualunque altro metodo della classe [`PreTrainedConfig`], come [`~PreTrainedConfig.push_to_hub`]
 per caricare direttamente la tua configurazione nell'hub.
 
 ## Scrivere un modello personalizzato

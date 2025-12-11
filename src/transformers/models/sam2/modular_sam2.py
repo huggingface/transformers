@@ -14,18 +14,19 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, DefaultFastImageProcessorKwargs
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -37,12 +38,11 @@ from ...image_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
     auto_docstring,
-    is_torch_available,
     logging,
 )
 from ...utils.generic import TransformersKwargs, check_model_inputs
@@ -69,21 +69,16 @@ from .configuration_sam2 import (
 )
 
 
-if is_torch_available():
-    import torch
-    from torch.nn import functional as F
-
-
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: Optional[dict[str, int]]
+    mask_size: dict[str, int]
 
 
 @auto_docstring
@@ -108,15 +103,6 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _get_preprocess_shape(self):
-        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
-
-    def resize(self):
-        raise NotImplementedError("No need to override resize for SAM 2.")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -124,6 +110,19 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         **kwargs,
     ) -> "torch.Tensor":
         return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
@@ -143,11 +142,9 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -281,7 +278,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
             elif not isinstance(masks[i], torch.Tensor):
-                raise ValueError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
+                raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], original_size, mode="bilinear", align_corners=False)
             if apply_non_overlapping_constraints:
                 interpolated_mask = self._apply_non_overlapping_constraints(interpolated_mask)
@@ -290,6 +287,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             output_masks.append(interpolated_mask)
 
         return output_masks
+
+    def _get_preprocess_shape(self):
+        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
+
+    def resize(self):
+        raise NotImplementedError("No need to override resize for SAM 2.")
 
 
 @dataclass
@@ -384,7 +387,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         _, num_channels, height, width = pixel_values.shape
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).permute(0, 2, 3, 1)
         return embeddings
 
 
@@ -419,7 +422,7 @@ class Sam2VisionNeck(nn.Module):
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
             lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -665,31 +668,22 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
-                module.pos_embed_window.data.zero_()
+                init.zeros_(module.pos_embed_window)
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):
@@ -883,12 +877,13 @@ class Sam2PromptEncoder(SamPromptEncoder):
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
 
@@ -1375,7 +1370,7 @@ class Sam2Model(SamModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

@@ -55,28 +55,17 @@ def prepare_led_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -184,10 +173,9 @@ class LEDModelTester:
         model = LEDModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
-        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -294,9 +282,8 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
+
     test_missing_keys = False
-    test_torchscript = False
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -329,7 +316,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -489,7 +476,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -539,7 +526,7 @@ class LEDModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]], device=torch_device
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_inference_head(self):
         model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").to(torch_device)

@@ -106,7 +106,7 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-[`torch.cuda.max_memory_allocated`](https://pytorch.org/docs/stable/generated/torch.cuda.max_memory_allocated.html)를 호출하여 최대 GPU 메모리 할당을 측정해 보겠습니다.
+[`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html)를 호출하여 최대 GPU 메모리 할당을 측정해 보겠습니다.
 
 ```python
 bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
@@ -182,7 +182,7 @@ $$ Y = X * \text{dequantize}(W) $$
 그런 다음 `from_pretrained`에 `load_in_8bit=True` 플래그를 추가하여 8비트 양자화로 모델을 로드할 수 있습니다.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_8bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_8bit=True), pad_token_id=0)
 ```
 
 이제 예제를 다시 실행하고 메모리 사용량을 측정해 봅시다.
@@ -227,7 +227,7 @@ flush()
 이제 4비트 양자화가 제공하는 최대 GPU 메모리 사용량을 확인해 봅시다. 4비트로 모델을 양자화하려면 이전과 동일한 API를 사용하되 이번에는 `load_in_8bit=True` 대신 `load_in_4bit=True`를 전달하면 됩니다.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", quantization_config=BitsAndBytesConfig(load_in_8bit=True), pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -269,7 +269,7 @@ flush()
 
 4비트 양자화는 RTX3090, V100, T4와 같은 GPU에서 모델을 실행할 수 있게 해주며, 이는 대부분의 사람들이 접근할 수 있는 GPU입니다.
 
-양자화에 대한 더 많은 정보를 확인하고 4비트보다 더 적은 GPU VRAM 메모리로 모델을 양자화하거나, 더 많은 양자화 관련 정보를 보려면 [`AutoGPTQ`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#autogptq-integration%60) 구현을 참조하는 것을 추천합니다.
+양자화에 대한 더 많은 정보를 확인하고 4비트보다 더 적은 GPU VRAM 메모리로 모델을 양자화하거나, 더 많은 양자화 관련 정보를 보려면 [`GPT-QModel`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#gptqmodel) 구현을 참조하는 것을 추천합니다.
 
 > 결론적으로, 모델 양자화는 향상된 메모리 효율성과 모델 정확성 간의 균형을 맞추는 것이며, 경우에 따라 추론 시간에도 영향을 미칠 수 있습니다.
 
@@ -319,160 +319,6 @@ $$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \
 현실적으로 플래시 어텐션이 사용 가능한 경우 이를 **사용하지 않을** 이유는 전혀 없습니다. 이 알고리즘은 수학적으로 동일한 출력을 제공하며, 더 빠르고 메모리 효율적입니다.
 
 실제 예를 살펴보겠습니다.
-
-우리의 OctoCoder 모델은 이제 *시스템 프롬프트*가 포함된 훨씬 더 긴 입력 프롬프트를 받게 됩니다. 시스템 프롬프트는 대규모 언어 모델을 사용자의 작업에 맞춘 더 나은 어시스턴트로 유도하는 데 사용됩니다. 다음 예제에서는 OctoCoder를 더 나은 코딩 어시스턴트로 만들기 위한 시스템 프롬프트를 사용합니다.
-
-```python
-system_prompt = """Below are a series of dialogues between various people and an AI technical assistant.
-The assistant tries to be helpful, polite, honest, sophisticated, emotionally aware, and humble but knowledgeable.
-The assistant is happy to help with code questions and will do their best to understand exactly what is needed.
-It also tries to avoid giving false or misleading information, and it caveats when it isn't entirely sure about the right answer.
-That said, the assistant is practical really does its best, and doesn't let caution get too much in the way of being useful.
-
-The Starcoder models are a series of 15.5B parameter models trained on 80+ programming languages from The Stack (v1.2) (excluding opt-out requests).
-The model uses Multi Query Attention, was trained using the Fill-in-the-Middle objective, and with 8,192 tokens context window for a trillion tokens of heavily deduplicated data.
-
------
-
-Question: Write a function that takes two lists and returns a list that has alternating elements from each input list.
-
-Answer: Sure. Here is a function that does that.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(len(list1)):
-       results.append(list1[i])
-       results.append(list2[i])
-   return results
-
-Question: Can you write some test cases for this function?
-
-Answer: Sure, here are some tests.
-
-assert alternating([10, 20, 30], [1, 2, 3]) == [10, 1, 20, 2, 30, 3]
-assert alternating([True, False], [4, 5]) == [True, 4, False, 5]
-assert alternating([], []) == []
-
-Question: Modify the function so that it returns all input elements when the lists have uneven length. The elements from the longer list should be at the end.
-
-Answer: Here is the modified function.
-
-def alternating(list1, list2):
-   results = []
-   for i in range(min(len(list1), len(list2))):
-       results.append(list1[i])
-       results.append(list2[i])
-   if len(list1) > len(list2):
-       results.extend(list1[i+1:])
-   else:
-       results.extend(list2[i+1:])
-   return results
-
------
-"""
-```
-시연을 위해 시스템 프롬프트를 10번 중복하여 증가시켜 플래시 어텐션의 메모리 절약 효과를 관찰할 수 있을 만큼 입력 길이를 충분히 길게 만듭니다. 원래의 텍스트 프롬프트를 다음과 같이 추가합니다. `"Question: Please write a function in Python that transforms bytes to Giga bytes.\n\nAnswer: Here"`
-
-```python
-long_prompt = 10 * system_prompt + prompt
-```
-
-모델을 다시 bfloat16 정밀도로 인스턴스화합니다.
-
-```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", dtype=torch.bfloat16, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("bigcode/octocoder")
-
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-```
-
-이제 플래시 어텐션을 *사용하지 않고* 이전과 동일하게 모델을 실행하여 최대 GPU 메모리 요구량과 추론 시간을 측정해 봅시다.
-
-```python
-import time
-
-start_time = time.time()
-result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**출력**:
-```
-Generated in 10.96854019165039 seconds.
-Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
-````
-
-이전과 동일한 출력을 얻고 있지만, 이번에는 모델이 답변을 여러 번 반복하여 60개의 토큰이 잘릴 때까지 계속됩니다. 시연을 위해 시스템 프롬프트를 10번 반복했기 때문에 모델이 스스로 반복하도록 유도한 결과입니다. 이는 놀라운 일이 아닙니다.
-
-**참고** 실제 응용에서는 시스템 프롬프트를 10번 반복할 필요가 없습니다. 한 번만 사용하면 충분합니다!
-
-최대 GPU 메모리 요구량을 측정해 봅시다.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**출력**:
-```bash
-37.668193340301514
-```
-
-보시다시피 최대 GPU 메모리 요구량이 처음보다 상당히 높아졌습니다. 이는 주로 입력 시퀀스가 길어졌기 때문입니다. 또한 생성 시간이 이제 1분을 넘어갑니다.
-
-다음 실험을 위해 `flush()`를 호출하여 GPU 메모리를 초기화합니다.
-
-```python
-flush()
-```
-
-비교를 위해, 동일한 기능을 실행하되 플래시 어텐션을 활성화해 보겠습니다.
-이를 위해 모델을 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview)로 변환하고, 이를 통해 PyTorch의 [SDPA self-attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention)을 활성화하면 플래시 어텐션을 사용할 수 있습니다.
-
-```python
-model.to_bettertransformer()
-```
-
-이제 이전과 동일한 코드 스니펫을 실행하면, 내부적으로 Transformers가 플래시 어텐션을 사용할 것입니다.
-
-```py
-start_time = time.time()
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-    result = pipe(long_prompt, max_new_tokens=60)[0]["generated_text"][len(long_prompt):]
-
-print(f"Generated in {time.time() - start_time} seconds.")
-result
-```
-
-**출력**:
-```
-Generated in 3.0211617946624756 seconds.
- Sure. Here is a function that does that.\n\ndef bytes_to_giga(bytes):\n   return bytes / 1024 / 1024 / 1024\n\nAnswer: Sure. Here is a function that does that.\n\ndef
-```
-
-이전과 동일한 결과를 얻었지만, 플래시 어텐션 덕분에 매우 큰 속도 향상을 관찰할 수 있습니다.
-
-메모리 소비량을 마지막으로 한 번 더 측정해 봅시다.
-
-```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
-```
-
-**출력**:
-```
-32.617331981658936
-```
-
-그리고 우리는 처음에 보았던 GPU 메모리 요구량인 29GB로 돌아왔습니다.
-
-플래시 어텐션을 사용하여 매우 긴 입력 시퀀스를 전달할 때 처음에 짧은 입력 시퀀스를 전달했을 때와 비교하여 약 100MB 정도의 GPU 메모리를 더 사용한다는 것을 관찰할 수 있습니다.
-
-```py
-flush()
-```
-
-플래시 어텐션 사용에 대한 자세한 정보는 [이 문서 페이지](https://huggingface.co/docs/transformers/en/perf_infer_gpu_one#flashattention-2)를 참조해 주세요.
 
 ## 3. 아키텍처 혁신 [[3-architectural-innovations]]
 
@@ -611,7 +457,7 @@ for _ in range(5):
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", len(past_key_values[0][0]))  # past_key_values 형태: [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values 형태: [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)

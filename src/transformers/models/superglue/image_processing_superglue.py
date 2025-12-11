@@ -35,6 +35,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import requires
 
@@ -43,7 +44,7 @@ if is_torch_available():
     import torch
 
 if TYPE_CHECKING:
-    from .modeling_superglue import KeypointMatchingOutput
+    from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
 if is_vision_available():
     import PIL
@@ -73,8 +74,7 @@ def convert_to_grayscale(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
-    and tensorflow grayscale conversion
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -132,6 +132,15 @@ def validate_and_format_image_pairs(images: ImageInput):
         ):
             return [image for image_pair in images for image in image_pair]
     raise ValueError(error_message)
+
+
+class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 @requires(backends=("torch",))
@@ -262,10 +271,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -292,10 +299,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_resize=do_resize,
@@ -341,15 +345,15 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
+        outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`SuperGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
@@ -390,8 +394,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]

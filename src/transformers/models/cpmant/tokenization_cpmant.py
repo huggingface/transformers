@@ -24,7 +24,7 @@ from transformers.utils import is_rjieba_available, requires_backends
 if is_rjieba_available():
     import rjieba
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -144,8 +144,16 @@ class CpmAntTokenizer(PreTrainedTokenizer):
             line_token=line_token,
             space_token=space_token,
             padding_side=padding_side,
+            token_type_ids_pattern="all_zeros",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="bos",
             **kwargs,
         )
+        for special_token in [space_token, line_token]:
+            token_id = self.added_tokens_encoder.pop(special_token, None)
+            if token_id is not None:
+                self._added_tokens_decoder.pop(token_id, None)
+        self._update_total_vocab_size()
 
     @property
     def bod_token_id(self):
@@ -221,52 +229,6 @@ class CpmAntTokenizer(PreTrainedTokenizer):
                 writer.write(token + "\n")
                 index += 1
         return (vocab_file,)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CPMAnt sequence has the following format:
-
-        - single sequence: `[BOS] Sequence`.
-
-        Args:
-            token_ids_0 (`list[int]`): The first tokenized sequence that special tokens will be added.
-            token_ids_1 (`list[int]`): The optional second tokenized sequence that special tokens will be added.
-
-        Returns:
-            `list[int]`: The model input with special tokens.
-        """
-        if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0
-        return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
-
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`): List of IDs.
-            token_ids_1 (`list[int]`, *optional*): Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
-        return [1] + ([0] * len(token_ids_0))
 
 
 __all__ = ["CpmAntTokenizer"]

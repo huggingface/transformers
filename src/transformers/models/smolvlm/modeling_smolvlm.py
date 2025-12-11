@@ -19,8 +19,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -28,7 +29,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
@@ -48,55 +49,18 @@ from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class SmolVLMRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        SmolVLMRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 @auto_docstring
 class SmolVLMPreTrainedModel(PreTrainedModel):
     config: SmolVLMConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, SmolVLMRMSNorm):
-            module.weight.data.fill_(1.0)
 
 
 class SmolVLMVisionEmbeddings(nn.Module):
@@ -147,11 +111,19 @@ class SmolVLMVisionEmbeddings(nn.Module):
             nb_patches_h = p_attn_mask[:, 0].sum()
             nb_patches_w = p_attn_mask[0].sum()
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=pixel_values.dtype)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=pixel_values.dtype)
+            step_h = 1.0 / nb_patches_h
+            step_w = 1.0 / nb_patches_w
 
-            fractional_coords_h = h_indices / nb_patches_h * (1 - 1e-6)
-            fractional_coords_w = w_indices / nb_patches_w * (1 - 1e-6)
+            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=torch.float32)
+            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=torch.float32)
+            fractional_coords_h = h_indices * step_h
+            fractional_coords_w = w_indices * step_w
+
+            fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+            fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+
+            fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+            fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
             bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
             bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -340,6 +312,7 @@ class SmolVLMEncoder(nn.Module):
 )
 class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     config: SmolVLMVisionConfig
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -363,11 +336,12 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         pixel_values,
         patch_attention_mask: Optional[torch.BoolTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
@@ -384,13 +358,12 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        # The call to `_upad_input` in `_flash_attention_forward` is expensive
-        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
-        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if self.config._attn_implementation != "flash_attention_2":
-            patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-        elif not torch.any(~patch_attention_mask):
-            patch_attention_mask = None
+        # Create the correct attention mask based on the attention implementation
+        patch_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=patch_attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -418,10 +391,8 @@ class SmolVLMBaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
         input) to speed up sequential decoding.
@@ -432,7 +403,7 @@ class SmolVLMBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -498,36 +469,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         self.image_token_id = self.config.image_token_id
 
         self.post_init()
-
-    def enable_input_require_grads(self):
-        """
-        Enables the gradients for the input embeddings.
-
-        This is useful for lora when using gradient checkpointing.
-        c.f. https://github.com/huggingface/peft/issues/1402#issuecomment-1913675032
-
-        Override to set output.requires_grad = True for both the decoder's and vision model's embeddings.
-        """
-
-        def get_lowest_module(module):
-            if len(list(module.children())) == 0:
-                # If the module has no children, it is a leaf module (e.g., Linear, Conv2d, etc.)
-                return module
-            else:
-                # Recursively call the function on each child module
-                return get_lowest_module(list(module.children())[0])
-
-        def make_inputs_require_grads(module, input, output):
-            output.requires_grad_(True)
-
-        self._text_require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
-        self._vision_require_grads_hook = get_lowest_module(self.vision_model).register_forward_hook(
-            make_inputs_require_grads
-        )
-
-    def disable_input_require_grads(self):
-        self._text_require_grads_hook.remove()
-        self._vision_require_grads_hook.remove()
 
     def get_input_embeddings(self):
         return self.text_model.get_input_embeddings()
@@ -740,8 +681,8 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
@@ -752,7 +693,7 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -764,7 +705,7 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
     """
 )
 class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -776,24 +717,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def enable_input_require_grads(self):
-        """
-        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
-        the model weights fixed.
-        """
-
-        def make_inputs_require_grads(module, input, output):
-            output.requires_grad_(True)
-
-        self._text_require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
-        self._vision_require_grads_hook = self.model.vision_model.get_input_embeddings().register_forward_hook(
-            make_inputs_require_grads
-        )
-
-    def disable_input_require_grads(self):
-        self._text_require_grads_hook.remove()
-        self._vision_require_grads_hook.remove()
 
     def get_input_embeddings(self):
         return self.model.text_model.get_input_embeddings()

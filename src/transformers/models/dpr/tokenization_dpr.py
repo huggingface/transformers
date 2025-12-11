@@ -39,6 +39,10 @@ class DPRContextEncoderTokenizer(BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
 
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
+
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
@@ -51,6 +55,10 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
 
 
 DPRSpanPrediction = collections.namedtuple(
@@ -112,7 +120,6 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         return_attention_mask (`bool`, *optional*):
@@ -316,6 +323,10 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(self, *args, do_lower_case=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.do_lower_case = do_lower_case
 
 
 __all__ = ["DPRContextEncoderTokenizer", "DPRQuestionEncoderTokenizer", "DPRReaderOutput", "DPRReaderTokenizer"]

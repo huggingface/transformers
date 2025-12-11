@@ -19,24 +19,24 @@
 # limitations under the License.
 """PyTorch Idefics model."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PretrainedConfig, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import OutputRecorder, check_model_inputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
@@ -60,10 +60,7 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
         If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -76,7 +73,7 @@ class IdeficsBaseModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -95,8 +92,7 @@ class IdeficsCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -109,7 +105,7 @@ class IdeficsCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
@@ -490,7 +486,7 @@ class IdeficsAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_cross_attention: bool = False,
-        config: PretrainedConfig = None,
+        config: Optional[PreTrainedConfig] = None,
         qk_layer_norms: bool = False,
         layer_idx: Optional[int] = None,
     ):
@@ -568,14 +564,13 @@ class IdeficsAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -656,14 +651,13 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = config.dropout
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
@@ -760,7 +754,6 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         if not (hasattr(self, "alpha_cross_attn") and hasattr(self, "alpha_dense")):
             raise ValueError("Alpha parameters not initialized correctly!")
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     @auto_docstring
     def forward(
         self,
@@ -769,7 +762,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         image_hidden_states: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
         cross_attention_gate: Optional[torch.Tensor] = None,
-        past_key_values: Optional[tuple[torch.Tensor]] = None,
+        past_key_values: Optional[Cache] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
@@ -825,6 +818,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
@@ -838,38 +832,26 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(IdeficsAttention, index=1, layer_name="self_attn"),
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
         # base should be used for training from scratch and it contains the correct code.
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, IdeficsRMSNorm):
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, IdeficsVisionEmbeddings):
-            module.class_embedding.data.normal_()
+        super()._init_weights(module)
+        if isinstance(module, IdeficsVisionEmbeddings):
+            init.normal_(module.class_embedding)
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
-                module.alpha_cross_attn.data.zero_()
-                module.alpha_dense.data.zero_()
+                init.zeros_(module.alpha_cross_attn)
+                init.zeros_(module.alpha_dense)
             elif self.config.alpha_initializer == "ones":
-                module.alpha_cross_attn.data.fill_(1.0)
-                module.alpha_dense.data.fill_(1.0)
+                init.ones_(module.alpha_cross_attn)
+                init.ones_(module.alpha_dense)
             elif self.config.alpha_initializer in {"normal", "gaussian", "random"}:
-                module.alpha_cross_attn.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
-                module.alpha_dense.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_cross_attn, mean=0.0, std=self.config.alphas_initializer_range)
+                init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
-            module.latents.data.normal_()
+            init.normal_(module.latents)
 
 
 @auto_docstring
@@ -1002,7 +984,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if sum([x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]]) != 2:
+        if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
@@ -1112,7 +1094,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
 
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config, vision_model=None):
         super().__init__(config)
@@ -1125,30 +1107,14 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             bias=False,
             partially_freeze=config.freeze_lm_head,
         )
+        if config.additional_vocab_size > 0:
+            self._tied_weights_keys = {
+                "lm_head.weight": "model.embed_tokens.weight",
+                "lm_head.additional_fc.weight": "model.embed_tokens.additional_embedding.weight",
+            }
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def tie_weights(self):
-        """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
-        IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
-
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings.weight = input_embeddings.weight
-            if input_embeddings.num_additional_embeddings > 0:
-                assert output_embeddings.out_additional_features == input_embeddings.num_additional_embeddings
-                output_embeddings.additional_fc.weight = input_embeddings.additional_embedding.weight
-
-        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
-            output_embeddings.out_features = input_embeddings.num_embeddings
-            if hasattr(output_embeddings, "out_additional_features") and hasattr(
-                input_embeddings, "num_additional_embeddings"
-            ):
-                output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -1167,6 +1133,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, IdeficsCausalLMOutputWithPast]:
         r"""
@@ -1206,8 +1173,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         >>> generate_ids = model.generate(**inputs, max_new_tokens=6)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True)
         ```"""
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: IdeficsBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1224,8 +1190,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

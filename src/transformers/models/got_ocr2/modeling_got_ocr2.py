@@ -30,6 +30,7 @@ import torch.nn.functional as F
 
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -276,7 +277,8 @@ class GotOcr2VisionLayer(GradientCheckpointingLayer):
 @auto_docstring
 class GotOcr2PreTrainedModel(PreTrainedModel):
     config: GotOcr2Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
@@ -286,15 +288,16 @@ class GotOcr2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
 
 
 @dataclass
@@ -399,6 +402,7 @@ class GotOcr2VisionNeck(nn.Module):
 
 class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
+    input_modalities = ("image",)
 
     def __init__(self, config: GotOcr2VisionConfig):
         super().__init__(config)
@@ -433,7 +437,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> GotOcr2VisionEncoderOutput:
@@ -485,8 +489,7 @@ class GotOcr2CausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -497,7 +500,7 @@ class GotOcr2CausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -512,8 +515,7 @@ class GotOcr2CausalLMOutputWithPast(ModelOutput):
 class GotOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -531,7 +533,9 @@ class GotOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class GotOcr2Model(GotOcr2PreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
 
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
@@ -546,12 +550,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -658,12 +656,12 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
 )
 class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
@@ -680,12 +678,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -699,19 +691,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

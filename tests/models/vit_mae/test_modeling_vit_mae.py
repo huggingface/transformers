@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -34,7 +34,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -179,10 +179,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -265,7 +262,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -321,23 +318,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # This is an excepton in the module, it's initialized with xavier_uniform without using initializer_range
-                if name.endswith("patch_embeddings.projection.weight"):
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -358,7 +338,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_pretraining(self):
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -367,8 +346,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = int((vit_mae_config.image_size // vit_mae_config.patch_size) ** 2)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -394,7 +371,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model
@@ -403,8 +379,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt", do_resize=False).to(torch_device)
 
-        # prepare a noise vector that will be also used for testing the TF model
-        # (this way we can ensure that the PT and TF models operate on the same inputs)
         vit_mae_config = ViTMAEConfig()
         num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
         noise = torch.from_numpy(np.random.uniform(size=(1, num_patches))).to(device=torch_device)
@@ -421,7 +395,6 @@ class ViTMAEModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding_custom_sizes(self):
         # Ensure custom sizes are correctly handled when interpolating the position embeddings
 
-        # make random mask reproducible across the PT and TF model
         np.random.seed(2)
 
         model = self.default_model

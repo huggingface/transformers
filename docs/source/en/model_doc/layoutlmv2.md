@@ -55,10 +55,12 @@ this https URL.*
 
 LayoutLMv2 depends on `detectron2`, `torchvision` and `tesseract`. Run the
 following to install them:
+
 ```bash
 python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 python -m pip install torchvision tesseract
 ```
+
 (If you are developing for LayoutLMv2, note that passing the doctests also requires the installation of these packages.)
 
 ## Usage tips
@@ -144,7 +146,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A notebook on how to [finetune LayoutLMv2 for question-answering on DocVQA dataset](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLMv2/DocVQA/Fine_tuning_LayoutLMv2ForQuestionAnswering_on_DocVQA.ipynb).
 - See also: [Question answering task guide](../tasks/question_answering)
 - See also: [Document question answering task guide](../tasks/document_question_answering)
-
 
 <PipelineTag pipeline="token-classification"/>
 
@@ -300,11 +301,6 @@ print(encoding.keys())
 ## LayoutLMv2Config
 
 [[autodoc]] LayoutLMv2Config
-
-## LayoutLMv2FeatureExtractor
-
-[[autodoc]] LayoutLMv2FeatureExtractor
-    - __call__
 
 ## LayoutLMv2ImageProcessor
 

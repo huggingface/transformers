@@ -6,17 +6,18 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # Example where we only want to overwrite the defaults of an init
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-class NewModelConfig(PretrainedConfig):
+class NewModelConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NewModelModel`]. It is used to instantiate an NewModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the NewModel-7B.
     e.g. [google/new_model-7b](https://huggingface.co/google/new_model-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the NewModel model. Defines the number of different tokens that can be represented by the
@@ -41,9 +42,6 @@ class NewModelConfig(PretrainedConfig):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The legacy activation function. It is overwritten by the `hidden_activation`.
-        hidden_activation (`str` or `function`, *optional*):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
         max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -67,6 +65,11 @@ class NewModelConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        use_bidirectional_attention (`bool`, *optional*):
+            If True, the model will attend to all text tokens instead of using a causal mask.
+
     ```python
     >>> from transformers import NewModelModel, NewModelConfig
     >>> # Initializing a NewModel new_model-7b style configuration
@@ -116,6 +119,8 @@ class NewModelConfig(PretrainedConfig):
         rope_theta=10000.0,
         attention_bias=False,
         attention_dropout=0.0,
+        use_bidirectional_attention=False,
+        layer_types=None,
         **kwargs,
     ):
         super().__init__(
@@ -134,13 +139,18 @@ class NewModelConfig(PretrainedConfig):
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.hidden_activation = hidden_activation
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.use_bidirectional_attention = use_bidirectional_attention
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
     @property
     def num_heads(self):

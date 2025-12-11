@@ -36,10 +36,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] trainer_callback.CallbackHandler
 
-## 분산 평가 (Distributed Evaluation) [[transformers.trainer_pt_utils.DistributedTensorGatherer]]
-
-[[autodoc]] trainer_pt_utils.DistributedTensorGatherer
-
 ## Trainer 인자 파서 (Trainer Argument Parser) [[transformers.HfArgumentParser]]
 
 [[autodoc]] HfArgumentParser

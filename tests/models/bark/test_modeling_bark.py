@@ -113,11 +113,8 @@ class BarkSemanticModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -249,11 +246,8 @@ class BarkCoarseModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -385,15 +379,12 @@ class BarkFineModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         # randint between self.n_codes_given - 1 and self.n_codes_total - 1
         codebook_idx = ids_tensor((1,), self.n_codes_total - self.n_codes_given).item() + self.n_codes_given
 
         inputs_dict = {
             "codebook_idx": codebook_idx,
             "input_ids": input_ids,
-            "head_mask": head_mask,
             "attention_mask": input_mask,
         }
 
@@ -499,7 +490,7 @@ class BarkModelTester:
         self.is_training = is_training
 
     def get_config(self):
-        return BarkConfig.from_sub_model_configs(
+        return BarkConfig(
             self.semantic_model_tester.get_config(),
             self.coarse_acoustics_model_tester.get_config(),
             self.fine_acoustics_model_tester.get_config(),
@@ -529,11 +520,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -552,7 +539,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -610,6 +597,10 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip("Bark has no base model due to special archiecture")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @require_torch
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -619,11 +610,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    test_model_parallel = False
-    # no model_parallel for now
 
     test_resize_embeddings = True
 
@@ -642,7 +629,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -700,20 +687,17 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    @unittest.skip("Bark has no base model due to special archiecture")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 @require_torch
 class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BarkFineModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
-    fx_compatible = False
     test_missing_keys = False
-    test_pruning = False
-    # no model_parallel for now
-    test_model_parallel = False
-
-    # torchscript disabled for now because forward with an int
-    test_torchscript = False
 
     test_resize_embeddings = True
 
@@ -732,7 +716,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -884,6 +868,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -926,10 +911,11 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@slow
 class BarkModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return BarkModel.from_pretrained("suno/bark").to(torch_device)
+        return BarkModel.from_pretrained("suno/bark", revision="refs/pr/25", trust_remote_code=True).to(torch_device)
 
     @cached_property
     def processor(self):
@@ -963,7 +949,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         # Bark has custom generate without inheriting GenerationMixin. This test could prevent regression.
         self.assertTrue(self.model.can_generate())
 
-    @slow
     def test_generate_semantic(self):
         input_ids = self.inputs
 
@@ -980,7 +965,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             )
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_semantic_early_stop(self):
         input_ids = self.inputs
         min_eos_p = 0.01
@@ -1023,7 +1007,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertLess(len(output_ids[0, :].tolist()), len(output_ids_without_min_eos_p[0, :].tolist()))
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_coarse(self):
         input_ids = self.inputs
 
@@ -1052,7 +1035,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_fine(self):
         input_ids = self.inputs
 
@@ -1102,7 +1084,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(output_ids[0, :, : len(expected_output_ids[0])].tolist(), expected_output_ids)
 
-    @slow
     def test_generate_end_to_end(self):
         input_ids = self.inputs
 
@@ -1110,7 +1091,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids)
             self.model.generate(**{key: val for (key, val) in input_ids.items() if key != "history_prompt"})
 
-    @slow
     def test_generate_end_to_end_with_args(self):
         input_ids = self.inputs
 
@@ -1118,7 +1098,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
 
-    @slow
     def test_generate_batching(self):
         args = {"do_sample": False, "temperature": None}
 
@@ -1149,7 +1128,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         outputs, _ = self.model.generate(**s1, **args, return_output_lengths=True)
         self.assertTrue((outputs == output1).all().item())
 
-    @slow
     def test_generate_end_to_end_with_sub_models_args(self):
         input_ids = self.inputs
 
@@ -1180,7 +1158,6 @@ class BarkModelIntegrationTests(unittest.TestCase):
         )
 
     @require_torch_accelerator
-    @slow
     def test_generate_end_to_end_with_offload(self):
         input_ids = self.inputs
 

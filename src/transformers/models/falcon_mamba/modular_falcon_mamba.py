@@ -17,11 +17,10 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -43,18 +42,13 @@ if is_mambapy_available():
 else:
     pscan = None
 
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
+selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn = (
+    None,
+    None,
+    None,
+    None,
+    None,
+)
 
 
 class FalconMambaConfig(MambaConfig):
@@ -64,8 +58,8 @@ class FalconMambaConfig(MambaConfig):
     defaults will yield a similar configuration to that of the FALCON_MAMBA
     [tiiuae/falcon-mamba-7b](https://huggingface.co/tiiuae/falcon-mamba-7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -205,7 +199,7 @@ class FalconMambaCache(MambaCache):
     Cache for falcon_mamba model which does not have attention mechanism and key value states.
 
     Arguments:
-        config (`PretrainedConfig):
+        config (`PreTrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
         max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
@@ -234,8 +228,6 @@ class FalconMambaCache(MambaCache):
         ```
     """
 
-    pass
-
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """
@@ -259,15 +251,15 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if not is_fast_path_available:
             if self.use_falcon_mambapy:
                 if is_mambapy_available():
                     logger.warning_once(
                         "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation and"
-                        " https://github.com/Dao-AILab/causal-conv1d"
+                        " is None. Falling back to the mamba.py backend. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                        " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d"
                     )
                 else:
                     raise ImportError(
@@ -276,12 +268,13 @@ class FalconMambaMixer(MambaMixer):
             else:
                 logger.warning_once(
                     "The fast path is not available because one of `(selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)`"
-                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation and"
-                    " https://github.com/Dao-AILab/causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
+                    " is None. Falling back to the sequential implementation of Mamba, as use_mambapy is set to False. To install follow https://github.com/state-spaces/mamba/#installation for mamba-ssm and"
+                    " https://github.com/Dao-AILab/causal-conv1d or `pip install kernels` for causal-conv1d. For the mamba.py backend, follow https://github.com/alxndrTL/mamba.py."
                 )
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -300,9 +293,8 @@ class FalconMambaMixer(MambaMixer):
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            contextualized_states = mamba_inner_fn(
+            contextualized_states = falcon_mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -517,9 +509,9 @@ class FalconMambaMixer(MambaMixer):
         attention_mask: Optional[torch.LongTensor] = None,
     ):
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 

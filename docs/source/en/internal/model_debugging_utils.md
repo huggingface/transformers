@@ -21,9 +21,7 @@ provides for it.
 
 Most of those are only useful if you are adding new models in the library.
 
-
 ## Model addition debuggers
-
 
 ### Model addition debugger - context manager for model adders
 
@@ -71,7 +69,6 @@ with model_addition_debugger_context(
     output = model.forward(**inputs)
 
 ```
-
 
 ### Reading results
 
@@ -221,9 +218,9 @@ path reference to the associated `.safetensors` file. Each tensor is written to 
 the state dictionary. File names are constructed using the `module_path` as a prefix with a few possible postfixes that
 are built recursively.
 
-*   Module inputs are denoted with the `_inputs` and outputs by `_outputs`.
-*   `list` and `tuple` instances, such as `args` or function return values, will be postfixed with `_{index}`.
-*   `dict` instances will be postfixed with `_{key}`.
+* Module inputs are denoted with the `_inputs` and outputs by `_outputs`.
+* `list` and `tuple` instances, such as `args` or function return values, will be postfixed with `_{index}`.
+* `dict` instances will be postfixed with `_{key}`.
 
 ### Comparing between implementations
 
@@ -231,14 +228,11 @@ Once the forward passes of two models have been traced by the debugger, one can 
 below: we can see slight differences between these two implementations' key projection layer. Inputs are mostly
 identical, but not quite. Looking through the file differences makes it easier to pinpoint which layer is wrong.
 
-
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/files_difference_debugging.png)
-
 
 ### Limitations and scope
 
-This feature will only work for torch-based models, and would require more work and case-by-case approach for say
-`jax`-based models that are usually compiled. Models relying heavily on external kernel calls may work, but trace will
+This feature will only work for torch-based models. Models relying heavily on external kernel calls may work, but trace will
 probably miss some things. Regardless, any python implementation that aims at mimicking another implementation can be
 traced once instead of reran N times with breakpoints.
 
@@ -254,13 +248,14 @@ layers.
 
 This small util is a power user tool intended for model adders and maintainers. It lists all test methods
 existing in `test_modeling_common.py`, inherited by all model tester classes, and scans the repository to measure
-how many tests are being skipped and for which models. 
+how many tests are being skipped and for which models.
 
 ### Rationale
 
 When porting models to transformers, tests fail as they should, and sometimes `test_modeling_common` feels irreconcilable with the peculiarities of our brand new model. But how can we be sure we're not breaking everything by adding a seemingly innocent skip?
 
 This utility:
+
 - scans all test_modeling_common methods
 - looks for times where a method is skipped
 - returns a summary json you can load as a DataFrame/inspect
@@ -269,8 +264,7 @@ This utility:
 
 ![download-icon](https://huggingface.co/datasets/huggingface/documentation-images/resolve/f7f671f69b88ce4967e19179172c248958d35742/transformers/tests_skipped_visualisation.png)
 
-
-### Usage 
+### Usage
 
 You can run the skipped test analyzer in two ways:
 
@@ -286,7 +280,7 @@ python utils/scan_skipped_tests.py --output_dir path/to/output
 
 **Example output:**
 
-```
+```text
 🔬 Parsing 331 model test files once each...
 📝 Aggregating 224 tests...
   (224/224) test_update_candidate_strategy_with_matches_1es_3d_is_nonecodet_schedule_fa_kwargs
@@ -326,7 +320,7 @@ df.sort_values(by=['skipped_proportion'], ascending=False)
 You can focus on a specific test method using `--test_method_name`:
 
 ```bash
-$ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
+python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
 ```
 
 - `--test_method_name`: Name of the test method to scan (e.g., `test_inputs_embeds`).
@@ -351,10 +345,95 @@ Skipped : 124/323 (38.4%)
  - bit: Bit does not use inputs_embeds
  - blip: Blip does not use inputs_embeds
  - blip_2: Inputs_embeds is tested in individual model tests
- - bridgetower: 
+ - bridgetower:
  - canine: CANINE does not have a get_input_embeddings() method.
  - ...
 
 📄 JSON saved to /home/pablo/git/transformers/scan_test_inputs_embeds.json
 
 ```
+
+## Modular model detector
+
+### Code similarity analyzer - for model adders
+
+This utility analyzes code similarities between model implementations to identify opportunities for modularization. It compares a new or existing modeling file against all models in the library using embedding-based and token-based similarity metrics.
+
+### Rationale
+
+When adding a new model to transformers, many components (attention layers, MLPs, outputs, etc.) may already exist in similar form in other models. Instead of implementing everything from scratch, model adders can identify which existing classes are similar and potentially reusable through modularization.
+
+The tool computes two similarity scores:
+
+- **Embedding score**: Uses semantic code embeddings (via `Qwen/Qwen3-Embedding-4B`) to detect functionally similar code even with different naming
+- **Jaccard score**: Measures token set overlap to identify structurally similar code patterns
+
+A score of 1.00 means the code is identical.
+
+### Usage
+
+From the root of the `transformers` repository:
+
+```bash
+python utils/modular_model_detector.py --modeling-file path/to/modeling_file.py
+```
+
+The tool will automatically download the pre-built index from the Hub (requires RAM/VRAM for the embedding model).
+
+**Example output:**
+
+```text
+Loading checkpoint shards: 100%|████████████████████| 2/2 [00:00<00:00, 33.62it/s]
+encoding 21 query definitions with Qwen/Qwen3-Embedding-4B (device=cuda, batch=16, max_length=4096)
+
+stuff.py::Beit3ImageTextMatchingOutput:
+embedding:
+    blip_2::Blip2ImageTextMatchingModelOutput (0.9994)
+    chinese_clip::ChineseCLIPOutput (0.9818)
+    owlvit::OwlViTOutput (0.9818)
+jaccard:
+    owlv2::Owlv2Output (0.9667)
+    metaclip_2::MetaClip2Output (0.9667)
+    altclip::AltCLIPOutput (0.9667)
+intersection:
+    blip::BlipOutput
+    owlvit::OwlViTOutput
+
+stuff.py::Beit3MLP:
+embedding:
+    efficientloftr::EfficientLoFTRMLP (0.9718)
+    seggpt::SegGptMlp (0.9650)
+jaccard:
+    chinese_clip::ChineseCLIPTextSelfOutput (0.5294)
+    bert::BertSelfOutput (0.5294)
+intersection:
+```
+
+The `intersection` field shows classes that appear in both top-5 results, indicating high confidence for modularization candidates.
+
+### Building a custom index
+
+To rebuild the index from your local codebase (useful after adding new models or using a different embedding model):
+
+```bash
+python utils/modular_model_detector.py --build
+```
+
+To push the rebuilt index to a Hub dataset:
+
+```bash
+python utils/modular_model_detector.py --build --push-new-index --hub-dataset your-org/your-dataset
+```
+
+### Options
+
+- `--modeling-file`: Path to the modeling file to analyze
+- `--build`: Build the code similarity index from all modeling files in `src/transformers/models/`
+- `--push-new-index`: After building, push the index to a Hub dataset (requires `--build`)
+- `--hub-dataset`: Hub dataset repository ID to pull/push the index (default: `hf-internal-testing/transformers_code_embeddings`)
+
+### Limitations
+
+This tool requires GPU/CPU resources to run the embedding model (`Qwen/Qwen3-Embedding-4B`). The pre-built index is downloaded from the Hub by default, which requires an internet connection on first use.
+
+Results are suggestions based on code similarity and should be manually reviewed before modularization. High similarity scores don't guarantee perfect compatibility.

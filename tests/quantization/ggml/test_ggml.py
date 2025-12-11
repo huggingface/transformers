@@ -16,7 +16,14 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import (
+    AddedToken,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    UMT5Config,
+    UMT5EncoderModel,
+)
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
@@ -303,6 +310,8 @@ class GgufModelTests(unittest.TestCase):
     gemma3_vision_model_id = "unsloth/gemma-3-4b-it-GGUF"
     qwen3_model_id = "Qwen/Qwen3-0.6B-GGUF"
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
+    umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
+    lfm2_model_id = "LiquidAI/LFM2-1.2B-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -341,6 +350,8 @@ class GgufModelTests(unittest.TestCase):
     fp16_deci_model_id = "decilm-7b-uniform-gqa-f16.gguf"
     q8_0_qwen3_model_id = "Qwen3-0.6B-Q8_0.gguf"
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
+    q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
+    q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
 
     example_text = "Hello"
 
@@ -1071,4 +1082,56 @@ class GgufModelTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello, I am a 20 year old male"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_umt5_encoder_q8_0(self):
+        """
+        Verifies that a UMT5 encoder loads directly from a GGUF file using
+        UMT5EncoderModel.from_pretrained(...), and the config is correctly UMT5.
+        """
+        model = UMT5EncoderModel.from_pretrained(
+            self.umt5_encoder_model_id,
+            gguf_file=self.q8_0_umt5_encoder_model_id,
+            dtype=torch.float16,
+            device_map="auto",
+        )
+        model.eval()
+
+        self.assertIsInstance(model, UMT5EncoderModel)
+        self.assertIsInstance(model.config, UMT5Config)
+        self.assertEqual(model.config.model_type, "umt5")
+        self.assertIn("UMT5EncoderModel", getattr(model.config, "architectures", []))
+
+        input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long).to(torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+
+        self.assertTrue(hasattr(outputs, "last_hidden_state"))
+        self.assertEqual(outputs.last_hidden_state.dim(), 3)  # (batch, seq_len, hidden)
+
+        EXPECTED_OUTPUT = torch.tensor(
+            [
+                [-0.0010, -0.0145, 0.0133],
+                [-0.0006, 0.1814, 0.1132],
+                [0.0005, 0.0083, -0.0285],
+            ]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], EXPECTED_OUTPUT, rtol=6e-3, atol=4e-4)
+
+    @require_read_token
+    ## to be precise, it currently require upstream gguf-py to be installed as lfm2 is not yet present in gguf 0.17.1
+    @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
+    def test_lfm2_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-1.2B")
+        model = AutoModelForCausalLM.from_pretrained(
+            self.lfm2_model_id,
+            gguf_file=self.q4_k_m_lfm2_model_id,
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)

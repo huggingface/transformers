@@ -1,4 +1,4 @@
-### `tiny-agents` CLI and MCP Tools
+# `tiny-agents` CLI and MCP Tools
 
 To showcase the use of MCP tools, let's see how to integrate the `transformers serve` server with the [`tiny-agents`](https://huggingface.co/blog/python-tiny-agents) CLI.
 
@@ -42,4 +42,3 @@ Image URL: https://evalstate-flux1-schnell.hf.space/gradio_api/file=/tmp/gradio/
 
 I have generated an image of a cat on the moon using the Flux 1 Schnell Image Generator. The image is 1024x1024 pixels and was created with 4 inference steps. Let me know if you would like to make any changes or need further assistance!
 ```
-
