@@ -21,7 +21,7 @@ specific language governing permissions and limitations under the License.
 
 # Pixo
 
-[Pixo]() is a vision foundation model that uses [ViT](./vit) as a feature extractor for multiple downstream tasks like depth estimation, semantic segmentation, feed-forward 3D reconstruction, robotics, and image classification. It is built on the Masked Autoencoder (MAE) pre-training framework, with four minimal yet cricait
+[Pixo]() is a vision foundation model that uses [ViT](./vit) as a feature extractor for multiple downstream tasks like depth estimation, semantic segmentation, feed-forward 3D reconstruction, robotics, and image classification. It is built on the Masked Autoencoder (MAE) pre-training framework, with four minimal yet critical updates: 1) deeper decoder, 2) larger masking granularity, 3) more class tokens, and 4) web-scale curated training data.
 
 You can find all the original Pixo checkpoints under the [Pixo]() collection.
 
