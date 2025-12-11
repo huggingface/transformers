@@ -34,34 +34,33 @@ jobs:
       - run: pip install -e .[torch]
       - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            dist/**
+            build/**
+
   upload_package:
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: build_and_test
+    # if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    environment: pypi-release
+    permissions:
+      # IMPORTANT: this permission is mandatory for Trusted Publishing
+      id-token: write
     steps:
-      - run: echo "Should only run on tags"
+      - uses: actions/checkout@v4
 
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: .   # will recreate dist/ and build/ here
 
-#  upload_package:
-#    name: Upload package to PyPi
-#    runs-on: ubuntu-latest
-#    needs: [build]
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Install Python
-#        uses: actions/setup-python@v5
-#        with:
-#          python-version: "3.13"
-#          architecture: x64
-#
-#      - uses: actions/download-artifact@v4
-#        with:
-#          path: ./bindings/python/dist
-#          merge-multiple: true
-#          # Temporary deactivation while testing abi3 CI
-#          # - name: Upload to PyPi
-#          #   working-directory: ./bindings/python
-#          #   run: |
-#          #     pip install twine
-#          #     twine upload dist/* -u __token__ -p "$PYPI_TOKEN"
+      - name: Publish package distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
