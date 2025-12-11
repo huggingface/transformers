@@ -121,7 +121,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Prepare the generation config by updating with default values if not already set by users
         self.assistant_generation_config = copy.deepcopy(assistant_model.generation_config)
         global_defaults = self.assistant_generation_config._get_default_generation_params()
-        _ = self.assistant_generation_config.update(**global_defaults, defaults_only=True)
+        self.assistant_generation_config.update(**global_defaults, defaults_only=True)
         self.num_assistant_tokens = self.assistant_generation_config.num_assistant_tokens
         self.assistant_confidence_threshold = self.assistant_generation_config.assistant_confidence_threshold
 
