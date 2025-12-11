@@ -798,7 +798,7 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        dtype = self.config.dtype
+        dtype = self._dtype
         if isinstance(dtype, str):
             if hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
@@ -1227,7 +1227,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config = config
         if getattr(self.config, "dtype", None) is None:
             default_dtype = torch.get_default_dtype()
-            self.config.dtype = default_dtype
+            self._dtype = default_dtype
+        else:
+            self._dtype = self.config.dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1479,6 +1481,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
+        cls._dtype = dtype
         return dtype_orig
 
     @property
@@ -3821,7 +3824,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        dtype = kwargs.pop("dtype", None)
+        dtype = kwargs.pop("dtype", "auto")
         torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
