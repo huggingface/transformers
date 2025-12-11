@@ -715,7 +715,7 @@ class TransformersKwargs(TypedDict, total=False):
     cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: int | None
     max_length_k: int | None
-    position_ids: Optional["torch.LongTensor"] = (None,)
+    position_ids: Optional["torch.LongTensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
