@@ -312,7 +312,6 @@ quantized_model = AutoModelForImageTextToText.from_pretrained(
 quantized_model = torch.compile(quantized_model)
 ```
 
-Infer like usual.
 
 ```python
 messages = [
