@@ -1235,7 +1235,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _checkpoint_conversion_mapping = {
         "^visual": "model.visual",
         "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector))": "model.language_model",
+        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
     }
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 

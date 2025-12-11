@@ -1334,7 +1334,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     _checkpoint_conversion_mapping = {
         "^visual": "model.visual",
         "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector))": "model.language_model",
+        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
     }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]

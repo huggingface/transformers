@@ -56,8 +56,8 @@ class PaddleOCRVLVisionText2TextModelTester:
         batch_size=7,
         seq_length=13,
         num_channels=3,
-        image_height=252,
-        image_width=616,
+        image_height=28,
+        image_width=28,
         text_config={
             "pad_token_id": 0,
             "bos_token_id": 1,
@@ -73,7 +73,7 @@ class PaddleOCRVLVisionText2TextModelTester:
             "max_position_embeddings": 131072,
             "model_type": "paddleocr_vl",
             "num_attention_heads": 16,
-            "num_hidden_layers": 18,
+            "num_hidden_layers": 2,
             "num_key_value_heads": 2,
             "rms_norm_eps": 1e-05,
             "rope_scaling": {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"},
@@ -92,11 +92,10 @@ class PaddleOCRVLVisionText2TextModelTester:
             "model_type": "paddleocr_vl",
             "num_attention_heads": 16,
             "num_channels": 3,
-            "num_hidden_layers": 27,
+            "num_hidden_layers": 2,
             "pad_token_id": 0,
             "patch_size": 14,
             "spatial_merge_size": 2,
-            # "torch_dtype": "bfloat16"
         },
     ):
         self.parent = parent
@@ -117,7 +116,7 @@ class PaddleOCRVLVisionText2TextModelTester:
         self.image_width = image_width
         self.is_training = is_training
         self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 198
+        self.num_image_tokens = 1
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
@@ -158,7 +157,7 @@ class PaddleOCRVLVisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 18, 44]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -218,6 +217,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 
+    # PaddleOCRVL has pixel_values shaped as (bs*patch_len, image_channels, patch_size, patch_size) so we can't slice to batches in generate
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -295,10 +295,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_can_load_from_already_mapped_keys(self):
         pass
 
-    @unittest.skip(reason="PaddleOCRVL needs to apply weight conversions.")
-    def test_from_pretrained_no_checkpoint(self):
-        pass
-
     @pytest.mark.generate
     @unittest.skip(reason="PaddleOCRVL does not support beam search.")
     def test_generate_from_inputs_embeds_1_beam_search(self, _, num_beams):
@@ -317,10 +313,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     @unittest.skip("PaddleOCRVL does not support this test.")
     def test_model_is_small(self):
-        pass
-
-    @unittest.skip("PaddleOCRVL does not support this test.")
-    def test_num_layers_is_small(self):
         pass
 
 
