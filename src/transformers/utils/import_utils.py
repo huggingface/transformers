@@ -45,7 +45,9 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
 
 
-def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
+def _is_package_available(
+    pkg_name: str, return_version: bool = False
+) -> tuple[bool, str] | bool:
     """Check if `pkg_name` exist, and optionally try to get its version"""
     spec = importlib.util.find_spec(pkg_name)
     package_exists = spec is not None
@@ -110,10 +112,14 @@ KERNELS_MIN_VERSION = "0.9.0"
 @lru_cache
 def is_torch_available() -> bool:
     try:
-        is_available, torch_version = _is_package_available("torch", return_version=True)
+        is_available, torch_version = _is_package_available(
+            "torch", return_version=True
+        )
         parsed_version = version.parse(torch_version)
         if is_available and parsed_version < version.parse("2.2.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
+            logger.warning_once(
+                f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}"
+            )
         return is_available and version.parse(torch_version) >= version.parse("2.2.0")
     except packaging.version.InvalidVersion:
         return False
@@ -136,7 +142,9 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False) ->
         return False
 
     if accept_dev:
-        return version.parse(version.parse(get_torch_version()).base_version) >= version.parse(library_version)
+        return version.parse(
+            version.parse(get_torch_version()).base_version
+        ) >= version.parse(library_version)
     else:
         return version.parse(get_torch_version()) >= version.parse(library_version)
 
@@ -152,7 +160,9 @@ def is_torch_less_or_equal(library_version: str, accept_dev: bool = False) -> bo
         return False
 
     if accept_dev:
-        return version.parse(version.parse(get_torch_version()).base_version) <= version.parse(library_version)
+        return version.parse(
+            version.parse(get_torch_version()).base_version
+        ) <= version.parse(library_version)
     else:
         return version.parse(get_torch_version()) <= version.parse(library_version)
 
@@ -211,7 +221,9 @@ def is_torch_mps_available(min_version: str | None = None) -> bool:
         import torch
 
         if hasattr(torch.backends, "mps"):
-            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            backend_available = (
+                torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            )
             if min_version is not None:
                 flag = version.parse(get_torch_version()) >= version.parse(min_version)
                 backend_available = backend_available and flag
@@ -279,13 +291,17 @@ def is_torch_mlu_available() -> bool:
     import torch
     import torch_mlu  # noqa: F401
 
-    pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
+    pytorch_cndev_based_mlu_check_previous_value = os.environ.get(
+        "PYTORCH_CNDEV_BASED_MLU_CHECK"
+    )
     try:
         os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
         available = torch.mlu.is_available()
     finally:
         if pytorch_cndev_based_mlu_check_previous_value:
-            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
+            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = (
+                pytorch_cndev_based_mlu_check_previous_value
+            )
         else:
             os.environ.pop("PYTORCH_CNDEV_BASED_MLU_CHECK", None)
 
@@ -302,8 +318,12 @@ def is_torch_musa_available(check_device=False) -> bool:
     import torch_musa  # noqa: F401
 
     torch_musa_min_version = "0.33.0"
-    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_musa_min_version):
+    accelerate_available, accelerate_version = _is_package_available(
+        "accelerate", return_version=True
+    )
+    if accelerate_available and version.parse(accelerate_version) < version.parse(
+        torch_musa_min_version
+    ):
         return False
 
     if check_device:
@@ -322,9 +342,13 @@ def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False) -> bool:
     Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
     the USE_TORCH_XLA to false.
     """
-    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+    assert not (
+        check_is_tpu and check_is_gpu
+    ), "The check_is_tpu and check_is_gpu cannot both be true."
 
-    torch_xla_available = USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
+    torch_xla_available = (
+        USE_TORCH_XLA in ENV_VARS_TRUE_VALUES and _is_package_available("torch_xla")
+    )
     if not torch_xla_available:
         return False
 
@@ -349,8 +373,12 @@ def is_torch_hpu_available() -> bool:
         return False
 
     torch_hpu_min_accelerate_version = "1.5.0"
-    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    if accelerate_available and version.parse(accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
+    accelerate_available, accelerate_version = _is_package_available(
+        "accelerate", return_version=True
+    )
+    if accelerate_available and version.parse(accelerate_version) < version.parse(
+        torch_hpu_min_accelerate_version
+    ):
         return False
 
     import torch
@@ -367,7 +395,9 @@ def is_torch_hpu_available() -> bool:
     # This can be removed once bug is fixed but for now we need it.
     original_gather = torch.gather
 
-    def patched_gather(input: torch.Tensor, dim: int, index: torch.LongTensor) -> torch.Tensor:
+    def patched_gather(
+        input: torch.Tensor, dim: int, index: torch.LongTensor
+    ) -> torch.Tensor:
         if input.dtype == torch.int64 and input.device.type == "hpu":
             return original_gather(input.to(torch.int32), dim, index).to(torch.int64)
         else:
@@ -378,9 +408,13 @@ def is_torch_hpu_available() -> bool:
 
     original_take_along_dim = torch.take_along_dim
 
-    def patched_take_along_dim(input: torch.Tensor, indices: torch.LongTensor, dim: int | None = None) -> torch.Tensor:
+    def patched_take_along_dim(
+        input: torch.Tensor, indices: torch.LongTensor, dim: int | None = None
+    ) -> torch.Tensor:
         if input.dtype == torch.int64 and input.device.type == "hpu":
-            return original_take_along_dim(input.to(torch.int32), indices, dim).to(torch.int64)
+            return original_take_along_dim(input.to(torch.int32), indices, dim).to(
+                torch.int64
+            )
         else:
             return original_take_along_dim(input, indices, dim)
 
@@ -393,7 +427,9 @@ def is_torch_hpu_available() -> bool:
 
         if torch.isnan(output).any():
             jitter_value = 1e-9
-            diag_jitter = torch.eye(A.size(-1), dtype=A.dtype, device=A.device) * jitter_value
+            diag_jitter = (
+                torch.eye(A.size(-1), dtype=A.dtype, device=A.device) * jitter_value
+            )
             output = original_cholesky(A + diag_jitter, *args, **kwargs)
 
         return output
@@ -403,7 +439,12 @@ def is_torch_hpu_available() -> bool:
     original_scatter = torch.scatter
 
     def patched_scatter(
-        input: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor, *args, **kwargs
+        input: torch.Tensor,
+        dim: int,
+        index: torch.Tensor,
+        src: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         if input.device.type == "hpu" and input is src:
             return original_scatter(input, dim, index, src.clone(), *args, **kwargs)
@@ -476,8 +517,12 @@ def is_torch_fp16_available_on_device(device: str) -> bool:
         # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
         # models use this layer.
         batch, sentence_length, embedding_dim = 3, 4, 5
-        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
-        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        embedding = torch.randn(
+            batch, sentence_length, embedding_dim, dtype=torch.float16, device=device
+        )
+        layer_norm = torch.nn.LayerNorm(
+            embedding_dim, dtype=torch.float16, device=device
+        )
         _ = layer_norm(embedding)
         return True
     except Exception:
@@ -549,7 +594,9 @@ def enable_tf32(enable: bool) -> None:
 
 @lru_cache
 def is_torch_flex_attn_available() -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.5.0")
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse(
+        "2.5.0"
+    )
 
 
 @lru_cache
@@ -559,7 +606,9 @@ def is_kenlm_available() -> bool:
 
 @lru_cache
 def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
-    is_available, kernels_version = _is_package_available("kernels", return_version=True)
+    is_available, kernels_version = _is_package_available(
+        "kernels", return_version=True
+    )
     return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
@@ -580,8 +629,12 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
-    is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    return is_available and version.parse(accelerate_version) >= version.parse(min_version)
+    is_available, accelerate_version = _is_package_available(
+        "accelerate", return_version=True
+    )
+    return is_available and version.parse(accelerate_version) >= version.parse(
+        min_version
+    )
 
 
 @lru_cache
@@ -643,8 +696,12 @@ def is_grokadamw_available() -> bool:
 
 @lru_cache
 def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
-    is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
-    return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
+    is_available, schedulefree_version = _is_package_available(
+        "schedulefree", return_version=True
+    )
+    return is_available and version.parse(schedulefree_version) >= version.parse(
+        min_version
+    )
 
 
 @lru_cache
@@ -694,14 +751,24 @@ def is_mamba_ssm_available() -> bool:
 
 @lru_cache
 def is_mamba_2_ssm_available() -> bool:
-    is_available, mamba_ssm_version = _is_package_available("mamba_ssm", return_version=True)
-    return is_torch_cuda_available() and is_available and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
+    is_available, mamba_ssm_version = _is_package_available(
+        "mamba_ssm", return_version=True
+    )
+    return (
+        is_torch_cuda_available()
+        and is_available
+        and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
+    )
 
 
 @lru_cache
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
-    return is_torch_cuda_available() and is_available and version.parse(fla_version) >= version.parse("0.2.2")
+    return (
+        is_torch_cuda_available()
+        and is_available
+        and version.parse(fla_version) >= version.parse("0.2.2")
+    )
 
 
 @lru_cache
@@ -762,7 +829,9 @@ def is_torch_neuroncore_available(check_device=True) -> bool:
 
 @lru_cache
 def is_torch_tensorrt_fx_available() -> bool:
-    return _is_package_available("torch_tensorrt") and _is_package_available("torch_tensorrt.fx")
+    return _is_package_available("torch_tensorrt") and _is_package_available(
+        "torch_tensorrt.fx"
+    )
 
 
 @lru_cache
@@ -851,9 +920,15 @@ def is_ninja_available() -> bool:
 @lru_cache
 def is_ipex_available(min_version: str = "") -> bool:
     def get_major_and_minor_from_version(full_version):
-        return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
+        return (
+            str(version.parse(full_version).major)
+            + "."
+            + str(version.parse(full_version).minor)
+        )
 
-    ipex_available, ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
+    ipex_available, ipex_version = _is_package_available(
+        "intel_extension_for_pytorch", return_version=True
+    )
 
     if not is_torch_available() or not ipex_available:
         return False
@@ -873,13 +948,19 @@ def is_ipex_available(min_version: str = "") -> bool:
 
 @lru_cache
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
-    is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
+    is_available, bitsandbytes_version = _is_package_available(
+        "bitsandbytes", return_version=True
+    )
+    return is_available and version.parse(bitsandbytes_version) >= version.parse(
+        min_version
+    )
 
 
 @lru_cache
 def is_flash_attn_2_available() -> bool:
-    is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    is_available, flash_attn_version = _is_package_available(
+        "flash_attn", return_version=True
+    )
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
@@ -904,23 +985,35 @@ def is_flash_attn_3_available() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
+    return is_flash_attn_2_available() and version.parse(
+        flash_attn_version
+    ) >= version.parse("2.1.0")
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
-    is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    is_available, flash_attn_version = _is_package_available(
+        "flash_attn", return_version=True
+    )
+    return is_available and version.parse(flash_attn_version) >= version.parse(
+        library_version
+    )
 
 
 @lru_cache
-def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
-    is_available, hub_version = _is_package_available("huggingface_hub", return_version=True)
+def is_huggingface_hub_greater_or_equal(
+    library_version: str, accept_dev: bool = False
+) -> bool:
+    is_available, hub_version = _is_package_available(
+        "huggingface_hub", return_version=True
+    )
     if not is_available:
         return False
 
     if accept_dev:
-        return version.parse(version.parse(hub_version).base_version) >= version.parse(library_version)
+        return version.parse(version.parse(hub_version).base_version) >= version.parse(
+            library_version
+        )
     else:
         return version.parse(hub_version) >= version.parse(library_version)
 
@@ -937,7 +1030,9 @@ def is_quanto_greater(library_version: str, accept_dev: bool = False) -> bool:
 
     _, quanto_version = _is_package_available("optimum.quanto", return_version=True)
     if accept_dev:
-        return version.parse(version.parse(quanto_version).base_version) > version.parse(library_version)
+        return version.parse(
+            version.parse(quanto_version).base_version
+        ) > version.parse(library_version)
     else:
         return version.parse(quanto_version) > version.parse(library_version)
 
@@ -985,7 +1080,9 @@ def is_protobuf_available() -> bool:
 
 @lru_cache
 def is_fsdp_available(min_version: str = FSDP_MIN_VERSION) -> bool:
-    return is_torch_available() and version.parse(get_torch_version()) >= version.parse(min_version)
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse(
+        min_version
+    )
 
 
 @lru_cache
@@ -1000,8 +1097,12 @@ def is_llm_awq_available() -> bool:
 
 @lru_cache
 def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
-    is_available, auto_round_version = _is_package_available("auto_round", return_version=True)
-    return is_available and version.parse(auto_round_version) >= version.parse(min_version)
+    is_available, auto_round_version = _is_package_available(
+        "auto_round", return_version=True
+    )
+    return is_available and version.parse(auto_round_version) >= version.parse(
+        min_version
+    )
 
 
 @lru_cache
@@ -1016,13 +1117,17 @@ def is_quark_available() -> bool:
 
 @lru_cache
 def is_fp_quant_available():
-    is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
+    is_available, fp_quant_version = _is_package_available(
+        "fp_quant", return_version=True
+    )
     return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
-    is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
+    is_available, qutlass_version = _is_package_available(
+        "qutlass", return_version=True
+    )
     return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
 
 
@@ -1113,7 +1218,9 @@ def is_torchaudio_available() -> bool:
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
-    is_available, torchao_version = _is_package_available("torchao", return_version=True)
+    is_available, torchao_version = _is_package_available(
+        "torchao", return_version=True
+    )
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
 
 
@@ -1140,7 +1247,9 @@ def is_uroman_available() -> bool:
 
 @lru_cache
 def is_ccl_available() -> bool:
-    return _is_package_available("torch_ccl") or _is_package_available("oneccl_bindings_for_pytorch")
+    return _is_package_available("torch_ccl") or _is_package_available(
+        "oneccl_bindings_for_pytorch"
+    )
 
 
 @lru_cache
@@ -1150,7 +1259,9 @@ def is_sudachi_available() -> bool:
 
 @lru_cache
 def is_sudachi_projection_available() -> bool:
-    is_available, sudachipy_version = _is_package_available("sudachipy", return_version=True)
+    is_available, sudachipy_version = _is_package_available(
+        "sudachipy", return_version=True
+    )
     return is_available and version.parse(sudachipy_version) >= version.parse("0.6.8")
 
 
@@ -1191,8 +1302,12 @@ def is_tiktoken_available() -> bool:
 
 @lru_cache
 def is_liger_kernel_available() -> bool:
-    is_available, liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
-    return is_available and version.parse(liger_kernel_version) >= version.parse("0.3.0")
+    is_available, liger_kernel_version = _is_package_available(
+        "liger_kernel", return_version=True
+    )
+    return is_available and version.parse(liger_kernel_version) >= version.parse(
+        "0.3.0"
+    )
 
 
 @lru_cache
@@ -1354,7 +1469,9 @@ def is_tracing(tensor=None) -> bool:
     CUDA stream capturing"""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
+    _is_tracing = (
+        is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
+    )
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
         _is_tracing |= is_jax_jitting(tensor)
@@ -1372,7 +1489,10 @@ def is_in_notebook() -> bool:
         if "IPKernelApp" not in get_ipython().config:
             raise ImportError("console")
         # Removed the lines to include VSCode
-        if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
+        if (
+            "DATABRICKS_RUNTIME_VERSION" in os.environ
+            and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0"
+        ):
             # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
             # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
             raise ImportError("databricks")
@@ -1388,7 +1508,9 @@ def is_sagemaker_dp_enabled() -> bool:
     try:
         # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
         sagemaker_params = json.loads(sagemaker_params)
-        if not sagemaker_params.get("sagemaker_distributed_dataparallel_enabled", False):
+        if not sagemaker_params.get(
+            "sagemaker_distributed_dataparallel_enabled", False
+        ):
             return False
     except json.JSONDecodeError:
         return False
@@ -1793,7 +1915,10 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
-        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
+        (
+            "pytorch_quantization",
+            (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR),
+        ),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
@@ -1853,7 +1978,12 @@ class DummyObject(type):
     is_dummy = True
 
     def __getattribute__(cls, key):
-        if (key.startswith("_") and key != "_from_config") or key == "is_dummy" or key == "mro" or key == "call":
+        if (
+            (key.startswith("_") and key != "_from_config")
+            or key == "is_dummy"
+            or key == "mro"
+            or key == "call"
+        ):
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
 
@@ -1881,7 +2011,9 @@ class _LazyModule(ModuleType):
         super().__init__(name)
 
         self._object_missing_backend = {}
-        self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
+        self._explicit_import_shortcut = (
+            explicit_import_shortcut if explicit_import_shortcut else {}
+        )
 
         if any(isinstance(key, frozenset) for key in import_structure):
             self._modules = set()
@@ -1909,7 +2041,12 @@ class _LazyModule(ModuleType):
                 # }
 
                 module_keys = set(
-                    chain(*[[k.rsplit(".", i)[0] for i in range(k.count(".") + 1)] for k in list(module.keys())])
+                    chain(
+                        *[
+                            [k.rsplit(".", i)[0] for i in range(k.count(".") + 1)]
+                            for k in list(module.keys())
+                        ]
+                    )
                 )
 
                 for backend in backends:
@@ -1960,7 +2097,9 @@ class _LazyModule(ModuleType):
                 for value in values:
                     self._class_to_module[value] = key
             # Needed for autocompletion in an IDE
-            self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
+            self.__all__ = list(import_structure.keys()) + list(
+                chain(*import_structure.values())
+            )
             self.__file__ = module_file
             self.__spec__ = module_spec
             self.__path__ = [os.path.dirname(module_file)]
@@ -2018,7 +2157,9 @@ class _LazyModule(ModuleType):
                     # Prefer importing the module that declares the fallback symbol if known
                     try:
                         if fallback_name in self._class_to_module:
-                            fb_module = self._get_module(self._class_to_module[fallback_name])
+                            fb_module = self._get_module(
+                                self._class_to_module[fallback_name]
+                            )
                             fallback_value = getattr(fb_module, fallback_name)
                         else:
                             module = self._get_module(self._class_to_module[name])
@@ -2033,16 +2174,32 @@ class _LazyModule(ModuleType):
                         if value is None and name.endswith("TokenizerFast"):
                             lookup_name = name[:-4]
                             try:
-                                from ..convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+                                from ..convert_slow_tokenizer import (
+                                    SLOW_TO_FAST_CONVERTERS,
+                                )
 
                                 if lookup_name in SLOW_TO_FAST_CONVERTERS:
-                                    converter_class = SLOW_TO_FAST_CONVERTERS[lookup_name]
-                                    converter_base_name = converter_class.__name__.replace("Converter", "")
-                                    preferred_tokenizer_name = f"{converter_base_name}Tokenizer"
+                                    converter_class = SLOW_TO_FAST_CONVERTERS[
+                                        lookup_name
+                                    ]
+                                    converter_base_name = (
+                                        converter_class.__name__.replace(
+                                            "Converter", ""
+                                        )
+                                    )
+                                    preferred_tokenizer_name = (
+                                        f"{converter_base_name}Tokenizer"
+                                    )
 
                                     candidate_names = [preferred_tokenizer_name]
-                                    for tokenizer_name, tokenizer_converter in SLOW_TO_FAST_CONVERTERS.items():
-                                        if tokenizer_converter is converter_class and tokenizer_name != lookup_name:
+                                    for (
+                                        tokenizer_name,
+                                        tokenizer_converter,
+                                    ) in SLOW_TO_FAST_CONVERTERS.items():
+                                        if (
+                                            tokenizer_converter is converter_class
+                                            and tokenizer_name != lookup_name
+                                        ):
                                             if tokenizer_name not in candidate_names:
                                                 candidate_names.append(tokenizer_name)
 
@@ -2055,19 +2212,34 @@ class _LazyModule(ModuleType):
                                         # Try to derive module path from tokenizer name (e.g., "AlbertTokenizer" -> "albert")
                                         # Remove "Tokenizer" suffix and convert to lowercase
                                         if candidate_name.endswith("Tokenizer"):
-                                            model_name = candidate_name[:-10].lower()  # Remove "Tokenizer"
+                                            model_name = candidate_name[
+                                                :-10
+                                            ].lower()  # Remove "Tokenizer"
                                             module_path = f"transformers.models.{model_name}.tokenization_{model_name}"
                                             try:
-                                                module = importlib.import_module(module_path)
-                                                base_tokenizer_class = getattr(module, candidate_name)
+                                                module = importlib.import_module(
+                                                    module_path
+                                                )
+                                                base_tokenizer_class = getattr(
+                                                    module, candidate_name
+                                                )
                                             except Exception:
                                                 pass
 
                                         # Fallback: try via _class_to_module
-                                        if base_tokenizer_class is None and candidate_name in self._class_to_module:
+                                        if (
+                                            base_tokenizer_class is None
+                                            and candidate_name in self._class_to_module
+                                        ):
                                             try:
-                                                alias_module = self._get_module(self._class_to_module[candidate_name])
-                                                base_tokenizer_class = getattr(alias_module, candidate_name)
+                                                alias_module = self._get_module(
+                                                    self._class_to_module[
+                                                        candidate_name
+                                                    ]
+                                                )
+                                                base_tokenizer_class = getattr(
+                                                    alias_module, candidate_name
+                                                )
                                             except Exception:
                                                 continue
 
@@ -2078,7 +2250,9 @@ class _LazyModule(ModuleType):
                                         # If we got here, we have base_tokenizer_class
                                         value = base_tokenizer_class
 
-                                        setattr(self, candidate_name, base_tokenizer_class)
+                                        setattr(
+                                            self, candidate_name, base_tokenizer_class
+                                        )
                                         if lookup_name != candidate_name:
                                             setattr(self, lookup_name, value)
                                         setattr(self, name, value)
@@ -2109,7 +2283,9 @@ class _LazyModule(ModuleType):
                 fallback_name = name[:-4]
                 if fallback_name in self._class_to_module:
                     try:
-                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        fb_module = self._get_module(
+                            self._class_to_module[fallback_name]
+                        )
                         value = getattr(fb_module, fallback_name)
                         setattr(self, fallback_name, value)
                         setattr(self, name, value)
@@ -2134,14 +2310,22 @@ class _LazyModule(ModuleType):
                         # Find which tokenizer class uses the same converter (reverse lookup)
                         # Prefer the tokenizer that matches the converter name pattern
                         # (e.g., AlbertConverter -> AlbertTokenizer)
-                        converter_base_name = converter_class.__name__.replace("Converter", "")
+                        converter_base_name = converter_class.__name__.replace(
+                            "Converter", ""
+                        )
                         preferred_tokenizer_name = f"{converter_base_name}Tokenizer"
 
                         # Try preferred tokenizer first
                         candidate_names = [preferred_tokenizer_name]
                         # Then try all other tokenizers with the same converter
-                        for tokenizer_name, tokenizer_converter in SLOW_TO_FAST_CONVERTERS.items():
-                            if tokenizer_converter is converter_class and tokenizer_name != lookup_name:
+                        for (
+                            tokenizer_name,
+                            tokenizer_converter,
+                        ) in SLOW_TO_FAST_CONVERTERS.items():
+                            if (
+                                tokenizer_converter is converter_class
+                                and tokenizer_name != lookup_name
+                            ):
                                 if tokenizer_name not in candidate_names:
                                     candidate_names.append(tokenizer_name)
 
@@ -2149,8 +2333,12 @@ class _LazyModule(ModuleType):
                         for candidate_name in candidate_names:
                             if candidate_name in self._class_to_module:
                                 try:
-                                    alias_module = self._get_module(self._class_to_module[candidate_name])
-                                    base_tokenizer_class = getattr(alias_module, candidate_name)
+                                    alias_module = self._get_module(
+                                        self._class_to_module[candidate_name]
+                                    )
+                                    base_tokenizer_class = getattr(
+                                        alias_module, candidate_name
+                                    )
                                     value = base_tokenizer_class
 
                                     # Cache both names for future imports
@@ -2167,9 +2355,15 @@ class _LazyModule(ModuleType):
                                 # Try importing it directly to trigger lazy loading
                                 try:
                                     # Try to get it from transformers module to trigger lazy loading
-                                    transformers_module = sys.modules.get("transformers")
-                                    if transformers_module and hasattr(transformers_module, candidate_name):
-                                        base_tokenizer_class = getattr(transformers_module, candidate_name)
+                                    transformers_module = sys.modules.get(
+                                        "transformers"
+                                    )
+                                    if transformers_module and hasattr(
+                                        transformers_module, candidate_name
+                                    ):
+                                        base_tokenizer_class = getattr(
+                                            transformers_module, candidate_name
+                                        )
                                         value = base_tokenizer_class
 
                                         if lookup_name != candidate_name:
@@ -2219,7 +2413,9 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     """
     name = "transformers"
     location = os.path.join(path, file)
-    spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
+    spec = importlib.util.spec_from_file_location(
+        name, location, submodule_search_locations=[path]
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module = sys.modules[name]
@@ -2261,7 +2457,9 @@ def split_package_version(package_version_str) -> tuple[str, str, str]:
 
 class Backend:
     def __init__(self, backend_requirement: str):
-        self.package_name, self.version_comparison, self.version = split_package_version(backend_requirement)
+        self.package_name, self.version_comparison, self.version = (
+            split_package_version(backend_requirement)
+        )
 
         if self.package_name not in BACKENDS_MAPPING:
             raise ValueError(
@@ -2270,7 +2468,9 @@ class Backend:
 
     def get_installed_version(self) -> str:
         """Return the currently installed version of the backend"""
-        is_available, current_version = _is_package_available(self.package_name, return_version=True)
+        is_available, current_version = _is_package_available(
+            self.package_name, return_version=True
+        )
         if not is_available:
             raise RuntimeError(f"Backend {self.package_name} is not available.")
         return current_version
@@ -2310,7 +2510,9 @@ def requires(*, backends=()):
             if any(key in backend for key in ["=", "<", ">"]):
                 applied_backends.append(Backend(backend))
             else:
-                raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
+                raise ValueError(
+                    f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}"
+                )
 
     def inner_fn(fun):
         fun.__backends = applied_backends
@@ -2322,7 +2524,8 @@ def requires(*, backends=()):
 BASE_FILE_REQUIREMENTS = {
     lambda e: "modeling_" in e: ("torch",),
     lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
-    lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
+    lambda e: e.startswith("image_processing_")
+    and e.endswith("_fast"): ("vision", "torch", "torchvision"),
     lambda e: e.startswith("image_processing_"): ("vision",),
     lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
 }
@@ -2356,7 +2559,9 @@ def fetch__all__(file_content) -> list[str]:
 
     # __all__ is defined on a single line
     if lines[0].endswith("]"):
-        return [obj.strip("\"' ") for obj in lines[0].split("=")[1].strip(" []").split(",")]
+        return [
+            obj.strip("\"' ") for obj in lines[0].split("=")[1].strip(" []").split(",")
+        ]
 
     # __all__ is defined on multiple lines
     else:
@@ -2433,7 +2638,9 @@ def create_import_structure_from_path(module_path):
 
     for f in os.listdir(module_path):
         if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+            import_structure[f] = create_import_structure_from_path(
+                os.path.join(module_path, f)
+            )
 
         elif not os.path.isdir(os.path.join(directory, f)):
             adjacent_modules.append(f)
@@ -2448,8 +2655,12 @@ def create_import_structure_from_path(module_path):
     def find_substring(substring, list_):
         return any(substring in x for x in list_)
 
-    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
+    if find_substring("modular_", adjacent_modules) and find_substring(
+        "modeling_", adjacent_modules
+    ):
+        adjacent_modules = [
+            module for module in adjacent_modules if "modular_" not in module
+        ]
 
     module_requirements = {}
     for module_name in adjacent_modules:
@@ -2483,7 +2694,9 @@ def create_import_structure_from_path(module_path):
             for index, line in enumerate(lines):
                 # This allows exporting items with other decorators. We'll take a look
                 # at the line that follows at the same indentation level.
-                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@requires"):
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith(
+                    "@requires"
+                ):
                     continue
 
                 # Skipping line enables putting whatever we want between the
@@ -2496,8 +2709,20 @@ def create_import_structure_from_path(module_path):
 
                     # Backends are defined on the same line as export
                     if "backends" in previous_line:
-                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
-                        backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
+                        backends_string = (
+                            previous_line.split("backends=")[1]
+                            .split("(")[1]
+                            .split(")")[0]
+                        )
+                        backends = tuple(
+                            sorted(
+                                [
+                                    b.strip("'\",")
+                                    for b in backends_string.split(", ")
+                                    if b
+                                ]
+                            )
+                        )
 
                     # Backends are defined in the lines following export, for example such as:
                     # @export(
@@ -2521,7 +2746,10 @@ def create_import_structure_from_path(module_path):
                                 backend_line = backend_line.split("=")[1]
                             if '"' in backend_line or "'" in backend_line:
                                 if ", " in backend_line:
-                                    backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
+                                    backends.extend(
+                                        backend.strip("()\"', ")
+                                        for backend in backend_line.split(", ")
+                                    )
                                 else:
                                     backends.append(backend_line.strip("()\"', "))
 
@@ -2696,7 +2924,9 @@ def spread_import_structure(nested_import_structure):
 
 
 @lru_cache
-def define_import_structure(module_path: str, prefix: str | None = None) -> IMPORT_STRUCTURE_T:
+def define_import_structure(
+    module_path: str, prefix: str | None = None
+) -> IMPORT_STRUCTURE_T:
     """
     This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
 
@@ -2725,7 +2955,10 @@ def define_import_structure(module_path: str, prefix: str | None = None) -> IMPO
     if prefix is None:
         return spread_dict
     else:
-        spread_dict = {k: {f"{prefix}.{kk}": vv for kk, vv in v.items()} for k, v in spread_dict.items()}
+        spread_dict = {
+            k: {f"{prefix}.{kk}": vv for kk, vv in v.items()}
+            for k, v in spread_dict.items()
+        }
         return spread_dict
 
 
@@ -2736,7 +2969,9 @@ def clear_import_cache() -> None:
     This is useful when actively developing/modifying Transformers code.
     """
     # Get all transformers modules
-    transformers_modules = [mod_name for mod_name in sys.modules if mod_name.startswith("transformers.")]
+    transformers_modules = [
+        mod_name for mod_name in sys.modules if mod_name.startswith("transformers.")
+    ]
 
     # Remove them from sys.modules
     for mod_name in transformers_modules:
