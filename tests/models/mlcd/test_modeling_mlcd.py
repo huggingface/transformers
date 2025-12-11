@@ -140,6 +140,12 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
+    @unittest.skip(
+        reason="MLCD passes position embeddings as tuples in its vision encoder, which breaks reentrant GC."
+    )
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        pass
+
 
 @require_torch
 class MLCDVisionModelIntegrationTest(unittest.TestCase):

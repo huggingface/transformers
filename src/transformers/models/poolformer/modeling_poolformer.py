@@ -268,7 +268,11 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        # Input embeddings correspond to the very first patch-embedding stage.
+        return self.encoder.patch_embeddings[0]
+
+    def set_input_embeddings(self, value):
+        self.encoder.patch_embeddings[0] = value
 
     @auto_docstring
     def forward(
@@ -332,6 +336,12 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.poolformer.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.poolformer.set_input_embeddings(value)
 
     @auto_docstring
     def forward(
