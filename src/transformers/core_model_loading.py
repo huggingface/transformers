@@ -570,7 +570,8 @@ def log_conversion_errors(
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
 ):
-    # A simple helper to handle errors with contextual messages.
+    """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
+    that will be catched later to skip the parameters that raised the original Exception."""
     try:
         yield
     except Exception as e:
