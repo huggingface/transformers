@@ -1300,7 +1300,6 @@ def _process_parameter_type(param, param_name, func):
     for subtype in subtypes:
         if subtype is type(None):
             optional = True
-            out_str.append("None")
             continue
         if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
             subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
