@@ -703,7 +703,7 @@ class ImageProcessingTestMixin:
         # Find an attribute with a non-None class default to test explicit None override
         test_attr = None
         for attr in ["do_resize", "do_rescale", "do_normalize"]:
-            if getattr(self.fast_image_processing_class, attr, None) not in [None, "NOT_FOUND"]:
+            if getattr(self.fast_image_processing_class, attr, None) is not None:
                 test_attr = attr
                 break
 
