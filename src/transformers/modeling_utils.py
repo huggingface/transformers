@@ -773,7 +773,8 @@ def _get_dtype(
         for key in config.sub_configs:
             if (sub_config := getattr(config, key)) is not None:
                 sub_config.dtype = default_dtype
-
+    dtype = dtype if isinstance(dtype, torch.dtype) else getattr(torch, dtype)
+    cls._dtype = dtype
     return config, dtype, dtype_orig
 
 
