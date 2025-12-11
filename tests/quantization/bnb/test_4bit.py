@@ -151,6 +151,33 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertEqual(num_params_4bit, num_params_fp16)
 
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map
+        """
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(self.model_fp16.config, torch_dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=True)
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+        for name, module in model.named_modules():
+            if isinstance(module, bnb.nn.Linear4bit):
+                # from 16 bits to 4 bits
+                assert int(model_size[f"{name}.weight"] // 4) == int(quantized_model_size[f"{name}.weight"])
+
+        # we should at least have 2 times memory reduction in total
+        assert model_size[""] > quantized_model_size[""] * 2
+
     def test_quantization_config_json_serialization(self):
         r"""
         A simple test to check if the quantization config is correctly serialized and deserialized
