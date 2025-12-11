@@ -208,6 +208,9 @@ class PEVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PEVideoEncoderLayer,
         "attentions": PEVideoEncoderAttention,
     }
+    _checkpoint_conversion_mapping = {
+        r"^audio_video_encoder\.video_encoder": "video_encoder",
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -230,6 +233,7 @@ class PEVideoPreTrainedModel(PreTrainedModel):
 )
 class PEVideoEncoder(PEVideoPreTrainedModel):
     config: PEVideoEncoderConfig
+    base_model_prefix = "video_encoder"
 
     def __init__(self, config: PEVideoEncoderConfig):
         super().__init__(config)

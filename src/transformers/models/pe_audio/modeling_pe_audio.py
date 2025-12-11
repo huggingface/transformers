@@ -589,6 +589,9 @@ class PEAudioPretrainedModel(PreTrainedModel):
         "hidden_states": PEAudioEncoderLayer,
         "attentions": PEAudioAttention,
     }
+    _checkpoint_conversion_mapping = {
+        r"^audio_video_encoder\.audio_encoder": "audio_encoder",
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -612,6 +615,7 @@ class PEAudioPretrainedModel(PreTrainedModel):
 class PEAudioEncoder(PEAudioPretrainedModel):
     config: PEAudioEncoderConfig
     main_input_name = "input_values"
+    base_model_prefix = "audio_encoder"
 
     def __init__(self, config: PEAudioEncoderConfig):
         super().__init__(config)
