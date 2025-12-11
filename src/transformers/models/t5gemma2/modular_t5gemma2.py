@@ -257,6 +257,7 @@ class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):
 class T5Gemma2SelfAttention(Gemma3Attention):
     def __init__(self, config: T5Gemma2TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = False  # Only used by the encoder
 
 
 class T5Gemma2MergedAttention(Gemma3Attention):
@@ -264,6 +265,7 @@ class T5Gemma2MergedAttention(Gemma3Attention):
 
     def __init__(self, config: T5Gemma2TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = False  # Fused causal and encoder mask
 
     def forward(
         self,
@@ -342,7 +344,6 @@ class T5Gemma2MergedAttention(Gemma3Attention):
             merged_attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
-            is_causal=False,
             **kwargs,
         )
 
