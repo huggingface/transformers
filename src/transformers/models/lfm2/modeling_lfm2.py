@@ -413,6 +413,7 @@ class Lfm2Attention(nn.Module):
             attention_mask,
             dropout=0.0,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
