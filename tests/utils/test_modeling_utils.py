@@ -2240,7 +2240,7 @@ class ModelUtilsTest(TestCasePlus):
             with patch("transformers.core_model_loading.MergeModulelist.convert", side_effect=Exception("failed")):
                 # It should raise the proper error
                 with self.assertRaisesRegex(
-                    RuntimeError, "We encountered the following issues during automatic conversion of the weights:"
+                    RuntimeError, "We encountered some issues during automatic conversion of the weights."
                 ):
                     _ = MixtralModel.from_pretrained(tmpdirname)
 

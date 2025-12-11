@@ -179,14 +179,6 @@ def log_state_dict_report(
             )
         raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
-    if misc:
-        misc_error_msg = ""
-        for k, v in update_key_name(misc).items():
-            misc_error_msg += f"\n{k}: {v}"
-        raise RuntimeError(
-            f"We encountered the following issues during automatic conversion of the weights:{misc_error_msg}"
-        )
-
     term_w = _get_terminal_width()
     rows = []
     if unexpected_keys:
@@ -212,6 +204,13 @@ def log_state_dict_report(
             )
             rows.append(data)
 
+    if misc:
+        for k, v in update_key_name(misc).items():
+            status = "MISC"
+            status = _color(status, "purple", ansi)
+            _details = v[:term_w]
+            rows.append([k, status, _details])
+
     if not rows:
         return
 
@@ -232,12 +231,19 @@ def log_state_dict_report(
         tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing form the checkpoint. Consider training on your downstream task."
     if mismatched_keys:
         tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight shapes."
+    if misc:
+        tips += f"\n- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
     tips += f"{ansi['reset']}"
 
     # Log the report as warning
     logger.warning(prelude + table + tips)
 
-    # Re-raise in this case, after the report
+    # Re-raise in those case, after the report
+    if misc:
+        raise RuntimeError(
+            "We encountered some issues during automatic conversion of the weights. For details look at the `MISC` entry of "
+            "the above report!"
+        )
     if not ignore_mismatched_sizes and mismatched_keys:
         raise RuntimeError(
             "You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!"
