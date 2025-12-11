@@ -197,7 +197,7 @@ This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary
 
 **Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provdied but no merges, merges will be automatically generated (excluding special tokens).
 
-Note: Loading from file paths with `vocab_file` is supported during initialization, but it is recommended to load saved tokenizers using `from_pretrained`.
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check wether you properly passed the merges or not. 
 
 #### 2. Simplified decoding API
 
