@@ -746,6 +746,12 @@ def _get_dtype(
                         "Since the `dtype` attribute can't be found in model's config object, "
                         "will use dtype={dtype} as derived from model's weights"
                     )
+                if isinstance(dtype, str) and hasattr(torch, dtype):
+                    dtype = getattr(torch, dtype)
+                    config.dtype = dtype
+                    for sub_config_key in config.sub_configs:
+                        if (sub_config := getattr(config, sub_config_key)) is not None:
+                            sub_config.dtype = dtype
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
