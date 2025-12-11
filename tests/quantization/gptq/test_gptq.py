@@ -39,6 +39,7 @@ if is_gptqmodel_available():
     from gptqmodel.quantization import METHOD
     from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
+
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):
         with self.assertRaises(ValueError):
