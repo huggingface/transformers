@@ -173,7 +173,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     # Override training overfit for BLT
     training_loss_reduction_threshold = 0.9
     # Grad norm empirically drops by ~81% for the tiny BLT config
-    training_grad_norm_reduction_threshold = 0.8
+    training_grad_norm_reduction_threshold = 0.9
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

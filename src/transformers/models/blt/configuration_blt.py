@@ -335,7 +335,7 @@ class BltConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         initializer_range: Optional[float] = 0.02,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_cache: Optional[bool] = False,
+        use_cache: Optional[bool] = False, 
         **kwargs,
     ):
         # Basic model configuration
@@ -407,7 +407,6 @@ class BltConfig(PreTrainedConfig):
         )
 
         self.rope_parameters = rope_parameters
-        # `use_cache` defaults to False for BLT.
         if "use_cache" not in kwargs:
             kwargs["use_cache"] = use_cache
         self.use_cache = kwargs["use_cache"]
@@ -416,6 +415,17 @@ class BltConfig(PreTrainedConfig):
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
+class BltTextConfig(PreTrainedConfig):
+    """
+    Configuration class for the Blt Text component.
+    """
+    pass
+
+class BltVisionConfig(PreTrainedConfig):
+    """
+    Configuration class for the Blt Vision component.
+    """
+    pass 
 
 __all__ = [
     "BltConfig",
@@ -423,4 +433,6 @@ __all__ = [
     "BltLocalEncoderConfig",
     "BltLocalDecoderConfig",
     "BltGlobalTransformerConfig",
+    "BltTextConfig",
+    "BltVisionConfig",
 ]
