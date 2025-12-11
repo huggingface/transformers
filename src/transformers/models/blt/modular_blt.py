@@ -360,6 +360,14 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
     }
 
+    # Weight initialization is adapted from:
+    # - https://github.com/facebookresearch/blt/blob/main/bytelatent/model/blt.py
+    # - https://github.com/pytorch/torchtitan/blob/main/torchtitan/experiments/transformers_modeling_backend/model/model.py
+    #
+    # Both implementations use truncated normal initialization with std ~ 1 / sqrt(d_model)
+    # (or 1 / sqrt(hidden_dim) for FFN outputs), and unit initialization for normalization layers.
+    # We follow the same scheme here, but expressed in the Transformers APIs.
+
     @torch.no_grad()
     def _init_weights(self, module):
         """
@@ -371,6 +379,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
         """
         class_name = module.__class__.__name__
 
+        # Norms: RMSNorm / LayerNorm
         if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
             if getattr(module, "weight", None) is not None:
                 module.weight.data.fill_(1.0)
@@ -378,6 +387,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 module.bias.data.zero_()
             return
 
+        # Embeddings (encoder / patcher / hash embeddings)
         if isinstance(module, nn.Embedding):
             hidden_size = getattr(self.config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "encoder_config"):
@@ -397,6 +407,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
             return
 
+        # Self-attention / cross-attention projections
         if isinstance(module, (BltSelfAttention, BltCrossAttention)) or class_name in (
             "MllamaTextSelfAttention",
             "MllamaTextCrossAttention",
@@ -427,7 +438,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                     )
                     if getattr(proj, "bias", None) is not None:
                         proj.bias.data.zero_()
-
+            # Output projection: o_proj or dense
             o_proj = getattr(module, "o_proj", getattr(module, "dense", None))
             if o_proj is not None and hasattr(o_proj, "weight"):
                 nn.init.trunc_normal_(
@@ -440,14 +451,14 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 if getattr(o_proj, "bias", None) is not None:
                     o_proj.bias.data.zero_()
             return
-
+        # MLP / FFN blocks
         if isinstance(module, BltMLP) or class_name == "MllamaTextMLP":
             hidden_size = getattr(self.config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "decoder_config"):
                 hidden_size = getattr(self.config.decoder_config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "encoder_config"):
                 hidden_size = getattr(self.config.encoder_config, "hidden_size", None)
-
+            # Input-side std
             in_std = None
             if hidden_size is not None:
                 in_std = hidden_size**-0.5
@@ -456,6 +467,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
             up_proj = getattr(module, "up_proj", None)
             down_proj = getattr(module, "down_proj", getattr(module, "fc2", None))
 
+            # gate / input projections
             for proj in (gate_proj, up_proj):
                 if proj is not None and hasattr(proj, "weight"):
                     std = in_std or (proj.weight.shape[1] ** -0.5)
@@ -469,6 +481,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                     if getattr(proj, "bias", None) is not None:
                         proj.bias.data.zero_()
 
+            # output / down projections
             if down_proj is not None and hasattr(down_proj, "weight"):
                 hidden_dim = down_proj.weight.shape[1]
                 out_std = hidden_dim**-0.5
@@ -483,6 +496,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                     down_proj.bias.data.zero_()
             return
 
+        # Generic Linear layers (projections, lm_head, etc.)
         if isinstance(module, nn.Linear):
             fan_in = module.in_features
             std = fan_in**-0.5
@@ -497,6 +511,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 module.bias.data.zero_()
             return
 
+        # Fallback to the parent implementation for anything we did not special-case
         super()._init_weights(module)
 
     def _update_causal_mask(self, module):

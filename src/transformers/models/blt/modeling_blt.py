@@ -809,6 +809,7 @@ class BltPreTrainedModel(PreTrainedModel):
         """
         class_name = module.__class__.__name__
 
+        # Norms: RMSNorm / LayerNorm
         if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
             if getattr(module, "weight", None) is not None:
                 module.weight.data.fill_(1.0)
@@ -816,6 +817,7 @@ class BltPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
             return
 
+        # Embeddings (encoder / patcher / hash embeddings)
         if isinstance(module, nn.Embedding):
             hidden_size = getattr(self.config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "encoder_config"):
@@ -835,6 +837,7 @@ class BltPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
             return
 
+        # Self-attention / cross-attention projections
         if isinstance(module, (BltSelfAttention, BltCrossAttention)) or class_name in (
             "MllamaTextSelfAttention",
             "MllamaTextCrossAttention",
@@ -865,7 +868,7 @@ class BltPreTrainedModel(PreTrainedModel):
                     )
                     if getattr(proj, "bias", None) is not None:
                         proj.bias.data.zero_()
-
+            # Output projection: o_proj or dense
             o_proj = getattr(module, "o_proj", getattr(module, "dense", None))
             if o_proj is not None and hasattr(o_proj, "weight"):
                 nn.init.trunc_normal_(
@@ -878,14 +881,14 @@ class BltPreTrainedModel(PreTrainedModel):
                 if getattr(o_proj, "bias", None) is not None:
                     o_proj.bias.data.zero_()
             return
-
+        # MLP / FFN blocks
         if isinstance(module, BltMLP) or class_name == "MllamaTextMLP":
             hidden_size = getattr(self.config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "decoder_config"):
                 hidden_size = getattr(self.config.decoder_config, "hidden_size", None)
             if hidden_size is None and hasattr(self.config, "encoder_config"):
                 hidden_size = getattr(self.config.encoder_config, "hidden_size", None)
-
+            # Input-side std
             in_std = None
             if hidden_size is not None:
                 in_std = hidden_size**-0.5
@@ -894,6 +897,7 @@ class BltPreTrainedModel(PreTrainedModel):
             up_proj = getattr(module, "up_proj", None)
             down_proj = getattr(module, "down_proj", getattr(module, "fc2", None))
 
+            # gate / input projections
             for proj in (gate_proj, up_proj):
                 if proj is not None and hasattr(proj, "weight"):
                     std = in_std or (proj.weight.shape[1] ** -0.5)
@@ -907,6 +911,7 @@ class BltPreTrainedModel(PreTrainedModel):
                     if getattr(proj, "bias", None) is not None:
                         proj.bias.data.zero_()
 
+            # output / down projections
             if down_proj is not None and hasattr(down_proj, "weight"):
                 hidden_dim = down_proj.weight.shape[1]
                 out_std = hidden_dim**-0.5
@@ -921,6 +926,7 @@ class BltPreTrainedModel(PreTrainedModel):
                     down_proj.bias.data.zero_()
             return
 
+        # Generic Linear layers (projections, lm_head, etc.)
         if isinstance(module, nn.Linear):
             fan_in = module.in_features
             std = fan_in**-0.5
