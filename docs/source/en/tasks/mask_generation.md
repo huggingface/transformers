@@ -24,7 +24,7 @@ Mask generation models are trained on large amounts of data and operate in two m
 - Prompting mode: In this mode, the model takes in an image and a prompt, where a prompt can be a 2D point location (XY coordinates) in the image within an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object
 that the prompt is pointing out.
 - Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference.
-- Video Inference: The model takes in a video, and a point or box prompt in a video frame, which is tracked throughout the video. You can get more information on how to do video inference by following [SAM 2 docs](model_doc/sam2).
+- Video Inference: The model accepts a video, and a point or box prompt in a video frame, which is tracked throughout the video. You can get more information on how to do video inference by following [SAM 2 docs](../model_doc/sam2).
 
 Mask generation task is supported by [Segment Anything Model (SAM)](model_doc/sam) and [Segment Anything Model 2 (SAM2)](model_doc/sam2), while video inference is supported by [Segment Anything Model 2 (SAM2)](model_doc/sam2). SAM is a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks.  Meanwhile SAM 2 extends SAM by adding a memory module to track the masks. 
 
