@@ -16,7 +16,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 import torch
@@ -125,7 +125,7 @@ class WatermarkDetector:
         self,
         model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: Optional["WatermarkingConfig"],
+        watermarking_config: Optional[Union["WatermarkingConfig", dict]],
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):

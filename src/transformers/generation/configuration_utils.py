@@ -129,14 +129,14 @@ class GenerationConfig(PushToHubMixin):
 
         > Parameters that control the generation strategy used
 
-        do_sample (`bool`, *optional*, defaults to `False`):
+        do_sample (`bool`, defaults to `False`):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
 
         > Parameters that control the cache
 
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, defaults to `True`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*):
@@ -206,7 +206,7 @@ class GenerationConfig(PushToHubMixin):
         bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        renormalize_logits (`bool`, *optional*, defaults to `False`):
+        renormalize_logits (`bool`, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors break the normalization.
@@ -217,7 +217,7 @@ class GenerationConfig(PushToHubMixin):
         forced_eos_token_id (`int` or list[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
             list to set multiple *end-of-sequence* tokens.
-        remove_invalid_values (`bool`, *optional*, defaults to `model.config.remove_invalid_values`):
+        remove_invalid_values (`bool`, defaults to `model.config.remove_invalid_values`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
         exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
@@ -234,7 +234,7 @@ class GenerationConfig(PushToHubMixin):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. Check
             [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
-        token_healing (`bool`, *optional*, defaults to `False`):
+        token_healing (`bool`, defaults to `False`):
             Heal tail tokens of prompts by replacing them with their appropriate extensions.
             This enhances the quality of completions for prompts affected by greedy tokenization bias.
         guidance_scale (`float`, *optional*):
@@ -250,18 +250,18 @@ class GenerationConfig(PushToHubMixin):
 
         num_return_sequences (`int`, *optional*, defaults to 1):
             The number of independently computed returned sequences for each element in the batch.
-        output_attentions (`bool`, *optional*, defaults to `False`):
+        output_attentions (`bool`, defaults to `False`):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more details.
-        output_hidden_states (`bool`, *optional*, defaults to `False`):
+        output_hidden_states (`bool`, defaults to `False`):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more details.
-        output_scores (`bool`, *optional*, defaults to `False`):
+        output_scores (`bool`, defaults to `False`):
             Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-        output_logits (`bool`, *optional*):
+        output_logits (`bool`, defaults to `False`):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
-        return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+        return_dict_in_generate (`bool`, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
             sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
             or optional outputs (see flags starting with `output_`)
@@ -286,7 +286,7 @@ class GenerationConfig(PushToHubMixin):
             (e.g. multilingual models with different target languages in one batch)
 
         > Generation parameters exclusive to assistant generation
-        is_assistant (`bool`, *optional*, defaults to `False`):
+        is_assistant (`bool`, defaults to `False`):
             Whether the model is an assistant (draft) model.
         num_assistant_tokens (`int`, *optional*):
             Defines the number of _speculative tokens_ that shall be generated by the assistant model before being
@@ -327,7 +327,7 @@ class GenerationConfig(PushToHubMixin):
         compile_config (CompileConfig, *optional*):
             If using a compilable cache, this controls how `generate` will `compile` the forward pass for faster
             inference.
-        disable_compile (`bool`, *optional*):
+        disable_compile (`bool`, defaults to `False`):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
@@ -379,6 +379,10 @@ class GenerationConfig(PushToHubMixin):
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
 
+        self.watermarking_config = kwargs.pop("watermarking_config", None)
+        if isinstance(self.watermarking_config, dict):
+            self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.output_attentions = kwargs.pop("output_attentions", False)
@@ -427,9 +431,6 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
-
-        if isinstance(self.watermarking_config, dict):
-            self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
 
         # Additional attributes without default values
         if not self._from_model_config:
@@ -616,9 +617,9 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. Validation of attribute combinations
         # 2.1. detect sampling-only parameterization when not in sampling mode
-        if self.do_sample is False:
+        if not self.do_sample:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set to set `False`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
+                "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
                 "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
             if self.temperature is not None and self.temperature != 1.0:
@@ -664,10 +665,10 @@ class GenerationConfig(PushToHubMixin):
         # 2.4. check `num_return_sequences`
         if self.num_return_sequences > 1:
             if self.num_beams is None or self.num_beams == 1:
-                if self.do_sample is False:
+                if not self.do_sample:
                     raise ValueError(
-                        "Greedy methods without beam search do not support `num_return_sequences` different than 1 "
-                        f"(got {self.num_return_sequences})."
+                        "Greedy methods (do_sample != True) without beam search do not support"
+                        f"`num_return_sequences` different than 1 (got {self.num_return_sequences})."
                     )
             elif self.num_beams is not None and self.num_return_sequences > self.num_beams:
                 raise ValueError(
@@ -676,13 +677,13 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2.5. check cache-related arguments
-        if self.use_cache is False:
+        if not self.use_cache:
             # In this case, all cache-related arguments should be unset. However, since `use_cache=False` is often used
             # passed to `generate` directly to hot-fix cache issues, let's raise a warning instead of an error
             # (otherwise a user might need to overwrite several parameters).
             no_cache_warning = (
-                "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
-                "have no effect."
+                "You have not set `use_cache` to `True`, but {cache_arg} is set to {cache_arg_value}."
+                "{cache_arg} will have no effect."
             )
             for arg_name in ("cache_implementation", "cache_config"):
                 if getattr(self, arg_name) is not None:
@@ -691,9 +692,9 @@ class GenerationConfig(PushToHubMixin):
                     )
 
         # 2.6. other incorrect combinations
-        if self.return_dict_in_generate is not True:
+        if not self.return_dict_in_generate:
             for extra_output_flag in self.extra_output_flags:
-                if getattr(self, extra_output_flag) is True:
+                if getattr(self, extra_output_flag):
                     minor_issues[extra_output_flag] = (
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."

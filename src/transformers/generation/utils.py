@@ -1774,9 +1774,9 @@ class GenerationMixin(ContinuousMixin):
             if len(self.config._get_generation_parameters()) > 0:
                 raise ValueError(
                     "You have modified the pretrained model configuration to control generation "
-                    f" We detected the following values set - {self.config._get_generation_parameters()}. "
-                    " This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
-                    " (see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                    f"We detected the following values set - {self.config._get_generation_parameters()}. "
+                    "This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
+                    "(see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
                 )
             generation_config = GenerationConfig()
 
@@ -1788,8 +1788,8 @@ class GenerationMixin(ContinuousMixin):
         # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
         # to `generate()`. Thus the `defaults_only=True` is used
         global_defaults = self.generation_config._get_default_generation_params()
-        _ = generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
-        _ = generation_config.update(**global_defaults, defaults_only=True)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**global_defaults, defaults_only=True)
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
@@ -1926,10 +1926,10 @@ class GenerationMixin(ContinuousMixin):
         user_defined_cache = model_kwargs.get(cache_name)
         if user_defined_cache is not None:
             if generation_config.cache_implementation is not None:
-               raise ValueError(
-                   f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
-                   "Cache object) is unsupported. Please use only one of the two."
-               )
+                raise ValueError(
+                    f"Passing both `cache_implementation` (used to initialize certain caches) and `{cache_name}` (a "
+                    "Cache object) is unsupported. Please use only one of the two."
+                )
             if isinstance(user_defined_cache, tuple):
                 raise ValueError(
                     "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
