@@ -14,19 +14,28 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Chat content patterns
+# Chat message patterns
 
-Chat models expect conversations as a list of dictionaries. Each dictionary uses `role` and `content` keys. The `content` key holds the user message passed to the model. Large language models accept text and multimodal models combine text with images, videos, and audio.
+Chat models expect conversations as a list of dictionaries. Each dictionary uses `role` and `content` keys. The `content` key holds the user message passed to the model. Large language models accept text and tools and multimodal models combine text with images, videos, and audio.
 
 Transformers uses a unified format where each modality type is specified explicitly, making it straightforward to mix and match inputs in a single message.
 
-This guide covers `content` formatting patterns for each modality, batch inference, and multi-turn conversations.
+This guide covers message formatting patterns for each modality, tools, batch inference, and multi-turn conversations.
 
 ## Text
 
-Text is the most basic content type. It's the foundation for all other patterns. Use the explicit `"type": "text"` format to keep your code consistent when you add images, videos, or audio later.
+Text is the most basic content type. It's the foundation for all other patterns. Pass your message to `"content"` as a string.
 
-Pass your message to the `"text"` key.
+```py
+message = [
+    {
+        "role": "user",
+        "content": "Explain the French Bread Law."
+    }
+]
+```
+
+You could also use the explicit `"type": "text"` format to keep your code consistent when you add images, videos, or audio later.
 
 ```py
 message = [
@@ -35,6 +44,28 @@ message = [
         "content": [{"type": "text", "text": "Explain the French Bread Law."}]
     }
 ]
+```
+
+## Tools
+
+[Tools](./chat_extras) are functions a chat model can call, like getting real-time weather data, instead of generating it on its own.
+
+The `assistant` role handles the tool request. Set `"type": "function"` in the `"tool_calls"` key and provide your tool to the `"function"` key. Append the assistant's tool request to your message.
+
+```py
+weather = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
+message.append(
+    {
+        "role": "assistant", 
+        "tool_calls": [{"type": "function", "function": weather}]
+    }
+)
+```
+
+The `tool` role handles the result. Append it in `"content"`. This value should always be a string.
+
+```py
+message.append({"role": "tool", "content": "22"})
 ```
 
 ## Multimodal
@@ -100,7 +131,7 @@ message = [
         "content": [
             {"type": "image", "url": "https://assets.bonappetit.com/photos/57ad4ebc53e63daf11a4ddc7/master/w_1280,c_limit/kouign-amann.jpg"},
             {"type": "video", "url": "https://static01.nyt.com/images/2019/10/01/dining/01Sourdough-GIF-1/01Sourdough-GIF-1-superJumbo.gif"},
-            {"type": "text", "text": "What does the image and video share in commmon?"},
+            {"type": "text", "text": "What does the image and video share in common?"},
         ],
     },
     {
