@@ -3848,8 +3848,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             _ = kwargs.pop(name, None)
 
         # For BC on torch_dtype argument
-        if torch_dtype is not None and (not dtype_kwarg_provided or dtype is None):
-            dtype = torch_dtype
+        if torch_dtype is not None:
+            dtype = dtype if dtype is not None else torch_dtype
 
         if is_offline_mode() and not local_files_only:
             local_files_only = True
