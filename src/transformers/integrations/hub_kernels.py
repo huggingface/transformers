@@ -111,6 +111,12 @@ try:
                     layer_name="RMSNorm",
                 )
             },
+            "mps": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/mlx_rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
