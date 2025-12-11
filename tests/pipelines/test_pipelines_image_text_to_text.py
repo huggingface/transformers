@@ -248,7 +248,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "The first image shows a statue of Liberty in the",
+                            "content": "The first image shows a statue of the Statue of",
                         },
                     ],
                 }
