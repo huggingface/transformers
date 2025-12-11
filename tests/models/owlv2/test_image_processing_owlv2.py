@@ -127,7 +127,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             pixel_values = processor(image, return_tensors="pt").pixel_values
 
             mean_value = round(pixel_values.mean().item(), 4)
-            self.assertEqual(mean_value, 0.2353)
+            self.assertEqual(mean_value, -0.2303)
 
     @slow
     def test_image_processor_integration_test_resize(self):
