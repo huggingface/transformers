@@ -44,8 +44,13 @@ jobs:
           script: |
             const fs = require('fs');
             const { execSync } = require('child_process');
+            const path = require('path');
             
             const workflowRunId = '20132741120';
+            
+            // Ensure we're working in the correct directory
+            const workspaceDir = process.env.GITHUB_WORKSPACE;
+            process.chdir(workspaceDir);
             
             // Get all artifacts with pagination
             const allArtifacts = [];
@@ -104,6 +109,16 @@ jobs:
               fs.rmSync(zipPath);
               if (fs.existsSync('temp_extract')) fs.rmSync('temp_extract', { recursive: true });
             }
+            
+            console.log(`Captured directory contents:`);
+            execSync('ls -la captured', { stdio: 'inherit' });
+
+      - name: Verify captured directory
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Captured directory contents:"
+          ls -la captured/ || echo "captured directory does not exist"
 
       - name: Run auto update script
         run: python3 auto_update.py captured
