@@ -184,7 +184,7 @@ def log_state_dict_report(
         for k, v in update_key_name(misc).items():
             misc_error_msg += f"\n{k}: {v}"
         raise RuntimeError(
-            f"We encountered the following issues during automatic format conversion of the weights:{misc_error_msg}"
+            f"We encountered the following issues during automatic conversion of the weights:{misc_error_msg}"
         )
 
     term_w = _get_terminal_width()
