@@ -123,6 +123,9 @@ jobs:
       - name: Run auto update script
         run: python3 batch_update.py captured --apply
 
+      - name: Run auto update script
+        run: python3 batch_update.py captured --apply
+
       - name: Rename batch results
         run: |
           mv batch_results_* batch_results

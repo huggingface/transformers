@@ -33,6 +33,25 @@ from datetime import datetime
 from pathlib import Path
 
 
+class TeeOutput:
+    """Capture stdout while still printing to console."""
+
+    def __init__(self, filename):
+        self.file = open(filename, 'w')
+        self.stdout = sys.stdout
+
+    def write(self, message):
+        self.stdout.write(message)
+        self.file.write(message)
+
+    def flush(self):
+        self.stdout.flush()
+        self.file.flush()
+
+    def close(self):
+        self.file.close()
+
+
 def get_all_models(base_dir="captured"):
     """Get list of all model directories with captured_info.txt."""
     models = []
@@ -187,6 +206,12 @@ def main():
     results_dir = f"batch_results_{timestamp}"
     os.makedirs(results_dir, exist_ok=True)
 
+    # Capture console output to file while still printing to terminal
+    console_output_file = os.path.join(results_dir, "CONSOLE_OUTPUT.txt")
+    tee = TeeOutput(console_output_file)
+    original_stdout = sys.stdout
+    sys.stdout = tee
+
     # Open combined output file
     combined_output_file = os.path.join(results_dir, "ALL_OUTPUT.txt")
     combined_f = open(combined_output_file, 'w')
@@ -210,6 +235,7 @@ def main():
     print(f"Found {len(all_models)} models to process")
     print(f"Target directories: {', '.join(target_dirs)}")
     print(f"Results will be saved to: {results_dir}/")
+    print(f"Console output: {console_output_file}")
     print(f"Combined output: {combined_output_file}")
     print()
 
@@ -352,6 +378,7 @@ def main():
     print(f"  Failed:     {failure_count} ({100 * failure_count // len(all_models)}%)")
     print()
     print(f"Results saved to: {results_dir}/")
+    print(f"  - Console output:  {results_dir}/CONSOLE_OUTPUT.txt")
     print(f"  - Combined output: {results_dir}/ALL_OUTPUT.txt")
     print(f"  - Individual logs: {results_dir}/<model_name>.txt")
     print(f"  - Summary report:  {results_dir}/SUMMARY.txt")
@@ -368,6 +395,10 @@ def main():
         print()
 
     print("=" * 80)
+
+    # Restore original stdout and close console output file
+    sys.stdout = original_stdout
+    tee.close()
 
 
 if __name__ == "__main__":

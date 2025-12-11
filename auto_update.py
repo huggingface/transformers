@@ -847,7 +847,11 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
         print(f"    Multi-line: {is_multiline(task.new_value_str)}")
 
         if dry_run:
-            print(f"    ✓ Would update")
+            # Check if pattern is supported before claiming we'd update
+            if info.pattern_type == "unknown":
+                print(f"    ✗ Unknown pattern")
+            else:
+                print(f"    ✓ Would update")
             continue
 
         # Apply update based on pattern type
