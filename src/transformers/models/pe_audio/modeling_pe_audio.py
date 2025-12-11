@@ -5,8 +5,9 @@
 #                          modular_pe_audio.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -14,7 +15,7 @@ import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -23,8 +24,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel
 from .configuration_pe_audio import PEAudioConfig, PEAudioEncoderConfig
 
@@ -338,11 +338,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class PEAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -367,7 +369,6 @@ class PEAudioAttention(nn.Module):
         self.k_norm = PEAudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -440,7 +441,6 @@ class PEAudioEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -449,7 +449,7 @@ class PEAudioEncoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -501,20 +501,49 @@ class PEAudioRotaryEmbedding(nn.Module):
 
     def __init__(self, config: PEAudioConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[PEAudioConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -523,7 +552,7 @@ class PEAudioRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -687,10 +716,12 @@ class PEAudioModel(PEAudioPretrainedModel):
             attention_mask=attention_mask,
             return_dict=True,
         )
-
         text_features = text_outputs.last_hidden_state
         text_features = self.text_head(text_features)
         return text_features
+
+    def _get_audio_embeds(self, audio_outputs: BaseModelOutputWithPooling):
+        return self.audio_head(audio_outputs.pooler_output)
 
     def get_audio_features(self, input_values, padding_mask=None):
         # TODO: should it be named feature or embeds
@@ -725,11 +756,13 @@ class PEAudioModel(PEAudioPretrainedModel):
             output_hidden_states=True,
         )
 
-        audio_embeds = self._get_audio_embeds(audio_outputs)
+        audio_embeds = audio_outputs.pooler_output
+        audio_embeds = self.audio_head(audio_embeds)
+
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
-        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_audio = audio_embeds @ text_embeds.T
         logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
         logits_per_text = logits_per_audio.t()
 
@@ -739,7 +772,7 @@ class PEAudioModel(PEAudioPretrainedModel):
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
         return PEAudioOutput(
-            logits_per_text=logits_per_audio.transpose(0, 1),
+            logits_per_text=logits_per_text,
             logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
@@ -749,9 +782,57 @@ class PEAudioModel(PEAudioPretrainedModel):
         )
 
 
+# TODO: underline in documentation that logits output shape is
+# 1. Model: (n_audio, n_text)
+# 2. Frame-level: (n_audio, n_text, n_frames)
 class PEAudioFrameLevelModel(PEAudioModel):
-    def _get_audio_embeds(self, audio_outputs: BaseModelOutputWithPooling):
-        return audio_outputs.last_hidden_state
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_loss: Optional[bool] = None,
+        **kwargs,
+    ) -> PEAudioOutput:
+        audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
+            input_values=input_values,
+            padding_mask=padding_mask,
+            **{**kwargs, "return_dict": True},
+        )
+
+        text_outputs: MaskedLMOutput = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+
+        audio_embeds = audio_outputs.last_hidden_state
+        audio_embeds = self.audio_head(audio_embeds)
+
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_audio_head(text_embeds)
+
+        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_text = logits_per_audio.transpose(0, 1)
+
+        loss = None
+        if return_loss:
+            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
+            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
+
+        return PEAudioOutput(
+            logits_per_text=logits_per_text,
+            logits_per_audio=logits_per_audio,
+            text_embeds=text_embeds,
+            audio_embeds=audio_embeds,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
+            loss=loss,
+        )
 
 
 __all__ = ["PEAudioFrameLevelModel", "PEAudioModel", "PEAudioEncoder"]

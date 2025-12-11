@@ -5,20 +5,19 @@
 #                          modular_pe_audio_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class PEAudioVideoEncoderConfig(PretrainedConfig):
+class PEAudioVideoEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PEAudioVideoEncoderModel`]. It is used to instantiate a
     PEAudioVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     PEAudioVideoEncoder-8B [Qwen/PEAudioVideoEncoder-8B](https://huggingface.co/Qwen/PEAudioVideoEncoder-8B).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -55,45 +54,10 @@ class PEAudioVideoEncoderConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
@@ -156,8 +120,9 @@ class PEAudioVideoEncoderConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        rope_theta=20000,
-        rope_scaling=None,
+        rope_parameters={
+            "rope_theta": 20000,
+        },
         attention_bias=False,
         max_window_layers=28,
         attention_dropout=0.0,
@@ -168,10 +133,6 @@ class PEAudioVideoEncoderConfig(PretrainedConfig):
         vocab_size=None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -192,15 +153,8 @@ class PEAudioVideoEncoderConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -210,7 +164,14 @@ class PEAudioVideoEncoderConfig(PretrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        self.rope_parameters = rope_parameters
+
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
         if isinstance(audio_config, dict):
             audio_config["model_type"] = audio_config.get("model_type", "pe_audio_encoder")

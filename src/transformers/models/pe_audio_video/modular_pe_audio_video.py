@@ -39,8 +39,9 @@ class PEAudioVideoEncoderConfig(Qwen3Config):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        rope_theta=20000,
-        rope_scaling=None,
+        rope_parameters={
+            "rope_theta": 20000,
+        },
         attention_bias=False,
         max_window_layers=28,
         attention_dropout=0.0,
@@ -63,8 +64,7 @@ class PEAudioVideoEncoderConfig(Qwen3Config):
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             max_window_layers=max_window_layers,
             attention_dropout=attention_dropout,
@@ -658,7 +658,6 @@ class PEAudioVideoModel(PEAudioVideoPretrainedModel):
             video_model_output=video_outputs,
             loss=loss,
         )
-
 
 
 __all__ = [

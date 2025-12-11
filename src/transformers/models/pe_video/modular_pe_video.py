@@ -7,11 +7,11 @@ import torch.nn.functional as F
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForImageClassification
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForImageClassification, AutoModel
 from ..pe_audio.modeling_pe_audio import PEAudioContrastiveHead, PEAudioEncoderEmbeddings
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -45,8 +45,9 @@ class PEVideoEncoderConfig(Qwen3Config):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        rope_theta=20000,
-        rope_scaling=None,
+        rope_parameters={
+            "rope_theta": 20000,
+        },
         attention_bias=False,
         max_window_layers=28,
         attention_dropout=0.0,
@@ -79,8 +80,7 @@ class PEVideoEncoderConfig(Qwen3Config):
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             max_window_layers=max_window_layers,
             attention_dropout=attention_dropout,
@@ -233,9 +233,6 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
 
     def __init__(self, config: PEVideoEncoderConfig):
         super().__init__(config)
-        # Vision feature extraction stack (pre-embeddings)
-        # NOTE: we use `AutoModelForImageClassification` instead of `AutoModel`
-        # because `TimmWrapperModel` forces `num_classes=0` which drops the final linear projection.
         self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
         self.proj = nn.Linear(config.vision_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -364,24 +361,23 @@ class PEVideoModel(PEVideoPreTrainedModel):
             output_hidden_states=True,
         )
 
-        # here is the only diff when doing frame-level
-        # video_embeds = video_output.last_hidden_state
         video_embeds = video_output.pooler_output
         video_embeds = self.video_head(video_embeds)
 
         text_embeds = text_output.hidden_states[-1][:, 0]
         text_embeds = self.text_video_head(text_embeds)
 
-        logits_per_video = (video_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_video = video_embeds @ text_embeds.T
         logits_per_video = logits_per_video * self.video_logit_scale + self.video_logit_bias
+        logits_per_text = logits_per_video.t()
 
         loss = None
         if return_loss:
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
-            loss = -F.logsigmoid(labels * logits_per_video).sum() / text_embeds.shape[0]
+            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
         return PEVideoOutput(
-            logits_per_text=logits_per_video.transpose(0, 1),
+            logits_per_text=logits_per_text,
             logits_per_video=logits_per_video,
             text_embeds=text_embeds,
             video_embeds=video_embeds,

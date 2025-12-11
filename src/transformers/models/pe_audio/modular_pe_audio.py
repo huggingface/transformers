@@ -45,8 +45,9 @@ class PEAudioEncoderConfig(Qwen3Config):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        rope_theta=20000,
-        rope_scaling=None,
+        rope_parameters={
+            "rope_theta": 20000,
+        },
         attention_bias=False,
         max_window_layers=28,
         attention_dropout=0.0,
@@ -81,8 +82,6 @@ class PEAudioEncoderConfig(Qwen3Config):
             initializer_range=initializer_range,
             rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
             attention_bias=attention_bias,
             max_window_layers=max_window_layers,
             attention_dropout=attention_dropout,
@@ -475,11 +474,12 @@ class PEAudioModel(PEAudioPretrainedModel):
             attention_mask=attention_mask,
             return_dict=True,
         )
-
-    
         text_features = text_outputs.last_hidden_state
         text_features = self.text_head(text_features)
         return text_features
+
+    def _get_audio_embeds(self, audio_outputs: BaseModelOutputWithPooling):
+        return self.audio_head(audio_outputs.pooler_output)
 
     def get_audio_features(self, input_values, padding_mask=None):
         # TODO: should it be named feature or embeds
@@ -514,11 +514,13 @@ class PEAudioModel(PEAudioPretrainedModel):
             output_hidden_states=True,
         )
 
-        audio_embeds = self._get_audio_embeds(audio_outputs)
+        audio_embeds = audio_outputs.pooler_output
+        audio_embeds = self.audio_head(audio_embeds)
+
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
-        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_audio = audio_embeds @ text_embeds.T
         logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
         logits_per_text = logits_per_audio.t()
 
@@ -528,7 +530,7 @@ class PEAudioModel(PEAudioPretrainedModel):
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
         return PEAudioOutput(
-            logits_per_text=logits_per_audio.transpose(0, 1),
+            logits_per_text=logits_per_text,
             logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
@@ -538,9 +540,57 @@ class PEAudioModel(PEAudioPretrainedModel):
         )
 
 
+# TODO: underline in documentation that logits output shape is 
+# 1. Model: (n_audio, n_text)
+# 2. Frame-level: (n_audio, n_text, n_frames)
 class PEAudioFrameLevelModel(PEAudioModel):
-    def _get_audio_embeds(self, audio_outputs: BaseModelOutputWithPooling):
-        return audio_outputs.last_hidden_state
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_loss: Optional[bool] = None,
+        **kwargs,
+    ) -> PEAudioOutput:
+        audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
+            input_values=input_values,
+            padding_mask=padding_mask,
+            **{**kwargs, "return_dict": True},
+        )
+
+        text_outputs: MaskedLMOutput = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+
+        audio_embeds = audio_outputs.last_hidden_state
+        audio_embeds = self.audio_head(audio_embeds)
+
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_audio_head(text_embeds)
+
+        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_text = logits_per_audio.transpose(0, 1)
+
+        loss = None
+        if return_loss:
+            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
+            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
+
+        return PEAudioOutput(
+            logits_per_text=logits_per_text,
+            logits_per_audio=logits_per_audio,
+            text_embeds=text_embeds,
+            audio_embeds=audio_embeds,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
+            loss=loss,
+        )
 
 
 __all__ = [
