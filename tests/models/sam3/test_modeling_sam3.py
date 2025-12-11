@@ -22,10 +22,10 @@ import requests
 
 from transformers.testing_utils import (
     backend_empty_cache,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
-    require_deterministic_for_xpu,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
