@@ -66,7 +66,7 @@ def pad_by_intervals(size: int, max_value: int, nb_intervals: int) -> int:
     interval_size = max_value // nb_intervals
     if interval_size == 0:
         return max_value
-    padded = ceil(size / interval_size) * interval_size
+    padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
     return min(padded, max_value)
 
 
@@ -713,6 +713,7 @@ class ContinuousBatchProcessor:
         # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
         # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
         batch_size, seq_len, vocab_size = logits.shape
+        # NOTE: to be an exact match with generate, we should also convert logits2d to float32 here, but it's not needed in practice
         logits_2d = logits.view(batch_size * seq_len, vocab_size)
         input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
         # Process with 2D tensors
@@ -869,7 +870,7 @@ class ContinuousBatchingManager:
             logger.warning("\nBatch processor was not initialized.")
         else:
             if self.batch_processor.cache.use_prefix_sharing:
-                logger.warning(
+                logger.info(
                     f"\nPrefix sharing was on. Total prefix length: {self.batch_processor.cache._total_prefix_length}"
                 )
 
