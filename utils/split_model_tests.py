@@ -266,7 +266,7 @@ if __name__ == "__main__":
         ["models/yolos"],
         ["models/zamba"],
     ]
-    model_splits = [[x[0] for x in model_tests]]
+    model_splits = [[x[0] for x in model_splits]]
 
     # Total: 179 models
     print(model_splits)
