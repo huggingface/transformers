@@ -39,6 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -322,7 +323,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with torch.autocast(device_type="cuda", enabled=False):
+            with maybe_autocast(device_type="cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 

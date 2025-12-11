@@ -80,5 +80,5 @@ class SpQRHfQuantizer(HfQuantizer):
     def is_trainable(self):
         return False
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
