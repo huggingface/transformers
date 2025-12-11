@@ -264,8 +264,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         del model
         flush_memory(flush_compile=use_compile)
 
-    @slow
-    @require_torch_accelerator
     @parameterized.expand(
         list(
             itertools.product(
@@ -276,6 +274,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
+    @require_torch_accelerator
+    @slow
     def test_continuous_batching_config_combinations(
         self,
         allow_prefix_sharing: bool,
@@ -290,8 +290,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
-    @slow
-    @require_torch_accelerator
+
     @parameterized.expand(
         list(
             itertools.product(
@@ -301,6 +300,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
+    @require_torch_accelerator
+    @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
             self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
