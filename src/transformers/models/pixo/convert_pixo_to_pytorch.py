@@ -183,7 +183,7 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        name = model_name.replace('_', '-')
+        name = model_name.replace("_", "-")
         model.push_to_hub(f"facebook/{name}")
         processor.push_to_hub(f"facebook/{name}")
 
