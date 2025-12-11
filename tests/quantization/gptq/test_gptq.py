@@ -113,8 +113,6 @@ class GPTQTest(unittest.TestCase):
     group_size = 128
     desc_act = False
     act_group_aware = True
-    quant_backend = BACKEND.AUTO
-    load_backend = BACKEND.AUTO
     dataset = [
         "gptqmodel is an easy-to-use model quantization library with user-friendly APIs, based on the GPTQ algorithm."
     ]
@@ -143,7 +141,7 @@ class GPTQTest(unittest.TestCase):
             desc_act=cls.desc_act,
             act_group_aware=cls.act_group_aware,
             sym=cls.sym,
-            backend=cls.quant_backend,
+            backend=BACKEND.AUTO,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -309,7 +307,6 @@ class GPTQTestActOrderExllamaV2(unittest.TestCase):
     # `act_group_aware` == `True` requires `desc_act` == `False` when both are explicitly set
     desc_act = True
     act_group_aware = False
-    load_backend = BACKEND.EXLLAMA_V2
 
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
@@ -328,7 +325,7 @@ class GPTQTestActOrderExllamaV2(unittest.TestCase):
             max_input_length=4028,
             desc_act=cls.desc_act,
             act_group_aware=cls.act_group_aware,
-            backend=cls.load_backend,
+            backend=BACKEND.EXLLAMA_V2,
         )
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
@@ -376,7 +373,6 @@ class GPTQTestExllamaV2(unittest.TestCase):
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
 
-    load_backend = BACKEND.EXLLAMA_V2
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel kernels are not always bitwise deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
@@ -389,7 +385,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, backend=cls.load_backend)
+        cls.quantization_config = GPTQConfig(bits=4, backend=BACKEND.EXLLAMA_V2)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             dtype=torch.float16,

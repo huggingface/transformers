@@ -85,7 +85,6 @@ class AwqBackend(str, Enum):
     GEMV_FAST = "gemv_fast"
     TORCH_AWQ = "torch_awq"
     TORCH_FUSED_AWQ = "torch_fused_awq"
-    LLMAWQ = "llm-awq"
 
 
 @dataclass
@@ -806,8 +805,7 @@ class AwqConfig(GPTQConfig):
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
         backend (`AwqBackend`, *optional*, defaults to `AwqBackend.AUTO`):
-            The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
-            that quantize their own models using `llm-awq` library.
+            The quantization backend.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
@@ -851,16 +849,6 @@ class AwqConfig(GPTQConfig):
 
         if self.backend not in AwqBackend.__members__.values():
             raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")
-
-        if self.backend == AwqBackend.LLMAWQ:
-            # Only cuda device can run this function
-            if not (torch.cuda.is_available() or torch.xpu.is_available()):
-                raise ValueError("LLM-AWQ backend is only supported on CUDA and XPU")
-            if torch.cuda.is_available():
-                compute_capability = torch.cuda.get_device_capability()
-                major, minor = compute_capability
-                if major < 8:
-                    raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
 
     def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
