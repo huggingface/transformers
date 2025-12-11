@@ -165,7 +165,8 @@ If you want something even higher up the stack, then `PreTrainedTokenizerBase` i
 - `save_pretrained`
 - among a few others
 
-**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure during conversion. This is useful if the model requires specific token ordering or additional tokens. See existing converter classes in `convert_slow_tokenizer.py` for examples.
+**Note for implementing new tokenizers:** When creating a tokenizer class that loads from SentencePiece files, you can override the `convert_from_spm` class method in your converter to customize vocabulary structure, normalizers, regexes and anything that you would want to be passed to the tokenizers your are converting. 
+This is useful if the model requires specific token ordering or special split regex patterns. See existing converter classes in `convert_slow_tokenizer.py` for examples.
 
 ### API Changes
 
