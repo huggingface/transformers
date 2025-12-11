@@ -3248,11 +3248,32 @@ class ModelTesterMixin:
             self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
         dtype = torch.bfloat16
+
+        def _expected_attn_impls(attn_impl: str) -> set[str]:
+            # Allow kernels fallbacks for flash attention tests.
+            requested = attn_impl
+            base = requested.removeprefix("paged|")
+            prefix = "paged|" if requested.startswith("paged|") else ""
+
+            expected = {requested}
+            kernel_map = {
+                "flash_attention_2": "kernels-community/flash-attn2",
+                "flash_attention_3": "kernels-community/vllm-flash-attn3",
+            }
+            if base in kernel_map:
+                if prefix:
+                    expected.add(f"{prefix}{kernel_map[base]}")
+                else:
+                    expected.add(kernel_map[base])
+            return expected
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not self._is_composite:
                 self.skipTest("This model is not a composite model!")
+
+            expected_attn_impls = _expected_attn_impls(attn_implementation)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -3280,7 +3301,7 @@ class ModelTesterMixin:
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
-                            self.assertTrue(sub_config._attn_implementation == attn_implementation)
+                            self.assertIn(sub_config._attn_implementation, expected_attn_impls)
 
                     has_fa = False
                     for name, submodule in model_fa.named_modules():
@@ -3288,7 +3309,7 @@ class ModelTesterMixin:
                         if (
                             "Attention" in class_name
                             and getattr(submodule, "config", None)
-                            and submodule.config._attn_implementation == attn_implementation
+                            and submodule.config._attn_implementation in expected_attn_impls
                         ):
                             has_fa = True
                             break
