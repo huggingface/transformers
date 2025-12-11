@@ -128,6 +128,7 @@ jobs:
 
       - name: Rename batch results
         run: |
+          mkdir -p batch_results
           mv batch_results_* batch_results
 
       - name: Collect modified test files
