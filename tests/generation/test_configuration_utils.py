@@ -252,8 +252,9 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
             self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
+            print(exc.exception)
             self.assertTrue(
-                "Greedy methods without beam search do not support `num_return_sequences` different than 1"
+                "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1"
                 in str(exc.exception)
             )
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)

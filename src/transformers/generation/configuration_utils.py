@@ -425,7 +425,6 @@ class GenerationConfig(PushToHubMixin):
         self.force_words_ids = kwargs.pop("force_words_ids", None)
 
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
-        self.watermarking_config = kwargs.pop("watermarking_config", None)
 
         # Common attributes
         self._commit_hash = kwargs.pop("_commit_hash", None)
@@ -667,7 +666,7 @@ class GenerationConfig(PushToHubMixin):
             if self.num_beams is None or self.num_beams == 1:
                 if not self.do_sample:
                     raise ValueError(
-                        "Greedy methods (do_sample != True) without beam search do not support"
+                        "Greedy methods (do_sample != True) without beam search do not support "
                         f"`num_return_sequences` different than 1 (got {self.num_return_sequences})."
                     )
             elif self.num_beams is not None and self.num_return_sequences > self.num_beams:
