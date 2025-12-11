@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - ydshieh-default-fast-image-proc-all-models
+      - ydshieh-default-fast-image-proc-all-models-full
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:

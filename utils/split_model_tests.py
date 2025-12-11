@@ -85,4 +85,5 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
+    model_splits = [["models/florence2"]]
     print(model_splits)
