@@ -327,7 +327,7 @@ inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tok
 input_len = len(inputs.input_ids[0])
 
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=100)
+    generated_ids = model.generate(**inputs, cache_implementation="static", max_new_tokens=100)
 generated_texts = processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)
 
 print(generated_texts[0])
