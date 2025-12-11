@@ -82,7 +82,7 @@ You can learn more about video processors [here](../main_classes/video_processor
 
 </Tip>
 
-We can define our chat template, passing in video with a URL like below.
+We can define our chat history, passing in video with a URL like below.
 ```python
 messages = [
     {
