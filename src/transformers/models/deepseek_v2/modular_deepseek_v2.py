@@ -25,6 +25,7 @@ from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
+from ...utils.generic import maybe_autocast
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -303,7 +304,7 @@ class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
             freqs_cis = freqs_cis * self.attention_scaling

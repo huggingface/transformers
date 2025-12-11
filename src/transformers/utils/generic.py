@@ -21,7 +21,7 @@ import os
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
@@ -42,6 +42,7 @@ _is_torch_available = False
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch
+    from torch.types import _dtype
 
     from ..model_debugging_utils import model_addition_debugger_context
 
@@ -152,6 +153,28 @@ def is_torch_dtype(x):
         else:
             return False
     return isinstance(x, torch.dtype)
+
+
+def maybe_autocast(
+    device_type: str,
+    dtype: Optional["_dtype"] = None,
+    enabled: bool = True,
+    cache_enabled: Optional[bool] = None,
+):
+    """
+    Context manager that only autocasts if:
+
+    - `autocast` is already enabled in this context
+    - Or this call to `maybe_autocast` has `enabled=True`
+
+    This prevents `autocast` being added to the graph when it is effectively a no-op.
+    Which makes graph splitting in `torch.compile` more flexible as it removes the
+    requirement that partition IDs be monotonically increasing.
+    """
+    if torch.is_autocast_enabled(device_type) or enabled:
+        return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
+    else:
+        return nullcontext()
 
 
 def _is_mlx(x):

@@ -313,6 +313,16 @@ GGUF_TOKENIZER_MAPPING = {
     },
 }
 
+# We only need to set here the parameters that default to different values between transformers and llamacpp.
+GGUF_CONFIG_DEFAULTS_MAPPING = {
+    "qwen3_moe": {
+        # NOTE: Qwen3MoeConfig defaults to false but llama.cpp needs this to be true.
+        # See: https://github.com/ggml-org/llama.cpp/blob/17f7f4baad8b3a716ee139da7bb56ae984e8c0fa/src/models/qwen3moe.cpp#L85-L96
+        #      (the parameter right after LLM_FFN_SILU corresponds to norm_topk_prob)
+        "norm_topk_prob": True,
+    },
+}
+
 
 def _gguf_parse_value(_value, data_type):
     if not isinstance(data_type, list):
