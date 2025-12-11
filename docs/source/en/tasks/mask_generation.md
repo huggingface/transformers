@@ -395,7 +395,7 @@ for k,v in batch.items():
 # ground_truth_mask torch.Size([4, 1, 256, 256])
 #original_image_size torch.Size([4, 2])
 ```
-We will now load the model, we will freeze the vision and the prompt encoder and only train the mask decoder. 
+We will now load the model and freeze the vision and the prompt encoder to only train the mask decoder. 
 
 ```python
 from transformers import Sam2Model
