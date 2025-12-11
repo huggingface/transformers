@@ -195,7 +195,7 @@ tokenizer = LlamaTokenizer(vocab=vocab, merges=merges)
 
 This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary. This allows comparing different tokenizer classes with the same vocab; therefore enabling the comparison of different pre-tokenizers, normalizers, etc.
 
-**Simplified file loading:** Support is added for passing`vocab_file` and `merges_file` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provdied but no merges, merges will be automatically generated (excluding special tokens).
+**Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provdied but no merges, merges will be automatically generated (excluding special tokens).
 
 Note: Loading from file paths with `vocab_file` is supported during initialization, but it is recommended to load saved tokenizers using `from_pretrained`.
 
