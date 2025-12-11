@@ -81,19 +81,15 @@
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_multi
-      title: Tensor parallelism
-    - local: expert_parallelism
-      title: Expert parallelism
+      title: Distributed inference
     - local: kv_cache
-      title: Cache strategies
+      title: KV cache strategies
     - local: cache_explanation
       title: Caching
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_cpu
-      title: CPU
-    - local: llm_optims
-      title: Optimizing inference
+    - local: assisted_decoding
+      title: Assisted decoding
+    - local: optimum
+      title: Optimum
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
