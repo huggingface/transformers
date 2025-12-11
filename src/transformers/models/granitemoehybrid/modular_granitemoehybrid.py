@@ -40,6 +40,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
     eager_attention_forward,
+    apply_rotary_pos_emb,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
@@ -55,6 +56,7 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -65,6 +67,9 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
