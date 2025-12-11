@@ -271,7 +271,7 @@ train_ds[0]
  'mask_path': '/content/MicroMat-mini/mask/0034_34.png',
  'prompt_path': '/content/MicroMat-mini/prompt/0034_34.json'}
 ```
-Prompts are string of dictionaries, so can get bounding boxes like below.
+Prompts are string of dictionaries, so you can get the bounding boxes as shown below.
 ```python
 import json
 
