@@ -46,7 +46,7 @@ class FillMaskPipelineTests(unittest.TestCase):
     def test_small_model_pt(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2)
 
-        outputs = unmasker("My name is <mask>")
+        outputs = unmasker("My name is<mask>")
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
             [
@@ -55,7 +55,7 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = unmasker("The largest city in France is <mask>")
+        outputs = unmasker("The largest city in France is<mask>")
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
             [
@@ -69,7 +69,7 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = unmasker("My name is <mask>", targets=[" Patrick", " Clara", " Teven"], top_k=3)
+        outputs = unmasker("My name is<mask>", targets=[" Patrick", " Clara", " Teven"], top_k=3)
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
             [
@@ -79,7 +79,7 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = unmasker("My name is <mask> <mask>", top_k=2)
+        outputs = unmasker("My name is<mask><mask>", top_k=2)
 
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
