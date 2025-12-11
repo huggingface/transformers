@@ -1313,9 +1313,12 @@ def _process_parameter_type(param, param_name, func):
             subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
         out_str.append(subtype)
 
-    param_type = " or ".join(out_str)
-
-    return param_type, optional
+    if not out_str:
+        return "", optional
+    elif len(out_str) == 1:
+        return out_str[0], optional
+    else:
+        return f"Union[{', '.join(out_str)}]", optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
