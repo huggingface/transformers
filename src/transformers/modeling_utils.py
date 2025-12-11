@@ -1479,6 +1479,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
         `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
         """
+        if isinstance(dtype, str):
+            if hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+            else:
+                raise ValueError(f"Received an invalid string dtype: {dtype}")
         if not dtype.is_floating_point:
             raise ValueError(
                 f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
