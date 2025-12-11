@@ -4102,7 +4102,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 state_dict = merged_state_dict
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
+            missing_keys, unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set(), set()
         else:
             all_pointer = set()
             # Checkpoints are safetensors
@@ -4124,7 +4124,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, misc = (
+            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, conversion_errors = (
                 convert_and_load_state_dict_in_model(
                     model,
                     merged_state_dict,
@@ -4198,7 +4198,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys=missing_keys,
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
-            misc=misc,
+            conversion_errors=conversion_errors,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
 
