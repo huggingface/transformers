@@ -24,7 +24,7 @@ These models have nearly the same architecture as [image-text-to-text](../image_
 
 Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
 
-Note that these models process videos with no audio. [any-to-any](../any-to-any) models on the other hand can process videos with audio in them.
+Note that these models process videos with no audio. [Any-to-any](../any-to-any) models on the other hand can process videos with audio in them.
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
