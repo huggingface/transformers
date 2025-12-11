@@ -33,6 +33,7 @@ from transformers.utils import is_ipex_available
 if is_torch_available():
     import torch
 
+
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):
         with self.assertRaises(ValueError):
@@ -185,7 +186,7 @@ class GPTQTest(unittest.TestCase):
         the class type of the linear layers of the converted models
         """
         from gptqmodel import METHOD, hf_select_quant_linear_v2
-        
+
         if hasattr(self.config, "quantization_config"):
             checkpoint_format = self.config.quantization_config.get("checkpoint_format")
             meta = self.config.quantization_config.get("meta")
@@ -302,7 +303,9 @@ class GPTQTestActOrderExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
+
     from gptqmodel import BACKEND
+
     # `act_group_aware` == `True` requires `desc_act` == `False` when both are explicitly set
     desc_act = True
     act_group_aware = False
@@ -372,6 +375,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
+
     from gptqmodel import BACKEND
 
     load_backend = BACKEND.EXLLAMA_V2
