@@ -699,7 +699,7 @@ class PEAudioModel(PEAudioPretrainedModel):
             padding_mask=padding_mask,
             return_dict=True,
         )
-        audio_features = self.audio_head(audio_outputs.pooler_output)
+        audio_features = self._get_audio_embeds(audio_outputs)
         return audio_features
 
     @can_return_tuple
@@ -712,29 +712,26 @@ class PEAudioModel(PEAudioPretrainedModel):
         return_loss: Optional[bool] = None,
         **kwargs,
     ) -> PEAudioOutput:
-        audio_output: BaseModelOutputWithPooling = self.audio_encoder(
+        audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
             **{**kwargs, "return_dict": True},
         )
 
-        text_output: MaskedLMOutput = self.text_model(
+        text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             **{**kwargs, "return_dict": True},
             output_hidden_states=True,
         )
 
-        # here is the only diff when doing frame-level
-        # audio_embeds = audio_output.last_hidden_state
-        audio_embeds = audio_output.pooler_output
-        audio_embeds = self.audio_head(audio_embeds)
-
-        text_embeds = text_output.hidden_states[-1][:, 0]
+        audio_embeds = self._get_audio_embeds(audio_outputs)
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
         logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
         logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_text = logits_per_audio.t()
 
         loss = None
         if return_loss:
@@ -746,10 +743,15 @@ class PEAudioModel(PEAudioPretrainedModel):
             logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
-            text_model_output=text_output,
-            audio_model_output=audio_output,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
             loss=loss,
         )
 
 
-__all__ = ["PEAudioModel", "PEAudioEncoder"]
+class PEAudioFrameLevelModel(PEAudioModel):
+    def _get_audio_embeds(self, audio_outputs: BaseModelOutputWithPooling):
+        return audio_outputs.last_hidden_state
+
+
+__all__ = ["PEAudioFrameLevelModel", "PEAudioModel", "PEAudioEncoder"]
