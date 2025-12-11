@@ -122,7 +122,7 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.conversion_mapping import MergeModulelist, get_model_conversion_mapping
+    from transformers.conversion_mapping import MergeModulelist, WeightConverter, get_model_conversion_mapping
     from transformers.modeling_attn_mask_utils import (
         AttentionMaskConverter,
         _create_4d_causal_attention_mask,
@@ -2226,11 +2226,10 @@ class ModelUtilsTest(TestCasePlus):
         small_config = MixtralConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, num_attention_heads=8)
         model = MixtralModel(small_config)
         weight_conversions = get_model_conversion_mapping(model)
+        converters = [conversion for conversion in weight_conversions if isinstance(conversion, WeightConverter)]
         # Just a safeguard
         self.assertTrue(
-            any(
-                isinstance(ops, MergeModulelist) for conversion in weight_conversions for ops in conversion.operations
-            ),
+            any(isinstance(ops, MergeModulelist) for converter in converters for ops in converter.operations),
             "The test is useless without conversions on the model",
         )
 
