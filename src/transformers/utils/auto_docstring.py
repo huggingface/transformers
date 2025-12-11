@@ -1290,27 +1290,31 @@ def _process_parameter_type(param, param_name, func):
         param_name (`str`): The name of the parameter
         func (`function`): The function the parameter belongs to
     """
-    param_annotation = param.annotation
-    default_value = param.default
-    origin = get_origin(param_annotation)
-    args = get_args(param_annotation)
-    optional_flag = False
-    type_hint_str = ""
-    if (
-        (origin is Union and type(None) in args)
-        or default_value is not inspect._empty
-        or (origin is types.UnionType and type(None) in args)
-        or param_annotation is types.NoneType
-        or param_annotation is None
-    ):
-        optional_flag = True
-    if param_annotation is not inspect._empty:
-        if (type(param_annotation) is not type) or not hasattr(param_annotation, "__name__"):
-            type_hint_str = str(param_annotation)
-        else:
-            type_hint_str = param_annotation.__name__
+    optional = False
+    if param.annotation == inspect.Parameter.empty:
+        return "", False
+    elif get_origin(param.annotation) is Union:
+        subtypes = get_args(param.annotation)
+    else:
+        subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
+    out_str = []
+    for subtype in subtypes:
+        if subtype is type(None):
+            optional = True
+            out_str.append("None")
+            continue
+        subtype = str(subtype)
+        if "typing" in subtype:
+            subtype = "".join(subtype.split("typing.")).replace("transformers.", "~")
+        elif hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
+            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '')}.{subtype.__name__}".removeprefix(".")
+        if "ForwardRef" in subtype:
+            subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
+        out_str.append(subtype)
 
-    return type_hint_str, optional_flag
+    param_type = " | ".join(out_str)
+
+    return param_type, optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
