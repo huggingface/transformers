@@ -269,24 +269,16 @@ def get_torch_context_manager_or_global_device():
     return device_in_context
 
 
-def get_state_dict_dtype(state_dict, config_dtype: Optional[torch.dtype] = None):
+def get_state_dict_dtype(state_dict):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
-
-    If `config_dtype` is provided (for instance when `dtype="auto"` and the config already carries a dtype), it is used.
     """
-    if config_dtype is not None:
-        return config_dtype
-
-    if len(state_dict) == 0:
-        return torch.get_default_dtype()
-
     for t in state_dict.values():
         if t.is_floating_point():
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return next(iter(state_dict.values())).dtype
+    return next(state_dict.values()).dtype
 
 
 str_to_torch_dtype = {
@@ -732,26 +724,16 @@ def _get_dtype(
                     if is_sharded and "dtype" in sharded_metadata:
                         dtype = sharded_metadata["dtype"]
                     elif state_dict is not None:
-                        dtype = get_state_dict_dtype(state_dict, getattr(config, "dtype", None))
+                        dtype = get_state_dict_dtype(state_dict)
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
-                        dtype = get_state_dict_dtype(state_dict, getattr(config, "dtype", None))
-                    config.dtype = dtype
-                    for sub_config_key in config.sub_configs:
-                        if (sub_config := getattr(config, sub_config_key)) is not None:
-                            sub_config.dtype = dtype
+                        dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `dtype` attribute can't be found in model's config object, "
                         "will use dtype={dtype} as derived from model's weights"
                     )
-                if isinstance(dtype, str) and hasattr(torch, dtype):
-                    dtype = getattr(torch, dtype)
-                    config.dtype = dtype
-                    for sub_config_key in config.sub_configs:
-                        if (sub_config := getattr(config, sub_config_key)) is not None:
-                            sub_config.dtype = dtype
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
                 config.dtype = dtype
@@ -816,7 +798,7 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        return next(param.dtype for param in self.parameters() if param.is_floating_point())
+        return self.config.dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -1242,11 +1224,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(self.config, "dtype", None) is None:
             default_dtype = torch.get_default_dtype()
             self.config.dtype = default_dtype
-            for sub_config_key in self.config.sub_configs:
-                if (sub_config := getattr(self.config, sub_config_key)) is not None and getattr(
-                    sub_config, "dtype", None
-                ) is None:
-                    sub_config.dtype = default_dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -3840,8 +3817,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        dtype_kwarg_provided = "dtype" in kwargs
-        dtype = kwargs.pop("dtype", "auto")
+        dtype = kwargs.pop("dtype", None)
         torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
