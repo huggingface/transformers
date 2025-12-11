@@ -27,7 +27,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
@@ -39,6 +39,10 @@ from ..parakeet.modeling_parakeet import (
 )
 from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..t5.tokenization_t5 import T5Tokenizer
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 class LasrTokenizer(T5Tokenizer, TokenizersBackend):
@@ -370,14 +374,8 @@ class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):
         super().__init__(config, module_config)
         self.padding = "same"
         self.norm = nn.BatchNorm1d(config.hidden_size, momentum=config.batch_norm_momentum)
-        try:
-            from torch.nn.attention.flex_attention import BlockMask
 
-            self.BlockMask = BlockMask
-        except ImportError:
-            self.BlockMask = None
-
-    def forward(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Union[torch.Tensor, "BlockMask"]):
         """
         Compute convolution module.
 
@@ -398,9 +396,7 @@ class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         # Apply padding mask before convolution
-        if attention_mask is not None and not (
-            self.BlockMask is not None and isinstance(attention_mask, self.BlockMask)
-        ):
+        if attention_mask is not None and not isinstance(attention_mask, BlockMask):
             if attention_mask.dtype == torch.bool:
                 all_masked_rows = torch.all(~attention_mask, dim=2)
             else:
