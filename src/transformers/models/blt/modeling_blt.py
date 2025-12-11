@@ -1851,4 +1851,4 @@ class BltTextModel(BltPreTrainedModel):
     pass
 
 
-__all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM"]
+__all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM", "BltVisionModel", "BltTextModel"]
