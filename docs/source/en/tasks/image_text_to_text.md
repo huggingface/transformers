@@ -81,7 +81,7 @@ messages = [
 ]
 ```
 
-In case we want to feed conversation turns to condition the generation better (like few-shot prompting), we can add assistant response ourselves, and the actual prompt as an input at the end of the template.
+Alternate between the `user` and `assistant` role to ground the model with prior context to generate better responses.
 
 ```python
 messages = [
