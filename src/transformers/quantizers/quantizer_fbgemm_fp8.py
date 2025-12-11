@@ -50,7 +50,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         if not is_torch_cuda_available() and not is_torch_xpu_available():
             raise ImportError("Using fbgemm fp8 quantization requires a GPU or XPU")
-        if is_torch_cuda_available() and not is_kernels_available():
+        if is_torch_xpu_available() and not is_kernels_available():
             raise ImportError("Using FP8 fbgemm on XPU requires kernels (`pip install kernels`)")
         if is_torch_cuda_available() and not is_fbgemm_gpu_available():
             raise ImportError(
