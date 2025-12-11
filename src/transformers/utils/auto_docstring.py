@@ -1293,6 +1293,7 @@ def _process_parameter_type(param, param_name, func):
     optional = False
     if param.annotation == inspect.Parameter.empty:
         return "", False
+    # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
     elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
         subtypes = get_args(param.annotation)
     else:
