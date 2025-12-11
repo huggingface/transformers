@@ -3563,6 +3563,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     with use_kernel_mapping(kernel_config.kernel_mapping):
                         self.use_kernels = True
                 else:
+                    # Param inherit_mapping should be False to avoid still loading kernel from remote
                     with use_kernel_mapping(kernel_config.kernel_mapping, inherit_mapping=False):
                         self.use_kernels = True
             # We use the default kernel mapping in .integrations.hub_kernels
