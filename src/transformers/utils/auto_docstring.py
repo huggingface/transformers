@@ -16,7 +16,6 @@
 import inspect
 import os
 import textwrap
-import types
 from pathlib import Path
 from typing import Union, get_args, get_origin
 
@@ -1307,7 +1306,9 @@ def _process_parameter_type(param, param_name, func):
         if "typing" in subtype:
             subtype = "".join(subtype.split("typing.")).replace("transformers.", "~")
         elif hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
-            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '')}.{subtype.__name__}".removeprefix(".")
+            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '')}.{subtype.__name__}".removeprefix(
+                "."
+            )
         if "ForwardRef" in subtype:
             subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
         out_str.append(subtype)
