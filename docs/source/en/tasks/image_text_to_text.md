@@ -299,7 +299,7 @@ First, install dependencies.
 pip install -U optimum-quanto bitsandbytes
 ```
 
-To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization. On top of this, you can compile a model using `torch.compile()` for additional speed gains.
+To quantize a model during loading, we need to first create [`QuantoConfig`]. Then load the model as usual, but pass `quantization_config` during model initialization. 
 
 ```python
 from transformers import AutoModelForImageTextToText, QuantoConfig
@@ -309,11 +309,7 @@ quantization_config = QuantoConfig(weights="int8")
 quantized_model = AutoModelForImageTextToText.from_pretrained(
     model_id, device_map="auto", quantization_config=quantization_config
 )
-quantized_model = torch.compile(quantized_model)
-```
 
-
-```python
 messages = [
     {
         "role": "user",
