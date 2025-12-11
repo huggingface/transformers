@@ -103,12 +103,11 @@ class Ernie4_5_VLVisionText2TextModelTester:
                 "max_position_embeddings": 512,
                 "tie_word_embeddings": True,
                 "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [1, 1, 2]},
+                "mlp_layer_types": ["dense", "sparse"],
                 "moe_intermediate_size": [22, 22],
                 "moe_k": 2,
                 "moe_num_experts": 8,
                 "moe_num_shared_experts": 2,
-                "moe_layer_start_index": 0,
-                "moe_layer_interval": 1,
                 "moe_norm_min": 1e-12,
             }
 

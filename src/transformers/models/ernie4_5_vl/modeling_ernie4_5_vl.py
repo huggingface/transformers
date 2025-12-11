@@ -497,11 +497,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
-        if (
-            ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= config.moe_layer_start_index
-            and layer_idx <= config.moe_layer_end_index
-        ):
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = Ernie4_5_VLMoeBlock(config)
         else:
             self.mlp = Ernie4_5_VLMLP(config)

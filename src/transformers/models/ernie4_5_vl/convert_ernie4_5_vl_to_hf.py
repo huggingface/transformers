@@ -67,8 +67,7 @@ TEXT_TO_VISION_CONFIG_KEYS = [
 ALL_VISION_CONFIG_KEYS = VALID_VISION_CONFIG_KEYS + TEXT_TO_VISION_CONFIG_KEYS + ["intermediate_size"]
 ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
     "hidden_act",
-    "moe_layer_end_index",
-    "moe_layer_start_index",
+    "mlp_layer_types",
     "moe_num_experts",
     "rope_parameters",
 ]
@@ -191,14 +190,24 @@ def convert_text_config_to_hf(text_config, original_config):
 
     # special cases
     text_config["hidden_act"] = "silu"  # default value which is not explicit in their json
-    text_config["moe_layer_end_index"] = max(original_config["moe_layer_end_index"])
-    text_config["moe_layer_start_index"] = min(original_config["moe_layer_start_index"])
     text_config["moe_num_experts"] = original_config["moe_num_experts"][0]  # the same for both modalities
     text_config["rope_parameters"] = {
         "rope_type": "default",
         "rope_theta": 500_000.0,
         "mrope_section": [22, 22, 20],
     }
+    # ernie logic to construct mlp/moe layers
+    text_config["mlp_layer_types"] = []
+    for layer_idx in range(text_config["num_hidden_layers"]):
+        if (
+            ((layer_idx + 1) % text_config["moe_layer_interval"] == 0)
+            and layer_idx >= min(original_config["moe_layer_start_index"])
+            and layer_idx <= max(original_config["moe_layer_end_index"])
+        ):
+            text_config["mlp_layer_types"].append("sparse")
+        else:
+            text_config["mlp_layer_types"].append("dense")
+    text_config.pop("moe_layer_interval", None)
 
     # delete everything else
     for key in list(text_config.keys()):

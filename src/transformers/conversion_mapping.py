@@ -288,7 +288,7 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
-    "ernie_vl",
+    "ernie4_5_vl",
 ]
 
 
