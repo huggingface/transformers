@@ -76,11 +76,8 @@ Videos are series of image frames. Depending on the hardware limitations, downsa
 
 `video-text-to-text` models have processors with video processor abstracted in them. You can pass video inference related arguments to [`~ProcessorMixin.apply_chat_template`] function.
 
-<Tip warning={true}>
-
-You can learn more about video processors [here](../main_classes/video_processor).
-
-</Tip>
+> [!WARNING]
+> You can learn more about video processors [here](../main_classes/video_processor).
 
 We can define our chat history, passing in video with a URL like below.
 ```python
