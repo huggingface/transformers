@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -298,7 +299,7 @@ class T5Attention(nn.Module):
         query_length: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:2]
         is_cross_attention = key_value_states is not None
@@ -381,6 +382,7 @@ class T5Attention(nn.Module):
             seq_length=seq_length,
             relative_context_positions=relative_context_positions,
             output_attentions=output_attentions,
+            **kwargs,
         )
 
         attn_output = attn_output.view(batch_size, -1, self.inner_dim).contiguous()
@@ -493,6 +495,7 @@ class T5Block(GradientCheckpointingLayer):
         output_attentions=False,
         return_dict=True,
         cache_position=None,
+        **kwargs,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
@@ -502,6 +505,7 @@ class T5Block(GradientCheckpointingLayer):
             use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = self_attention_outputs[0]
         attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -526,6 +530,7 @@ class T5Block(GradientCheckpointingLayer):
                 query_length=cache_position[-1] + 1,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
+                **kwargs,
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -830,6 +835,7 @@ class T5Stack(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 return_dict=return_dict,
                 cache_position=cache_position,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -991,6 +997,7 @@ class T5Model(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                **kwargs
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1014,6 +1021,7 @@ class T5Model(T5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         if not return_dict:
@@ -1165,6 +1173,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                **kwargs,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1192,6 +1201,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1296,6 +1306,7 @@ class T5EncoderModel(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return encoder_outputs
@@ -1399,6 +1410,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         sequence_output = outputs[0]
 
@@ -1499,6 +1511,7 @@ class T5ForTokenClassification(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -1637,6 +1650,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                **kwargs,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1659,6 +1673,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
