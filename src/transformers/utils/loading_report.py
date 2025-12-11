@@ -170,6 +170,7 @@ def log_state_dict_report(
     color_enabled = bool(color and sys.stdout.isatty())
     ansi = ANSI(color_enabled)
 
+    # Re-raise errors early if needed
     if error_msgs:
         error_msg = "\n\t".join(error_msgs)
         if "size mismatch" in error_msg:
@@ -230,9 +231,7 @@ def log_state_dict_report(
     if missing_keys:
         tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing form the checkpoint. Consider training on your downstream task."
     if mismatched_keys:
-        tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight."
-    if misc:
-        tips += f"\n- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
+        tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight shapes."
     tips += f"{ansi['reset']}"
 
     # Log the report as warning
