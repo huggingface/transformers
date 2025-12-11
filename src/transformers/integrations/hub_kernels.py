@@ -19,7 +19,6 @@ from types import ModuleType
 
 from packaging import version as pkg_version
 
-from ..utils import logging
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
 from .flash_attention import flash_attention_forward
@@ -32,9 +31,11 @@ try:
         Device,
         LayerRepository,
         Mode,
-        get_kernel as get_kernel_hub,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+    )
+    from kernels import (
+        get_kernel as get_kernel_hub,
     )
     from kernels import (
         use_kernel_forward_from_hub as _kernels_use_kernel_forward_from_hub,
@@ -387,6 +388,7 @@ def get_kernel(kernel_name: str, revision: str | None = None, version: str | Non
     else:
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
+
 def use_kernelized_func(module_names: list[Callable] | Callable):
     """
     This decorator attaches the target function as an attribute of the module.
@@ -423,4 +425,4 @@ __all__ = [
     "lazy_load_kernel",
     "get_kernel",
     "use_kernelized_func",
-] # type: ignore
+]  # type: ignore
