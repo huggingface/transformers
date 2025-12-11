@@ -37,11 +37,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
@@ -88,98 +84,6 @@ class CausalLMOutputWithIndexer(CausalLMOutputWithPast):
 
     lm_loss: Optional[torch.FloatTensor] = None
     indexer_kl_loss: Optional[torch.FloatTensor] = None
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class DeepseekV32RMSNorm(nn.Module):
-    """RMSNorm for DeepSeek V3.2, inherited from V3.
-
-    Per the V3.2 tech report, the only architectural difference from V3 is
-    DeepSeek Sparse Attention (DSA). All other components are identical.
-    """
-
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        DeepseekV32RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class DeepseekV32RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: DeepseekV32Config, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Optional[DeepseekV32Config] = None,
-        device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
@@ -267,7 +171,7 @@ def _hadamard_transform(x: torch.Tensor) -> torch.Tensor:
         return hadamard_transform_fallback(x, scale=scale)
 
 
-# Note: DeepseekV32MLP, DeepseekV32MoE, DeepseekV32TopkRouter, DeepseekV32NaiveMoe
+# Note: DeepseekV32RMSNorm, DeepseekV32RotaryEmbedding, DeepseekV32MLP, DeepseekV32MoE, etc.
 # are NOT needed because DeepseekV32DecoderLayer uses super().__init__() which
 # creates the MLP/MoE from the V3 parent class. The only architectural difference
 # from V3 is the Lightning Indexer in attention.
@@ -409,6 +313,27 @@ class DeepseekV32Indexer(nn.Module):
         if output_scores:
             return topk_indices, index_scores
         return topk_indices
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class DeepseekV32RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        DeepseekV32RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -568,10 +493,18 @@ class DeepseekV32Attention(nn.Module):
             and seq_length > 1  # Only for prefill, not decode
         )
 
-        # If not using sparse attention, use dense attention (V3 path)
-        # This handles decode (seq_len=1) and when use_sparse_attention=False
-        if not use_sparse:
-            # Call parent's dense attention and add None for indexer outputs
+        # Check if we need indexer outputs for warm-up training
+        # During warm-up (use_sparse_attention=False), we still need to compute
+        # indexer scores and KL target from dense attention
+        need_warmup_kl = (
+            not self.config.use_sparse_attention
+            and self.q_lora_rank is not None
+            and seq_length > 1
+            and (output_indexer_scores or output_indexer_kl_target)
+        )
+
+        # If not using sparse attention and don't need warm-up KL, use V3 path
+        if not use_sparse and not need_warmup_kl:
             attn_output, attn_weights = DeepseekV3Attention.forward(
                 self,
                 hidden_states=hidden_states,
@@ -582,6 +515,20 @@ class DeepseekV32Attention(nn.Module):
                 **kwargs,
             )
             return attn_output, attn_weights, None, None
+
+        # Dense warm-up path: compute dense attention but also indexer outputs
+        # This is used when use_sparse_attention=False but indexer_kl_coef > 0
+        if need_warmup_kl:
+            return self._forward_dense_warmup(
+                hidden_states=hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                cache_position=cache_position,
+                output_indexer_scores=output_indexer_scores,
+                output_indexer_kl_target=output_indexer_kl_target,
+                **kwargs,
+            )
 
         # Sparse attention path (eager computation, matching official DeepSeek code)
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
@@ -674,6 +621,111 @@ class DeepseekV32Attention(nn.Module):
         # Per tech report: "sum across all attention heads, then L1-normalize"
         if output_indexer_kl_target:
             # attn_weights: [B, H, S_q, S_k] - post-softmax attention
+            # Sum across heads: [B, S_q, S_k]
+            attn_sum = attn_weights.sum(dim=1)
+            # L1 normalize along key dimension to get target distribution p_{t,:}
+            indexer_kl_target = attn_sum / (attn_sum.sum(dim=-1, keepdim=True) + 1e-10)
+            # Detach - target should not receive gradients
+            indexer_kl_target = indexer_kl_target.detach()
+
+        attn_weights = F.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights, indexer_scores, indexer_kl_target
+
+    def _forward_dense_warmup(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        output_indexer_scores: bool = False,
+        output_indexer_kl_target: bool = False,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Dense attention forward pass for warm-up training.
+
+        During warm-up (use_sparse_attention=False, indexer_kl_coef > 0), we compute:
+        1. Dense attention (no sparse mask) for the forward pass
+        2. Indexer scores for KL loss computation
+        3. KL target from dense attention distribution
+
+        This trains the indexer to predict which tokens dense attention focuses on.
+        """
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
+
+        # Query path with LoRA compression
+        q_compressed = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        q_states = self.q_b_proj(q_compressed)
+
+        # Optionally detach for separate indexer optimization
+        if self.config.detach_indexer_input:
+            q_compressed_for_indexer = q_compressed.detach()
+        else:
+            q_compressed_for_indexer = q_compressed
+
+        q_states = q_states.view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+
+        # KV path with compression
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
+        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
+        # Apply RoPE (INTERLEAVED for MLA)
+        cos, sin = position_embeddings
+        if self.config.rope_interleave:
+            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+        else:
+            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+
+        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states = torch.cat((k_pass, k_rot), dim=-1)
+
+        # Update cache if provided (unlikely during training)
+        if past_key_values is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # Compute indexer scores (needed for KL loss)
+        indexer_scores = None
+        if output_indexer_scores or output_indexer_kl_target:
+            _, indexer_scores = self.indexer(
+                hidden_states,
+                q_compressed_for_indexer,
+                position_embeddings,
+                attention_mask,
+                output_scores=True,
+            )
+
+        # Dense attention (no sparse mask) - this is the key difference from sparse path
+        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.scaling
+
+        # Apply causal mask only (no sparse mask)
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
+
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+
+        # Compute KL target from DENSE attention (before dropout!)
+        # This is the target the indexer learns to predict during warm-up
+        indexer_kl_target = None
+        if output_indexer_kl_target:
+            # attn_weights: [B, H, S_q, S_k] - post-softmax DENSE attention
             # Sum across heads: [B, S_q, S_k]
             attn_sum = attn_weights.sum(dim=1)
             # L1 normalize along key dimension to get target distribution p_{t,:}
@@ -822,13 +874,16 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
     DeepSeek V3.2 decoder layer.
 
     Only difference from V3: uses DeepseekV32Attention with Lightning Indexer.
-    The forward() is overridden to handle the additional indexer outputs.
+
+    Note: forward() must be overridden because V3.2 attention returns 4 values
+    (hidden_states, attn_weights, indexer_scores, indexer_kl_target) vs V3's 2 values.
+    This signature change propagates up, requiring a full forward override.
+    The MLP logic (4 lines) is duplicated but factoring it out would add complexity.
     """
 
     def __init__(self, config: DeepseekV32Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        # Override attention with V3.2 sparse attention
         self.self_attn = DeepseekV32Attention(config=config, layer_idx=layer_idx)
 
         if layer_idx >= config.first_k_dense_replace:
@@ -910,6 +965,71 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
         elif isinstance(module, DeepseekV32NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
+
+class DeepseekV32RotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: DeepseekV32Config, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[DeepseekV32Config] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -1246,22 +1366,4 @@ class DeepseekV32ForCausalLM(DeepseekV32PreTrainedModel, GenerationMixin):
         )
 
 
-class DeepseekV32ForSequenceClassification(GenericForSequenceClassification, DeepseekV32PreTrainedModel):
-    """DeepSeek V3.2 for sequence classification."""
-
-    config_class = DeepseekV32Config
-
-
-class DeepseekV32ForTokenClassification(GenericForTokenClassification, DeepseekV32PreTrainedModel):
-    """DeepSeek V3.2 for token classification."""
-
-    config_class = DeepseekV32Config
-
-
-__all__ = [
-    "DeepseekV32PreTrainedModel",
-    "DeepseekV32Model",
-    "DeepseekV32ForCausalLM",
-    "DeepseekV32ForSequenceClassification",
-    "DeepseekV32ForTokenClassification",
-]
+__all__ = ["DeepseekV32PreTrainedModel", "DeepseekV32Model", "DeepseekV32ForCausalLM"]
