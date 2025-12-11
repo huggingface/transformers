@@ -118,33 +118,7 @@ class HfQuantizer(ABC):
         """
         return device_map
 
-    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        """
-        Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
-        to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
-        to `torch.int8` and for 4-bit we pass a custom enum `accelerate.CustomDtype.int4`.
-
-        Args:
-            dtype (`torch.dtype`, *optional*):
-                The dtype that is used to compute the device_map.
-        """
-        return dtype
-
     def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-
-        if self.param_needs_quantization(model, param_name):
-            from accelerate.utils import CustomDtype
-
-            mapping = {
-                torch.int8: 1,
-                CustomDtype.INT4: 0.5,
-                CustomDtype.FP8: 1,
-                CustomDtype.INT2: 0.25,
-            }
-            # The value passed is actually not used when the method is overridden
-            if (custom_dtype := self.adjust_target_dtype(torch.float16)) in mapping:
-                return mapping[custom_dtype]
         return param.element_size()
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:

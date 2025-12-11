@@ -4411,8 +4411,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
-                if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
-                    _load_parameter_into_model(self, key, value)
+                _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4593,21 +4592,18 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
         if param_name in tied_param_names:
             continue
 
-        # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
-        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
-        if hf_quantizer is not None:
-            param_name = hf_quantizer.get_param_name(param_name)
-
         try:
             param = model.get_parameter_or_buffer(param_name)
         except AttributeError:
-            # TODO: for now let's skip if we can't find the parameters
-            if hf_quantizer is not None:
-                continue
             raise AttributeError(f"Parameter {param_name} not found in model")
 
+        if hf_quantizer is not None:
+            dtype_size = hf_quantizer.param_element_size(model, param_name, param)
+        else:
+            dtype_size = param.element_size()
+
         # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = param.numel() * param.element_size()
+        param_byte_count = param.numel() * dtype_size
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
