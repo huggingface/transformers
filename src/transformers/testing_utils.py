@@ -80,8 +80,6 @@ from .utils import (
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
-    is_auto_awq_available,
-    is_auto_gptq_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -1297,13 +1295,11 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_gptq(test_case):
+def require_gptqmodel(test_case):
     """
-    Decorator for auto_gptq dependency
+    Decorator for gptqmodel dependency
     """
-    return unittest.skipUnless(
-        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
-    )(test_case)
+    return unittest.skipUnless(is_gptqmodel_available(), "test requires gptqmodel")(test_case)
 
 
 def require_hqq(test_case):
@@ -1311,13 +1307,6 @@ def require_hqq(test_case):
     Decorator for hqq dependency
     """
     return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
-
-
-def require_auto_awq(test_case):
-    """
-    Decorator for auto_awq dependency
-    """
-    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
 def require_auto_round(test_case):

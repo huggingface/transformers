@@ -41,7 +41,7 @@ def _assign_original_dtype(module, original_dtype):
         _assign_original_dtype(child, original_dtype)
 
 
-def get_keys_to_not_convert(model):
+def get_keys_to_not_convert(model) -> list:
     r"""
     Function to automatically detect keys to not convert for usage like quantization. For example for CausalLM modules
     we may want to keep the lm_head in full precision for numerical stability reasons.
