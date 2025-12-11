@@ -1,0 +1,946 @@
+#!/usr/bin/env python3
+"""
+CST-based updater with string-ops formatting and backward update approach.
+
+Workflow:
+1. Use CST to parse file and identify: pattern type, line numbers, indentation
+2. Analyze ALL tasks before any updates (collect original line positions)
+3. Sort tasks by line number DESCENDING (highest first)
+4. Apply updates in backward order - each update only affects lines ABOVE it
+5. Insert new value (using simplest approach)
+6. If captured_info is multi-line: use string ops to reformat based on captured_info structure
+
+Key innovation: Backward update approach avoids line number shift issues.
+When processing from highest to lowest line, subsequent updates remain at valid positions.
+"""
+
+import argparse
+import libcst as cst
+from libcst.metadata import PositionProvider
+from typing import Optional, Tuple, List, Dict
+from dataclasses import dataclass
+
+
+@dataclass
+class UpdateTask:
+    """Represents a single update to be performed."""
+    test_file: str
+    assertion_line: int
+    variable_name: str
+    new_value_str: str
+    expectations_var: str
+    expectations_lineno: int
+
+
+@dataclass
+class PatternInfo:
+    """Information extracted from CST analysis."""
+    pattern_type: str  # "Expectations", "torch.tensor", "plain_list", "plain_string"
+    base_indent: int
+    line_start: int
+    line_end: int
+
+
+def is_multiline(value_str: str) -> bool:
+    """Check if captured value is multi-line."""
+    return '\n' in value_str
+
+
+def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
+    """
+    Parse captured_info.txt file to extract update tasks.
+
+    The captured_info.txt file contains test failure information with:
+    - Test context (file path and line number)
+    - Argument expressions (variable names)
+    - Argument values (the new expected values)
+
+    This function extracts:
+    - Which test file to update
+    - Which variable to update (finds the assignment line)
+    - What new value to use (from first "argument value" section)
+
+    Args:
+        filepath: Path to captured_info.txt file
+
+    Returns:
+        Tuple of (List of UpdateTask objects, statistics dict)
+    """
+    with open(filepath) as f:
+        content = f.read()
+
+    tasks = []
+    stats = {"blocks": 0, "skipped": 0}
+    blocks = content.split("=" * 120)
+
+    for block in blocks:
+        if not block.strip():
+            continue
+
+        stats["blocks"] += 1
+        lines = block.split('\n')
+
+        # Extract test context - find line starting with "test context:"
+        test_file = None
+        assertion_line = None
+        for line in lines:
+            if line.startswith('test context: /transformers/'):
+                # Extract filepath and line number
+                # Format: "test context: /transformers/PATH:LINE"
+                rest = line[len('test context: /transformers/'):]
+                # Find last ':' to split path and line number
+                colon_pos = rest.rfind(':')
+                if colon_pos != -1:
+                    test_file = rest[:colon_pos]
+                    assertion_line = int(rest[colon_pos + 1:])
+                break
+
+        if not test_file:
+            stats["skipped"] += 1
+            continue
+
+        # Extract variable expressions - find lines with "argument expression:"
+        arg_expressions = []
+        for line in lines:
+            if line.startswith('argument expression: `'):
+                # Extract content between backticks
+                start = line.find('`') + 1
+                end = line.find('`', start)
+                if end != -1:
+                    arg_expressions.append(line[start:end].strip())
+
+        if len(arg_expressions) < 2:
+            stats["skipped"] += 1
+            continue
+
+        variable_name = arg_expressions[1]
+
+        # Extract new value (first "argument value:")
+        # Find the line with "argument value:", then collect lines until "----"
+        value_lines = []
+        in_value_section = False
+        skip_blank = False
+
+        for i, line in enumerate(lines):
+            if line.startswith('argument value:'):
+                in_value_section = True
+                skip_blank = True  # Skip the blank line right after "argument value:"
+                continue
+
+            if in_value_section:
+                if skip_blank and not line.strip():
+                    skip_blank = False
+                    continue
+
+                if line.startswith('-' * 80):
+                    break
+
+                value_lines.append(line)
+
+        if not value_lines:
+            stats["skipped"] += 1
+            continue
+
+        new_value_str = '\n'.join(value_lines).strip()
+
+        # Find the actual assignment in the test file
+        expectations_var, expectations_lineno = find_assignment(test_file, variable_name, assertion_line)
+        if not expectations_var:
+            print(f"Warning: Could not find assignment for {variable_name}")
+            print(f"Skip handling: {test_file}:{assertion_line}")
+            stats["skipped"] += 1
+            continue
+
+        # Skip duplicates
+        if tasks and tasks[-1].test_file == test_file and tasks[-1].expectations_lineno == expectations_lineno:
+            continue
+
+        tasks.append(UpdateTask(
+            test_file=test_file,
+            assertion_line=assertion_line,
+            variable_name=variable_name,
+            new_value_str=new_value_str,
+            expectations_var=expectations_var,
+            expectations_lineno=expectations_lineno
+        ))
+
+    return tasks, stats
+
+
+def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Optional[str], Optional[int]]:
+    """
+    Find the actual variable assignment by searching backwards from assertion line.
+
+    Strategy:
+    1. First pass: Look for exact variable name (skip self-referential assignments)
+    2. Second pass: Look for Expectations() pattern
+    3. Third pass: Look for torch.tensor() pattern
+
+    This handles cases where the variable in the assertion differs from the
+    actual assignment variable (e.g., assertion uses 'output' but we need 'EXPECTED_OUTPUT').
+
+    Args:
+        test_file: Path to test file
+        var_name: Variable name from assertion (may not be the actual assignment)
+        from_line: Line number to search backwards from (1-indexed)
+
+    Returns:
+        Tuple of (actual_variable_name, line_number) or (None, None) if not found
+    """
+    try:
+        with open(test_file) as f:
+            lines = f.readlines()
+    except:
+        return None, None
+
+    # First pass: look for exact variable name (skip self-referential and derived)
+    for i in range(from_line - 1, max(0, from_line - 50), -1):
+        line = lines[i]
+
+        if f'{var_name} =' in line:
+            # Skip self-referential like: VAR = VAR[1:-1]
+            if f'{var_name} = {var_name}' in line or f'{var_name}={var_name}' in line:
+                continue
+
+            # Skip derived assignments like: VAR = something.get_expectation()
+            if '.get_expectation()' in line or '()' in line:
+                continue
+
+            # Found direct assignment of the variable
+            return var_name, i + 1
+
+    # Second pass: look for Expectations pattern (if exact variable not found)
+    for i in range(from_line - 1, max(0, from_line - 50), -1):
+        line = lines[i]
+        if 'Expectations(' in line and '=' in line:
+            # Extract variable name before '='
+            eq_pos = line.find('=')
+            if eq_pos == -1:
+                continue
+            before_eq = line[:eq_pos].strip()
+            # Get the last word (variable name)
+            parts = before_eq.split()
+            if parts and parts[-1].isidentifier():
+                return parts[-1], i + 1
+
+    # Third pass: look for torch.tensor patterns
+    for i in range(from_line - 1, max(0, from_line - 50), -1):
+        line = lines[i]
+
+        if 'torch.tensor(' in line and '=' in line:
+            if '.get_expectation()' in line:
+                continue
+            # Extract variable name before '='
+            eq_pos = line.find('=')
+            if eq_pos == -1:
+                continue
+            before_eq = line[:eq_pos].strip()
+            # Get the last word (variable name)
+            parts = before_eq.split()
+            if parts and parts[-1].isidentifier():
+                return parts[-1], i + 1
+
+    return None, None
+
+
+def analyze_with_cst(filepath: str, line_num: int, var_name: str) -> Optional[PatternInfo]:
+    """
+    Use LibCST to analyze an assignment and determine its pattern type.
+
+    This function parses the file with CST and finds the assignment at the given line.
+    It determines:
+    - Pattern type: "Expectations", "torch.tensor", "plain_list", "plain_dict", "plain_string"
+    - Base indentation level
+    - Line range (start and end)
+
+    For chained method calls like torch.tensor(...).to(device), this function
+    unwraps the chain to find the actual constructor/function call.
+
+    Args:
+        filepath: Path to the file to analyze
+        line_num: Line number of the assignment (1-indexed)
+        var_name: Variable name to look for
+
+    Returns:
+        PatternInfo object with analysis results, or None if not found
+    """
+    with open(filepath) as f:
+        code = f.read()
+
+    tree = cst.parse_module(code)
+
+    class Analyzer(cst.CSTVisitor):
+        METADATA_DEPENDENCIES = (PositionProvider,)
+
+        def __init__(self, target_line: int, target_var: str):
+            self.target_line = target_line
+            self.target_var = target_var
+            self.info = None
+
+        def visit_Assign(self, node: cst.Assign) -> None:
+            try:
+                pos = self.get_metadata(PositionProvider, node)
+                if pos.start.line != self.target_line:
+                    return
+
+                # Check variable name matches what we're looking for
+                if not isinstance(node.targets[0].target, cst.Name):
+                    return
+                if node.targets[0].target.value != self.target_var:
+                    return
+
+                # Get base indentation from the assignment position
+                parent_pos = pos
+                base_indent = parent_pos.start.column
+
+                # Determine pattern type by examining right-hand side
+                pattern_type = "unknown"
+                value = node.value
+
+                # Unwrap chained method calls to find the actual constructor/function
+                # Example: torch.tensor(...).to(device).float() -> torch.tensor(...)
+                # This handles ANY depth of chaining, not just .to()
+                while isinstance(value, cst.Call) and isinstance(value.func, cst.Attribute):
+                    # This is a method call like .to() or .cuda()
+                    if isinstance(value.func.value, cst.Call):
+                        # Keep unwrapping to find the base call
+                        value = value.func.value
+                    else:
+                        # Not a chained call, stop unwrapping
+                        break
+
+                # Identify the pattern type from the unwrapped value
+                if isinstance(value, cst.Call):
+                    if isinstance(value.func, cst.Name) and value.func.value == "Expectations":
+                        pattern_type = "Expectations"
+                    elif isinstance(value.func, cst.Attribute):
+                        if isinstance(value.func.value, cst.Name) and value.func.value.value == "torch":
+                            if value.func.attr.value == "tensor":
+                                pattern_type = "torch.tensor"
+                elif isinstance(value, cst.List):
+                    pattern_type = "plain_list"
+                elif isinstance(value, cst.Dict):
+                    pattern_type = "plain_dict"
+                elif isinstance(value, (cst.SimpleString, cst.ConcatenatedString)):
+                    pattern_type = "plain_string"
+
+                # Record the line range
+                line_end = pos.end.line
+
+                self.info = PatternInfo(
+                    pattern_type=pattern_type,
+                    base_indent=base_indent,
+                    line_start=pos.start.line,
+                    line_end=line_end
+                )
+
+            except KeyError:
+                pass
+
+    wrapper = cst.metadata.MetadataWrapper(tree)
+    analyzer = Analyzer(line_num, var_name)
+    wrapper.visit(analyzer)
+
+    return analyzer.info
+
+
+def get_line_indent(line: str) -> int:
+    """Get indentation of a line."""
+    return len(line) - len(line.lstrip())
+
+
+def update_expectations(filepath: str, task: UpdateTask, info: PatternInfo, device: Tuple = ("cuda", 8)) -> bool:
+    """Update Expectations pattern - uses device parameter to find the exact key."""
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # Build exact pattern to search for
+    device_type, device_version = device
+
+    # Build the exact pattern string
+    # Handle None specially - it should be None, not "None"
+    if device_type is None:
+        device_type_str = "None"
+    else:
+        device_type_str = f'"{device_type}"'
+
+    if device_version is None:
+        device_version_str = "None"
+    elif isinstance(device_version, tuple):
+        device_version_str = str(device_version)
+    else:
+        device_version_str = str(device_version)
+
+    pattern = f'({device_type_str}, {device_version_str}):'
+
+    # Search for the exact key
+    found_line_idx = None
+    for i in range(info.line_start - 1, min(len(lines), info.line_start + 50)):
+        if pattern in lines[i]:
+            found_line_idx = i
+            break
+
+    if found_line_idx is None:
+        # Key not found - return False silently for fallback logic
+        return False
+
+    # Get the key part using simple string operations
+    colon_pos = lines[found_line_idx].find('):', 0)
+    if colon_pos == -1:
+        print(f"    ✗ Could not find colon in line")
+        return False
+
+    # Key prefix includes everything up to and including "): "
+    key_prefix = lines[found_line_idx][:colon_pos + 2] + ' '
+
+    # Find the end of this key's value using bracket counting
+    end_line_idx = found_line_idx
+    bracket_count = lines[found_line_idx].count('[') - lines[found_line_idx].count(']')
+    if bracket_count > 0:
+        for i in range(found_line_idx + 1, min(len(lines), found_line_idx + 50)):
+            bracket_count += lines[i].count('[') - lines[i].count(']')
+            if bracket_count == 0:
+                end_line_idx = i
+                break
+
+    # Check if there's a trailing comma
+    has_comma = lines[end_line_idx].rstrip().endswith(',')
+    comma = ',' if has_comma else ''
+
+    # Get the indentation of the key line
+    key_indent = len(lines[found_line_idx]) - len(lines[found_line_idx].lstrip())
+
+    # Check if the new value is multi-line
+    if is_multiline(task.new_value_str):
+        # Use the captured_info format directly with adjusted indentation
+        captured_lines = task.new_value_str.strip().split('\n')
+
+        # The first line is the opening bracket
+        new_lines = []
+        new_lines.append(f"{key_prefix}{captured_lines[0]}\n")
+
+        # Middle lines - indent them relative to the key
+        value_indent = ' ' * (key_indent + 4)
+        for i in range(1, len(captured_lines) - 1):
+            # Just add the proper indentation to each line from captured_info
+            line_content = captured_lines[i].strip()
+            new_lines.append(f"{value_indent}{line_content}\n")
+
+        # Last line (closing bracket) - align with key
+        key_indent_str = ' ' * key_indent
+        last_line = captured_lines[-1].strip()
+        new_lines.append(f"{key_indent_str}{last_line}{comma}\n")
+
+        lines[found_line_idx:end_line_idx + 1] = new_lines
+    else:
+        # Single-line value - just insert as-is
+        lines[found_line_idx:end_line_idx + 1] = [f"{key_prefix}{task.new_value_str}{comma}\n"]
+
+    with open(filepath, 'w') as f:
+        f.writelines(lines)
+
+    return True
+
+
+def update_torch_tensor(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """
+    Update torch.tensor pattern - replaces ONLY the first argument, preserves all other parameters.
+
+    Strategy:
+    1. Use CST to locate the exact position of the first argument
+    2. Replace only that argument span, keeping device=, dtype=, and any chained methods
+    3. Handle both single-line and multi-line replacements
+    4. For multi-line: indent relative to base_indent + 4 (standard Python indent)
+
+    Examples:
+        torch.tensor([1, 2], device="cpu").to("cuda")
+        -> Only [1, 2] is replaced, device and .to() are preserved
+
+    Args:
+        filepath: Path to file to update
+        task: UpdateTask with new value
+        info: PatternInfo from CST analysis
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # Use CST to find the exact position of the first argument
+    with open(filepath) as f:
+        code = f.read()
+
+    tree = cst.parse_module(code)
+
+    class ArgFinder(cst.CSTVisitor):
+        METADATA_DEPENDENCIES = (PositionProvider,)
+
+        def __init__(self, target_line: int, target_var: str):
+            self.target_line = target_line
+            self.target_var = target_var
+            self.arg_info = None
+
+        def visit_Assign(self, node: cst.Assign) -> None:
+            try:
+                pos = self.get_metadata(PositionProvider, node)
+                if pos.start.line != self.target_line:
+                    return
+
+                # Verify this is the correct variable
+                if not isinstance(node.targets[0].target, cst.Name):
+                    return
+                if node.targets[0].target.value != self.target_var:
+                    return
+
+                # Find torch.tensor call (may be wrapped in chained methods)
+                value = node.value
+
+                # Unwrap chained calls like .to(), .cuda(), .float()
+                # We need to find the actual torch.tensor(...) call
+                while isinstance(value, cst.Call) and isinstance(value.func, cst.Attribute):
+                    if isinstance(value.func.value, cst.Call):
+                        value = value.func.value
+                    else:
+                        break
+
+                # Extract the first argument's exact position
+                if isinstance(value, cst.Call):
+                    if isinstance(value.func, cst.Attribute):
+                        if isinstance(value.func.value, cst.Name) and value.func.value.value == "torch":
+                            if value.func.attr.value == "tensor":
+                                # Found torch.tensor! Get first argument's exact position
+                                if len(value.args) > 0:
+                                    first_arg = value.args[0]
+                                    arg_pos = self.get_metadata(PositionProvider, first_arg.value)
+                                    # Store the exact character positions
+                                    self.arg_info = {
+                                        'start_line': arg_pos.start.line,
+                                        'start_col': arg_pos.start.column,
+                                        'end_line': arg_pos.end.line,
+                                        'end_col': arg_pos.end.column,
+                                    }
+            except KeyError:
+                pass
+
+    wrapper = cst.metadata.MetadataWrapper(tree)
+    finder = ArgFinder(info.line_start, task.expectations_var)
+    wrapper.visit(finder)
+
+    if not finder.arg_info:
+        return False
+
+    arg_info = finder.arg_info
+
+    # Now use string operations to replace only the first argument
+    # arg_info contains exact character positions (1-indexed)
+
+    base_indent = info.base_indent
+
+    # Parse the new value from captured_info
+    captured_lines = task.new_value_str.strip().split('\n')
+
+    if len(captured_lines) == 1:
+        # Single-line replacement
+        start_idx = arg_info['start_line'] - 1  # Convert to 0-indexed
+        end_idx = arg_info['end_line'] - 1
+
+        if start_idx == end_idx:
+            # Simple case: replace within same line
+            # Example: torch.tensor([1, 2], device=...)
+            # Keep everything before and after [1, 2]
+            line = lines[start_idx]
+            new_line = line[:arg_info['start_col']] + task.new_value_str.strip() + line[arg_info['end_col']:]
+            lines[start_idx] = new_line
+        else:
+            # Multi-line span collapsed to single-line
+            # Example: torch.tensor([\n  [1, 2]\n], ...) -> torch.tensor([1, 2], ...)
+            # Take prefix from first line, suffix from last line
+            prefix = lines[start_idx][:arg_info['start_col']]
+            suffix = lines[end_idx][arg_info['end_col']:]
+            new_line = prefix + task.new_value_str.strip() + suffix
+            lines[start_idx:end_idx + 1] = [new_line]
+    else:
+        # Multi-line replacement - needs proper indentation
+        # Target structure:
+        #   my_tensor = torch.tensor([
+        #       [4.0, 1.0],      <- base_indent + 8
+        #       [2.0, 3.0]       <- base_indent + 8
+        #   ], device=...)       <- base_indent + 4 for closing ]
+
+        start_idx = arg_info['start_line'] - 1
+        end_idx = arg_info['end_line'] - 1
+
+        # Extract prefix (before argument) and suffix (after argument)
+        prefix = lines[start_idx][:arg_info['start_col']]
+        suffix = lines[end_idx][arg_info['end_col']:]
+
+        # Calculate indentation adjustment
+        # captured_info has its own indentation structure
+        # We need to adjust it to match our target (base_indent + 4)
+        first_line_indent = len(captured_lines[0]) - len(captured_lines[0].lstrip())
+        target_first_indent = base_indent + 4  # Standard Python indent
+        indent_adjustment = target_first_indent - first_line_indent
+
+        new_lines = []
+
+        # First line: combine prefix with content
+        content = captured_lines[0].lstrip()
+        new_lines.append(prefix + content + '\n')
+
+        # Middle lines: re-indent to maintain structure from captured_info
+        for i in range(1, len(captured_lines) - 1):
+            orig_indent = len(captured_lines[i]) - len(captured_lines[i].lstrip())
+            new_indent = orig_indent + indent_adjustment
+            indent_str = ' ' * new_indent
+            content = captured_lines[i].lstrip()
+            new_lines.append(indent_str + content + '\n')
+
+        # Last line: closing bracket at same level as opening bracket, then suffix
+        if len(captured_lines) > 1:
+            orig_indent = len(captured_lines[-1]) - len(captured_lines[-1].lstrip())
+            new_indent = orig_indent + indent_adjustment
+            indent_str = ' ' * new_indent
+            content = captured_lines[-1].lstrip()
+            new_lines.append(indent_str + content + suffix)
+
+        # Replace the span
+        lines[start_idx:end_idx + 1] = new_lines
+
+    with open(filepath, 'w') as f:
+        f.writelines(lines)
+
+    return True
+
+
+def update_plain_list(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """Update plain list pattern."""
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # Find assignment line
+    found_idx = None
+    for i in range(info.line_start - 1, min(len(lines), info.line_start + 5)):
+        if f'{task.expectations_var} =' in lines[i] and '[' in lines[i]:
+            found_idx = i
+            break
+
+    if found_idx is None:
+        return False
+
+    # Find end of assignment
+    end_idx = found_idx
+    if not lines[found_idx].rstrip().endswith(']'):
+        bracket_count = lines[found_idx].count('[') - lines[found_idx].count(']')
+        for i in range(found_idx + 1, min(len(lines), found_idx + 100)):
+            bracket_count += lines[i].count('[') - lines[i].count(']')
+            if bracket_count == 0:
+                end_idx = i
+                break
+
+    # Check for trailing comment
+    trailing_comment = ""
+    if end_idx < len(lines):
+        # Find comment in line using simple string operation
+        line = lines[end_idx]
+        comment_pos = line.find('#')
+        if comment_pos != -1:
+            trailing_comment = "  " + line[comment_pos:].rstrip('\n')
+
+    base_indent = info.base_indent
+
+    # Check if multi-line
+    if is_multiline(task.new_value_str):
+        # Use captured_info format directly with proper indentation
+        indent_str = ' ' * base_indent
+        inner_indent_str = ' ' * (base_indent + 4)
+
+        # Split captured_info lines
+        captured_lines = task.new_value_str.strip().split('\n')
+
+        new_lines = []
+        new_lines.append(f"{indent_str}{task.expectations_var} = {captured_lines[0]}\n")
+
+        # Middle lines - just re-indent from captured_info
+        for i in range(1, len(captured_lines) - 1):
+            line_content = captured_lines[i].strip()
+            new_lines.append(f"{inner_indent_str}{line_content}\n")
+
+        # Last line (closing bracket) - align with base
+        new_lines.append(f"{indent_str}{captured_lines[-1].strip()}{trailing_comment}\n")
+
+        lines[found_idx:end_idx + 1] = new_lines
+    else:
+        # Single-line
+        indent_str = ' ' * base_indent
+        lines[found_idx:end_idx + 1] = [
+            f"{indent_str}{task.expectations_var} = {task.new_value_str}{trailing_comment}\n"]
+
+    with open(filepath, 'w') as f:
+        f.writelines(lines)
+
+    return True
+
+
+def update_plain_dict(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """Update plain dict pattern."""
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # Find assignment line
+    found_idx = None
+    for i in range(info.line_start - 1, min(len(lines), info.line_start + 5)):
+        if f'{task.expectations_var} =' in lines[i] and '{' in lines[i]:
+            found_idx = i
+            break
+
+    if found_idx is None:
+        return False
+
+    # Find end of assignment
+    end_idx = found_idx
+    if not lines[found_idx].rstrip().endswith('}'):
+        brace_count = lines[found_idx].count('{') - lines[found_idx].count('}')
+        for i in range(found_idx + 1, min(len(lines), found_idx + 100)):
+            brace_count += lines[i].count('{') - lines[i].count('}')
+            if brace_count == 0:
+                end_idx = i
+                break
+
+    # Check for trailing comment
+    trailing_comment = ""
+    if end_idx < len(lines):
+        # Find comment in line using simple string operation
+        line = lines[end_idx]
+        comment_pos = line.find('#')
+        if comment_pos != -1:
+            trailing_comment = "  " + line[comment_pos:].rstrip('\n')
+
+    base_indent = info.base_indent
+
+    # Check if multi-line
+    if is_multiline(task.new_value_str):
+        # Keep multi-line format from captured_info
+        # Just use the captured_info value directly with proper indentation
+        indent_str = ' ' * base_indent
+
+        # Split captured_info into lines and re-indent
+        captured_lines = task.new_value_str.split('\n')
+
+        new_lines = []
+        new_lines.append(f"{indent_str}{task.expectations_var} = {captured_lines[0]}\n")
+
+        for i in range(1, len(captured_lines)):
+            if i == len(captured_lines) - 1:
+                # Last line - add trailing comment
+                new_lines.append(f"{indent_str}{captured_lines[i]}{trailing_comment}\n")
+            else:
+                new_lines.append(f"{indent_str}{captured_lines[i]}\n")
+
+        lines[found_idx:end_idx + 1] = new_lines
+    else:
+        # Single-line
+        indent_str = ' ' * base_indent
+        lines[found_idx:end_idx + 1] = [
+            f"{indent_str}{task.expectations_var} = {task.new_value_str}{trailing_comment}\n"]
+
+    with open(filepath, 'w') as f:
+        f.writelines(lines)
+
+    return True
+
+
+def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """Update plain string pattern."""
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # Find assignment line
+    found_idx = None
+    for i in range(info.line_start - 1, min(len(lines), info.line_start + 5)):
+        if f'{task.expectations_var} =' in lines[i]:
+            found_idx = i
+            break
+
+    if found_idx is None:
+        return False
+
+    # Find end (for multi-line strings)
+    end_idx = found_idx
+    if '"""' in lines[found_idx]:
+        quote_count = lines[found_idx].count('"""')
+        if quote_count == 1:
+            for i in range(found_idx + 1, min(len(lines), found_idx + 100)):
+                if '"""' in lines[i]:
+                    end_idx = i
+                    break
+
+    base_indent = info.base_indent
+    indent_str = ' ' * base_indent
+
+    # If new_value_str starts with quote, use as-is
+    if task.new_value_str.startswith('"') or task.new_value_str.startswith("'"):
+        new_line = f'{indent_str}{task.expectations_var} = {task.new_value_str}\n'
+    else:
+        new_line = f'{indent_str}{task.expectations_var} = "{task.new_value_str}"\n'
+
+    lines[found_idx:end_idx + 1] = [new_line]
+
+    with open(filepath, 'w') as f:
+        f.writelines(lines)
+
+    return True
+
+
+def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) -> bool:
+    """
+    Update a file with all tasks using the backward update approach.
+
+    The backward update approach solves the line-shifting problem:
+    - When multiple updates target the same file, early updates can change line counts
+    - This would invalidate line numbers for subsequent updates
+    - Solution: Process updates from HIGHEST to LOWEST line number
+    - Each update only affects lines ABOVE it, keeping subsequent positions valid
+
+    Algorithm:
+    1. Analyze ALL tasks first (collect original line positions)
+    2. Sort tasks by line number DESCENDING (highest first)
+    3. Apply updates in backward order
+    4. No line number tracking needed!
+
+    Example:
+        File with 3 variables at lines 10, 20, 30
+        - Update line 30 first (file now changed, but lines 10, 20 unchanged)
+        - Update line 20 next (file changed, but line 10 unchanged)
+        - Update line 10 last (all done!)
+
+    Args:
+        filepath: Path to file to update
+        tasks: List of UpdateTask objects for this file
+        dry_run: If True, only show what would be updated (don't modify file)
+
+    Returns:
+        True (always returns True, even if some updates fail)
+    """
+
+    # Step 1: Analyze ALL tasks before making any updates
+    # This captures the original line positions before any modifications
+    analyzed_tasks = []
+    for task in tasks:
+        info = analyze_with_cst(filepath, task.expectations_lineno, task.expectations_var)
+
+        if not info:
+            print(f"  ✗ Could not analyze {task.expectations_var} at line {task.expectations_lineno}")
+            continue
+
+        analyzed_tasks.append((task, info))
+
+    # Step 2: Sort by line number DESCENDING (highest line first)
+    # This ensures updates only affect lines ABOVE, keeping subsequent positions valid
+    analyzed_tasks.sort(key=lambda x: x[1].line_start, reverse=True)
+
+    # Step 3: Process updates in backward order (highest line number first)
+    for task, info in analyzed_tasks:
+        print(f"  Processing {task.expectations_var} at line {task.expectations_lineno}")
+        print(f"    Pattern: {info.pattern_type}")
+        print(f"    Base indent: {info.base_indent}")
+        print(f"    Multi-line: {is_multiline(task.new_value_str)}")
+
+        if dry_run:
+            print(f"    ✓ Would update")
+            continue
+
+        # Apply update based on pattern type
+        success = False
+
+        # For Expectations pattern: try different device keys in order of specificity
+        # This handles hardware-specific expected values: ("cuda", (8, 6)) for CUDA 8.6, etc.
+        device_keys_to_try = [
+            ("cuda", (8, 6)),  # Most specific: cuda with nested tuple (version)
+            ("cuda", 8),  # Specific: cuda with simple version number
+            ("cuda", None),  # Less specific: cuda without version
+            (None, None),  # Least specific: fallback key (matches any hardware)
+        ]
+
+        if info.pattern_type == "Expectations":
+            for device in device_keys_to_try:
+                success = update_expectations(filepath, task, info, device)
+                if success:
+                    break  # Stop on first successful match
+        elif info.pattern_type == "torch.tensor":
+            success = update_torch_tensor(filepath, task, info)
+        elif info.pattern_type == "plain_list":
+            success = update_plain_list(filepath, task, info)
+        elif info.pattern_type == "plain_dict":
+            success = update_plain_dict(filepath, task, info)
+        elif info.pattern_type == "plain_string":
+            success = update_plain_string(filepath, task, info)
+        else:
+            print(f"    ✗ Unknown pattern")
+            continue
+
+        if success:
+            print(f"    ✓ Updated")
+        else:
+            print(f"    ✗ Update failed")
+
+    if dry_run:
+        print(f"  💡 DRY RUN - No files modified")
+    else:
+        print(f"  ✅ File updated: {filepath}")
+
+    return True
+
+
+def main():
+    """
+    Main entry point for the expectations updater.
+
+    Workflow:
+    1. Parse captured_info.txt to extract update tasks
+    2. Group tasks by file (multiple updates per file supported)
+    3. Process each file using backward update approach
+    4. Dry run by default (requires --apply flag to modify files)
+    """
+    parser = argparse.ArgumentParser(description="Update test expectations")
+    parser.add_argument("captured_info", help="Path to captured_info.txt")
+    parser.add_argument("--apply", action="store_true", help="Apply changes (default is dry run)")
+    args = parser.parse_args()
+
+    print("=" * 80)
+    print("CST + String Ops Expectations Updater v7 (Backward)")
+    print("=" * 80)
+    print()
+
+    # Step 1: Parse captured_info to extract all update tasks
+    tasks, stats = parse_captured_info(args.captured_info)
+    print(f"[1] Found {len(tasks)} update task(s)")
+    for task in tasks:
+        print(f"    - {task.expectations_var} at {task.test_file}:{task.expectations_lineno}")
+    print()
+
+    # Step 2: Group tasks by file (some files may have multiple updates)
+    file_tasks: Dict[str, List[UpdateTask]] = {}
+    for task in tasks:
+        if task.test_file not in file_tasks:
+            file_tasks[task.test_file] = []
+        file_tasks[task.test_file].append(task)
+
+    print(f"[2] Grouped into {len(file_tasks)} file(s)")
+    print()
+
+    # Step 3: Process each file (backward update approach handles multiple updates safely)
+    for filepath, tasks_for_file in file_tasks.items():
+        print(f"[3] Processing {filepath}...")
+        update_file(filepath, tasks_for_file, dry_run=not args.apply)
+        print()
+
+    print("=" * 80)
+    print("✅ Complete!")
+    print("=" * 80)
+    print()
+    print(f"STATS: blocks={stats['blocks']} skip={stats['skipped']} tasks={len(tasks)}")
+
+
+if __name__ == "__main__":
+    main()

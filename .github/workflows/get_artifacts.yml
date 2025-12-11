@@ -1,11 +1,41 @@
-name: Collect Captured Info
+name: Run auto update
 
-on: push
+on:
+  push:
+    branches:
+      - grab_captured_info
 
 jobs:
   collect:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository (current)
+        uses: actions/checkout@v4
+
+      - name: Save scripts
+        run: |
+          mkdir -p /tmp/saved_scripts
+          cp auto_update.py /tmp/saved_scripts/
+          cp batch_update.py /tmp/saved_scripts/
+
+      - name: Checkout specific commit
+        uses: actions/checkout@v4
+        with:
+          ref: 377a8ee7
+
+      - name: Restore scripts
+        run: |
+          cp /tmp/saved_scripts/auto_update.py .
+          cp /tmp/saved_scripts/batch_update.py .
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install libcst
+        run: pip install libcst
+
       - name: Download and process artifacts
         uses: actions/github-script@v7
         with:
@@ -15,7 +45,7 @@ jobs:
             
             const workflowRunId = '20132741120';
             
-            // Get ALL artifacts from the workflow run (with pagination)
+            // Get all artifacts with pagination
             const allArtifacts = [];
             let page = 1;
             while (true) {
@@ -28,30 +58,27 @@ jobs:
               });
               
               allArtifacts.push(...artifacts.data.artifacts);
-              
               if (artifacts.data.artifacts.length < 100) break;
               page++;
             }
             
             console.log(`Found ${allArtifacts.length} total artifacts`);
             
-            // Filter artifacts matching the pattern
+            // Filter matching artifacts
             const pattern = /^single-gpu_run_models_gpu_models_(.+)_test_reports$/;
             const matchingArtifacts = allArtifacts.filter(a => pattern.test(a.name));
             
             console.log(`Found ${matchingArtifacts.length} matching artifacts`);
             
-            // Create working directory
             fs.mkdirSync('captured', { recursive: true });
             
-            // Download and process each artifact
+            // Download and extract
             for (const artifact of matchingArtifacts) {
               const match = artifact.name.match(pattern);
               const xxx = match[1];
               
               console.log(`Processing ${artifact.name} (${xxx})`);
               
-              // Download artifact
               const download = await github.rest.actions.downloadArtifact({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -59,31 +86,43 @@ jobs:
                 archive_format: 'zip'
               });
               
-              // Save zip file
               const zipPath = `${artifact.name}.zip`;
               fs.writeFileSync(zipPath, Buffer.from(download.data));
               
-              // Extract captured_info.txt if it exists
               try {
                 execSync(`unzip -j ${zipPath} captured_info.txt -d temp_extract`, { stdio: 'ignore' });
-                
-                // Create destination directory and move file
                 const destDir = `captured/${xxx}`;
                 fs.mkdirSync(destDir, { recursive: true });
                 fs.renameSync('temp_extract/captured_info.txt', `${destDir}/captured_info.txt`);
-                
                 console.log(`Extracted captured_info.txt for ${xxx}`);
               } catch (error) {
                 console.log(`No captured_info.txt found in ${artifact.name}`);
               }
               
-              // Cleanup
               fs.rmSync(zipPath);
               if (fs.existsSync('temp_extract')) fs.rmSync('temp_extract', { recursive: true });
             }
 
-      - name: Upload captured directory
+      - name: Run auto update script
+        run: python3 auto_update.py captured
+
+      - name: Rename batch results
+        run: |
+          mv batch_results_* batch_results
+
+      - name: Collect modified test files
+        run: |
+          mkdir -p modified_tests
+          find tests/models -name "*.py" -newer captured -exec cp --parents {} modified_tests \;
+
+      - name: Upload batch results
         uses: actions/upload-artifact@v4
         with:
-          name: captured
-          path: captured/
+          name: batch_results
+          path: batch_results
+
+      - name: Upload modified tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: modified_tests
+          path: modified_tests
