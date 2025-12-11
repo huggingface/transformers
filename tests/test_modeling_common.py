@@ -1830,7 +1830,10 @@ class ModelTesterMixin:
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
+        if (
+            getattr(original_config, "tie_word_embeddings", False)
+            or original_config.get_text_config().tie_word_embeddings
+        ):
             self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:
@@ -2039,7 +2042,7 @@ class ModelTesterMixin:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
             try:
-                config.get_text_config().tie_word_embeddings = False
+                config.get_text_config(decoder=True).tie_word_embeddings = False
             except Exception as _:
                 pass
 
@@ -2081,8 +2084,10 @@ class ModelTesterMixin:
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
             # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
-            # does not tie them
-            if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
+            # does not tie them or does not have embedding layer (non-text model)
+            if len(tied_weight_keys) == 0 and not getattr(
+                original_config.get_text_config(), "tie_word_embeddings", False
+            ):
                 continue
 
             ptrs = collections.defaultdict(list)
