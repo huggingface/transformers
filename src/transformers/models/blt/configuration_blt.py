@@ -335,7 +335,7 @@ class BltConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         initializer_range: Optional[float] = 0.02,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_cache: Optional[bool] = False, 
+        use_cache: Optional[bool] = False,
         **kwargs,
     ):
         # Basic model configuration
@@ -425,7 +425,7 @@ class BltVisionConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Vision component.
     """
-    pass 
+    pass
 
 __all__ = [
     "BltConfig",
