@@ -418,7 +418,6 @@ class MiniMaxM2PreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxM2DecoderLayer,
         "attentions": MiniMaxM2Attention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
