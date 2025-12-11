@@ -23,7 +23,6 @@ import httpx
 from transformers import AutoImageProcessor, TensorType, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
 from transformers.image_processing_utils_fast import validate_fast_preprocess_arguments
-from transformers.image_utils import ChannelDimension
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
 
