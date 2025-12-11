@@ -111,6 +111,12 @@ try:
                     layer_name="RMSNorm",
                 )
             },
+            "mps": {
+                Mode.INFERENCE: LayerRepository(
+                    repo_id="kernels-community/mlx_rmsnorm",
+                    layer_name="RMSNorm",
+                )
+            },
             "npu": {
                 Mode.INFERENCE: LayerRepository(
                     repo_id="kernels-community/liger_kernels",
@@ -343,6 +349,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
+            mapping[kernel_name] = None
+        except AssertionError:
+            # Happens when torch is built without an accelerator backend; fall back to slow path.
             mapping[kernel_name] = None
 
     else:
