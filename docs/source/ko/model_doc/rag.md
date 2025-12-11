@@ -56,8 +56,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] RagRetriever
 
-<frameworkcontent>
-<pt>
 
 ## RagModel [[transformers.RagModel]]
 
@@ -76,25 +74,3 @@ rendered properly in your Markdown viewer.
     - forward
     - generate
 
-</pt>
-<tf>
-
-## TFRagModel [[transformers.TFRagModel]]
-
-[[autodoc]] TFRagModel
-    - call
-
-## TFRagSequenceForGeneration [[transformers.TFRagSequenceForGeneration]]
-
-[[autodoc]] TFRagSequenceForGeneration
-    - call
-    - generate
-
-## TFRagTokenForGeneration [[transformers.TFRagTokenForGeneration]]
-
-[[autodoc]] TFRagTokenForGeneration
-    - call
-    - generate
-
-</tf>
-</frameworkcontent>

@@ -15,7 +15,7 @@
 import gc
 import unittest
 
-from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
+from transformers import MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -34,7 +34,6 @@ from .test_pipelines_common import ANY
 @is_pipeline_test
 class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
 
     def tearDown(self):
         super().tearDown()
@@ -45,7 +44,7 @@ class FillMaskPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt(self):
-        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2, framework="pt")
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2)
 
         outputs = unmasker("My name is <mask>")
         self.assertEqual(
@@ -112,7 +111,6 @@ class FillMaskPipelineTests(unittest.TestCase):
             "fill-mask",
             model="hf-internal-testing/tiny-random-distilbert",
             device=torch_device,
-            framework="pt",
         )
 
         # convert model to fp16
@@ -127,7 +125,7 @@ class FillMaskPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        unmasker = pipeline(task="fill-mask", model="distilbert/distilroberta-base", top_k=2, framework="pt")
+        unmasker = pipeline(task="fill-mask", model="distilbert/distilroberta-base", top_k=2)
         self.run_large_test(unmasker)
 
     def run_large_test(self, unmasker):
@@ -191,7 +189,7 @@ class FillMaskPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_model_no_pad_pt(self):
-        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")
+        unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base")
         unmasker.tokenizer.pad_token_id = None
         unmasker.tokenizer.pad_token = None
         self.run_pipeline_test(unmasker, [])

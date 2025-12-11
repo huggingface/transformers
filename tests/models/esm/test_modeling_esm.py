@@ -18,14 +18,14 @@ import unittest
 
 import pytest
 
-from transformers import EsmConfig, is_torch_available
+from transformers import BitsAndBytesConfig, EsmConfig, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -234,13 +234,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            config_and_inputs[0]._attn_implementation = "eager"
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -313,7 +306,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow
@@ -381,14 +374,18 @@ class EsmModelIntegrationTest(TestCasePlus):
 
     @require_bitsandbytes
     def test_inference_bitsandbytes(self):
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
         with torch.no_grad():
             _ = model(input_ids)[0]
 
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_4bit=True)
+        model = EsmForMaskedLM.from_pretrained(
+            "facebook/esm2_t36_3B_UR50D", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works

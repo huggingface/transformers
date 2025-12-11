@@ -45,7 +45,6 @@ There are two general types of models you can load:
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
 
-
 ## Model classes
 
 To get a pretrained model, you need to load the weights into the model. This is done by calling [`~PreTrainedModel.from_pretrained`] which accepts weights from the Hugging Face Hub or a local directory.
@@ -111,7 +110,6 @@ You need enough memory to hold two copies of the model weights (random and pretr
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
 
-
 ### Sharded checkpoints
 
 The [`~PreTrainedModel.save_pretrained`] method automatically shards checkpoints larger than 10GB.
@@ -141,10 +139,10 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-Sharded checkpoints can also be directly loaded with [`~transformers.modeling_utils.load_sharded_checkpoint`].
+Sharded checkpoints can also be directly loaded with [`~transformers.trainer_utils.load_sharded_checkpoint`].
 
 ```py
-from transformers.modeling_utils import load_sharded_checkpoint
+from transformers.trainer_utils import load_sharded_checkpoint
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     model.save_pretrained(tmp_dir, max_shard_size="5GB")

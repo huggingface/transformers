@@ -84,8 +84,6 @@ pip install -r requirements.txt
 
 ## Esegui uno script
 
-<frameworkcontent>
-<pt>
 
 Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando il [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/google-t5/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
 
@@ -100,27 +98,8 @@ python examples/pytorch/summarization/run_summarization.py \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-Lo script di esempio scarica e pre-processa un dataset dalla libreria 🤗 [Datasets](https://huggingface.co/docs/datasets/). Successivamente, lo script esegue il fine-tuning su un dataset usando Keras su un'architettura che supporta la summarization. Il seguente esempio mostra come eseguire il fine-tuning di [T5-small](https://huggingface.co/google-t5/t5-small) sul dataset [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail). Il modello T5 richiede un parametro addizionale `source_prefix` a causa del modo in cui è stato addestrato. Questo prefisso permette a T5 di sapere che si tratta di un task di summarization.
-
-```bash
-python examples/tensorflow/summarization/run_summarization.py  \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Addestramento distribuito e precisione mista
 
@@ -142,7 +121,6 @@ torchrun \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -150,8 +128,6 @@ Gli script TensorFlow utilizzano una [`MirroredStrategy`](https://www.tensorflow
 
 ## Esegui uno script su TPU
 
-<frameworkcontent>
-<pt>
 Le Tensor Processing Units (TPU) sono state progettate per migliorare le prestazioni. PyTorch supporta le TPU con il compilatore per deep learning [XLA](https://www.tensorflow.org/xla) (guarda [questo link](https://github.com/pytorch/xla/blob/master/README.md) per maggiori dettagli). Per usare una TPU, avvia lo script `xla_spawn.py` e usa l'argomento `num_cores` per impostare il numero di core TPU che intendi usare.
 
 ```bash
@@ -166,28 +142,8 @@ python xla_spawn.py --num_cores 8 \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
-</pt>
-<tf>
-Le Tensor Processing Units (TPU) sono state progettate per migliorare le prestazioni. Gli script TensorFlow utilizzano una [`TPUStrategy`](https://www.tensorflow.org/guide/distributed_training#tpustrategy) per eseguire l'addestramento su TPU. Per usare una TPU, passa il nome della risorsa TPU all'argomento `tpu`.
-
-```bash
-python run_summarization.py  \
-    --tpu name_of_tpu_resource \
-    --model_name_or_path google-t5/t5-small \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --output_dir /tmp/tst-summarization  \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
-    --num_train_epochs 3 \
-    --do_train \
-    --do_eval
-```
-</tf>
-</frameworkcontent>
 
 ## Esegui uno script con 🤗 Accelerate
 
@@ -242,7 +198,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --summary_column summary_column_name \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
-    --overwrite_output_dir \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --predict_with_generate
@@ -270,7 +225,6 @@ python examples/pytorch/summarization/run_summarization.py \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```
 
@@ -284,8 +238,6 @@ examples/pytorch/summarization/run_summarization.py -h
 
 Un'altra utile opzione è riavviare un addestramento da un checkpoint precedente. Questo garantirà che tu possa riprendere da dove hai interrotto senza ricominciare se l'addestramento viene interrotto. Ci sono due metodi per riavviare l'addestramento da un checkpoint: 
 
-Il primo metodo usa l'argomento `output_dir previous_output_dir` per riavviare l'addestramento dall'ultima versione del checkpoint contenuto in `output_dir`. In questo caso, dovresti rimuovere `overwrite_output_dir`:
-
 ```bash
 python examples/pytorch/summarization/run_summarization.py
     --model_name_or_path google-t5/t5-small \
@@ -297,24 +249,6 @@ python examples/pytorch/summarization/run_summarization.py
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --output_dir previous_output_dir \
-    --predict_with_generate
-```
-
-Il secondo metodo usa l'argomento `resume_from_checkpoint path_to_specific_checkpoint` per riavviare un addestramento da una specifica cartella di checkpoint.
-
-```bash
-python examples/pytorch/summarization/run_summarization.py
-    --model_name_or_path google-t5/t5-small \
-    --do_train \
-    --do_eval \
-    --dataset_name cnn_dailymail \
-    --dataset_config "3.0.0" \
-    --source_prefix "summarize: " \
-    --output_dir /tmp/tst-summarization \
-    --per_device_train_batch_size=4 \
-    --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --resume_from_checkpoint path_to_specific_checkpoint \
     --predict_with_generate
 ```
@@ -346,6 +280,5 @@ python examples/pytorch/summarization/run_summarization.py
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --overwrite_output_dir \
     --predict_with_generate
 ```

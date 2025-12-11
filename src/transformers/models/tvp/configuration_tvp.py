@@ -14,30 +14,28 @@
 # limitations under the License.
 """TVP model configuration"""
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class TvpConfig(PretrainedConfig):
+class TvpConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Tvp
     [Intel/tvp-base](https://huggingface.co/Intel/tvp-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -99,6 +97,7 @@ class TvpConfig(PretrainedConfig):
     """
 
     model_type = "tvp"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -129,7 +128,6 @@ class TvpConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -172,38 +170,7 @@ class TvpConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    @classmethod
-    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`TvpConfig`] (or a derived class) from a pre-trained backbone model configuration.
-
-        Args:
-            backbone_config ([`PretrainedConfig`]):
-                The backbone configuration.
-        Returns:
-            [`TvpConfig`]: An instance of a configuration object
-        """
-        return cls(backbone_config=backbone_config, **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+        super().__init__(**kwargs)
 
 
 __all__ = ["TvpConfig"]

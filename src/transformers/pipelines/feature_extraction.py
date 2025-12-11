@@ -1,4 +1,4 @@
-from typing import Any, Union
+from typing import Any
 
 from ..utils import add_end_docstrings
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
@@ -62,7 +62,7 @@ class FeatureExtractionPipeline(Pipeline):
         return preprocess_params, {}, postprocess_params
 
     def preprocess(self, inputs, **tokenize_kwargs) -> dict[str, GenericTensor]:
-        model_inputs = self.tokenizer(inputs, return_tensors=self.framework, **tokenize_kwargs)
+        model_inputs = self.tokenizer(inputs, return_tensors="pt", **tokenize_kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -73,12 +73,9 @@ class FeatureExtractionPipeline(Pipeline):
         # [0] is the first available tensor, logits or last_hidden_state.
         if return_tensors:
             return model_outputs[0]
-        if self.framework == "pt":
-            return model_outputs[0].tolist()
-        elif self.framework == "tf":
-            return model_outputs[0].numpy().tolist()
+        return model_outputs[0].tolist()
 
-    def __call__(self, *args: Union[str, list[str]], **kwargs: Any) -> Union[Any, list[Any]]:
+    def __call__(self, *args: str | list[str], **kwargs: Any) -> Any | list[Any]:
         """
         Extract the features of the input(s) text.
 

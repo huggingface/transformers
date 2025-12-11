@@ -17,7 +17,6 @@ from unittest.mock import patch
 
 from transformers import (
     MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     TextGenerationPipeline,
     logging,
     pipeline,
@@ -28,7 +27,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_torch,
     require_torch_accelerator,
-    require_torch_or_tf,
     torch_device,
 )
 
@@ -36,17 +34,15 @@ from .test_pipelines_common import ANY
 
 
 @is_pipeline_test
-@require_torch_or_tf
+@require_torch
 class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-random-LlamaForCausalLM",
-            framework="pt",
             max_new_tokens=10,
         )
         # Using `do_sample=False` to force deterministic output
@@ -76,7 +72,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -124,7 +119,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -158,7 +152,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
@@ -206,7 +199,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         dataset = MyDataset()
@@ -228,12 +220,9 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_chat_model_with_iterator_pt(self):
-        from transformers.pipelines.pt_utils import PipelineIterator
-
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
-            framework="pt",
         )
 
         # Using `do_sample=False` to force deterministic output
@@ -262,7 +251,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             yield from [chat1, chat2]
 
         outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
-        assert isinstance(outputs, PipelineIterator)
         outputs = list(outputs)
         self.assertEqual(
             outputs,
@@ -271,6 +259,31 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [{"generated_text": expected_chat2}],
             ],
         )
+
+    @require_torch
+    def test_small_chat_model_with_response_parsing(self):
+        text_generator = pipeline(
+            task="text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        text_generator.tokenizer.response_schema = {
+            # A real response schema should probably have things like "role" and "content"
+            # and "reasoning_content" but it's unlikely we'd get a tiny model to reliably
+            # output anything like that, so let's keep it simple.
+            "type": "object",
+            "properties": {
+                "first_word": {"type": "string", "x-regex": r"^\s*([a-zA-Z]+)"},
+                "last_word": {"type": "string", "x-regex": r"([a-zA-Z]+)\s*$"},
+            },
+        }
+        outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
+        parsed_message = outputs[0]["generated_text"][-1]
+        self.assertEqual(parsed_message, {"first_word": "factors", "last_word": "factors"})
 
     def get_test_pipeline(
         self,
@@ -372,11 +385,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             with self.assertRaises((ValueError, AssertionError)):
                 outputs = text_generator("", add_special_tokens=False)
 
-        if text_generator.framework == "tf":
-            # TF generation does not support max_new_tokens, and it's impossible
-            # to control long generation with only max_length without
-            # fancy calculation, dismissing tests for now.
-            self.skipTest(reason="TF generation does not support max_new_tokens")
         # We don't care about infinite range models.
         # They already work.
         # Skip this test for XGLM, since it uses sinusoidal positional embeddings which are resized on-the-fly.
@@ -483,10 +491,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     def test_pipeline_length_setting_warning(self):
         prompt = """Hello world"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=5)
-        if text_generator.model.framework == "tf":
-            logger = logging.get_logger("transformers.generation.tf_utils")
-        else:
-            logger = logging.get_logger("transformers.generation.utils")
+        logger = logging.get_logger("transformers.generation.utils")
         logger_msg = "Both `max_new_tokens`"  # The beginning of the message to be checked in this test
 
         # Both are set by the user -> log warning

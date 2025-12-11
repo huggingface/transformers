@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn.functional import normalize
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -328,7 +328,6 @@ class BlipAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Input shape: Batch x Time x Channel"""
@@ -353,10 +352,6 @@ class BlipAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_states).permute(0, 2, 1, 3)
 
@@ -397,7 +392,6 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -405,7 +399,6 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            head_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -422,38 +415,21 @@ class BlipEncoderLayer(GradientCheckpointingLayer):
 class BlipPreTrainedModel(PreTrainedModel):
     config: BlipConfig
     base_model_prefix = "blip"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["past_key_values"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_range
-        if isinstance(module, (nn.Conv2d, nn.Embedding, nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-
+        super()._init_weights(module)
+        std = self.config.initializer_range
         if isinstance(module, BlipVisionEmbeddings):
             if hasattr(self.config, "vision_config"):
-                factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(
-                module.position_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-            nn.init.trunc_normal_(
-                module.class_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+                std = self.config.vision_config.initializer_range
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=std)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=std)
 
 
 class BlipEncoder(nn.Module):
@@ -476,14 +452,12 @@ class BlipEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutput]:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
                 **kwargs,
             )
 
@@ -492,6 +466,7 @@ class BlipEncoder(nn.Module):
 
 class BlipVisionModel(BlipPreTrainedModel):
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     config: BlipVisionConfig
     _can_record_outputs = {
         "hidden_states": BlipEncoderLayer,
@@ -509,7 +484,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -805,8 +780,11 @@ class BlipModel(BlipPreTrainedModel):
 )
 class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
     main_input_name = "pixel_values"
+    _tied_weights_keys = {
+        "text_decoder.cls.predictions.decoder.bias": "text_decoder.cls.predictions.bias",
+        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
+    }  # TODO @arthurzucker check why we need this when for other models, their subPreTrainedModel handle it themselves.
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -836,6 +814,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BlipForConditionalGenerationModelOutput]:
         r"""
@@ -872,6 +851,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
             encoder_hidden_states=image_embeds,
             labels=labels,
             reduction="mean",
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -969,7 +949,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 )
 class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
     config: BlipConfig
-    _tied_weights_keys = ["text_decoder.cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "text_decoder.cls.predictions.decoder.bias": "text_decoder.cls.predictions.bias",
+        "text_decoder.cls.predictions.decoder.weight": "text_decoder.bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config: BlipConfig):
         super().__init__(config)
@@ -977,7 +960,6 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         self.vision_model = BlipVisionModel(config.vision_config)
 
         self.text_encoder = BlipTextModel(config.text_config, add_pooling_layer=False)
-
         self.text_decoder = BlipTextLMHeadModel(config.text_config)
 
         self.decoder_pad_token_id = config.text_config.pad_token_id

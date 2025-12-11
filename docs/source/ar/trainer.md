@@ -611,7 +611,6 @@ accelerate launch \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 يمكنك أيضًا تحديد المعلمات من ملف `config_file.yaml` مباشرة في سطر الأوامر:
@@ -634,7 +633,6 @@ accelerate launch --num_processes=2 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
     --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
 ```
 
 اطلع على برنامج تعليمي [Launching your Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch) لمعرفة المزيد حول `accelerate_launch` والتكوينات المخصصة.

@@ -14,22 +14,22 @@
 # limitations under the License.
 """Splinter model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SplinterConfig(PretrainedConfig):
+class SplinterConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SplinterModel`]. It is used to instantiate an
     Splinter model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Splinter
     [tau/splinter-base](https://huggingface.co/tau/splinter-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

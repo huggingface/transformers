@@ -56,17 +56,13 @@ ConvBERT 훈련 팁은 BERT와 유사합니다. 사용 팁은 [BERT 문서](bert
 ## ConvBertTokenizer [[transformers.ConvBertTokenizer]]
 
 [[autodoc]] ConvBertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## ConvBertTokenizerFast [[transformers.ConvBertTokenizerFast]]
 
 [[autodoc]] ConvBertTokenizerFast
 
-<frameworkcontent>
-<pt>
 
 ## ConvBertModel [[transformers.ConvBertModel]]
 
@@ -98,38 +94,3 @@ ConvBERT 훈련 팁은 BERT와 유사합니다. 사용 팁은 [BERT 문서](bert
 [[autodoc]] ConvBertForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFConvBertModel [[transformers.TFConvBertModel]]
-
-[[autodoc]] TFConvBertModel
-    - call
-
-## TFConvBertForMaskedLM [[transformers.TFConvBertForMaskedLM]]
-
-[[autodoc]] TFConvBertForMaskedLM 
-    - call
-
-## TFConvBertForSequenceClassification [[transformers.TFConvBertForSequenceClassification]]
-
-[[autodoc]] TFConvBertForSequenceClassification
-    - call
-
-## TFConvBertForMultipleChoice [[transformers.TFConvBertForMultipleChoice]]
-
-[[autodoc]] TFConvBertForMultipleChoice
-    - call
-
-## TFConvBertForTokenClassification [[transformers.TFConvBertForTokenClassification]]
-
-[[autodoc]] TFConvBertForTokenClassification
-    - call
-
-## TFConvBertForQuestionAnswering [[transformers.TFConvBertForQuestionAnswering]]
-
-[[autodoc]] TFConvBertForQuestionAnswering
-    - call
-
-</tf>
-</frameworkcontent>

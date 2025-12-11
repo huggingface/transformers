@@ -13,6 +13,9 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-09-02 and added to Hugging Face Transformers on 2025-08-28.*
+
+# Apertus
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -23,7 +26,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Apertus
+## Overview
 
 [Apertus](https://www.swiss-ai.org) is a family of large language models from the Swiss AI Initiative.
 

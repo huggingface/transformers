@@ -33,6 +33,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
 
 
@@ -50,6 +51,18 @@ if TYPE_CHECKING:
     from .modeling_vitpose import VitPoseEstimatorOutput
 
 logger = logging.get_logger(__name__)
+
+
+class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_affine_transform (`bool`, *optional*):
+        Whether to apply an affine transformation to the input images based on the bounding boxes.
+    normalize_factor (`float`, *optional*, defaults to `200.0`):
+        Width and height scale factor used for normalization when computing center and scale from bounding boxes.
+    """
+
+    do_affine_transform: Optional[bool]
+    normalize_factor: Optional[float]
 
 
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
@@ -348,6 +361,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
+    valid_kwargs = VitPoseImageProcessorKwargs
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -380,12 +394,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
         size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Apply an affine transformation to an image.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Image to transform.
             center (`tuple[float]`):
                 Center of the bounding box (x, y).
@@ -465,10 +479,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -487,10 +499,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if isinstance(boxes, list) and len(images) != len(boxes):
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
@@ -600,7 +609,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
         boxes: Union[list[list[list[float]]], np.ndarray],
         kernel_size: int = 11,
         threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.

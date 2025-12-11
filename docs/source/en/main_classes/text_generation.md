@@ -30,15 +30,35 @@ like token streaming.
 ## GenerationConfig
 
 [[autodoc]] generation.GenerationConfig
-	- from_pretrained
-	- from_model_config
-	- save_pretrained
-	- update
-	- validate
-	- get_generation_mode
+    - from_pretrained
+    - from_model_config
+    - save_pretrained
+    - update
+    - validate
+    - get_generation_mode
 
 ## GenerationMixin
 
 [[autodoc]] GenerationMixin
-	- generate
-	- compute_transition_scores
+    - generate
+    - compute_transition_scores
+
+## ContinuousMixin
+
+[[autodoc]] generation.ContinuousMixin
+
+## ContinuousBatchingManager
+
+[[autodoc]] generation.ContinuousBatchingManager
+
+## Scheduler
+
+[[autodoc]] generation.Scheduler
+
+## FIFOScheduler
+
+[[autodoc]] generation.FIFOScheduler
+
+## PrefillFirstScheduler
+
+[[autodoc]] generation.PrefillFirstScheduler

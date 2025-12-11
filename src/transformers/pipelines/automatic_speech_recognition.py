@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
+import httpx
 import numpy as np
-import requests
 
 from ..generation import GenerationConfig
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
@@ -134,9 +134,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
         tokenizer ([`PreTrainedTokenizer`]):
@@ -168,11 +168,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             </Tip>
 
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed. If no framework is specified, will default to the one currently installed. If no framework is
-            specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
-            no model is provided.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
@@ -192,10 +187,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def __init__(
         self,
         model: "PreTrainedModel",
-        feature_extractor: Optional[Union["SequenceFeatureExtractor", str]] = None,
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        device: Optional[Union[int, "torch.device"]] = None,
+        feature_extractor: Union["SequenceFeatureExtractor", str] | None = None,
+        tokenizer: PreTrainedTokenizer | None = None,
+        decoder: Union["BeamSearchDecoderCTC", str] | None = None,
+        device: Union[int, "torch.device"] | None = None,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -215,7 +210,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
+    def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
@@ -360,7 +355,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()
@@ -419,7 +414,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
                 inputs = F.resample(
                     torch.from_numpy(inputs) if isinstance(inputs, np.ndarray) else inputs,
-                    in_sampling_rate,
                     in_sampling_rate,
                     self.feature_extractor.sampling_rate,
                 ).numpy()
@@ -583,7 +577,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: dict | None = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}
@@ -592,7 +586,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
         stride = None
         for outputs in model_outputs:
-            if self.framework == "pt" and outputs[key].dtype in (torch.bfloat16, torch.float16):
+            if outputs[key].dtype in (torch.bfloat16, torch.float16):
                 items = outputs[key].to(torch.float32).numpy()
             else:
                 items = outputs[key].numpy()

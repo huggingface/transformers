@@ -17,10 +17,6 @@ rendered properly in your Markdown viewer.
 
 Questa guida si concentra sull'inferenza di modelli di grandi dimensioni in modo efficiente sulla CPU.
 
-## `BetterTransformer` per inferenza più rapida
-
-Abbiamo integrato di recente `BetterTransformer` per fare inferenza più rapidamente con modelli per testi, immagini e audio. Visualizza la documentazione sull'integrazione [qui](https://huggingface.co/docs/optimum/bettertransformer/overview) per maggiori dettagli.
-
 ## PyTorch JIT-mode (TorchScript)
 
 TorchScript è un modo di creare modelli serializzabili e ottimizzabili da codice PyTorch. Ogni programma TorchScript può esere salvato da un processo Python  e caricato in un processo dove non ci sono dipendenze Python.
@@ -37,43 +33,3 @@ Vedi maggiori informazioni per [IPEX Graph Optimization](https://intel.github.io
 #### Installazione di IPEX
 
 I rilasci di IPEX seguono PyTorch, verifica i vari approcci per [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/).
-
-### Utilizzo del JIT-mode
-
-Per abilitare JIT-mode in Trainer per evaluation e prediction, devi aggiungere `jit_mode_eval` negli argomenti di Trainer.
-
-<Tip warning={true}>
-
-per PyTorch >= 1.14.0. JIT-mode potrebe giovare a qualsiasi modello di prediction e evaluaion visto che il dict input è supportato in jit.trace
-
-per PyTorch < 1.14.0. JIT-mode potrebbe giovare ai modelli il cui ordine dei parametri corrisponde all'ordine delle tuple in ingresso in jit.trace, come i modelli per question-answering.
-Nel caso in cui l'ordine dei parametri seguenti non corrisponda all'ordine delle tuple in ingresso in jit.trace, come nei modelli di text-classification, jit.trace fallirà e lo cattureremo con una eccezione al fine di renderlo un fallback. Il logging è usato per notificare gli utenti.
-
-</Tip>
-
-Trovi un esempo con caso d'uso in [Transformers question-answering](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
-
-- Inference using jit mode on CPU:
-
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--jit_mode_eval </b></pre> 
-
-- Inference with IPEX using jit mode on CPU:
-
-<pre>python run_qa.py \
---model_name_or_path csarron/bert-base-uncased-squad-v1 \
---dataset_name squad \
---do_eval \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/ \
---no_cuda \
-<b>--use_ipex \</b>
-<b>--jit_mode_eval</b></pre> 

@@ -34,9 +34,6 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
@@ -123,7 +120,6 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ## MBartTokenizer
 
 [[autodoc]] MBartTokenizer
-    - build_inputs_with_special_tokens
 
 ## MBartTokenizerFast
 

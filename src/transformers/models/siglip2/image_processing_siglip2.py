@@ -37,6 +37,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -45,6 +46,19 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
+
+
+class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`int`, *optional*, defaults to 16):
+        The size (resolution) of each patch the image will be split to.
+    max_num_patches (`int`, *optional*, defaults to 256):
+        The image will be resized to have at most this number of patches,
+        and then padded in "patch" dimension to match this number exactly.
+    """
+
+    patch_size: int
+    max_num_patches: int
 
 
 @lru_cache(maxsize=256)
@@ -159,6 +173,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
+    valid_kwargs = Siglip2ImageProcessorKwargs
 
     def __init__(
         self,
@@ -235,10 +250,8 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
@@ -271,10 +284,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

@@ -19,7 +19,6 @@ import pytest
 
 from transformers import (
     MODEL_MAPPING,
-    TF_MODEL_MAPPING,
     TOKENIZER_MAPPING,
     ImageFeatureExtractionPipeline,
     is_torch_available,
@@ -45,13 +44,10 @@ def prepare_img():
 @is_pipeline_test
 class ImageFeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
-    tf_model_mapping = TF_MODEL_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit", framework="pt"
-        )
+        feature_extractor = pipeline(task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit")
         img = prepare_img()
         outputs = feature_extractor(img)
         self.assertEqual(
@@ -61,7 +57,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_model_w_pooler_pt(self):
         feature_extractor = pipeline(
-            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit-w-pooler", framework="pt"
+            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit-w-pooler"
         )
         img = prepare_img()
         outputs = feature_extractor(img, pool=True)
@@ -71,9 +67,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_image_processing_small_model_pt(self):
-        feature_extractor = pipeline(
-            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit", framework="pt"
-        )
+        feature_extractor = pipeline(task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit")
 
         # test with image processor parameters
         image_processor_kwargs = {"size": {"height": 300, "width": 300}}
@@ -93,9 +87,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_return_tensors_pt(self):
-        feature_extractor = pipeline(
-            task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit", framework="pt"
-        )
+        feature_extractor = pipeline(task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit")
         img = prepare_img()
         outputs = feature_extractor(img, return_tensors=True)
         self.assertTrue(torch.is_tensor(outputs))

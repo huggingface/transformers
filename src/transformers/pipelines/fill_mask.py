@@ -1,15 +1,9 @@
-from typing import Any, Union, overload
+from typing import Any, overload
 
 import numpy as np
 
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_torch_available, logging
 from .base import GenericTensor, Pipeline, PipelineException, build_pipeline_init_args
-
-
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..tf_utils import stable_softmax
 
 
 if is_torch_available():
@@ -90,12 +84,7 @@ class FillMaskPipeline(Pipeline):
     """
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
-        if self.framework == "tf":
-            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
-        elif self.framework == "pt":
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
-        else:
-            raise ValueError("Unsupported framework")
+        masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
         return masked_index
 
     def _ensure_exactly_one_mask_token(self, input_ids: GenericTensor) -> np.ndarray:
@@ -120,7 +109,7 @@ class FillMaskPipeline(Pipeline):
         self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
     ) -> dict[str, GenericTensor]:
         if return_tensors is None:
-            return_tensors = self.framework
+            return_tensors = "pt"
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
 
@@ -140,29 +129,15 @@ class FillMaskPipeline(Pipeline):
         input_ids = model_outputs["input_ids"][0]
         outputs = model_outputs["logits"]
 
-        if self.framework == "tf":
-            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[:, 0]
+        masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
+        # Fill mask pipeline supports only one ${mask_token} per sample
 
-            outputs = outputs.numpy()
+        logits = outputs[0, masked_index, :]
+        probs = logits.softmax(dim=-1)
+        if target_ids is not None:
+            probs = probs[..., target_ids]
 
-            logits = outputs[0, masked_index, :]
-            probs = stable_softmax(logits, axis=-1)
-            if target_ids is not None:
-                probs = tf.gather_nd(tf.squeeze(probs, 0), target_ids.reshape(-1, 1))
-                probs = tf.expand_dims(probs, 0)
-
-            topk = tf.math.top_k(probs, k=top_k)
-            values, predictions = topk.values.numpy(), topk.indices.numpy()
-        else:
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
-            # Fill mask pipeline supports only one ${mask_token} per sample
-
-            logits = outputs[0, masked_index, :]
-            probs = logits.softmax(dim=-1)
-            if target_ids is not None:
-                probs = probs[..., target_ids]
-
-            values, predictions = probs.topk(top_k)
+        values, predictions = probs.topk(top_k)
 
         result = []
         single_mask = values.shape[0] == 1
@@ -188,7 +163,7 @@ class FillMaskPipeline(Pipeline):
             return result[0]
         return result
 
-    def get_target_ids(self, targets, top_k=None):
+    def get_target_ids(self, targets):
         if isinstance(targets, str):
             targets = [targets]
         try:
@@ -238,7 +213,7 @@ class FillMaskPipeline(Pipeline):
         postprocess_params = {}
 
         if targets is not None:
-            target_ids = self.get_target_ids(targets, top_k)
+            target_ids = self.get_target_ids(targets)
             postprocess_params["target_ids"] = target_ids
 
         if top_k is not None:
@@ -256,9 +231,7 @@ class FillMaskPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(
-        self, inputs: Union[str, list[str]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    def __call__(self, inputs: str | list[str], **kwargs: Any) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Fill the masked token in the text(s) given as inputs.
 

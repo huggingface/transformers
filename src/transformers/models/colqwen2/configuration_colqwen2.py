@@ -16,7 +16,7 @@
 from copy import deepcopy
 from typing import Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
 
@@ -24,7 +24,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class ColQwen2Config(PretrainedConfig):
+class ColQwen2Config(PreTrainedConfig):
     r"""
     Configuration class to store the configuration of a [`ColQ2en2ForRetrieval`]. It is used to instantiate an instance
     of `ColQwen2ForRetrieval` according to the specified arguments, defining the model architecture following the methodology
@@ -33,11 +33,11 @@ class ColQwen2Config(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to the vision encoder used by the pre-trained
     ColQwen2-v1.0 model, e.g. [vidore/colqwen2-v1.0-hf](https://huggingface.co/vidore/colqwen2-v1.0-hf).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vlm_config (`PretrainedConfig`, *optional*):
+        vlm_config (`PreTrainedConfig`, *optional*):
             Configuration of the VLM backbone model.
         embedding_dim (`int`, *optional*, defaults to 128):
             Dimension of the multi-vector embeddings produced by the model.
@@ -54,7 +54,7 @@ class ColQwen2Config(PretrainedConfig):
     """
 
     model_type = "colqwen2"
-    sub_configs: dict[str, Any] = {"vlm_config": PretrainedConfig}
+    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
 
     def __init__(
         self,
@@ -75,19 +75,20 @@ class ColQwen2Config(PretrainedConfig):
                     "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
                 )
             vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
-        elif isinstance(vlm_config, PretrainedConfig):
-            vlm_config = vlm_config
-        else:
+        elif not isinstance(vlm_config, PreTrainedConfig):
             raise TypeError(
-                f"Invalid type for `vlm_config`. Expected `PretrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
             )
+
+        if not hasattr(vlm_config, "vocab_size"):
+            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
 
         self.vlm_config = vlm_config
         self.embedding_dim = embedding_dim
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
-    def get_text_config(self, *args, **kwargs) -> PretrainedConfig:
+    def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
         return self.vlm_config.get_text_config(*args, **kwargs)
 
 

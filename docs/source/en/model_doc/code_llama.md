@@ -143,6 +143,7 @@ visualizer("""def func(a, b):
 
 - Infilling is only available in the 7B and 13B base models, and not in the Python, Instruct, 34B, or 70B models.
 - Use the `<FILL_ME>` token where you want your input to be filled. The tokenizer splits this token to create a formatted input string that follows the [original training pattern](https://github.com/facebookresearch/codellama/blob/cb51c14ec761370ba2e2bc351374a79265d0465e/llama/generation.py#L402). This is more robust than preparing the pattern yourself.
+
     ```py
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
@@ -158,6 +159,7 @@ visualizer("""def func(a, b):
     filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens = True)[0]
     print(PROMPT.replace("<FILL_ME>", filling))
     ```
+
 - Use `bfloat16` for further training or fine-tuning and `float16` for inference.
 - The `BOS` character is not used for infilling when encoding the prefix or suffix, but only at the beginning of each prompt.
 - The tokenizer is a byte-pair encoding model based on [SentencePiece](https://github.com/google/sentencepiece). During decoding, if the first token is the start of the word (for example, “Banana”), the tokenizer doesn’t prepend the prefix space to the string.
@@ -165,16 +167,12 @@ visualizer("""def func(a, b):
 ## CodeLlamaTokenizer
 
 [[autodoc]] CodeLlamaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CodeLlamaTokenizerFast
 
 [[autodoc]] CodeLlamaTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary

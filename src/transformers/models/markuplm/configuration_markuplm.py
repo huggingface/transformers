@@ -14,14 +14,14 @@
 # limitations under the License.
 """MarkupLM model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MarkupLMConfig(PretrainedConfig):
+class MarkupLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MarkupLMModel`]. It is used to instantiate a
     MarkupLM model according to the specified arguments, defining the model architecture. Instantiating a configuration

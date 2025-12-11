@@ -22,7 +22,7 @@ Higher-level computer visions tasks, such as object detection or image segmentat
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png"/>
 </div>
 
-Load a backbone with [`~PretrainedConfig.from_pretrained`] and use the `out_indices` parameter to determine which layer, given by the index, to extract a feature map from.
+Load a backbone with [`~PreTrainedConfig.from_pretrained`] and use the `out_indices` parameter to determine which layer, given by the index, to extract a feature map from.
 
 ```py
 from transformers import AutoBackbone
@@ -46,7 +46,7 @@ There are two ways to load a Transformers backbone, [`AutoBackbone`] and a model
 <hfoptions id="backbone-classes">
 <hfoption id="AutoBackbone">
 
-The [AutoClass](./model_doc/auto) API automatically loads a pretrained vision model with [`~PretrainedConfig.from_pretrained`] as a backbone if it's supported.
+The [AutoClass](./model_doc/auto) API automatically loads a pretrained vision model with [`~PreTrainedConfig.from_pretrained`] as a backbone if it's supported.
 
 Set the `out_indices` parameter to the layer you'd like to get the feature map from. If you know the name of the layer, you could also use `out_features`. These parameters can be used interchangeably, but if you use both, make sure they refer to the same layer.
 

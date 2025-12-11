@@ -4,7 +4,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.testing_utils import require_flash_attn, require_torch_gpu, slow
+from transformers.testing_utils import require_flash_attn, require_torch_accelerator, slow
 
 
 _TEST_PROMPTS = [
@@ -26,7 +26,7 @@ _EXPECTED_OUTPUTS = [
 
 @slow
 @require_flash_attn
-@require_torch_gpu
+@require_torch_accelerator
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -44,10 +44,10 @@ class TestBatchGeneration(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("eager_paged", 64, 128, 64),
-            ("sdpa_paged", 32, 256, 128),
-            ("paged_attention", 16, 512, 256),
-            ("flex_paged", 64, 128, 64),
+            ("paged|eager", 64, 128, 64),
+            ("paged|sdpa", 32, 256, 128),
+            ("paged|flash_attention_2", 16, 512, 256),
+            ("paged|flex_attention", 64, 128, 64),
         ]
     )
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
@@ -89,10 +89,10 @@ class TestBatchGeneration(unittest.TestCase):
 
     @parameterized.expand(
         [
-            ("eager_paged", 64, 128, 64),
-            ("sdpa_paged", 32, 256, 128),
-            ("paged_attention", 16, 512, 256),
-            ("flex_paged", 64, 128, 64),
+            ("paged|eager", 64, 128, 64),
+            ("paged|sdpa", 32, 256, 128),
+            ("paged|flash_attention_2", 16, 512, 256),
+            ("paged|flex_attention", 64, 128, 64),
         ]
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):

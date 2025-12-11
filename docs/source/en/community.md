@@ -6,13 +6,13 @@ rendered properly in your Markdown viewer.
 
 This page regroups resources around 🤗 Transformers developed by the community.
 
-## Community resources:
+## Community resources
 
 | Resource     |      Description      |      Author      |
 |:----------|:-------------|------:|
 | [Hugging Face Transformers Glossary Flashcards](https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards) | A set of flashcards based on the [Transformers Docs Glossary](glossary) that has been put into a form which can be easily learned/revised using [Anki](https://apps.ankiweb.net/) an open source, cross platform app specifically designed for long term knowledge retention. See this [Introductory video on how to use the flashcards](https://www.youtube.com/watch?v=Dji_h7PILrw). | [Darigov Research](https://www.darigovresearch.com/) |
 
-## Community notebooks:
+## Community notebooks
 
 | Notebook     |      Description      |      Author      |      |
 |:----------|:-------------|:-------------|------:|

@@ -49,8 +49,7 @@ from transformers import (
 )
 from transformers.image_processing_utils import BatchFeature
 from transformers.trainer import EvalPrediction
-from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
@@ -334,18 +333,6 @@ def find_last_checkpoint(training_args: TrainingArguments) -> Optional[str]:
     checkpoint = None
     if training_args.resume_from_checkpoint is not None:
         checkpoint = training_args.resume_from_checkpoint
-    elif os.path.isdir(training_args.output_dir) and not training_args.overwrite_output_dir:
-        checkpoint = get_last_checkpoint(training_args.output_dir)
-        if checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
-            raise ValueError(
-                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-                "Use --overwrite_output_dir to overcome."
-            )
-        elif checkpoint is not None and training_args.resume_from_checkpoint is None:
-            logger.info(
-                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
-            )
 
     return checkpoint
 
@@ -367,14 +354,10 @@ def main():
     training_args.batch_eval_metrics = True
     training_args.remove_unused_columns = False
 
-    # # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_instance_segmentation", args)
-
     # Setup logging and log on each process the small summary:
     setup_logging(training_args)
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"Process rank: {training_args.local_process_index}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")

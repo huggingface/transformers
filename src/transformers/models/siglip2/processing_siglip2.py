@@ -16,19 +16,10 @@
 Image/Text processor class for SigLIP2.
 """
 
-from typing import Optional
-
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
-
-
-class Siglip2ImagesKwargs(ImagesKwargs, total=False):
-    max_num_patches: Optional[int]
-    patch_size: Optional[int]
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 
 
 class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Siglip2ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "padding": "max_length",
@@ -56,10 +47,6 @@ class Siglip2Processor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = Siglip2ProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

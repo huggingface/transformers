@@ -66,10 +66,6 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 
 [[autodoc]] models.electra.modeling_electra.ElectraForPreTrainingOutput
 
-[[autodoc]] models.electra.modeling_tf_electra.TFElectraForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## ElectraModel
 
@@ -111,86 +107,3 @@ Generators](https://openreview.net/pdf?id=r1xMH1BtvB) 논문에서 제안되었�
 [[autodoc]] ElectraForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
-## TFElectraModel
-
-[[autodoc]] TFElectraModel
-    - call
-
-## TFElectraForPreTraining
-
-[[autodoc]] TFElectraForPreTraining
-    - call
-
-## TFElectraForMaskedLM
-
-[[autodoc]] TFElectraForMaskedLM
-    - call
-
-## TFElectraForSequenceClassification
-
-[[autodoc]] TFElectraForSequenceClassification
-    - call
-
-## TFElectraForMultipleChoice
-
-[[autodoc]] TFElectraForMultipleChoice
-    - call
-
-## TFElectraForTokenClassification
-
-[[autodoc]] TFElectraForTokenClassification
-    - call
-
-## TFElectraForQuestionAnswering
-
-[[autodoc]] TFElectraForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxElectraModel
-
-[[autodoc]] FlaxElectraModel
-    - __call__
-
-## FlaxElectraForPreTraining
-
-[[autodoc]] FlaxElectraForPreTraining
-    - __call__
-
-## FlaxElectraForCausalLM
-
-[[autodoc]] FlaxElectraForCausalLM
-    - __call__
-
-## FlaxElectraForMaskedLM
-
-[[autodoc]] FlaxElectraForMaskedLM
-    - __call__
-
-## FlaxElectraForSequenceClassification
-
-[[autodoc]] FlaxElectraForSequenceClassification
-    - __call__
-
-## FlaxElectraForMultipleChoice
-
-[[autodoc]] FlaxElectraForMultipleChoice
-    - __call__
-
-## FlaxElectraForTokenClassification
-
-[[autodoc]] FlaxElectraForTokenClassification
-    - __call__
-
-## FlaxElectraForQuestionAnswering
-
-[[autodoc]] FlaxElectraForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

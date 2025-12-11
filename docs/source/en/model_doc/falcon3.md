@@ -30,5 +30,6 @@ Depth up-scaling for improved reasoning: Building on recent studies on the effec
 Knowledge distillation for better tiny models: To provide compact and efficient alternatives, we developed Falcon3-1B-Base and Falcon3-3B-Base by leveraging pruning and knowledge distillation techniques, using less than 100GT of curated high-quality data, thereby redefining pre-training efficiency.
 
 ## Resources
+
 - [Blog post](https://huggingface.co/blog/falcon3)
 - [Models on Huggingface](https://huggingface.co/collections/tiiuae/falcon3-67605ae03578be86e4e87026)

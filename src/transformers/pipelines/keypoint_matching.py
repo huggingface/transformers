@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from collections.abc import Sequence
-from typing import Any, TypedDict, Union
+from typing import Any, TypeAlias, TypedDict, Union
 
-from typing_extensions import TypeAlias, overload
+from typing_extensions import overload
 
 from ..image_utils import is_pil_image
 from ..utils import is_vision_available, requires_backends
@@ -79,8 +79,6 @@ class KeypointMatchingPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        if self.framework != "pt":
-            raise ValueError("Keypoint matching pipeline only supports PyTorch (framework='pt').")
 
     def _sanitize_parameters(self, threshold=None, timeout=None):
         preprocess_params = {}
@@ -99,10 +97,10 @@ class KeypointMatchingPipeline(Pipeline):
 
     def __call__(
         self,
-        inputs: Union[list[ImagePair], ImagePair],
+        inputs: list[ImagePair] | ImagePair,
         threshold: float = 0.0,
         **kwargs: Any,
-    ) -> Union[list[Match], list[list[Match]]]:
+    ) -> list[Match] | list[list[Match]]:
         """
         Find matches between keypoints in two images.
 
@@ -146,8 +144,8 @@ class KeypointMatchingPipeline(Pipeline):
 
     def preprocess(self, images, timeout=None):
         images = [load_image(image, timeout=timeout) for image in images]
-        model_inputs = self.image_processor(images=images, return_tensors=self.framework)
-        model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = self.image_processor(images=images, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
         target_sizes = [image.size for image in images]
         preprocess_outputs = {"model_inputs": model_inputs, "target_sizes": target_sizes}
         return preprocess_outputs

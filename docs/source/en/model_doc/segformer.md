@@ -71,8 +71,6 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 </hfoptions>
 
-
-
 ## Notes
 
 - SegFormer works with **any input size**, padding inputs to be divisible by `config.patch_sizes`.
@@ -96,12 +94,6 @@ processor = SegformerImageProcessor(do_reduce_labels=True)
 ## SegformerConfig
 
 [[autodoc]] SegformerConfig
-
-## SegformerFeatureExtractor
-
-[[autodoc]] SegformerFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## SegformerImageProcessor
 

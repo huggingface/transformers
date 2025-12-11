@@ -20,7 +20,7 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available
 
@@ -33,14 +33,8 @@ class Emu3TextKwargs(TextKwargs, total=False):
     return_for_image_generation: bool
 
 
-class Emu3ImagesKwargs(ImagesKwargs, total=False):
-    ratio: str
-    image_area: int
-
-
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: Emu3TextKwargs
-    images_kwargs: Emu3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "return_for_image_generation": False,
@@ -70,10 +64,6 @@ class Emu3Processor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
-    image_processor_class = "Emu3ImageProcessor"
-
     def __init__(
         self,
         image_processor,
@@ -95,8 +85,6 @@ class Emu3Processor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -117,10 +105,8 @@ class Emu3Processor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -243,6 +229,41 @@ class Emu3Processor(ProcessorMixin):
 
     def postprocess(self, images: ImageInput, **kwargs):
         return self.image_processor.postprocess(images, **kwargs)
+
+    def post_process_multimodal_output(
+        self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
+    ):
+        """
+        Post-process the output of a multimodal model to return the requested modality output.
+        If the model cannot generated the requested modality, an error will be raised.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            generation_mode (`str`, *optional*):
+                Generation mode indicated which modality to output and can be one of `["text", "image", "audio"]`.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
+
+        Returns:
+            `list[Union[str, PIL.Image.Image]]`: The decoded text or generated image.
+        """
+        if generation_mode is None or generation_mode == "text":
+            return self.post_process_image_text_to_text(
+                generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs
+            )
+
+        elif generation_mode == "image":
+            images = self.postprocess(generated_outputs, return_tensors="PIL.Image.Image")
+            return images["pixel_values"]
+
+        else:
+            raise ValueError(
+                f"{self.__class__.__name__} got an unexpected generation_mode={generation_mode}. Supported options are only `text` and `image"
+            )
 
 
 __all__ = ["Emu3Processor"]

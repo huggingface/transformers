@@ -123,11 +123,6 @@ audio classification, video classification, etc.
 [[autodoc]] PerceiverTokenizer
     - __call__
 
-## PerceiverFeatureExtractor
-
-[[autodoc]] PerceiverFeatureExtractor
-    - __call__
-
 ## PerceiverImageProcessor
 
 [[autodoc]] PerceiverImageProcessor

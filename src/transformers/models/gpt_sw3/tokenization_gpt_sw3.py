@@ -1,14 +1,10 @@
 """The tokenizer used by the GPT-SW3 models."""
 
-import os
 import re
 import unicodedata
-from shutil import copyfile
 from typing import Any, Optional, Union
 
-import sentencepiece as spm
-
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import is_torch_available, logging
 from ...utils.import_utils import requires
 
@@ -22,7 +18,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
 @requires(backends=("sentencepiece",))
-class GPTSw3Tokenizer(PreTrainedTokenizer):
+class GPTSw3Tokenizer(SentencePieceBackend):
     """
     Construct an GPTSw3 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
@@ -86,6 +82,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    is_fast = False
 
     def __init__(
         self,
@@ -100,8 +97,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
             logger.warning(
@@ -123,14 +118,10 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
         # Used for whitespace normalization in input texts
         # fmt : off
-        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
+        self.whitespaces = {" ", " ", " ", " ", " ", "　", " ", " ", " ", " ", "￼", ""}
         # fmt : on
 
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
@@ -138,7 +129,13 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
         )
 
+        # Ensure sp_model_kwargs is in kwargs for proper signature storage
+        # Always add it even if None, parent class will handle the conversion to {}
+        kwargs["sp_model_kwargs"] = sp_model_kwargs if sp_model_kwargs is not None else {}
+
+        # Call parent init (which will load sp_model)
         super().__init__(
+            vocab_file=vocab_file,
             do_lower_case=do_lower_case,
             remove_space=remove_space,
             keep_accents=keep_accents,
@@ -146,31 +143,9 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
+            special_tokens_pattern="none",
             **kwargs,
         )
-
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__setstate__
-    def __setstate__(self, d):
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
-
-    @property
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.vocab_size
-    def vocab_size(self) -> int:
-        return len(self.sp_model)
 
     def preprocess_text(self, text: str) -> str:
         """
@@ -190,19 +165,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str, **kwargs) -> list[str]:
         text = self.preprocess_text(text)
         return self.sp_model.encode(text, out_type=str)
-
-    def _convert_token_to_id(self, token: str) -> int:
-        """Converts a token (str) to an id (int) using the vocab."""
-        return self.sp_model.PieceToId(token)
-
-    def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (int) to a token (str) using the vocab."""
-        return self.sp_model.IdToPiece(index)
-
-    @staticmethod
-    def clean_up_tokenization(out_string: str) -> str:
-        """Returns the input string, this function is overridden to remove the default clean up."""
-        return out_string
 
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
@@ -225,30 +187,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
 
         return out_string
-
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.get_vocab
-    def get_vocab(self) -> dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        return (out_vocab_file,)
 
     def encode_fast(
         self, text: Union[str, list[str]], return_tensors: Union[str, bool] = False

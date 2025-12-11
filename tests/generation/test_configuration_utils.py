@@ -19,7 +19,7 @@ import tempfile
 import unittest
 import warnings
 
-from huggingface_hub import HfFolder, create_pull_request
+from huggingface_hub import create_pull_request
 from parameterized import parameterized
 
 from transformers import AutoConfig, GenerationConfig, WatermarkingConfig, is_torch_available
@@ -688,7 +688,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        HfFolder.save_token(TOKEN)
 
     def test_push_to_hub(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:

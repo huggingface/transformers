@@ -65,7 +65,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "task": None,
         },
-        "images_kwargs": {},
     }
 
 
@@ -216,10 +215,6 @@ class OmDetTurboProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -227,8 +222,6 @@ class OmDetTurboProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[list[str], list[list[str]]]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         """
