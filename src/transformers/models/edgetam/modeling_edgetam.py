@@ -392,8 +392,8 @@ class EdgeTamVisionNeck(nn.Module):
         # forward in top-down order (from low to high resolution)
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
-            lateral_features = hidden_states[i].permute(0, 3, 1, 2).to(self.convs[i].weight.dtype)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = hidden_states[i].permute(0, 3, 1, 2)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -408,7 +408,7 @@ class EdgeTamVisionNeck(nn.Module):
 
             prev_position_encoding = self.position_encoding(
                 prev_features.shape, prev_features.device, prev_features.dtype
-            )
+            ).to(prev_features.dtype)
 
             fpn_hidden_states += (prev_features,)
             fpn_position_encoding += (prev_position_encoding,)
