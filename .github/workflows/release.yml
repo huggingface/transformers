@@ -6,9 +6,6 @@ on:
     branches:
       - 'v*-release'
 
-env:
-  PYPI_TOKEN: ${{ secrets.PYPI_TOKEN_DIST }}
-
 jobs:
   build_and_test:
     name: build release
