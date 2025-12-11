@@ -454,7 +454,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if len(generation_parameters) > 0:
             raise ValueError(
                 "Some generation parameters are set in the model config. These should go into `model.generation_config`"
-                f"as opposed to `model.config. \nGeneration parameters found: {str(generation_parameters)}",
+                f"as opposed to `model.config`. \nGeneration parameters found: {str(generation_parameters)}",
             )
 
         os.makedirs(save_directory, exist_ok=True)
