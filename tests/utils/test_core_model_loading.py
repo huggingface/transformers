@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from transformers import PretrainedConfig
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
@@ -503,6 +504,44 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+
+class TestConversionMapping(unittest.TestCase):
+    def test_register_checkpoint_conversion_mapping(self):
+        register_checkpoint_conversion_mapping(
+            "foobar",
+            [
+                WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
+            ],
+        )
+        self.assertEqual(len(get_checkpoint_conversion_mapping("foobar")), 1)
+
+    def test_register_checkpoint_conversion_mapping_overwrites(self):
+        register_checkpoint_conversion_mapping(
+            "foobarbaz",
+            [
+                WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
+            ],
+        )
+        with self.assertRaises(ValueError):
+            register_checkpoint_conversion_mapping(
+                "foobarbaz",
+                [
+                    WeightRenaming(".block_sparse_moe.foo", ".mlp.foo"),
+                    WeightRenaming(".block_sparse_moe.bar", ".mlp.bar"),
+                ],
+            )
+
+        register_checkpoint_conversion_mapping(
+            "foobarbaz",
+            [
+                WeightRenaming(".block_sparse_moe.foo", ".mlp.foo"),
+                WeightRenaming(".block_sparse_moe.bar", ".mlp.bar"),
+            ],
+            overwrite=True,
+        )
+
+        self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
 
 
 if __name__ == "__main__":
