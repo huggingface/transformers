@@ -1062,7 +1062,6 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         self.decoder.set_input_embeddings(new_embeddings)
 
     @auto_docstring
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.forward with google-t5/->google/, T5->MT5, t5->mt5
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1179,9 +1178,6 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel, GenerationMixin):
         )
 
         sequence_output = decoder_outputs[0]
-
-        if self.config.tie_word_embeddings:
-            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 
