@@ -70,7 +70,7 @@ class PaddleOCRVLVisionText2TextModelTester:
             "ignored_index": -100,
             "image_token_id": 100295,
             "intermediate_size": 3072,
-            "max_position_embeddings": 131072,
+            "max_position_embeddings": 512,
             "model_type": "paddleocr_vl",
             "num_attention_heads": 16,
             "num_hidden_layers": 2,
