@@ -78,7 +78,7 @@ try:
                 )
             return lambda func: func
 
-    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository]] = {
+    _KERNEL_MAPPING: dict[str, dict[Device | str, LayerRepository | dict[Mode, LayerRepository]]] = {
         "MultiScaleDeformableAttention": {
             "cuda": LayerRepository(
                 repo_id="kernels-community/deformable-detr",
@@ -253,6 +253,8 @@ except ImportError:
 
 _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "causal-conv1d": {"repo_id": "kernels-community/causal-conv1d"},
+    "mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
+    "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "revision": "v0.0.4"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -328,7 +330,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     if kernel_name in mapping and isinstance(mapping[kernel_name], ModuleType):
         return mapping[kernel_name]
     if kernel_name not in _HUB_KERNEL_MAPPING:
-        logger.warning(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
+        logger.warning_once(f"Kernel {kernel_name} not found in _HUB_KERNEL_MAPPING")
         mapping[kernel_name] = None
         return None
     if _kernels_available:
@@ -336,8 +338,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
 
         try:
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
+            revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, version=version)
+            kernel = get_kernel(repo_id, revision=revision, version=version)
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
@@ -369,6 +372,32 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+def use_kernelized_func(module_names: list[Callable] | Callable):
+    """
+    This decorator attaches the target function as an attribute of the module.
+    The function must already be decorated with @use_kernel_func_from_hub
+    this decorator then wraps it as an nn.Module internally.
+    When kernelize is later applied to the full model, the function can be accessed as a regular module attribute and kernelized just like any other layer.
+    The kernelization is performed in place, modifying the module directly.
+    """
+    if isinstance(module_names, Callable):
+        module_names = [module_names]
+
+    def decorator(cls):
+        orig_init = cls.__init__
+
+        def new_init(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            for fn in module_names:
+                # we hardcode the name of the function to "rotary_fn" for now
+                setattr(self, "rotary_fn", fn)
+
+        cls.__init__ = new_init
+        return cls
+
+    return decorator
+
+
 __all__ = [
     "LayerRepository",
     "use_kernel_forward_from_hub",
@@ -377,4 +406,5 @@ __all__ = [
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
+    "use_kernelized_func",
 ]

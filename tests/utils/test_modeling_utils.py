@@ -67,6 +67,7 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    force_serialization_as_bin_files,
     hub_retry,
     is_staging_test,
     require_accelerate,
@@ -83,7 +84,6 @@ from transformers.utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    check_torch_load_is_safe,
 )
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
@@ -102,6 +102,7 @@ from test_module.custom_configuration import CustomConfig
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
     from safetensors.torch import save_file as safe_save_file
     from test_module.custom_modeling import CustomModel
     from torch import nn
@@ -315,16 +316,16 @@ if is_torch_available():
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
                 # First offline load should fail
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     with pytest.raises(OSError):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Enable online mode for download
-                with patch("transformers.utils.hub.is_offline_mode", return_value=False):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
                     snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
                 # Load again in offline mode - should work now
-                with patch("transformers.utils.hub.is_offline_mode", return_value=True):
+                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                     AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
@@ -753,34 +754,32 @@ class ModelUtilsTest(TestCasePlus):
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
 
-    def test_checkpoint_sharding_local_bin(self):
+    def test_checkpoint_sharding_local(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # We use the same folder for various sizes to make sure a new save erases the old checkpoint.
             for max_size in ["50kB", "100kB", "200kB"]:
-                model.save_pretrained(tmp_dir, max_shard_size=max_size, safe_serialization=False)
+                model.save_pretrained(tmp_dir, max_shard_size=max_size)
 
                 # Get each shard file and its size
                 shard_to_size = {}
                 for shard in os.listdir(tmp_dir):
-                    if shard.endswith(".bin"):
+                    if shard.endswith(".safetensors"):
                         shard_file = os.path.join(tmp_dir, shard)
                         shard_to_size[shard_file] = os.path.getsize(shard_file)
 
-                index_file = os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)
+                index_file = os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)
                 # Check there is an index but no regular weight file
                 self.assertTrue(os.path.isfile(index_file))
-                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+                self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
                     max_size_int = int(max_size[:-2]) * 10**3
-                    # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
-                    # the size asked for (since we count parameters)
+                    # Note: the file can end up being slightly bigger than the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
-                        check_torch_load_is_safe()
-                        state_dict = torch.load(shard_file, weights_only=True)
+                        state_dict = load_file(shard_file)
                         self.assertEqual(len(state_dict), 1)
 
                 # Check the index and the shard files found match
@@ -788,11 +787,11 @@ class ModelUtilsTest(TestCasePlus):
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
-                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".bin")}
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".safetensors")}
                 self.assertSetEqual(all_shards, shards_found)
 
                 # Finally, check the model can be reloaded
-                new_model = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
+                new_model = BertModel.from_pretrained(tmp_dir)
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     torch.testing.assert_close(p1, p2)
 
@@ -803,56 +802,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
-    def test_checkpoint_variant_local_bin(self):
+    def test_checkpoint_variant_local(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=False)
-
-            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
-
-            weights_file = os.path.join(tmp_dir, weights_name)
-            self.assertTrue(os.path.isfile(weights_file))
-            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
-
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(tmp_dir)
-
-            new_model = BertModel.from_pretrained(tmp_dir, variant="v2", use_safetensors=False)
-
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            torch.testing.assert_close(p1, p2)
-
-    @unittest.skip("Skipping it for now, not sure how critial but does not look hard to fix.")
-    def test_checkpoint_variant_local_sharded_bin(self):
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB", safe_serialization=False)
-
-            weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
-            weights_index_file = os.path.join(tmp_dir, weights_index_name)
-            self.assertTrue(os.path.isfile(weights_index_file))
-            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
-
-            for i in range(1, 5):
-                weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00005"] + ["bin"])
-                weights_name_file = os.path.join(tmp_dir, weights_name)
-                self.assertTrue(os.path.isfile(weights_name_file))
-
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(tmp_dir)
-
-            new_model = BertModel.from_pretrained(tmp_dir, variant="v2", use_safe_tensors=False)
-
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            torch.testing.assert_close(p1, p2)
-
-    def test_checkpoint_variant_local_safe(self):
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=True)
+            model.save_pretrained(tmp_dir, variant="v2")
 
             weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
@@ -868,11 +822,11 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
-    def test_checkpoint_variant_local_sharded_safe(self):
+    def test_checkpoint_variant_local_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB", safe_serialization=True)
+            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB")
 
             weights_index_name = ".".join(SAFE_WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
             weights_index_file = os.path.join(tmp_dir, weights_index_name)
@@ -901,7 +855,7 @@ class ModelUtilsTest(TestCasePlus):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, max_shard_size="50kB", safe_serialization=True)
+            model.save_pretrained(tmp_dir, max_shard_size="50kB")
 
             weights_index_name = ".".join(SAFE_WEIGHTS_INDEX_NAME.split(".")[:-1] + ["json"])
             weights_index_file = os.path.join(tmp_dir, weights_index_name)
@@ -912,7 +866,7 @@ class ModelUtilsTest(TestCasePlus):
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 
-            # Setting use_safetensors=False should raise an error as the checkpoint was saved with safetensors=True
+            # Setting use_safetensors=False should raise an error as the checkpoint was saved in safetensors
             with self.assertRaises(OSError):
                 _ = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
 
@@ -934,10 +888,12 @@ class ModelUtilsTest(TestCasePlus):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, max_shard_size="50kB", safe_serialization=False)
+            # Since we don't support saving with bins files anymore, but still support loading we use this context
+            # to easily create the bins files and try to load them
+            with force_serialization_as_bin_files():
+                model.save_pretrained(tmp_dir, max_shard_size="50kB")
 
-            weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["json"])
-            weights_index_file = os.path.join(tmp_dir, weights_index_name)
+            weights_index_file = os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)
             self.assertTrue(os.path.isfile(weights_index_file))
 
             for i in range(1, 5):
@@ -999,24 +955,27 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    def test_checkpoint_variant_save_load_bin(self):
+    def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2", use_safetensors=False
+                "hf-internal-testing/tiny-random-bert-variant",
+                cache_dir=tmp_dir,
+                variant="v2",
+                use_safetensors=False,
             )
-            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
-            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=False)
+            model.save_pretrained(tmp_dir, variant="v2")
             # saving will create a variant checkpoint
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir)
             # saving shouldn't delete variant checkpoints
-            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
             # there should be a normal checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
         self.assertIsNotNone(model)
 
@@ -1134,8 +1093,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=False)
-            model.save_pretrained(tmp_dir, safe_serialization=True)
+            model.save_pretrained(tmp_dir)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
@@ -1302,7 +1260,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_safetensors_save_and_load(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
+            model.save_pretrained(tmp_dir)
             # No pytorch_model.bin file, only a model.safetensors
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
@@ -1324,7 +1282,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_safetensors_save_and_load_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            model.save_pretrained(tmp_dir, max_shard_size="100kB")
             # No pytorch_model.bin index file, only a model.safetensors index
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
@@ -1699,7 +1657,7 @@ class ModelUtilsTest(TestCasePlus):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
+            model.save_pretrained(tmp_dir)
             new_model = BertModel.from_pretrained(tmp_dir)
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1709,7 +1667,7 @@ class ModelUtilsTest(TestCasePlus):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            model.save_pretrained(tmp_dir, max_shard_size="100kB")
             new_model = BertModel.from_pretrained(tmp_dir)
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1736,7 +1694,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNotNone(model)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
+            model.save_pretrained(tmp_dir)
             with safe_open(os.path.join(tmp_dir, "model.safetensors"), framework="pt") as f:
                 metadata = f.metadata()
                 self.assertEqual(metadata.get("format"), "pt")
@@ -2228,6 +2186,41 @@ class ModelUtilsTest(TestCasePlus):
         # Unexpected keys (mtp) should be removed from the state dict, therefore this should not error out.
         BaseModelWithUnexpectedKeys.from_pretrained(temp.name, device_map={"linear": "cpu", "linear_2": "disk"})
 
+    def test_loading_respect_env_variable_for_threading(self):
+        """Test that we can correctly control threading during loading"""
+        model = BaseModel(PreTrainedConfig())
+
+        # Monkey patch Thread.__init__ to add a counter of launched threads
+        original_init = threading.Thread.__init__
+        counter = 0
+
+        def tracking_init(self, *args, **kwargs):
+            nonlocal counter
+            counter += 1
+            original_init(self, *args, **kwargs)
+
+        threading.Thread.__init__ = tracking_init
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Use threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "0"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after - before > 0, "Loading should have spawned new threads!")
+
+            # Deactivate threading
+            os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "1"
+            before = counter
+            _ = BaseModel.from_pretrained(tmpdirname)
+            after = counter
+            self.assertTrue(after == before, "It looks like loading did spawn new threads, but it should not have!")
+
+        # Reverse monkey patch
+        threading.Thread.__init__ = original_init
+
 
 @slow
 @require_torch
@@ -2254,7 +2247,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token)
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2273,7 +2269,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, private=True)
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2292,7 +2291,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token)
         self.api.update_repo_settings(self.repo_name, gated="auto")
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
@@ -2312,7 +2314,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb")
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2331,9 +2336,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(
-            self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
-        )
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", private=True)
         converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         with self.subTest("Initial and converted models are equal"):
@@ -2352,7 +2358,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb")
         headers = {"Authorization": f"Bearer {self.token}"}
         httpx.put(
             f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
@@ -2376,7 +2385,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         )
         initial_model = BertModel(config)
 
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, private=True)
         BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
 
         # This should have opened a PR with the user's account
@@ -2413,10 +2425,16 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token)
 
         # Push a model on a given revision
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, revision="new-branch")
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token, revision="new-branch")
 
         # Try to convert the model on that revision should raise
         with self.assertRaises(EnvironmentError):
@@ -2429,7 +2447,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token)
 
         # Download the model that doesn't have safetensors
         BertModel.from_pretrained(self.repo_name, token=self.token)
@@ -2461,7 +2482,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         initial_model = BertModel(config)
 
         # Push a model on `main`
-        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        # Since we don't support saving with bins files anymore, but still support loading we use this context
+        # to easily create the bins files and try to load them
+        with force_serialization_as_bin_files():
+            initial_model.push_to_hub(self.repo_name, token=self.token)
 
         # The auto conversion is mocked to always raise; ensure that it doesn't raise in the main thread
         BertModel.from_pretrained(self.repo_name, token=self.token)
