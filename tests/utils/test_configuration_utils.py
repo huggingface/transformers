@@ -38,7 +38,7 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",
-    "tie_word_embeddings": False,
+    "tie_word_embeddings": True,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
