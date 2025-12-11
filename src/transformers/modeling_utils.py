@@ -1081,6 +1081,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _keep_in_fp32_modules_strict = None
 
     dtype_plan: Optional[dict[str, torch.dtype]] = None
+    _dtype: Optional[Union[str, torch.dtype]] = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1225,10 +1226,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
-        if getattr(self.config, "dtype", None) is None:
-            default_dtype = torch.get_default_dtype()
-            self._dtype = default_dtype
-        else:
+        default_dtype = torch.get_default_dtype()
+        self._dtype = default_dtype
+        if hasattr(self.config, "dtype") and self.config.dtype is not None:
             self._dtype = self.config.dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
@@ -4445,7 +4445,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                value = torch.empty_like(param, dtype=self.dtype, device="cpu")
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
 
