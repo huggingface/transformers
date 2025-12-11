@@ -537,7 +537,7 @@ def _test_model_moe_forward_impl(rank, mode):
 def _test_model_moe_backward_pass_impl(rank):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
     model_id = "hf-internal-testing/tiny-qwen3-moe"
-    
+
     torch.manual_seed(0)
 
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
@@ -641,14 +641,14 @@ def _test_model_moe_forward_compile_impl(rank, mode):
 def _test_model_moe_save_impl(rank, tmp_dir):
     """Implementation of test_model_save for MoE model distributed execution."""
     model_id = "hf-internal-testing/tiny-qwen3-moe"
-    
+
     if dist.is_initialized():
         kwargs = {"tp_plan": "auto"}
         result_dir = f"{tmp_dir}/tp"
     else:
         kwargs = {}
         result_dir = f"{tmp_dir}/nontp"
-        
+
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", **kwargs)
     model.save_pretrained(result_dir)
 
