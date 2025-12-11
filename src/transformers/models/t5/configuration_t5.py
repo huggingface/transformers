@@ -131,13 +131,13 @@ class T5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True  # T5 is always tied, has always been like that.
 
 
 __all__ = ["T5Config"]

@@ -532,7 +532,7 @@ class EncoderDecoderMixin:
         torch.manual_seed(0)
         tied_encoder_model, tied_decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         config = EncoderDecoderConfig.from_encoder_decoder_configs(
-            tied_encoder_model.config, tied_decoder_model.config, tie_encoder_decoder=True
+            tied_encoder_model.config, tied_decoder_model.config, tie_word_embeddings=True
         )
         tied_model = EncoderDecoderModel(encoder=tied_encoder_model, decoder=tied_decoder_model, config=config)
         tied_model.to(torch_device)

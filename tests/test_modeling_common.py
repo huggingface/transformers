@@ -2043,7 +2043,6 @@ class ModelTesterMixin:
             except Exception as _:
                 pass
 
-            # config.tie_encoder_decoder = False
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:

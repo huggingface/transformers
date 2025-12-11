@@ -42,7 +42,6 @@ config_common_kwargs = {
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
-    "tie_encoder_decoder": True,
     "chunk_size_feed_forward": 5,
     "architectures": ["BertModel"],
     "finetuning_task": "translation",
