@@ -273,6 +273,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("ovis2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+        ("paddleocr_vl", "TokenizersBackend" if is_tokenizers_available() else None),
         ("paligemma", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),

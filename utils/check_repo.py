@@ -156,6 +156,10 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
@@ -389,6 +393,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "PaddleOCRVLModel",  # Building part of bigger (tested) model
+    "PaddleOCRVisionModel",  # Building part of bigger (tested) model
+    "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model
+    "PaddleOCRTextModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model

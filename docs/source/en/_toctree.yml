@@ -1121,6 +1121,8 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paddleocr_vl
+        title: PaddleOCRVL
       - local: model_doc/paligemma
         title: PaliGemma
       - local: model_doc/perceiver
