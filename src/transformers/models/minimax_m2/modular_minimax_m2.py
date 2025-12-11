@@ -13,26 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from typing import Optional
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
+from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
+    apply_rotary_pos_emb,  # noqa: F401
 )
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
@@ -41,7 +39,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeAttention
 
 
 class MiniMaxM2Config(PreTrainedConfig):
@@ -184,11 +181,6 @@ class MiniMaxM2Config(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -237,13 +229,14 @@ class MiniMaxM2Config(PreTrainedConfig):
 class MiniMaxM2TopKRouter(MixtralTopKRouter):
     def forward(self, hidden_states, e_score_correction_bias):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = nn.functional.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        # Main difference to other Moe, using Sigmoid activation instead of Softmax
         routing_weights = nn.functional.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
         top_k_weights = routing_weights.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        router_scores = torch.zeros_like(routing_weights).scatter_(1, top_k_index, top_k_weights)
+        router_scores = top_k_weights
         return router_logits, router_scores, top_k_index
 
 
@@ -271,73 +264,13 @@ class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
     pass
 
 
-class MiniMaxM2Attention(Qwen3MoeAttention):
+class MiniMaxM2Attention(FlexOlmoAttention):
     def __init__(self, config: MiniMaxM2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-
-        self.q_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_attention_heads, eps=config.rms_norm_eps)
-        self.k_norm = MiniMaxM2RMSNorm(self.head_dim * config.num_key_value_heads, eps=config.rms_norm_eps)
-
-        del self.sliding_window
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # main diff from Llama
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        key_states = key_states.view(hidden_shape)
-        query_states = query_states.view(hidden_shape)
-        value_states = value_states.view(hidden_shape)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class MiniMaxM2Model(MixtralModel):
