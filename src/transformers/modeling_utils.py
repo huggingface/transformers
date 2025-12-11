@@ -279,7 +279,7 @@ def get_state_dict_dtype(state_dict):
 
     # if no floating dtype was found return whatever the first dtype is
     if len(state_dict) == 0:
-        raise ValueError("The provided state_dict is empty.")
+        return torch.float32
     return next(iter(state_dict.values())).dtype
 
 
