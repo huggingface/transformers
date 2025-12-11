@@ -3,7 +3,7 @@ name: CodeQL Security Analysis
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "fix_security_issue_*"]
   # pull_request:
   #   branches: ["main"]
   workflow_dispatch:

@@ -437,7 +437,7 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,
@@ -749,13 +749,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
-
-    def visual(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
 
     @can_return_tuple
     @auto_docstring
@@ -1134,7 +1127,7 @@ class VideoLlama3Processor(Qwen2VLProcessor):
                 for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
             ]
             video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]

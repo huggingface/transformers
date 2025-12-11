@@ -215,10 +215,6 @@ class OmDetTurboProcessor(ProcessorMixin):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

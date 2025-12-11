@@ -32,7 +32,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.deprecation import deprecate_kwarg
 from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
@@ -52,24 +51,9 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         kwargs.setdefault("size_divisor", pad_size)
         super().__init__(**kwargs)
 
-    @property
-    def pad_size(self):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        return self.size_divisor
-
-    @pad_size.setter
-    def pad_size(self, value):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        self.size_divisor = value
-
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Swin2SRImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    @deprecate_kwarg("size", version="v5", new_name="size_divisor")
     def pad(self, images: "torch.Tensor", size_divisor: int) -> "torch.Tensor":
         """
         Pad an image to make the height and width divisible by `size_divisor`.
@@ -93,7 +77,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
             padding_mode="symmetric",
         )
 
-    @deprecate_kwarg("pad_size", version="v5", new_name="size_divisor")
     def _preprocess(
         self,
         images: list["torch.Tensor"],

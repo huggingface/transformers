@@ -149,7 +149,7 @@ The example below packs `up_proj` and `gate_proj` into a single `gate_up_proj` m
 ```python
 class Llama4TextExperts(nn.Module):
     ...
-    self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+    self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
 ```
 
 Batch matrix multiplication can be used in the `forward` pass to compute the output of the `gate_up_proj` module.
@@ -306,3 +306,7 @@ The most important part of DTensor is the `placement` attribute because it tells
     ```
 
 - `Partial()` - Indicates a tensor is pending a reduction operation (not typically relevant for usage in Transformers).
+
+## Resources
+
+Read the [Tensor Parallelism (TP) in Transformers: 5 Minutes to Understand](https://huggingface.co/blog/qgallouedec/tp) blog post for a quick overview of tensor parallelism and learn how column and row parallel setups differ.

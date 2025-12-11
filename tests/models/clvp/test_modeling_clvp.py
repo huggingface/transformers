@@ -186,6 +186,10 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="ClvpEncoder does not output loss")
+    def test_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 class ClvpDecoderTester:
     def __init__(
@@ -308,21 +312,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.to(torch_device)
         model.train()
         inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
-        loss = model(**inputs).loss
-        loss.backward()
-
-    def test_training_gradient_checkpointing(self):
-        # we will only test the ClvpForCausalLM since it outputs loss
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_cache = False
-        config.return_dict = True
-
-        model = ClvpForCausalLM(config)
-        model.to(torch_device)
-        model.gradient_checkpointing_enable()
-        model.train()
-        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
-
         loss = model(**inputs).loss
         loss.backward()
 

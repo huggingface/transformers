@@ -64,10 +64,6 @@ class Lfm2VlProcessor(ProcessorMixin):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Lfm2VlImageProcessorFast"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -75,11 +71,15 @@ class Lfm2VlProcessor(ProcessorMixin):
         chat_template: Optional[str] = None,
         **kwargs,
     ):
-        self.image_token = tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
-        self.image_start_token = tokenizer.image_start_token
-        self.image_end_token = tokenizer.image_end_token
-        self.image_thumbnail_token = tokenizer.image_thumbnail
+        self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if hasattr(tokenizer, "image_token_id")
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<|image_start|>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "<|image_end|>")
+        self.image_thumbnail_token = getattr(tokenizer, "image_thumbnail_token", "<|img_thumbnail|>")
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(

@@ -308,7 +308,7 @@ You could also create and use your own dataset if you prefer to train with the [
      # simple example
      id2label = {0: 'cat', 1: 'dog'}
      with open('id2label.json', 'w') as fp:
-     json.dump(id2label, fp)
+         json.dump(id2label, fp)
      ```
 
 As an example, take a look at this [example dataset](https://huggingface.co/datasets/nielsr/ade20k-demo) which was created with the steps shown above.

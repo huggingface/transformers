@@ -77,11 +77,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
-    attributes = ["video_processor", "image_processor", "tokenizer"]
-    image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-
     def __init__(
         self,
         video_processor=None,

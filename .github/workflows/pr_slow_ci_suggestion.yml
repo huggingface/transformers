@@ -28,12 +28,14 @@ jobs:
         with:
           fetch-depth: "0"
 
+      # We need to use `${{ ... }}` here to avoid `Argument list too long` error when a PR changes a lot of files.
+      # (We could also try to use artifact approach, but it's more involved).
+      # `CodeQL` doesn't identify any security issue here. Also `PR_FILES` is from `get-pr-info.yml` by using an api
+      # `github.rest.pulls.listFiles`, which is fine.
       - name: Write pr_files file
-        env:
-          PR_FILES: ${{ needs.get-pr-info.outputs.PR_FILES }}
         run: |
-          cat > pr_files.txt << EOF
-          $PR_FILES
+          cat > pr_files.txt << 'EOF'
+          ${{ needs.get-pr-info.outputs.PR_FILES }}
           EOF
 
       - name: Get repository content
