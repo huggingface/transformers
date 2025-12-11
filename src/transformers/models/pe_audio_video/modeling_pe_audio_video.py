@@ -491,6 +491,7 @@ class PEAudioVideoPretrainedModel(PreTrainedModel):
 class PEAudioVideoEncoder(PEAudioVideoPretrainedModel):
     config: PEAudioVideoEncoderConfig
     main_input_name = "input_values"
+    base_model_prefix = "audio_video_encoder"
 
     def __init__(self, config: PEAudioVideoEncoderConfig):
         super().__init__(config)
