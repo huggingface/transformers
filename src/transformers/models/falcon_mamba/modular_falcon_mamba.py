@@ -21,7 +21,7 @@ from torch import nn
 
 from ...integrations.hub_kernels import lazy_load_kernel
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import is_mamba_ssm_available, is_mambapy_available, is_torchdynamo_compiling
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -243,18 +243,6 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
-        mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update, selective_scan_fn, mamba_inner_fn = (
-            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
-            if mamba_ssm is not None
-            else (None, None, None)
-        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -278,7 +266,28 @@ class FalconMambaMixer(MambaMixer):
                 )
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
+        global \
+            causal_conv1d, \
+            causal_conv1d_update, \
+            causal_conv1d_fn, \
+            mamba_ssm, \
+            selective_state_update, \
+            selective_scan_fn, \
+            mamba_inner_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update, selective_scan_fn, mamba_inner_fn = (
+            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
+            if mamba_ssm is not None
+            else (None, None, None)
+        )
         super().__init__(config, layer_idx)
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -297,12 +306,6 @@ class FalconMambaMixer(MambaMixer):
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-        mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update, selective_scan_fn, mamba_inner_fn = (
-            mamba_ssm.selective_state_update,
-            mamba_ssm.selective_scan_fn,
-            mamba_ssm.mamba_inner_fn,
-        )
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
             contextualized_states = mamba_inner_fn(
                 projected_states,
@@ -325,12 +328,6 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d")
-            causal_conv1d_update, causal_conv1d_fn = (
-                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-                if causal_conv1d is not None
-                else (None, None)
-            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -524,22 +521,6 @@ class FalconMambaMixer(MambaMixer):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
-        mamba_ssm = lazy_load_kernel("mamba-ssm")
-        selective_state_update, selective_scan_fn, mamba_inner_fn = (
-            (
-                mamba_ssm.selective_state_update,
-                mamba_ssm.selective_scan_fn,
-                mamba_ssm.mamba_inner_fn,
-            )
-            if mamba_ssm is not None
-            else (None, None, None)
-        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
