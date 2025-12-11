@@ -17,8 +17,8 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Union, get_args, get_origin
 from types import UnionType
+from typing import Union, get_args, get_origin
 
 import regex as re
 
