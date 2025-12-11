@@ -19,7 +19,6 @@ from types import ModuleType
 
 from packaging import version as pkg_version
 
-from ..modeling_flash_attention_utils import lazy_import_flash_attention
 from ..utils import logging
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available
@@ -33,7 +32,7 @@ try:
         Device,
         LayerRepository,
         Mode,
-        get_kernel,
+        get_kernel as get_kernel_hub,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
     )
@@ -313,7 +312,7 @@ def load_and_register_attn_kernel(
 
     # Load the kernel from hub
     try:
-        kernel = get_kernel_wrapper(repo_id, revision=rev)
+        kernel = get_kernel(repo_id, revision=rev)
     except Exception as e:
         raise ValueError(f"An error occurred while trying to load from '{repo_id}': {e}.")
     # correctly wrap the kernel
@@ -375,18 +374,19 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-def get_kernel_wrapper(kernel_name: str, revision: Optional[str] = None, version: Optional[str] = None) -> ModuleType:
+def get_kernel(kernel_name: str, revision: str | None = None, version: str | None = None) -> ModuleType:
     from .. import __version__
 
     user_agent = {"framework": "transformers", "version": __version__, "repo_id": kernel_name}
     if _kernels_available:
         kernels_version = importlib.metadata.version("kernels")
         if pkg_version.parse(kernels_version) >= pkg_version.parse("0.10.4"):
-            return get_kernel(kernel_name, revision=revision, version=version, user_agent=user_agent)
+            return get_kernel_hub(kernel_name, revision=revision, version=version, user_agent=user_agent)
         else:
-            return get_kernel(kernel_name, revision=revision)
+            return get_kernel_hub(kernel_name, revision=revision)
     else:
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
+
 def use_kernelized_func(module_names: list[Callable] | Callable):
     """
     This decorator attaches the target function as an attribute of the module.
@@ -421,6 +421,6 @@ __all__ = [
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
     "lazy_load_kernel",
-    "get_kernel_wrapper",
+    "get_kernel",
     "use_kernelized_func",
-]
+] # type: ignore

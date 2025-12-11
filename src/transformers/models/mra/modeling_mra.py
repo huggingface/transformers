@@ -54,9 +54,9 @@ def load_cuda_kernels():
     global mra_cuda_kernel
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
-    from ...integrations.hub_kernels import get_kernel_wrapper
+    from ...integrations.hub_kernels import get_kernel
 
-    mra_cuda_kernel = get_kernel_wrapper("kernels-community/mra")
+    mra_cuda_kernel = get_kernel("kernels-community/mra")
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):

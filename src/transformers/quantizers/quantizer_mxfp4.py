@@ -53,9 +53,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         """Lazy import and initialize kernels only when needed"""
         if self.triton_kernels_hub is None:
             try:
-                from ..integrations.hub_kernels import get_kernel_wrapper
+                from ..integrations.hub_kernels import get_kernel
 
-                self.triton_kernels_hub = get_kernel_wrapper("kernels-community/triton_kernels")
+                self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
             except ImportError:
                 raise ImportError("kernels package is required for MXFP4 quantization")
         return self.triton_kernels_hub

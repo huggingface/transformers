@@ -54,9 +54,9 @@ def load_cuda_kernels():
     global lsh_cumulation
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
-    from ...integrations.hub_kernels import get_kernel_wrapper
+    from ...integrations.hub_kernels import get_kernel
 
-    yoso = get_kernel_wrapper("kernels-community/yoso")
+    yoso = get_kernel("kernels-community/yoso")
     lsh_cumulation = yoso.lsh_cumulation
 
 
