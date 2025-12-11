@@ -303,6 +303,12 @@ class LasrEncoderConvolutionModule(nn.Module):
         self.pointwise_conv2 = nn.Conv1d(
             channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
         )
+        try:
+            from torch.nn.attention.flex_attention import BlockMask
+
+            self.BlockMask = BlockMask
+        except ImportError:
+            self.BlockMask = None
 
     def forward(self, hidden_states, attention_mask=None):
         """
@@ -325,7 +331,9 @@ class LasrEncoderConvolutionModule(nn.Module):
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         # Apply padding mask before convolution
-        if attention_mask is not None:
+        if attention_mask is not None and not (
+            self.BlockMask is not None and isinstance(attention_mask, self.BlockMask)
+        ):
             if attention_mask.dtype == torch.bool:
                 all_masked_rows = torch.all(~attention_mask, dim=2)
             else:
