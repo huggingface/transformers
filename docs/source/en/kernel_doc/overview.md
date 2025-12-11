@@ -1,4 +1,4 @@
-# Hugging Face Transformers Kernels
+# Kernels
 
 The Transformers Kernels integration provides high-performance, optimized kernel implementations for common transformer operations. By enabling kernels with a single `use_kernels=True` flag, you can achieve significant speedups for model inference and training with minimal code changes. The system leverages specialized CUDA, Triton, ROCm, Metal, and XPU kernels distributed through the Hugging Face Hub, automatically replacing standard PyTorch operations while maintaining full compatibility. Kernels are mode-aware (automatically switching between training and inference optimizations), support multiple hardware backends (NVIDIA, AMD, Apple Silicon, Intel), and are fully customizable via `KernelConfig` for advanced use cases.
 
