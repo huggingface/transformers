@@ -1441,11 +1441,8 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                video_metadata = videos_inputs.pop("video_metadata")
-            else:
-                video_metadata = videos_inputs["video_metadata"]
+            # pop video metadata because it is can't be converted to BatchFeature
+            video_metadata = videos_inputs.pop("video_metadata")
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -1514,6 +1511,12 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return_video_metadata = kwargs.get("return_metadata")
+        if return_video_metadata:
+            return BatchFeature(
+                data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors
+            ), video_metadata
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
