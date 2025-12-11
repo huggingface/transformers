@@ -1073,7 +1073,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
                 - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
         """
         vision_outputs: Sam3TrackerVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
+            pixel_values.to(self.vision_encoder.dtype),
             **kwargs,
         )
 
