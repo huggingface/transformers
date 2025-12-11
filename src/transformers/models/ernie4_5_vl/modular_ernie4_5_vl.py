@@ -600,7 +600,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        mm_token_type_ids: Optional[torch.IntTensor] = None,
+        moe_mm_token_type_ids: Optional[torch.IntTensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
@@ -608,7 +608,7 @@ class Ernie4_5_VLMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        if mm_token_type_ids is not None and mm_token_type_ids.any():
+        if moe_mm_token_type_ids is not None and moe_mm_token_type_ids.any():
             final_hidden_states = torch.zeros_like(hidden_states)
             router_logits = torch.zeros(
                 size=(batch_size * sequence_length, self.num_experts),
@@ -617,9 +617,9 @@ class Ernie4_5_VLMoeBlock(nn.Module):
             )
 
             # True (1 or 2) == vision, False (0) == text tokens
-            mm_token_type_ids = mm_token_type_ids.bool()
-            token_type_ids_router = mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
-            token_type_ids_states = mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
+            moe_mm_token_type_ids = moe_mm_token_type_ids.bool()
+            token_type_ids_router = moe_mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
+            token_type_ids_states = moe_mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
 
             # Run moe on each modality and assign their results to the original token positions
             final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(
@@ -665,7 +665,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        mm_token_type_ids: Optional[torch.IntTensor] = None,
+        moe_mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -690,7 +690,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         if isinstance(self.mlp, Ernie4_5_VLMoeBlock):
-            hidden_states, _ = self.mlp(hidden_states, mm_token_type_ids)
+            hidden_states, _ = self.mlp(hidden_states, moe_mm_token_type_ids)
         else:
             hidden_states = self.mlp(hidden_states)
         hidden_states = hidden_states + residual
@@ -732,7 +732,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        mm_token_type_ids: Optional[torch.IntTensor] = None,
+        moe_mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -740,8 +740,8 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
         r"""
-        mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -797,7 +797,7 @@ class Ernie4_5_VLTextModel(Ernie4_5_MoeModel):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                mm_token_type_ids=mm_token_type_ids,
+                moe_mm_token_type_ids=moe_mm_token_type_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
                 **kwargs,
@@ -1149,7 +1149,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
             mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Token type ids matching image/video tokens in the inputs sequence to `True` and otherwise `False`.
+                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
 
         Returns:
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
@@ -1250,58 +1250,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
-    def get_mm_token_type_ids(
-        self,
-        mm_token_type_ids: Optional[torch.IntTensor],
-        image_mask: Optional[torch.BoolTensor],
-        video_mask: Optional[torch.BoolTensor],
-    ):
-        """Construct `mm_token_type_ids` from the given modality masks (if needed)"""
-        if mm_token_type_ids is not None or (image_mask is None and video_mask is None):
-            return mm_token_type_ids
-
-        if image_mask is not None:
-            mm_token_type_ids = torch.zeros_like(image_mask[..., -1], dtype=torch.int32)
-        else:
-            mm_token_type_ids = torch.zeros_like(video_mask[..., -1], dtype=torch.int32)
-
-        if image_mask is not None:
-            mm_token_type_ids[image_mask[..., -1]] = 1
-        if video_mask is not None:
-            mm_token_type_ids[video_mask[..., -1]] = 2
-
-        return mm_token_type_ids
-
-    def get_moe_mm_token_type_ids(self, original_mm_token_type_ids: Optional[torch.IntTensor]):
-        r"""
-        Turns left and right neighbours of a value other than 0 to its value. Since start/end tokens are always used together,
-        there will never be an ambiguous value, i.e. we always have at least `00` between each modality. This is needed as the vision
-        experts considers these tokens (start/end token which are mandatory) as vision tokens.
-
-        Args:
-            original_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-
-        Example:
-            Given `original_mm_token_type_ids = [01110022200000]`, it will turn into `[11111222220000]`.
-        """
-        if original_mm_token_type_ids is not None:
-            moe_mm_token_type_ids = original_mm_token_type_ids.clone()
-            left = original_mm_token_type_ids[:, :-1]  # left shifted
-            right = original_mm_token_type_ids[:, 1:]  # right shifted
-
-            # consider the token to the left that is zero to a non-zero token to the right (left boundary)
-            mask_left_zero = (left == 0) & (right != 0)
-            # consider the token to the right that is zero to a non-zero token to the left (right boundary)
-            mask_right_zero = (left != 0) & (right == 0)
-
-            # replace those zeros with their non-zero neighbor
-            moe_mm_token_type_ids[:, :-1][mask_left_zero] = right[mask_left_zero]
-            moe_mm_token_type_ids[:, 1:][mask_right_zero] = left[mask_right_zero]
-
-            return moe_mm_token_type_ids
-        return original_mm_token_type_ids
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1348,6 +1296,7 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         mm_token_type_ids: Optional[torch.IntTensor] = None,
+        moe_mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1362,6 +1311,8 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
@@ -1372,7 +1323,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        image_mask = None
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1381,7 +1331,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        video_mask = None
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1389,9 +1338,6 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-        # Compose multimodal token type ids based on our masks
-        mm_token_type_ids = self.get_mm_token_type_ids(mm_token_type_ids, image_mask, video_mask)
 
         if position_ids is None:
             position_ids = self.get_position_ids(
@@ -1405,13 +1351,10 @@ class Ernie4_5_VLModel(Qwen2_5_VLModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
 
-        # Moe's vision experts consider the additional start and end tokens as vision tokens themself
-        moe_mm_token_type_ids = self.get_moe_mm_token_type_ids(original_mm_token_type_ids=mm_token_type_ids)
-
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
-            mm_token_type_ids=moe_mm_token_type_ids,
+            moe_mm_token_type_ids=moe_mm_token_type_ids,
             attention_mask=attention_mask,
             use_cache=use_cache,
             past_key_values=past_key_values,
@@ -1480,6 +1423,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
             model_inputs["mm_token_type_ids"] = None
+            model_inputs["moe_mm_token_type_ids"] = None
 
         return model_inputs
 
@@ -1491,6 +1435,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         mm_token_type_ids: Optional[torch.IntTensor] = None,
+        moe_mm_token_type_ids: Optional[torch.IntTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1508,6 +1453,8 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
+        moe_mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The same as `mm_token_type_ids` while additionally considering start/end image/video tokens as respective vision tokens.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1528,6 +1475,7 @@ class Ernie4_5_VLForConditionalGeneration(Glm4vForConditionalGeneration, Generat
             attention_mask=attention_mask,
             position_ids=position_ids,
             mm_token_type_ids=mm_token_type_ids,
+            moe_mm_token_type_ids=moe_mm_token_type_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

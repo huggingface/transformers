@@ -365,6 +365,9 @@ class Ernie4_5_VLImageProcessor(BaseImageProcessor):
 
         """
         size = size if size is not None else self.size
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale

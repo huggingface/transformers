@@ -327,6 +327,8 @@ class AutoVideoProcessor:
             pretrained_model_name_or_path, **kwargs
         )
         # Specific models need the original path for modification in `from_dict`, e.g. see `Ernie 4.5 VL` with fonts
+        # TODO: Remove this workaround when the processor no longer relies on the `Auto`, i.e. `BaseVideoProcessor`, class
+        # and resolves the underlying class instead
         kwargs["resolved_file_path"] = processed_kwargs.get("resolved_file_path")
 
         video_processor_class = config_dict.get("video_processor_type", None)

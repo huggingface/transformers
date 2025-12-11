@@ -21,8 +21,8 @@ from transformers import PretrainedConfig
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
-    ModulelistSplitAndFuse,
     PermuteForRope,
     WeightConverter,
     WeightRenaming,
@@ -546,12 +546,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightConverter(
                 ["experts.*.w1.weight", "experts.*.w3.weight"],
                 ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
             WeightConverter(
                 "experts.*.w2.weight",
                 ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
             WeightConverter(
                 "self_attn.qkv_proj.weight",
@@ -668,12 +668,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightConverter(
                 ["experts.*.w1.weight", "experts.*.w3.weight"],
                 ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
             WeightConverter(
                 "experts.*.w2.weight",
                 ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
-                operations=[ModulelistSplitAndFuse(stack_dim=0, concat_dim=1)],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
             WeightConverter(
                 "self_attn.qkv_proj.weight",

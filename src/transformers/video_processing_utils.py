@@ -721,6 +721,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             )
 
         # Specific models need the original path for modification in `from_dict`, e.g. see `Ernie 4.5 VL` with fonts
+        # TODO: Remove this workaround when the processor no longer relies on the `Auto`, i.e. `BaseVideoProcessor`, class
+        # and resolves the underlying class instead
         kwargs["resolved_file_path"] = final_resolved_file_path
 
         return video_processor_dict, kwargs

@@ -280,8 +280,8 @@ class PermuteForRope(ConversionOps):
         return output
 
 
-class ModulelistSplitAndFuse(ConversionOps):
-    """
+class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
+    r"""
     Special operation that splits a module list over all keys and fuses over the number of original modules.
 
     Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
@@ -298,7 +298,7 @@ class ModulelistSplitAndFuse(ConversionOps):
 
     The splits are equal and are defined by the amount of target keys.
     The final fusions are defined by the amount of original module lists.
-    """  # noqa: W605
+    """
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -338,11 +338,11 @@ class ModulelistSplitAndFuse(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return ModulelistSplitAndDecouple(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+        return ErnieSplitAndDecoupleTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
-class ModulelistSplitAndDecouple(ConversionOps):
-    """
+class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
+    r"""
     Special operation that splits a fused module list over all original modules and
     then decouples them into a mixed module list each over all keys.
 
@@ -360,7 +360,7 @@ class ModulelistSplitAndDecouple(ConversionOps):
 
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
-    """  # noqa: W605
+    """
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -400,13 +400,12 @@ class ModulelistSplitAndDecouple(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return ModulelistSplitAndFuse(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+        return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
 class Transpose(ConversionOps):
     """
-    Transposes the given tensor along dim0 and dim1, e.g. when going
-    from `nn.Parameter` to `nn.Linear`.
+    Transposes the given tensor along dim0 and dim1.
     """
 
     def __init__(self, dim0: int = 0, dim1: int = 1):
@@ -600,8 +599,8 @@ class WeightRenaming(WeightTransform):
 
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ModulelistSplitAndFuse,
-    ModulelistSplitAndDecouple,
+    ErnieFuseAndSplitTextVisionExperts,
+    ErnieSplitAndDecoupleTextVisionExperts,
 )
 
 
