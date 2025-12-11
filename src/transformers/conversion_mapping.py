@@ -142,11 +142,11 @@ def _build_checkpoint_conversion_mapping():
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
             WeightRenaming(
-                source_patterns=r"weight_g$",
+                source_patterns="weight_g",
                 target_patterns="parametrizations.weight.original0",
             ),
             WeightRenaming(
-                source_patterns=r"weight_v$",
+                source_patterns="weight_v",
                 target_patterns="parametrizations.weight.original1",
             ),
         ]
