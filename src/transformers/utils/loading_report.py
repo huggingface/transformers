@@ -228,7 +228,7 @@ def log_state_dict_report(
     if unexpected_keys:
         tips += f"\n- {_color('UNEXPECTED', 'orange', ansi) + ansi['italic']}\t:can be ignored when loading from different task/architecture; not ok if you expect identical arch."
     if missing_keys:
-        tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing form the checkpoint. Consider training on your downstream task."
+        tips += f"\n- {_color('MISSING', 'red', ansi) + ansi['italic']}\t:those params were newly initialized because missing from the checkpoint. Consider training on your downstream task."
     if mismatched_keys:
         tips += f"\n- {_color('MISMATCH', 'yellow', ansi) + ansi['italic']}\t:ckpt weights were loaded, but they did not match the original empty weight shapes."
     if misc:
@@ -241,7 +241,7 @@ def log_state_dict_report(
     # Re-raise in those case, after the report
     if misc:
         raise RuntimeError(
-            "We encountered some issues during automatic conversion of the weights. For details look at the `MISC` entry of "
+            "We encountered some issues during automatic conversion of the weights. For details look at the `MISC` entries of "
             "the above report!"
         )
     if not ignore_mismatched_sizes and mismatched_keys:
