@@ -12,12 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import lru_cache
 from typing import Optional
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_fbgemm_gpu_available,
+    is_torch_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -27,7 +34,9 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
-if is_fbgemm_gpu_available():
+_is_torch_xpu_available = is_torch_xpu_available()
+
+if is_fbgemm_gpu_available() and not _is_torch_xpu_available:
     import fbgemm_gpu.experimental.gen_ai  # noqa: F401
 
 logger = logging.get_logger(__name__)
@@ -61,7 +70,7 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per row instead of per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
@@ -77,14 +86,14 @@ class FbgemmFp8Quantize(ConversionOps):
                 flattened_param = transposed_param.reshape(-1, original_shape[-1])
 
                 # Quantize using per column
-                new_value_flat, weight_scale_flat = torch.ops.fbgemm.quantize_fp8_per_row(flattened_param)
+                new_value_flat, weight_scale_flat = quantize_fp8_per_row(flattened_param)
 
                 # Reshape back to original dimensions
                 new_value = new_value_flat.reshape(original_shape)
                 new_value = new_value.transpose(1, 2)
                 weight_scale = weight_scale_flat.reshape(original_shape[0], original_shape[1], 1)
         else:
-            new_value, weight_scale = torch.ops.fbgemm.quantize_fp8_per_row(value)
+            new_value, weight_scale = quantize_fp8_per_row(value)
             weight_scale = torch.nn.Parameter(weight_scale.view(weight_scale.shape[0], 1))
 
         return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
@@ -110,18 +119,26 @@ class FbgemmFp8Linear(torch.nn.Linear):
         output_shape = (*x.shape[:-1], -1)
         # x_quantized and x_scale are not necessarily on the same device as x, this is an issue.
         # https://github.com/pytorch/FBGEMM/blob/e08af8539c391437f447173863df0f3f6f6f1855/fbgemm_gpu/experimental/gen_ai/src/quantize/quantize.cu#L1237C3-L1237C45
-        x_quantized, x_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-            x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
-        )
+        x_quantized, x_scale = quantize_fp8_per_row(x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub)
         # moving x_quantized, x_scale here creates glibberish output ... However, if we move the output, it works
         # x_quantized, x_scale = x_quantized.to(x.device), x_scale.to(x.device)
 
         # The computation still happens on the device where self.weight is even if x_quantized is not on the same device as self.weight
         weight_scale_float32 = self.weight_scale.to(torch.float32)
-        output = torch.ops.fbgemm.f8f8bf16_rowwise(
-            x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
-        )
-        output = output + self.bias if self.bias is not None else output
+        if _is_torch_xpu_available:
+            output = torch._scaled_mm(
+                x_quantized,
+                self.weight.t(),
+                scale_a=x_scale.unsqueeze(-1),
+                scale_b=weight_scale_float32.t(),
+                out_dtype=x.dtype,
+                bias=self.bias,
+            )
+        else:
+            output = torch.ops.fbgemm.f8f8bf16_rowwise(
+                x_quantized, self.weight, x_scale, weight_scale_float32, use_fast_accum=True
+            )
+            output = output + self.bias if self.bias is not None else output
         # Hacky for now, we have the output to the device of x
         output = output.to(x.device)
         output = output.reshape(output_shape)
@@ -173,46 +190,77 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_hidden = hidden_states[i]
             expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
             # Quantize for this expert
-            expert_quantized, expert_scale = torch.ops.fbgemm.quantize_fp8_per_row(
+            expert_quantized, expert_scale = quantize_fp8_per_row(
                 expert_hidden_reshaped, num_tokens, self.input_scale_ub
             )
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
+            if _is_torch_xpu_available:
+                gate = torch._scaled_mm(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous().t(),
+                    scale_a=expert_scale.unsqueeze(-1),
+                    scale_b=gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+                up = torch._scaled_mm(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous().t(),
+                    scale_a=expert_scale.unsqueeze(-1),
+                    scale_b=gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+            else:
+                gate = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
+                    expert_scale,
+                    gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
 
-            gate = torch.ops.fbgemm.f8f8bf16_rowwise(
-                expert_quantized,
-                self.gate_up_proj[i].transpose(0, 1)[:sharded_expert_dim].contiguous(),
-                expert_scale,
-                gate_up_proj_scale_float32[i][0][:sharded_expert_dim].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
-
-            up = torch.ops.fbgemm.f8f8bf16_rowwise(
-                expert_quantized,
-                self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
-                expert_scale,
-                gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
+                up = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    expert_quantized,
+                    self.gate_up_proj[i].transpose(0, 1)[sharded_expert_dim:].contiguous(),
+                    expert_scale,
+                    gate_up_proj_scale_float32[i][0][sharded_expert_dim:].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
 
             activated = up * self.act_fn(gate)
 
-            activated_quantized, activated_scale = torch.ops.fbgemm.quantize_fp8_per_row(
-                activated, num_tokens, self.input_scale_ub
-            )
+            activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, self.input_scale_ub)
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
-            expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
-                activated_quantized,
-                self.down_proj[i].transpose(0, 1).contiguous(),
-                activated_scale,
-                down_proj_scale_float32[i].view(-1, 1).contiguous(),
-                use_fast_accum=True,
-            )
+            if _is_torch_xpu_available:
+                expert_output = torch._scaled_mm(
+                    activated_quantized,
+                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    scale_a=activated_scale.unsqueeze(-1),
+                    scale_b=down_proj_scale_float32[i].view(-1, 1).contiguous().t(),
+                    out_dtype=hidden_states.dtype,
+                )
+            else:
+                expert_output = torch.ops.fbgemm.f8f8bf16_rowwise(
+                    activated_quantized,
+                    self.down_proj[i].transpose(0, 1).contiguous(),
+                    activated_scale,
+                    down_proj_scale_float32[i].view(-1, 1).contiguous(),
+                    use_fast_accum=True,
+                )
 
             next_states[i] = expert_output
         next_states = next_states.to(hidden_states.device)
         return next_states.view(-1, self.hidden_size)
+
+
+@lru_cache(maxsize=1)
+def get_quantize_fp8_per_row():
+    if _is_torch_xpu_available:
+        from kernels import get_kernel
+
+        return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
+    return torch.ops.fbgemm.quantize_fp8_per_row
 
 
 def replace_with_fbgemm_fp8_linear(
@@ -232,6 +280,8 @@ def replace_with_fbgemm_fp8_linear(
         pre_quantized (`book`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
+    global quantize_fp8_per_row
+    quantize_fp8_per_row = get_quantize_fp8_per_row()
 
     has_been_replaced = False
     module_kwargs = {} if pre_quantized else {"dtype": None}
