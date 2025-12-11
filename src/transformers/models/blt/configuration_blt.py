@@ -415,17 +415,22 @@ class BltConfig(PreTrainedConfig):
         kwargs.pop("tie_word_embeddings", None)
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
+
 class BltTextConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Text component.
     """
+
     pass
+
 
 class BltVisionConfig(PreTrainedConfig):
     """
     Configuration class for the Blt Vision component.
     """
+
     pass
+
 
 __all__ = [
     "BltConfig",
