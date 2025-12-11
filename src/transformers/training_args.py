@@ -860,7 +860,7 @@ class TrainingArguments:
     warmup_ratio: float | None = field(
         default=None,
         metadata={
-            "help": "This argument is deprecated and will be removed in v5.2 . Use `warmup_steps` instead as it also works with float values."
+            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
         },
     )
 
