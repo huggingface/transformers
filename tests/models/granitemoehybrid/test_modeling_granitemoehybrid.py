@@ -30,7 +30,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -235,7 +235,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         pass
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @unittest.skip(
@@ -356,7 +356,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
 # TODO (@alex-jw-brooks) - update this once the model(s) are out
 @unittest.skip(reason="GraniteMoeHybrid models are not yet released")
-@require_torch_gpu
+@require_torch_accelerator
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):

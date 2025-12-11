@@ -16,6 +16,13 @@ limitations under the License.
 
 # Version 5 Migration guide
 
+> [!NOTE] 
+> 👀 Welcome to the migration guide for the first release candidate! Nothing is final and things are still actively in 
+> movement. We have a section dedicated to what is planned for future release candidates, yet is known not to work in 
+> the RC0. Look for "Disclaimers for the RC0".
+> 
+> We'll be eagerly awaiting your feedback in our GitHub issues!
+
 ## Library-wide changes with widespread impact
 
 ### Removal of TensorFlow and Jax
@@ -74,6 +81,333 @@ While this is being implemented, expect varying levels of support across differe
 
 Linked PR: https://github.com/huggingface/transformers/pull/41580
 
+## Tokenization
+
+Just as we moved towards a single backend library for model definition, we want our tokenizers, and the `Tokenizer` object to be a lot more intuitive. With v5, tokenizer definition is much simpler; one can now initialize an empty `LlamaTokenizer` and train it directly on your corpus.
+
+Defining a new tokenizer object should be as simple as this:
+
+```python
+from transformers import TokenizersBackend, generate_merges
+from tokenizers import pre_tokenizers, Tokenizer
+from tokenizers.model import BPE
+
+class Llama5Tokenizer(TokenizersBackend):
+    def __init__(self, unk_token="<unk>",bos_token="<s>", eos_token="</s>", vocab=None, merges=None ):
+        if vocab is None:
+            self._vocab = {
+                str(unk_token): 0,
+                str(bos_token): 1,
+                str(eos_token): 2,
+            }
+
+        else:
+            self._vocab = vocab
+
+        if merges is not None:
+            self._merges = merges or []
+        else:
+            self._merges = generate_merges(filtered_vocab)
+
+        self._tokenizer = Tokenizer(
+            BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True)
+        )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+        )
+        super().__init__(
+            tokenizer_object=self._tokenizer,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+        )
+```
+
+Once the tokenizer is defined as above, you can load it with the following: `Llama5Tokenizer()`. Doing this returns you an empty, trainable tokenizer that follows the definition of the authors of `Llama5` (it does not exist yet :wink:).
+
+The above is the main motivation towards refactoring tokenization: we want tokenizers to behave similarly to models: trained or empty, and with exactly what is defined in their class definition.
+
+### Backend Architecture Changes: moving away from the slow/fast tokenizer separation
+
+Up to now, transformers maintained two parallel implementations for many tokenizers:
+- "Slow" tokenizers (`tokenization_<model>.py`) - Python-based implementations, often using [SentencePiece](https://github.com/google/sentencepiece) as the backend.
+- "Fast" tokenizers (`tokenization_<model>_fast.py`) - Rust-based implementations using the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library.
+
+In v5, we consolidate to a single tokenizer file per model: `tokenization_<model>.py`. This file will use the most appropriate backend available:
+
+1. **TokenizersBackend** (preferred): Rust-based tokenizers from the 🤗 [tokenizers](https://github.com/huggingface/tokenizers) library. In general it provides optimal performance, but it also offers a lot more features that are commonly adopted across the ecosystem:
+  - handling additional tokens
+  - a full python API for setting and updating 
+  - automatic parallelization,
+  - automatic offsets
+  - customization
+  - training
+2. **SentencePieceBackend**: for tokenizers requiring the `sentencepiece` library. It inherits from `PythonBackend`. 
+3. **PythonBackend**: a Python implementations of the features provided by `tokenizers`. Basically allows adding tokens.
+4. **MistralCommonBackend**: relies on `MistralCommon`'s tokenization library. (Previously known as the `MistralCommonTokenizer`)
+
+The `AutoTokenizer` automatically selects the appropriate backend based on available files and dependencies. This is transparent, you continue to use `AutoTokenizer.from_pretrained()` as before. This allows transformers to be future-proof and modular to easily support future backends.
+
+### Defining a tokenizers outside of the existing backends
+
+We enable users and tokenizer builders to define their own tokenizers from top to bottom. Tokenizers are usually defined using a backend such as `tokenizers`, `sentencepiece` or `mistral-common`, but we offer the possibility to design the tokenizer at a higher-level, without relying on those backends.
+
+To do so, you can import the `PythonBackend` (which was previously known as `PreTrainedTokenizer`). This class encapsulates all the logic related to added tokens, encoding, and decoding.
+
+If you want something even higher up the stack, then `PreTrainedTokenizerBase` is what `PythonBackend` inherits from. It contains the very basic tokenizer API features: 
+- `encode`
+- `decode`
+- `vocab_size`
+- `get_vocab`
+- `convert_tokens_to_ids`
+- `convert_ids_to_tokens`
+- `from_pretrained`
+- `save_pretrained`
+- among a few others
+
+### API Changes
+
+#### 1. Direct tokenizer initialization with vocab and merges
+
+Starting with v5, we now enable initializing blank, untrained `tokenizers`-backed tokenizers:
+
+```py
+from transformers import LlamaTokenizer
+
+tokenizer = LlamaTokenizer()
+```
+
+This tokenizer will therefore follow the definition of the `LlamaTokenizer` as defined in its class definition. It can then be trained on a corpus as can be seen in [the `tokenizers` documentation](https://huggingface.co/docs/tokenizers/training_from_memory).
+
+These tokenizers can also be initialized from vocab and merges (if necessary), like the previous "slow" tokenizers:
+
+```py
+from transformers import LlamaTokenizer
+
+vocab = {"<unk>": 0, "<s>": 1, "</s>": 2, "hello": 3, "world": 4}
+merges = [("h", "e"), ("l", "l"), ("o", " ")]
+
+tokenizer = LlamaTokenizer(vocab=vocab, merges=merges)
+```
+
+This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary. This allows comparing different tokenizer classes with the same vocab; therefore enabling the comparison of different pre-tokenizers, normalizers, etc.
+
+⚠️ The `vocab_file` (as in, a path towards a file containing the vocabulary) cannot be used to initialize the `LlamaTokenizer` as loading from files is reserved to the `from_pretrained` method.
+
+#### 2. Simplified decoding API
+
+The `batch_decode` and `decode` methods have been unified to reflect behavior of the `encode` method. Both single and batch decoding now use the same `decode` method. See an example of the new behavior below:
+
+```python
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("t5-small") 
+inputs = ["hey how are you?", "fine"]
+tokenizer.decode(tokenizer.encode(inputs))
+```
+
+Gives:
+```diff
+- 'hey how are you?</s> fine</s>'
++ ['hey how are you?</s>', 'fine</s>']
+```
+
+We expect `encode` and `decode` to behave, as two sides of the same coin: `encode`, `process`, `decode`,  should work. 
+
+> [!NOTE]
+> A common use-case would be: `encode`, `model.generate`, `decode`.  However, using `generate` would return `list[list[int]]`, which would then be incompatible with `decode`.
+
+#### 3. Unified encoding API
+
+The `encode_plus` method is deprecated in favor of the single `__call__` method.
+
+#### 4. `apply_chat_template` returns `BatchEncoding`
+
+Previously, `apply_chat_template` returned `input_ids` for backward compatibility. Starting with v5, it now consistently returns a `BatchEncoding` dict like other tokenizer methods.
+
+```python
+# v5
+messages = [
+    {"role": "user", "content": "Hello!"},
+    {"role": "assistant", "content": "Hi there!"}
+]
+
+# Now returns BatchEncoding with input_ids, attention_mask, etc.
+outputs = tokenizer.apply_chat_template(messages, return_tensors="pt")
+print(outputs.keys())  # dict_keys(['input_ids', 'attention_mask'])
+```
+
+#### 5. Removed legacy configuration file saving:
+
+We simplify the serialization of tokenization attributes:
+
+- `special_tokens_map.json` - special tokens are now stored in `tokenizer_config.json`.
+- `added_tokens.json` - added tokens are now stored in `tokenizer.json`.
+- `added_tokens_decoder` is only stored when there is no `tokenizer.json`.
+
+When loading older tokenizers, these files are still read for backward compatibility, but new saves use the consolidated format. We're gradually moving towards consolidating attributes to fewer files so that other libraries and implementations may depend on them more reliably.
+
+#### 6. Model-Specific Changes
+
+Several models that had identical tokenizers now import from their base implementation:
+
+- **LayoutLM** → uses BertTokenizer
+- **LED** → uses BartTokenizer  
+- **Longformer** → uses RobertaTokenizer
+- **LXMert** → uses BertTokenizer
+- **MT5** → uses T5Tokenizer
+- **MVP** → uses BartTokenizer
+
+These modules will eventually be removed altogether.
+
+**Removed T5-specific workarounds**
+
+The internal `_eventually_correct_t5_max_length` method has been removed. T5 tokenizers now handle max length consistently with other models.
+
+### Testing Changes
+
+A few testing changes specific to tokenizers have been applied:
+- Model-specific tokenization test files now focus on integration tests.
+- Common tokenization API tests (e.g., `add_tokens`, `encode`, `decode`) are now centralized and automatically applied across all tokenizers. This reduces test duplication and ensures consistent behavior
+
+For legacy implementations, the original BERT Python tokenizer code (including `WhitespaceTokenizer`, `BasicTokenizer`, etc.) is preserved in `bert_legacy.py` for reference purposes.
+
+#### 7. Deprecated / Modified Features
+
+**Special Tokens Structure:**
+- `SpecialTokensMixin`: Merged into `PreTrainedTokenizerBase` to simplify the tokenizer architecture.
+- `special_tokens_map`: Now only stores named special token attributes (e.g., `bos_token`, `eos_token`). Use `extra_special_tokens` for additional special tokens (formerly `additional_special_tokens`). `all_special_tokens` includes both named and extra tokens.
+
+```python
+# v4
+tokenizer.special_tokens_map  # Included 'additional_special_tokens'
+
+# v5
+tokenizer.special_tokens_map  # Only named tokens
+tokenizer.extra_special_tokens  # Additional tokens
+```
+
+- `special_tokens_map_extended` and `all_special_tokens_extended`: Removed. Access `AddedToken` objects directly from `_special_tokens_map` or `_extra_special_tokens` if needed.
+- `additional_special_tokens`: Still accepted for backward compatibility but is automatically converted to `extra_special_tokens`.
+
+**Deprecated Methods:**
+- `sanitize_special_tokens()`: Already deprecated in v4, removed in v5.
+- `prepare_seq2seq_batch()`: Deprecated; use `__call__()` with `text_target` parameter instead.
+
+```python
+# v4
+model_inputs = tokenizer.prepare_seq2seq_batch(src_texts, tgt_texts, max_length=128)
+
+# v5
+model_inputs = tokenizer(src_texts, text_target=tgt_texts, max_length=128, return_tensors="pt")
+model_inputs["labels"] = model_inputs.pop("input_ids_target")
+```
+
+- `BatchEncoding.words()`: Deprecated; use `word_ids()` instead.
+
+**Removed Methods:**
+- `create_token_type_ids_from_sequences()`: Removed from base class. Subclasses that need custom token type ID creation should implement this method directly.
+- `clean_up_tokenization()`: Removed from base class. Now defined at model class level for models that need it (e.g., PLBart, CLVP, Wav2Vec2).
+- `prepare_for_model()`, `build_inputs_with_special_tokens()`, `truncate_sequences()`: Moved from `tokenization_utils_base.py` to `tokenization_python.py` for `PythonBackend` tokenizers. `TokenizersBackend` provides model-ready input via `tokenize()` and `encode()`, so these methods are no longer needed in the base class.
+- `_switch_to_input_mode()`, `_switch_to_target_mode()`, `as_target_tokenizer()`: Removed from base class. Use `__call__()` with `text_target` parameter instead.
+
+```python
+# v4
+with tokenizer.as_target_tokenizer():
+    labels = tokenizer(tgt_texts, ...)
+
+# v5
+labels = tokenizer(text_target=tgt_texts, ...)
+```
+
+- `parse_response()`: Removed from base class.
+
+## Disclaimers for the RC0
+
+### PEFT + MoE:
+
+Because we are switching from the naive MOE (`nn.ModuleList` for experts) we currently have an issue with MoEs that have adapters. For more details see https://github.com/huggingface/transformers/issues/42491#issuecomment-3591485649. 
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Tensor parallel and Expert parallel + MoE
+
+We are streamlining the MoE support with vLLM; while this is being implemented, tensor parallelism and expert parallelism aren't working as expected.
+This is known and actively being worked on.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Remote code incompatibility
+
+A lot of paths were removed and reworked; paths like `transformers.tokenization_utils` and `transformers.tokenization_utils_fast`, which no longer exist.
+These now redirect to `transformers.tokenization_utils_sentencepiece` and `transformers.tokenization_utils_tokenizers` respectively; please update imports accordingly.
+
+_We aim for this to be fixed and released in a following release candidate in the week that follows RC0._
+
+### Custom pretrained models:
+For anyone inheriting from a `transformers` `PreTrainedModel`, the weights are automatically initialized with the common scheme: 
+```python
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """
+        Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex
+        initialization scheme, it should be overridden by the derived `PreTrainedModel` class. In case a model adds an explicit
+        `nn.Parameter`, this method should also be overridden in order to initialize it correctly.
+        """
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range or 0.02
+        elif hasattr(self.config, "init_std"):
+            std = self.config.init_std
+        elif hasattr(self.config, "initializer_factor"):
+            std = self.config.initializer_factor
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
+            if getattr(module, "bias", None) is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
+                # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+                if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                    init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+        # We cannot use `isinstance` on the RMSNorms or LayerNorms, as they usually are custom modules which change names
+        # between modelings (because they are prefixed with the model name)
+        elif (
+            isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+            or "LayerNorm" in module.__class__.__name__
+            or "RMSNorm" in module.__class__.__name__
+        ):
+            # Norms can exist without weights (in which case they are None from torch primitives)
+            if hasattr(module, "weight") and module.weight is not None:
+                init.ones_(module.weight)
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
+```
+
+If you want to avoid that, for now you should just do:
+
+```
+class CustomModel(Qwen3VLForConditionalGeneration):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_head = nn.Linear(1024, 7)
+        self.positional_embedding = nn.Parameter(torch.randn(16, 1152))
+        self.post_init()
+    
+    def _init_weights(self, module):
+        pass 
+
+```
+There is a tracker for that here: https://github.com/huggingface/transformers/issues/42418.
+
 ## Library-wide changes with lesser impact
 
 ### `use_auth_token`
@@ -127,8 +461,9 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 - Methods to init a nested config such as `from_xxx_config` are deleted. Configs can be init from the `__init__` method in the same way. See [#41314](https://github.com/huggingface/transformers/pull/41314).
 - It is no longer possible to load a config class from a URL file. Configs must be loaded from either a local path or a repo on the Hub. See [#42383](https://github.com/huggingface/transformers/pull/42383).
-- All parameters for configuring model's rotary embedding are now stored under `mode.rope_parameters`, including the `rope_theta` and `rope_type`. Model's `config.rope_parameters` is a simple dictionaty in most cases, and can also be a nested dict in special cases (i.e. Gemma3 and ModernBert) with different rope parameterization for each layer type. See [#39847](https://github.com/huggingface/transformers/pull/39847)
-
+- All parameters for configuring model's rotary embedding are now stored under `mode.rope_parameters`, including the `rope_theta` and `rope_type`. Model's `config.rope_parameters` is a simple dictionaty in most cases, and can also be a nested dict in special cases (i.e. Gemma3 and ModernBert) with different rope parameterization for each layer type. Trying to get `config.rope_theta` will throw an attribute error from now on. See [#39847](https://github.com/huggingface/transformers/pull/39847) and [#42255](https://github.com/huggingface/transformers/pull/42255)
+- Qwen-VL family configuration is in a nested format and trying to access keys directly will throw an error (e.g. `config.vocab_size`). Users are expected to access keys from their respective sub-configs (`config.text_config.vocab_size`).
+- Configurations of non-generative models (any model that doesn't call `model.generate()`) will no longer have a `generation_config` and `model.config.generation_config` will throw an attribute error.
 
 ## Processing
 
@@ -244,18 +579,33 @@ but also makes the commands less bloated. The new signature of `transformers cha
 ```
 Usage: transformers chat [OPTIONS] BASE_URL MODEL_ID [GENERATE_FLAGS]...
 
-  Chat with a model from the command line.
+Chat with a model from the command line.
 ```
 
-Example:
+It works hand in hand with `transformers serve`, which means that if `transformers serve` is running on its default endpoint, `transformers chat` can be launched as follows:
 
 ```sh
-transformers chat https://router.huggingface.co/v1 HuggingFaceTB/SmolLM3-3B
+transformers chat HuggingFaceTB/SmolLM3-3B
+```
+
+It can however use any OpenAI API compatible HTTP endpoint:
+
+```sh
+transformers chat HuggingFaceTB/SmolLM3-3B https://router.huggingface.co/v1
 ```
 
 Linked PRs: 
 - https://github.com/huggingface/transformers/pull/40997
 - https://github.com/huggingface/transformers/pull/41487
+
+
+### Removal of the `run` method
+
+The `transformers run` (previously `transformers-cli run`) is an artefact of the past, was not documented nor tested,
+and isn't part of any public documentation. We're removing it for now and ask you to please let us know in case
+this is a method you are using; in which case we should bring it back with better support.
+
+Linked PR: https://github.com/huggingface/transformers/pull/42447
 
 ## Environment variables
 

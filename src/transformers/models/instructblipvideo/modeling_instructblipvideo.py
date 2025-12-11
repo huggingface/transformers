@@ -132,7 +132,7 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config: InstructBlipVideoConfig
     base_model_prefix = "blip"
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -807,7 +807,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

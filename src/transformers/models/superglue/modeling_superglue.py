@@ -468,7 +468,7 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
@@ -670,6 +670,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SuperGlueKeypointMatchingOutput]:
         r"""
         Examples:

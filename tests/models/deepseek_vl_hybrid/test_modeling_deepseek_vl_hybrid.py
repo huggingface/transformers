@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -154,7 +155,7 @@ class DeepseekVLHybridModelTester:
 
 
 @require_torch
-class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
     )
@@ -162,6 +163,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         {
             "feature-extraction": DeepseekVLHybridModel,
             "image-text-to-text": DeepseekVLHybridForConditionalGeneration,
+            "any-to-any": DeepseekVLHybridForConditionalGeneration,
         }
         if is_torch_available()
         else {}

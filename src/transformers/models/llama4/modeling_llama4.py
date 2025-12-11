@@ -40,7 +40,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -228,7 +228,7 @@ class Llama4TextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
             freqs_cis = freqs_cis * self.attention_scaling
@@ -463,7 +463,7 @@ class Llama4TextDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
@@ -493,7 +493,7 @@ class Llama4PreTrainedModel(PreTrainedModel):
 class Llama4TextModel(Llama4PreTrainedModel):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "model"
-    input_modalities = "text"
+    input_modalities = ("text",)
     config: Llama4TextConfig
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
@@ -518,7 +518,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1030,7 +1030,7 @@ class Llama4VisionRotaryEmbedding(nn.Module):
 
 class Llama4VisionModel(Llama4PreTrainedModel):
     base_model_prefix = "vision_model"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["Llama4VisionEncoderLayer"]
     config: Llama4VisionConfig
 
@@ -1072,6 +1072,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
         r"""
 

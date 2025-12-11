@@ -1306,7 +1306,7 @@ class ClapTextPooler(nn.Module):
 class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
     base_model_prefix = "clap"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = False
 
     @torch.no_grad()
@@ -1356,6 +1356,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1410,7 +1411,7 @@ class ClapAudioModel(ClapPreTrainedModel):
 )
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1446,6 +1447,7 @@ class ClapTextModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1627,6 +1629,7 @@ class ClapModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapOutput]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1715,7 +1718,7 @@ class ClapModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1740,6 +1743,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapTextModelOutput]:
         r"""
         Examples:
@@ -1803,6 +1807,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapAudioModelOutput]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):

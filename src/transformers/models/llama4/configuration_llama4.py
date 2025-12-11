@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -124,14 +124,9 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
         super().__init__(**kwargs)
 
 
@@ -218,6 +213,7 @@ class Llama4TextConfig(PreTrainedConfig):
 
     model_type = "llama4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -286,13 +282,6 @@ class Llama4TextConfig(PreTrainedConfig):
         attn_scale=0.1,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.attn_temperature_tuning = attn_temperature_tuning
         self.attn_scale = attn_scale
         self.floor_scale = floor_scale
@@ -316,10 +305,6 @@ class Llama4TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
 
@@ -352,10 +337,14 @@ class Llama4TextConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 class Llama4Config(PreTrainedConfig):

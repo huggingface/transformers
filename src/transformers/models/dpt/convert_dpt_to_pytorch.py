@@ -239,18 +239,8 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print("Pushing model to hub...")
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

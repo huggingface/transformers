@@ -304,6 +304,7 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):

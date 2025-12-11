@@ -25,6 +25,7 @@ from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
+from ...utils.generic import maybe_autocast
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -119,6 +120,9 @@ class DeepseekV2Config(LlamaConfig):
             Number of selected groups per token for expert selection.
         topk_method (`str`, *optional*, defaults to `"greedy"`):
             The method used for selecting top-k experts in the routed gate mechanism.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to renormalize the router probabilities when `top_k > 1`. This flag is kept for backward
+            compatibility with previously released checkpoints and runtimes relying on the legacy DeepSeek config.
         v_head_dim (`int`, *optional*, defaults to 128):
             The dimension of value projections in the attention layers.
         num_experts_per_tok (`int`, *optional*):
@@ -182,6 +186,7 @@ class DeepseekV2Config(LlamaConfig):
         routed_scaling_factor: Optional[float] = 1.0,
         topk_group: Optional[int] = None,
         topk_method: Optional[str] = "greedy",
+        norm_topk_prob: Optional[bool] = False,
         v_head_dim: Optional[int] = 128,
         num_experts_per_tok: Optional[int] = None,
         moe_intermediate_size: Optional[int] = 1407,
@@ -198,6 +203,7 @@ class DeepseekV2Config(LlamaConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.topk_group = topk_group
         self.topk_method = topk_method
+        self.norm_topk_prob = norm_topk_prob
         self.v_head_dim = v_head_dim
         self.num_experts_per_tok = num_experts_per_tok
         self.moe_intermediate_size = moe_intermediate_size
@@ -298,7 +304,7 @@ class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
             freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
             freqs_cis = freqs_cis * self.attention_scaling
@@ -363,7 +369,6 @@ class DeepseekV2Attention(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:-1]

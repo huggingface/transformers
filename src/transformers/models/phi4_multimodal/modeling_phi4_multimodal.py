@@ -47,7 +47,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_int
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs, maybe_autocast
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
 
@@ -243,7 +243,7 @@ def default_flax_embed_init(tensor):
 class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
     config: Phi4MultimodalVisionConfig
     base_model_prefix = "phi4_vision"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     _no_split_modules = ["Phi4MultimodalVisionEncoderLayer"]
@@ -602,7 +602,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+        with maybe_autocast(device_type=inputs_embeds.device.type, enabled=False):
             image_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_img_set_tensor, accumulate=False
             )
@@ -1014,7 +1014,7 @@ class Phi4MultimodalAudioModel(Phi4MultimodalAudioPreTrainedModel):
         pad_mask = pad_mask & enc_streaming_mask
         return pad_mask
 
-    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor], **kwargs):
         hidden_states = self.encoder_embedding(hidden_states)
         hidden_states, hs_mask, mask = self.forward_embeddings(hidden_states, mask)
 
@@ -1116,7 +1116,7 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         merged_audio_embeds = merged_audio_embeds.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
         # Temporarily disable autocast to avoid issue on bf16 tensors
         # Ref: https://github.com/pytorch/pytorch/issues/132715
-        with torch.autocast(device_type=inputs_embeds.device.type, enabled=False):
+        with maybe_autocast(device_type=inputs_embeds.device.type, enabled=False):
             audio_embeds = inputs_embeds.index_put(
                 indices=positions_tuple, values=merged_audio_embeds, accumulate=False
             )
@@ -1432,7 +1432,7 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
         "attentions": Phi4MultimodalAttention,
     }
     _version = "0.0.5"
-    input_modalities = ["image", "audio", "text"]
+    input_modalities = ("image", "audio", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1481,7 +1481,7 @@ class Phi4MultimodalRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -1500,7 +1500,7 @@ class Phi4MultimodalRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -1532,7 +1532,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

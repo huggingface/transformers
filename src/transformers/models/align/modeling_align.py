@@ -821,7 +821,7 @@ class AlignTextPooler(nn.Module):
 class AlignPreTrainedModel(PreTrainedModel):
     config: AlignConfig
     base_model_prefix = "align"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -853,7 +853,7 @@ class AlignPreTrainedModel(PreTrainedModel):
 )
 class AlignTextModel(AlignPreTrainedModel):
     config: AlignTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["AlignTextEmbeddings"]
 
     def __init__(self, config: AlignTextConfig, add_pooling_layer: bool = True):
@@ -974,7 +974,7 @@ class AlignTextModel(AlignPreTrainedModel):
 class AlignVisionModel(AlignPreTrainedModel):
     config: AlignVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
     def __init__(self, config: AlignVisionConfig):
@@ -1004,6 +1004,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
         Examples:
@@ -1169,6 +1170,7 @@ class AlignModel(AlignPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, AlignOutput]:
         r"""
         return_loss (`bool`, *optional*):

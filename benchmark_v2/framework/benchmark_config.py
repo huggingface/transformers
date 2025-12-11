@@ -5,6 +5,7 @@ import logging
 from functools import lru_cache
 from typing import Any
 
+from transformers.generation.configuration_utils import CompileConfig
 from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
 
 
@@ -61,8 +62,7 @@ class BenchmarkConfig:
         sequence_length: int = 128,
         num_tokens_to_generate: int = 128,
         attn_implementation: str = "eager",
-        compile_mode: str | None = None,
-        compile_options: dict[str, Any] | None = None,
+        compile_kwargs: dict[str, Any] | None = None,
         kernelize: bool = False,
         name: str | None = None,
         skip_validity_check: bool = False,
@@ -79,8 +79,11 @@ class BenchmarkConfig:
         # Generation parameters
         self.attn_implementation = attn_implementation
         # Optimization parameters
-        self.compile_mode = compile_mode
-        self.compile_options = compile_options if compile_options is not None else {}
+        if compile_kwargs is None:
+            self.compile_config = None
+        else:
+            compile_kwargs["fullgraph"] = compile_kwargs.get("fullgraph", True)
+            self.compile_config = CompileConfig(**compile_kwargs)
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
@@ -92,22 +95,41 @@ class BenchmarkConfig:
     def check_validity(self, skip_validity_check: bool = False) -> None:
         if skip_validity_check:
             return
-        # Check FA is installed
-        is_fa = self.attn_implementation == "flash_attention_2"
-        if is_fa and not is_fa2_or_kernel_available():
-            logger.warning("Flash attention is not available. Defaulting to SDPA.")
+
+        # If flash_attention_2 is selected but not available, default to SDPA
+        if self.attn_implementation == "flash_attention_2" and not is_fa2_or_kernel_available():
+            logger.error("Flash attention is not available. Defaulting to SDPA.")
             self.attn_implementation = "sdpa"
-        # Flash attention does not support compile mode, so we turn it off # FIXME: it would be better to support it
-        if is_fa and self.compile_mode is not None:
-            logger.warning("Flash attention does not support compile mode. Turning off compile mode.")
-            self.compile_mode = None
-        # Handle continuous batching cases
-        if self.continuous_batching:
-            if self.attn_implementation == "flex_attention":
-                logger.error(
-                    "Disabling continuous batching because of invalid configuration: flex attention is not supported."
-                )
-                self.continuous_batching = False
+
+        # The combination of flash_attention_2, compile and generate is not supported # FIXME: support it
+        if (
+            not self.continuous_batching
+            and self.attn_implementation == "flash_attention_2"
+            and self.compile_config is not None
+        ):
+            logger.error(
+                "The combination of flash_attention_2, compile and generate is not supported. Turning off compile."
+            )
+            self.compile_config = None
+
+        # Continuous batching does not support flex attention as an attention implementation # FIXME: support it
+        if self.attn_implementation == "flex_attention" and self.continuous_batching:
+            logger.error(
+                "Disabling continuous batching because of invalid configuration: flex attention is not supported."
+            )
+            self.continuous_batching = False
+
+        # Continuous batching supports compile mode "default" or "max-autotune-no-cudagraphs"
+        if (
+            self.continuous_batching
+            and self.compile_config is not None
+            and self.compile_config.mode not in ["default", "max-autotune-no-cudagraphs"]
+        ):
+            logger.error(
+                f"You have continuous batching and compile enabled, but {self.compile_config.mode = } is not supported."
+                " Supported modes are: default, max-autotune-no-cudagraphs. Changing to default."
+            )
+            self.compile_config.mode = "default"
 
     @property
     def hash(self) -> str:
@@ -120,7 +142,7 @@ class BenchmarkConfig:
             gpu_monitor_str = "monitored" if self.gpu_monitoring else "unmonitored"
             dimensions_str = f"b{self.batch_size}_s{self.sequence_length}_n{self.num_tokens_to_generate}"
             attn_code = self.attn_implementation
-            compile_str = f"compiled_{self.compile_mode}" if self.compile_mode is not None else "uncompiled"
+            compile_str = f"compiled_{self.compile_config.mode}" if self.compile_config is not None else "uncompiled"
             kernelize_str = "kernelized" if self.kernelize else "unkernelized"
             continuous_batching_str = "cb" if self.continuous_batching else "generate"
             sep = "-"
@@ -129,7 +151,7 @@ class BenchmarkConfig:
             gpu_monitor_str = ("with" if self.gpu_monitoring else "no") + " GPU monitoring"
             dimensions_str = f"batch size {self.batch_size}, sequence length {self.sequence_length}, {self.num_tokens_to_generate} generated tokens"
             attn_code = f"{self.attn_implementation} attention"
-            compile_str = "compiled" if self.compile_mode is not None else "not compiled"
+            compile_str = "compiled" if self.compile_config is not None else "not compiled"
             kernelize_str = "kernelized" if self.kernelize else "not kernelized"
             continuous_batching_str = "continuous batching" if self.continuous_batching else "regular generate"
             sep = ", "
@@ -148,8 +170,7 @@ class BenchmarkConfig:
             "sequence_length": self.sequence_length,
             "num_tokens_to_generate": self.num_tokens_to_generate,
             "attn_implementation": self.attn_implementation,
-            "compile_mode": self.compile_mode,
-            "compile_options": self.compile_options | {},  # to avoid inplace modification of the original dict
+            "compile_kwargs": self.compile_config.to_dict() if self.compile_config is not None else None,
             "kernelize": self.kernelize,
         }
 
@@ -164,8 +185,7 @@ class BenchmarkConfig:
             sequence_length=data.get("sequence_length", 128),
             num_tokens_to_generate=data.get("num_tokens_to_generate", 128),
             attn_implementation=data.get("attn_implementation", "eager"),
-            compile_mode=data.get("compile_mode"),
-            compile_options=data.get("compile_options"),
+            compile_kwargs=data.get("compile_kwargs"),
             kernelize=data.get("kernelize", False),
             name=data.get("name"),
             skip_validity_check=skip_validity_check,
@@ -218,12 +238,13 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
             # Usually there is not much to gain by compiling with other modes, but we allow it for level 4
             compile_modes = BenchmarkConfig.all_compiled_modes if level >= 4 else [None, "default"]
             for cm in compile_modes:
+                compile_kwargs = {"mode": cm} if cm is not None else None
                 for kernelize_on in {False, KERNELIZATION_AVAILABLE}:
                     for cb_on in [False, True]:
                         configs.append(
                             BenchmarkConfig(
                                 attn_implementation=attn_implementation,
-                                compile_mode=cm,
+                                compile_kwargs=compile_kwargs,
                                 kernelize=kernelize_on,
                                 continuous_batching=cb_on,
                             )
@@ -231,14 +252,14 @@ def get_config_by_level(level: int) -> list[BenchmarkConfig]:
         return configs
     # Otherwise, we add the configs for the given level
     if level >= 0:
-        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default"))
+        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_kwargs={}))
     if level >= 1:
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2"))
-        configs.append(BenchmarkConfig(attn_implementation="eager", compile_mode="default"))
+        configs.append(BenchmarkConfig(attn_implementation="eager", compile_kwargs={}))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", continuous_batching=True))
     if level >= 2:
-        configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_mode="default"))
-        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_mode="default", kernelize=True))
+        configs.append(BenchmarkConfig(attn_implementation="sdpa", compile_kwargs={}))
+        configs.append(BenchmarkConfig(attn_implementation="flex_attention", compile_kwargs={}, kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="flash_attention_2", kernelize=True))
         configs.append(BenchmarkConfig(attn_implementation="sdpa", continuous_batching=True))
     return configs

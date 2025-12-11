@@ -102,7 +102,6 @@ class GlueDataset(Dataset):
         label_list = self.processor.get_labels()
         if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
             "RobertaTokenizer",
-            "RobertaTokenizerFast",
             "XLMRobertaTokenizer",
             "BartTokenizer",
             "BartTokenizerFast",

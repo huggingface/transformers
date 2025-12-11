@@ -31,6 +31,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
+from safetensors.torch import load_file
 
 from transformers import (
     AutoModel,
@@ -42,6 +43,8 @@ from transformers import (
     logging,
     set_seed,
 )
+from transformers.conversion_mapping import get_model_conversion_mapping
+from transformers.core_model_loading import WeightRenaming
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -77,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -445,7 +449,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device == "hpu":
+            elif torch_device in ["hpu", "npu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -1305,6 +1309,10 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
+                if (
+                    self._is_composite and k == "vision_config"
+                ):  # skip because it's not needed and causes errors e.g with Timm
+                    continue
                 if getattr(config, k) is not None:
                     getattr(config, k).output_attentions = True
 
@@ -1464,6 +1472,10 @@ class ModelTesterMixin:
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
+            if (
+                self._is_composite and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
 
@@ -1984,7 +1996,7 @@ class ModelTesterMixin:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
-                    model_tied.save_pretrained(d, safe_serialization=True)
+                    model_tied.save_pretrained(d)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
                 with self.subTest(model_class):
@@ -2368,7 +2380,10 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
 
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
@@ -2420,7 +2435,9 @@ class ModelTesterMixin:
                 max_memory = {0: max_size, "cpu": max_size}
 
                 # This doesn't error out as it's in safetensors and doesn't need an offload folder
-                new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
                 torch.manual_seed(0)
@@ -3304,6 +3321,11 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
@@ -3347,7 +3369,7 @@ class ModelTesterMixin:
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     @slow
@@ -3369,8 +3391,10 @@ class ModelTesterMixin:
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
+        if not cls._supports_flash_attn:
+            self.skipTest(f"{cls.__name__} does not support Flash Attention 2")
 
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -3398,6 +3422,12 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
+
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
@@ -4055,8 +4085,125 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
+    def test_reverse_loading_mapping(self):
+        """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
+        mapping.
+        Note that this test would be better if we could start from the serialized keys, and check that the model
+        keys correspond to the weight converions. However, when instantiating a model, it already has the "target"
+        keys (or modified keys after mapping) of the conversion mapping, so we have to do it the other way, i.e.
+        reverse the conversion and then check that those converted keys match correctly the conversions.
+
+        However, all the checks performed here should ensure everything is going as it should.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
+        # lest one MoE layer here to check the mapping
+        config_to_set = config.get_text_config(decoder=True)
+        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config_to_set.mlp_only_layers = [0]  # same but for qwens
+        config_to_set.num_dense_layers = 1  # lfm2_moe
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                # Skip if no conversions
+                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                if len(conversions) == 0:
+                    self.skipTest("No conversion found for this model")
+
+                # Find the model keys, so the targets according to the conversions
+                model_keys = list(model.state_dict().keys())
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Serialize with reverse mapping
+                    model.save_pretrained(tmpdirname)
+                    state_dict = load_file(os.path.join(tmpdirname, "model.safetensors"))
+                    # Get all the serialized keys that we just saved according to the reverse mapping
+                    serialized_keys = list(state_dict.keys())
+
+                # They should be different, otherwise we did not perform any mapping
+                self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+
+                # Check that for each conversion entry, we at least map to one key
+                for conversion in conversions:
+                    for source_pattern in conversion.source_patterns:
+                        # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
+                        if isinstance(conversion, WeightRenaming):
+                            if any(
+                                re.search(conversion.target_patterns[0], k) for k in model.all_tied_weights_keys.keys()
+                            ):
+                                continue
+                        num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
+                        self.assertTrue(
+                            num_matches > 0,
+                            f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
+                            "This indicates whether that the pattern is not properly written, ot that it could not be reversed correctly",
+                        )
+
+                # If everything is still good at this point, let's test that we perform the same operations both when
+                # reverting ops from `from_pretrained` and from `__init__`
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # The model was instantiated from __init__ before being saved
+                    model.save_pretrained(tmpdirname)
+                    state_dict_saved_from_init = load_file(os.path.join(tmpdirname, "model.safetensors"))
+
+                    # Now reload it
+                    model_reloaded = model_class.from_pretrained(tmpdirname)
+
+                    # Make sure both loaded state_dict are identical
+                    self.assertTrue(compare_state_dicts(model_reloaded.state_dict(), model.state_dict()))
+
+                    # The model was instantiated from `from_pretrained` before being saved
+                    model_reloaded.save_pretrained(tmpdirname)
+                    state_dict_saved_from_pretrained = load_file(os.path.join(tmpdirname, "model.safetensors"))
+
+                    # Make sure both saved state_dict are identical
+                    self.assertTrue(compare_state_dicts(state_dict_saved_from_init, state_dict_saved_from_pretrained))
+
+    def test_can_load_from_already_mapped_keys(self):
+        """Test that we can correctly reload a model if we chose `save_original_format=False` in `save_pretrained`,
+        i.e. we do not reapply weight conversions when reloading if it was saved correctly already.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+
+                # Skip if no conversions
+                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                if len(conversions) == 0:
+                    self.skipTest("No conversion found for this model")
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Serialize without reverting the mapping
+                    model.save_pretrained(tmpdirname, save_original_format=False)
+                    model_reloaded = model_class.from_pretrained(tmpdirname)
+                    # Make sure both saved state_dict are identical
+                    self.assertTrue(compare_state_dicts(model.state_dict(), model_reloaded.state_dict()))
+
 
 global_rng = random.Random()
+
+
+def compare_state_dicts(state_dict1, state_dict2) -> bool:
+    """Make sure 2 state dicts are the exact same"""
+    # Make sure the keys are the exact same
+    if sorted(state_dict1.keys()) != sorted(state_dict2.keys()):
+        raise ValueError("The keys of both state dict are not the same")
+
+    for k, v1 in state_dict1.items():
+        v2 = state_dict2[k]
+        try:
+            torch.testing.assert_close(v1, v2)
+        except Exception as e:
+            raise AssertionError(f"For key {k}: {e}")
+
+    return True
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

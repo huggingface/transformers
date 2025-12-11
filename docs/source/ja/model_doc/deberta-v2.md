@@ -74,16 +74,12 @@ v2 の新機能:
 ## DebertaV2Tokenizer
 
 [[autodoc]] DebertaV2Tokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## DebertaV2TokenizerFast
 
 [[autodoc]] DebertaV2TokenizerFast
-    - build_inputs_with_special_tokens
-    - create_token_type_ids_from_sequences
 
 
 ## DebertaV2Model
