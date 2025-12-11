@@ -96,6 +96,8 @@
       title: Chat basics
     - local: chat_templating
       title: Chat templates
+    - local: chat_content_patterns
+      title: Chat message patterns
     - local: chat_templating_multimodal
       title: Multimodal chat templates
     - local: chat_extras
