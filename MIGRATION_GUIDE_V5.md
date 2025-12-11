@@ -264,7 +264,6 @@ Several models that had identical tokenizers now import from their base implemen
 - **LXMert** → uses BertTokenizer
 - **MT5** → uses T5Tokenizer
 - **MVP** → uses BartTokenizer
-for
 These modules will eventually be removed altogether.
 
 **Removed T5-specific workarounds**
