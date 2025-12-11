@@ -150,8 +150,7 @@ def log_state_dict_report(
     ignore_mismatched_sizes=True,
     misc=None,
     color=True,  # allow disabling for plain logs
-    min_width_full_table=60,  # terminal min width to attempt full table
-):
+) -> None:
     """Log a readable report about state_dict loading issues.
 
     This version is terminal-size aware: for very small terminals it falls back to a compact
@@ -179,6 +178,14 @@ def log_state_dict_report(
             )
         raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
 
+    if misc:
+        misc_error_msg = ""
+        for k, v in update_key_name(misc).items():
+            misc_error_msg += f"\n{k}: {v}"
+        raise RuntimeError(
+            f"We encountered the following issues during automatic format conversion of the weights:{misc_error_msg}"
+        )
+
     term_w = _get_terminal_width()
     rows = []
     if unexpected_keys:
@@ -204,13 +211,6 @@ def log_state_dict_report(
             )
             rows.append(data)
 
-    if misc:
-        for k, v in update_key_name(misc).items():
-            status = "MISC"
-            status = _color(status, "purple", ansi)
-            _details = v[:term_w]
-            rows.append([k, status, _details])
-
     if not rows:
         return
 
@@ -235,9 +235,9 @@ def log_state_dict_report(
         tips += f"\n- {_color('MISC', 'purple', ansi) + ansi['italic']}\t:originate from the conversion scheme"
     tips += f"{ansi['reset']}"
 
+    # Log the report as warning
     logger.warning(prelude + table + tips)
     if not ignore_mismatched_sizes and mismatched_keys:
         raise RuntimeError(
             "You set `ignore_mismatched_sizes` to `False`, thus raising an error. For details look at the above report!"
         )
-    return prelude + table + tips

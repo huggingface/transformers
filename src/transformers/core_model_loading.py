@@ -595,7 +595,9 @@ def log_to_misc(
             misc[first_target_key] = f"{op_name}: {e}"
         else:
             misc[first_target_key] = f"{extras} |Error: {e}"
-        raise SkipLayer()
+
+        # Raise a specific Exception that we can catch easily
+        raise SkipParameters()
 
 
 def set_param_for_module(
@@ -663,8 +665,9 @@ def offload_and_maybe_resave_param(
     return disk_offload_index
 
 
-class SkipLayer(Exception):
-    """Control-flow sentinel: abort processing of the current layer only."""
+class SkipParameters(Exception):
+    """Control-flow sentinel: abort processing of the current parameters only (that were supposed to be created
+    by a WeightConverter)."""
 
     pass
 
@@ -958,7 +961,7 @@ def convert_and_load_state_dict_in_model(
                     # Cleanup all the tensors that were gathered before next iteration
                     del realized_value
 
-                except SkipLayer:
+                except SkipParameters:
                     continue
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
