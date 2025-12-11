@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -177,8 +177,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics2Model,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
 
     test_resize_embeddings = True
     _is_composite = True
@@ -369,10 +367,8 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
 
     test_resize_embeddings = True
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)
@@ -647,8 +643,9 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(batched_generated_texts[0], generated_text_0[0])
         self.assertEqual(batched_generated_texts[1], generated_text_1[0])
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_flash_attn_2_eager_equivalence(self):
         # Create inputs

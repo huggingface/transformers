@@ -26,10 +26,11 @@ import re
 import shutil
 import sys
 import tempfile
+import warnings
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import packaging.version
@@ -38,7 +39,7 @@ from transformers.utils.import_utils import _is_package_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
-    print("⚙️  Running in WANDB offline mode")
+    print("[INFO] Running in WANDB offline mode")
 
 from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
@@ -737,7 +738,7 @@ class WandbCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
@@ -982,7 +983,7 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
                 project=project,
@@ -1455,6 +1456,10 @@ class NeptuneMissingConfiguration(Exception):
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
+    > [!WARNING]
+    > Neptune integration is deprecated and will be removed in a future version of Transformers. We recommend using
+    > other supported experiment tracking integrations.
+
     Args:
         api_token (`str`, *optional*): Neptune API token obtained upon registration.
             You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
@@ -1491,15 +1496,20 @@ class NeptuneCallback(TrainerCallback):
     def __init__(
         self,
         *,
-        api_token: Optional[str] = None,
-        project: Optional[str] = None,
-        name: Optional[str] = None,
+        api_token: str | None = None,
+        project: str | None = None,
+        name: str | None = None,
         base_namespace: str = "finetuning",
         run=None,
         log_parameters: bool = True,
-        log_checkpoints: Optional[str] = None,
+        log_checkpoints: str | None = None,
         **neptune_run_kwargs,
     ):
+        warnings.warn(
+            "The NeptuneCallback is deprecated and will be removed in a future version of Transformers. We recommend "
+            "using other supported experiment tracking integrations.",
+            FutureWarning,
+        )
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "
@@ -1524,7 +1534,7 @@ class NeptuneCallback(TrainerCallback):
         self._base_namespace_path = base_namespace
         self._log_parameters = log_parameters
         self._log_checkpoints = log_checkpoints
-        self._initial_run: Optional[Run] = run
+        self._initial_run: Run | None = run
 
         self._run = None
         self._is_monitoring_run = False
@@ -1712,7 +1722,7 @@ class NeptuneCallback(TrainerCallback):
 
         raise Exception("The trainer doesn't have a NeptuneCallback configured.")
 
-    def on_log(self, args, state, control, logs: Optional[dict[str, float]] = None, **kwargs):
+    def on_log(self, args, state, control, logs: dict[str, float] | None = None, **kwargs):
         if not state.is_world_process_zero:
             return
 
@@ -2091,8 +2101,8 @@ class DVCLiveCallback(TrainerCallback):
 
     def __init__(
         self,
-        live: Optional[Any] = None,
-        log_model: Optional[Union[Literal["all"], bool]] = None,
+        live: Any | None = None,
+        log_model: Literal["all"] | bool | None = None,
         **kwargs,
     ):
         if not is_dvclive_available():
@@ -2246,7 +2256,7 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None and args.run_name is not None:

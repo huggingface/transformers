@@ -93,27 +93,6 @@ class GlueDataTrainingArguments(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LineByLineTextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class LineByLineWithRefDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class LineByLineWithSOPTextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SquadDataset(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -122,20 +101,6 @@ class SquadDataset(metaclass=DummyObject):
 
 
 class SquadDataTrainingArguments(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TextDatasetForNextSentencePrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

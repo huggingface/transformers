@@ -53,10 +53,6 @@ class Sam2VideoProcessor(ProcessorMixin):
             The value used for padding input points.
     """
 
-    attributes = ["image_processor", "video_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
-    video_processor_class = "Sam2VideoVideoProcessor"
-
     def __init__(
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
@@ -101,7 +97,6 @@ class Sam2VideoProcessor(ProcessorMixin):
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
             - `input_points` (`torch.Tensor`): The processed points.
             - `input_labels` (`torch.Tensor`): The processed labels.
@@ -525,6 +520,11 @@ class Sam2VideoProcessor(ProcessorMixin):
             apply_non_overlapping_constraints,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(image_processor_input_names + ["original_sizes"])
 
     def init_video_session(
         self,

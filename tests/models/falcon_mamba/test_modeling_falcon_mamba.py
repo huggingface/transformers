@@ -66,7 +66,7 @@ class FalconMambaModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -263,8 +263,6 @@ class FalconMambaModelTester:
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
-    fx_compatible = False  # FIXME let's try to support this @ArthurZucker
-    test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
 
     pipeline_model_mapping = (

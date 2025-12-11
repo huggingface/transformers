@@ -74,11 +74,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
     """
 
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-    video_processor_class = "AutoVideoProcessor"
-
     def __init__(
         self,
         image_processor=None,

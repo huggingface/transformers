@@ -175,7 +175,6 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torchscript = False
     test_torch_exportable = True
 
     # special case for head model

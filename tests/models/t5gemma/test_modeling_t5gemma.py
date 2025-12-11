@@ -19,9 +19,11 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+from pytest import mark
 
 from transformers import T5GemmaConfig, T5GemmaModuleConfig, is_torch_available
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     torch_device,
@@ -601,7 +603,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_attn_implementation = "eager"
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -633,6 +634,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return False
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     def test_shift_right(self):
@@ -1268,6 +1271,19 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
+    @require_flash_attn
+    @require_torch_accelerator
+    @mark.flash_attn_test
+    def test_generate_beyond_sliding_window_with_flash_attn(self):
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(dtype=torch.float16, device=torch_device).eval()
+        model.set_attn_implementation("flash_attention_2")
+
+        # Only generate beyond prefill, we don't care about the output as it only checks for crashes
+        _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
+
 
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig
@@ -1456,7 +1472,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     # won't fix
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = T5GemmaEncoderOnlyModelTester(self)
@@ -1471,6 +1486,8 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
+        # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
+        self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None
         self.config_tester.run_common_tests()
 
     @unittest.skip("This was not properly written, submodules need the attribute to be overwritten")

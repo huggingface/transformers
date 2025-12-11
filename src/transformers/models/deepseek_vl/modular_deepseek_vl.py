@@ -134,14 +134,6 @@ class DeepseekVLAligner(nn.Module):
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
     _no_split_modules = ["LlamaDecoderLayer"]
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        # Required only for Linear layer in DeepseekVLAligner
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.text_config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):
@@ -165,7 +157,7 @@ class DeepseekVLModel(JanusModel):
 
 
 class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
-    output_modalities = "text"
+    output_modalities = ("text",)
 
     def prepare_embeddings_for_image_generation(self):
         raise AttributeError("Not needed for DeepseekVL")
@@ -221,11 +213,6 @@ class DeepseekVLProcessor(ProcessorMixin):
         num_image_tokens (`int`, *optional*, defaults to 576):
             The number of special image tokens used as placeholders for visual content in text sequences.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "num_image_tokens"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,

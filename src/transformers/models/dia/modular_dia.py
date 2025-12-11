@@ -207,7 +207,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -239,7 +239,7 @@ class DiaEncoder(DiaPreTrainedModel):
             [DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.rotary_embeddings = DiaRotaryEmbedding(config)
+        self.rotary_emb = DiaRotaryEmbedding(config=config)
 
     @auto_docstring
     @can_return_tuple
@@ -257,13 +257,13 @@ class DiaEncoder(DiaPreTrainedModel):
         # Note: We expect right padding and hence always generate
         # the position ids on the fly to reduce preparation overhead
         position_ids = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
             input_embeds=hidden_states,
             attention_mask=attention_mask,
         )
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -274,8 +274,9 @@ class DiaEncoder(DiaPreTrainedModel):
 
             layer_outputs = encoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
+                position_ids=position_ids,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -307,7 +308,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -360,11 +361,11 @@ class DiaDecoder(DiaPreTrainedModel):
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbedding(config)
-        self.rotary_embeddings = DiaRotaryEmbedding(config)
         self.layers = nn.ModuleList(
             [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.rotary_emb = DiaRotaryEmbedding(config=config)
 
     @auto_docstring
     @can_return_tuple
@@ -399,7 +400,6 @@ class DiaDecoder(DiaPreTrainedModel):
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -419,6 +419,7 @@ class DiaDecoder(DiaPreTrainedModel):
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -430,12 +431,15 @@ class DiaDecoder(DiaPreTrainedModel):
 
             layer_outputs = layer(
                 hidden_states,
+                # Needs to be an arg in order to function properly
+                # on inplace operations to be carried (e.g. compile)
                 position_embeddings,
                 attention_mask,
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
+                position_ids=position_ids,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -472,9 +476,6 @@ class DiaModel(DiaPreTrainedModel):
         self.encoder = DiaEncoder(config.encoder_config)
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @can_return_tuple
@@ -595,7 +596,7 @@ class DiaModel(DiaPreTrainedModel):
 )
 class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     base_model_prefix = "model"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: DiaConfig):
         super().__init__(config)
@@ -611,12 +612,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @auto_docstring
     @can_return_tuple

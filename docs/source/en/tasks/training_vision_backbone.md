@@ -126,7 +126,6 @@ def rebuild_objects(bboxes, labels):
 train_dataset = train_dataset.with_transform(train_transform)
 ```
 
-
 Build COCO-style annotations for the image processor.
 
 ```py

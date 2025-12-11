@@ -53,51 +53,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     rescale_factor = 1 / 255
     do_pad = True
 
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`Owlv2ObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        warnings.warn(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-            FutureWarning,
-        )
-
-        logits, boxes = outputs.logits, outputs.pred_boxes
-
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        probs = torch.max(logits, dim=-1)
-        scores = torch.sigmoid(probs.values)
-        labels = probs.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
     def post_process_object_detection(
         self,
         outputs: "Owlv2ObjectDetectionOutput",
@@ -228,7 +183,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
+    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.0) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
         """
@@ -245,7 +200,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
-        constant_value: float = 0.5,
+        constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
         """
@@ -351,7 +306,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.0, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping

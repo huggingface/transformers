@@ -1067,17 +1067,6 @@ class LEDPreTrainedModel(PreTrainedModel):
     base_model_prefix = "led"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
@@ -1290,7 +1279,7 @@ class LEDEncoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -1313,10 +1302,7 @@ class LEDEncoder(LEDPreTrainedModel):
                     f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
                 )
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_source_positions,
@@ -1393,6 +1379,7 @@ class LEDEncoder(LEDPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1553,17 +1540,14 @@ class LEDDecoder(LEDPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_decoder_position_embeddings
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_target_positions,
@@ -1590,6 +1574,7 @@ class LEDDecoder(LEDPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1763,7 +1748,10 @@ class LEDDecoder(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDModel(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -1771,8 +1759,8 @@ class LEDModel(LEDPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = LEDEncoder(config, self.shared)
-        self.decoder = LEDDecoder(config, self.shared)
+        self.encoder = LEDEncoder(config)
+        self.decoder = LEDDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1784,9 +1772,6 @@ class LEDModel(LEDPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -1805,6 +1790,7 @@ class LEDModel(LEDPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], LEDSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1908,7 +1894,9 @@ class LEDModel(LEDPreTrainedModel):
 class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "led.shared.weight",
+    }
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -1918,12 +1906,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.led.get_encoder()
-
-    def get_decoder(self):
-        return self.led.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1959,6 +1941,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], LEDSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -2106,8 +2089,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     """
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
-
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
             "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
@@ -2143,6 +2124,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], LEDSeq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -2252,8 +2234,6 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -2283,6 +2263,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], LEDSeq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):

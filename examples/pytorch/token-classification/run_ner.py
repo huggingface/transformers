@@ -49,7 +49,6 @@ from transformers import (
     DataCollatorForTokenClassification,
     HfArgumentParser,
     PreTrainedConfig,
-    PreTrainedTokenizerFast,
     Trainer,
     TrainingArguments,
     set_seed,
@@ -389,7 +388,8 @@ def main():
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
-    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+    # Check if tokenizer has _tokenizer attribute (from tokenizers library) or is_fast property
+    if not (hasattr(tokenizer, "_tokenizer") or getattr(tokenizer, "is_fast", False)):
         raise TypeError(
             "This example script only works for models that have a fast tokenizer. Check out the big table of models at"
             " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
@@ -616,8 +616,7 @@ def main():
         output_predictions_file = os.path.join(training_args.output_dir, "predictions.txt")
         if trainer.is_world_process_zero():
             with open(output_predictions_file, "w") as writer:
-                for prediction in true_predictions:
-                    writer.write(" ".join(prediction) + "\n")
+                writer.writelines(" ".join(prediction) + "\n" for prediction in true_predictions)
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
     if data_args.dataset_name is not None:

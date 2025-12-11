@@ -49,7 +49,6 @@ class Lfm2ModelTester(CausalLMModelTester):
 
 @require_torch
 class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False
     model_tester_class = Lfm2ModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None

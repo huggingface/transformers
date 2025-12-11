@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
@@ -102,12 +103,10 @@ class DeepseekV3TopkRouter(nn.Module):
         return router_logits
 
 
-class DeepseekV3NaiveMoe(MixtralExperts, nn.ModuleList):
+class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
-        nn.ModuleList.__init__(self)
+        super().__init__(config)
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(DeepseekV3MLP(config, intermediate_size=config.moe_intermediate_size))
 
 
 class DeepseekV3MoE(nn.Module):
@@ -176,7 +175,7 @@ class DeepseekV3Attention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.attention_dropout = config.attention_dropout
         self.num_heads = config.num_attention_heads
-        self.rope_theta = config.rope_theta
+
         self.q_lora_rank = config.q_lora_rank
         self.qk_rope_head_dim = config.qk_rope_head_dim
         self.kv_lora_rank = config.kv_lora_rank
@@ -211,9 +210,9 @@ class DeepseekV3Attention(nn.Module):
         )
 
         self.scaling = self.qk_head_dim ** (-0.5)
-        if self.config.rope_scaling is not None:
-            mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
-            scaling_factor = self.config.rope_scaling["factor"]
+        if self.config.rope_parameters.get("rope_type", "default") != "default":
+            mscale_all_dim = self.config.rope_parameters.get("mscale_all_dim", 0)
+            scaling_factor = self.config.rope_parameters["factor"]
             if mscale_all_dim:
                 mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
                 self.scaling = self.scaling * mscale * mscale
@@ -305,11 +304,16 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV3TopkRouter):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, DeepseekV3NaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekV3Model(LlamaModel):

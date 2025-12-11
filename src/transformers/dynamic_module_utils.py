@@ -26,12 +26,11 @@ import shutil
 import signal
 import sys
 import threading
-import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
 
-from huggingface_hub import try_to_load_from_cache
+from huggingface_hub import is_offline_mode, try_to_load_from_cache
 from packaging import version
 
 from .utils import (
@@ -39,7 +38,6 @@ from .utils import (
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     cached_file,
     extract_commit_hash,
-    is_offline_mode,
     logging,
 )
 from .utils.import_utils import VersionComparison, split_package_version
@@ -371,16 +369,6 @@ def get_cached_module_file(
     Returns:
         `str`: The path to the module inside the cache.
     """
-    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -571,16 +559,6 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
-    use_auth_token = kwargs.pop("use_auth_token", None)
-    if use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-            FutureWarning,
-        )
-        if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        token = use_auth_token
-
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")

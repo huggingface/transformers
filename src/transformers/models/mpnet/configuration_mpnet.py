@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class MPNetConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MPNetModel`] or a [`TFMPNetModel`]. It is used to
+    This is the configuration class to store the configuration of a [`MPNetModel`]. It is used to
     instantiate a MPNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPNet
     [microsoft/mpnet-base](https://huggingface.co/microsoft/mpnet-base) architecture.
@@ -35,7 +35,7 @@ class MPNetConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30527):
             Vocabulary size of the MPNet model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MPNetModel`] or [`TFMPNetModel`].
+            `inputs_ids` passed when calling [`MPNetModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):

@@ -212,8 +212,6 @@
     title: ONNX로 내보내기
   - local: executorch
     title: ExecuTorch
-  - local: torchscript
-    title: TorchScript로 내보내기
   title: 배포환경에 내보내기
 - isExpanded: false
   sections:
@@ -408,8 +406,6 @@
       title: Models
     - local: main_classes/text_generation
       title: 텍스트 생성
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: 최적화
     - local: main_classes/output
@@ -1059,7 +1055,7 @@
         title: FLAVA
       - local: model_doc/gemma3
         title: Gemma3
-      - local: in_translation
+      - local: model_doc/gemma3n
         title: Gemma3n
       - local: in_translation
         title: GIT
@@ -1197,8 +1193,6 @@
     - sections:
       - local: in_translation
         title: Decision Transformer
-      - local: model_doc/trajectory_transformer
-        title: Trajectory Transformer
       title: 강화학습 모델
     - sections:
       - local: model_doc/autoformer
@@ -1214,10 +1208,6 @@
       - local: in_translation
         title: TimesFM
       title: 시게열 모델
-    - sections:
-      - local: model_doc/graphormer
-        title: Graphormer
-      title: 그래프 모델
     title: 모델
   - sections:
     - local: internal/modeling_utils

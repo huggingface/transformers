@@ -52,6 +52,7 @@ class Qwen2ModelTester(CausalLMModelTester):
 @require_torch
 class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen2ModelTester
+    pretrained_model_name = "Qwen/Qwen2-0.5B"
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -274,6 +275,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
     @slow
     def test_3b_generation(self):

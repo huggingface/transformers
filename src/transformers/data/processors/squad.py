@@ -17,12 +17,11 @@ import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
-from typing import Optional
 
 import numpy as np
 from tqdm import tqdm
 
-from ...models.bert.tokenization_bert import whitespace_tokenize
+from ...models.bert.tokenization_bert_legacy import whitespace_tokenize
 from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import is_torch_available, is_torch_hpu_available, logging
 from .utils import DataProcessor
@@ -126,7 +125,6 @@ def squad_convert_example_to_features(
             "RobertaTokenizer",
             "LongformerTokenizer",
             "BartTokenizer",
-            "RobertaTokenizerFast",
             "LongformerTokenizerFast",
             "BartTokenizerFast",
         ]:
@@ -162,7 +160,8 @@ def squad_convert_example_to_features(
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
-    sequence_pair_added_tokens = tokenizer.model_max_length - tokenizer.max_len_sentences_pair
+    max_len_sentences_pair = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=True)
+    sequence_pair_added_tokens = tokenizer.model_max_length - max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
@@ -176,7 +175,7 @@ def squad_convert_example_to_features(
             pairs = truncated_query
             truncation = TruncationStrategy.ONLY_FIRST.value
 
-        encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
+        encoded_dict = tokenizer(  # TODO(thom) update this logic
             texts,
             pairs,
             truncation=truncation,
@@ -693,8 +692,8 @@ class SquadFeatures:
         start_position,
         end_position,
         is_impossible,
-        qas_id: Optional[str] = None,
-        encoding: Optional[BatchEncoding] = None,
+        qas_id: str | None = None,
+        encoding: BatchEncoding | None = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
