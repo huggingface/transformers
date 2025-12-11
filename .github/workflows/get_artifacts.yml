@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout repository (current)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Save scripts
         run: |
@@ -19,10 +21,9 @@ jobs:
           cp batch_update.py /tmp/saved_scripts/
 
       - name: Checkout specific commit
-        uses: actions/checkout@v4
-        with:
-          ref: 377a8ee7
-          fetch-depth: 0
+        run: |
+          git fetch origin
+          git checkout 377a8ee7
 
       - name: Restore scripts
         run: |
