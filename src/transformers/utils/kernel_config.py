@@ -73,6 +73,7 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
 
 def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping):
     from pathlib import Path
+
     from kernels import LocalLayerRepository
 
     if device not in ["cuda", "rocm", "xpu", "npu"]:
@@ -142,7 +143,6 @@ class KernelConfig(PushToHubMixin):
                 "kernels-community/layer_norm:LlamaRMSNorm",
             ...
         },
-
         For multiple devices form remote
         {
             "RMSNorm": {
@@ -154,14 +154,12 @@ class KernelConfig(PushToHubMixin):
             },
             ...
         }
-        
         For single device form local
         {
             "RMSNorm":
                 "/abs-path:package_name:LlamaRMSNorm",
             ...
         },
-        
         For multiple devices form local
         {
             "RMSNorm": {
