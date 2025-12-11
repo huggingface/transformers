@@ -74,7 +74,7 @@ We will infer with two videos, both have cats.
 Videos are series of image frames. Depending on the hardware limitations, downsampling is required. If the number of downsampled frames are too little, predictions will be low quality. 
 
 
-`video-text-to-text` models have processors with video processor abstracted in them. You can pass video inference related arguments to [`~ProcessorMixin.apply_chat_template`] function.
+Video-text-to-text models have processors with video processor abstracted in them. You can pass video inference related arguments to [`~ProcessorMixin.apply_chat_template`] function.
 
 > [!WARNING]
 > You can learn more about video processors [here](../main_classes/video_processor).
