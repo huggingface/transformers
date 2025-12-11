@@ -197,8 +197,6 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "BltTextModel",   # Placeholder wrapper; no dedicated functionality yet.
-        "BltVisionModel", # Placeholder wrapper; no dedicated functionality yet.
     ]
 )
 
@@ -405,8 +403,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
-    "BltTextModel",   # Placeholder wrapper; no dedicated functionality yet.
-    "BltVisionModel", # Placeholder wrapper; no dedicated functionality yet.
 ]
 
 
@@ -1037,6 +1033,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
+    "RoFormerTokenizerFast",  # An alias
 ]
 
 
