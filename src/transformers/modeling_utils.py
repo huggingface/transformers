@@ -736,28 +736,14 @@ def _get_dtype(
                     )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
-                config.dtype = dtype
-                for sub_config_key in config.sub_configs:
-                    if (sub_config := getattr(config, sub_config_key)) is not None:
-                        sub_config.dtype = dtype
-        elif isinstance(dtype, torch.dtype):
-            config.dtype = dtype
-            for sub_config_key in config.sub_configs:
-                if (sub_config := getattr(config, sub_config_key)) is not None:
-                    sub_config.dtype = dtype
-        elif isinstance(dtype, dict):
-            for key, curr_dtype in dtype.items():
-                if hasattr(config, key):
-                    value = getattr(config, key)
-                    curr_dtype = curr_dtype if not isinstance(curr_dtype, str) else getattr(torch, curr_dtype)
-                    value.dtype = curr_dtype
-            # main torch dtype for modules that aren't part of any sub-config
-            dtype = dtype.get("")
-            dtype = dtype if not isinstance(dtype, str) else getattr(torch, dtype)
-            config.dtype = dtype
-            if dtype is None:
-                dtype = torch.float32
-        else:
+            else:
+                raise ValueError(
+                    "`dtype` provided as a `str` can only be `'auto'`, or a string representation of a valid `torch.dtype`"
+                )
+
+            # cast it to a proper `torch.dtype` object
+            dtype = getattr(torch, dtype) if isinstance(dtype, str) else dtype
+        elif not isinstance(dtype, (dict, torch.dtype)):
             raise ValueError(
                 f"`dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `dtype` "
                 f"for each sub-config in composite configs, but received {dtype}"
@@ -765,14 +751,28 @@ def _get_dtype(
 
         dtype_orig = cls._set_default_dtype(dtype)
     else:
-        # set fp32 as the default dtype for BC
-        default_dtype = torch.get_default_dtype()
-        config.dtype = default_dtype
-        for key in config.sub_configs:
-            if (sub_config := getattr(config, key)) is not None:
-                sub_config.dtype = default_dtype
-    dtype = dtype if isinstance(dtype, torch.dtype) else getattr(torch, dtype)
-    return config, dtype, dtype_orig
+        # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
+        dtype = torch.get_default_dtype()
+
+    # Get the main dtype
+    if isinstance(dtype, dict):
+        main_dtype = dtype.get("", torch.get_default_dtype())
+        main_dtype = getattr(torch, main_dtype) if isinstance(main_dtype, str) else main_dtype
+    else:
+        main_dtype = dtype
+
+    # Set it on the config and subconfigs
+    config.dtype = main_dtype
+    for sub_config_key in config.sub_configs:
+        if (sub_config := getattr(config, sub_config_key)) is not None:
+            if isinstance(dtype, dict):
+                sub_dtype = dtype.get(sub_config_key, main_dtype)
+                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
+            else:
+                sub_dtype = main_dtype
+            sub_config.dtype = sub_dtype
+
+    return config, main_dtype, dtype_orig
 
 
 class PipelineParallel(Enum):
