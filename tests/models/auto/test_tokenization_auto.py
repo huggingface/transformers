@@ -184,6 +184,14 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(AutoTokenizer.from_pretrained("google-bert/bert-base-cased"), BertTokenizerFast)
 
     @require_tokenizers
+    @slow
+    def test_custom_tokenizer_from_hub(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "openbmb/MiniCPM-Llama3-V-2_5", trust_remote_code=True, revision="fd7f352fac0e06d0d818b23f98e3ec8c64267a57"
+        )
+        self.assertTrue(tokenizer.__class__.__module__.startswith("transformers_modules."))
+
+    @require_tokenizers
     def test_voxtral_tokenizer_converts_from_tekken(self):
         repo_id = "mistralai/Voxtral-Mini-3B-2507"
         tokenization_auto = transformers.models.auto.tokenization_auto
@@ -262,6 +270,18 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
+        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
+
+    @require_tokenizers
+    def test_auto_tokenizer_loads_sentencepiece_only_repo(self):
+        tokenizer = AutoTokenizer.from_pretrained("sshleifer/tiny-mbart")
+        self.assertIsInstance(tokenizer, TokenizersBackend)
+        self.assertTrue(tokenizer.is_fast)
 
     def test_auto_tokenizer_fast_no_slow(self):
         tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")

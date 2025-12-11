@@ -147,7 +147,7 @@ def get_ijepa_config(model_name):
 
 
 @torch.no_grad()
-def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_logits):
+def write_model(model_name, output_dir, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our IJEPA structure.
     """
@@ -211,12 +211,12 @@ def write_model(model_name, output_dir, safe_serialization, push_to_hub, verify_
     if output_dir:
         Path(output_dir).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {output_dir}")
-        image_processor.save_pretrained(output_dir, safe_serialization=safe_serialization)
-        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        image_processor.save_pretrained(output_dir)
+        model.save_pretrained(output_dir)
 
     if push_to_hub:
-        image_processor.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
-        model.push_to_hub(repo_id=f"jmtzt/{model_name}", safe_serialization=safe_serialization)
+        image_processor.push_to_hub(repo_id=f"jmtzt/{model_name}")
+        model.push_to_hub(repo_id=f"jmtzt/{model_name}")
 
     if output_dir:
         del model, state_dict
@@ -248,9 +248,6 @@ def main():
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--push_to_hub",
         action="store_true",
         help="Whether or not to push the model to the Hugging Face Hub.",
@@ -261,7 +258,7 @@ def main():
 
     parser.set_defaults()
     args = parser.parse_args()
-    write_model(args.model_name, args.output_dir, args.safe_serialization, args.push_to_hub, args.verify_logits)
+    write_model(args.model_name, args.output_dir, args.push_to_hub, args.verify_logits)
 
 
 if __name__ == "__main__":
