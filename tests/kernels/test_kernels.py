@@ -17,6 +17,7 @@
 
 import copy
 import types
+import os
 from unittest.mock import MagicMock, patch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
@@ -216,6 +217,28 @@ class TestHubKernels(TestCasePlus):
                 "unsloth/Llama-3.2-1B-Instruct", use_kernels=True, device_map=torch_device, kernel_config=kernel_config
             )
 
+@require_kernels
+class TestKernelsEnv(TestCasePlus):
+
+    def test_disable_hub_kernels(self):
+        with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
+            import importlib
+
+            from transformers.integrations import hub_kernels
+
+            importlib.reload(hub_kernels)
+
+            self.assertFalse(hub_kernels._kernels_enabled)
+
+    def test_enable_hub_kernels(self):
+        with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
+            import importlib
+
+            from transformers.integrations import hub_kernels
+
+            importlib.reload(hub_kernels)
+
+            self.assertTrue(hub_kernels._kernels_enabled)
 
 @require_kernels
 class TestKernelUtilities(TestCasePlus):
