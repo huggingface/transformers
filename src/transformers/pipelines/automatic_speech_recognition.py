@@ -196,8 +196,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # set the model type so we can check we have the right pre- and post-processing parameters
         if model.config.model_type == "whisper":
             self.type = "seq2seq_whisper"
-        elif model.config.model_type == "lasr_ctc":
-            self.type = "lasr_ctc"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
         elif (
@@ -451,7 +449,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # it's ok.
             align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
 
-            if self.type == "lasr_ctc":
+            if self.model.config.model_type == "lasr_ctc":
                 # TODO: find a standard for that but not easy because input length -> mel length depends on the feature extractor
                 # specific way of doing it
                 # means the model take mel features as input, we align according to the hop length
