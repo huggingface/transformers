@@ -121,7 +121,7 @@ jobs:
           ls -la captured/ || echo "captured directory does not exist"
 
       - name: Run auto update script
-        run: python3 auto_update.py captured
+        run: python3 batch_update.py captured --apply
 
       - name: Rename batch results
         run: |
