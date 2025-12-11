@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/upload_pr_documentation.yml@803cc895829ea30f251eca5e4338f1e2fc73d872
     with:
       package_name: transformers
     secrets:
