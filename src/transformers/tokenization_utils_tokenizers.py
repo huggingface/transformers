@@ -58,9 +58,9 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 TIKTOKEN_VOCAB_FILE = "tokenizer.model"
 
 
-def _validate_tokenizer_components(tokenizer_class, tokenizer_json_path):
-    """Validate that tokenizer.json components match the mapped tokenizer class."""
-    if tokenizer_class is TokenizersBackend or not hasattr(tokenizer_class, "__init__"):
+def _validate_tokenizer_components(tokenizer_instance, tokenizer_json_path):
+    """Validate that tokenizer.json components match the tokenizer instance."""
+    if tokenizer_instance is None or not hasattr(tokenizer_instance, "_tokenizer"):
         return
     
     try:
@@ -91,12 +91,7 @@ def _validate_tokenizer_components(tokenizer_class, tokenizer_json_path):
             "model": _get_component_type(json_data.get("model")),
         }
         
-        # Create dummy instance to get expected components
-        instance = tokenizer_class()
-        tokenizer = getattr(instance, "_tokenizer", None)
-        if tokenizer is None:
-            return
-        
+        tokenizer = tokenizer_instance._tokenizer
         expected_components = {
             "normalizer": _get_component_type(tokenizer.normalizer),
             "pre_tokenizer": _get_component_type(tokenizer.pre_tokenizer),
@@ -114,7 +109,7 @@ def _validate_tokenizer_components(tokenizer_class, tokenizer_json_path):
         
         if mismatches:
             warning_msg = (
-                f"Tokenizer component mismatch for {tokenizer_class.__name__}:\n"
+                f"Tokenizer component mismatch for {tokenizer_instance.__class__.__name__}:\n"
                 + "\n".join(f"  - {m}" for m in mismatches)
             )
             logger.warning(warning_msg)
@@ -182,7 +177,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
-            _validate_tokenizer_components(cls, fast_tokenizer_file)
+            if cls is not TokenizersBackend:
+                _validate_tokenizer_components(cls(), fast_tokenizer_file)
+            
             # we extract vocab / merges from the tokenizer file to pass them to __init__
             processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
@@ -311,7 +308,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if tokenizer_object is not None:
             fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
-            _validate_tokenizer_components(self.__class__, fast_tokenizer_file)
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
