@@ -25,7 +25,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_processing_utils_fast import (
@@ -220,6 +220,8 @@ class Ernie4_5_VLTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        mlp_layer_types (`list`, *optional*):
+            MLP (Moe vs Dense) pattern for each layer.
         moe_intermediate_size (`list[int]`, *optional*, defaults to `[1536, 512]`):
             Intermediate size of the routed experts; differs between text (first) and image (second) experts.
         moe_k (`int`, *optional*, defaults to 6):
@@ -228,12 +230,6 @@ class Ernie4_5_VLTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
             Number of routed experts.
         moe_num_shared_experts (`int`, *optional*, defaults to 2):
             The number of experts that are shared for all MoE forwards.
-        moe_layer_start_index (`int`, *optional*, defaults to 1):
-            The first index at which MoE layers start to appear.
-        moe_layer_end_index (`int`, *optional*, defaults to 29):
-            The last possible index for a MoE layer.
-        moe_layer_interval (`int`, *optional*, defaults to 1):
-            The intervals between MoE layers to appear.
         moe_norm_min (`float`, *optional*, defaults to 1e-12):
             Minimum division value during routing normalization.
         output_router_logits (`bool`, *optional*, defaults to `False`):
@@ -275,13 +271,11 @@ class Ernie4_5_VLTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         use_bias=False,
         tie_word_embeddings=True,
         rope_parameters=None,
+        mlp_layer_types=None,
         moe_intermediate_size=None,
         moe_k=6,
         moe_num_experts=64,
         moe_num_shared_experts=2,
-        moe_layer_start_index=1,
-        moe_layer_end_index=29,
-        moe_layer_interval=1,
         moe_norm_min=1e-12,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
@@ -300,15 +294,24 @@ class Ernie4_5_VLTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.rope_parameters = rope_parameters
+
+        # Default to MoE from the second layer and on
+        self.mlp_layer_types = mlp_layer_types
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = []
+            for i in range(self.num_hidden_layers):
+                if i == 0:
+                    self.mlp_layer_types.append("dense")
+                else:
+                    self.mlp_layer_types.append("sparse")
+        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
+
         self.moe_intermediate_size = moe_intermediate_size
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]
         self.moe_k = moe_k
         self.moe_num_experts = moe_num_experts
         self.moe_num_shared_experts = moe_num_shared_experts
-        self.moe_layer_start_index = moe_layer_start_index
-        self.moe_layer_end_index = moe_layer_end_index
-        self.moe_layer_interval = moe_layer_interval
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
@@ -647,11 +650,7 @@ class Ernie4_5_VLDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = Ernie4_5_VLTextAttention(config, layer_idx)
 
-        if (
-            ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= config.moe_layer_start_index
-            and layer_idx <= config.moe_layer_end_index
-        ):
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = Ernie4_5_VLMoeBlock(config)
         else:
             self.mlp = Ernie4_5_VLMLP(config)

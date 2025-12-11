@@ -142,7 +142,8 @@ class Ernie4_5_VLTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        mlp_layer_types TODO
+        mlp_layer_types (`list`, *optional*):
+            MLP (Moe vs Dense) pattern for each layer.
         moe_intermediate_size (`list[int]`, *optional*, defaults to `[1536, 512]`):
             Intermediate size of the routed experts; differs between text (first) and image (second) experts.
         moe_k (`int`, *optional*, defaults to 6):
