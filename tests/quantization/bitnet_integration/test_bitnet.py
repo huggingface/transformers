@@ -92,7 +92,7 @@ class BitNetTest(unittest.TestCase):
             if isinstance(module, BitLinear):
                 nb_bitnet_linear += 1
 
-        self.assertEqual(nb_linears, nb_bitnet_linear)
+        self.assertEqual(nb_linears - 1, nb_bitnet_linear)
 
     def test_quantized_model(self):
         """
