@@ -108,11 +108,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = MiniMaxM2ForCausalLM.from_pretrained(
-            model_id,
-            dtype="auto",
-            device_map="auto"
-        )
+        model = MiniMaxM2ForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
