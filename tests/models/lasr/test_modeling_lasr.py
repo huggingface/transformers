@@ -16,7 +16,7 @@
 import tempfile
 import unittest
 
-from transformers import is_datasets_available, is_torch_available
+from transformers import is_datasets_available, is_torch_available, pipeline
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -387,4 +387,19 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         predicted_ids = model.generate(**inputs)
         torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKENS)
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+
+    @slow
+    @unittest.skip(reason="TODO when checkpoint")
+    def test_model_integration_pipe_with_chunk(self):
+        EXPECTED_TRANSCRIPTIONS = [
+            {"text": "Mr. Kuer is thele of the middle classes and we are glad to welcome his gosal.</s>"}
+        ]
+
+        samples = self._load_datasamples(1)
+        pipe = pipeline(
+            task="automatic-speech-recognition", model=self.checkpoint_name, dtype=self.dtype, device_map=torch_device
+        )
+        self.assertEqual(pipe.type, "ctc")
+        predicted_transcripts = pipe(samples, chunk_length_s=3, stride_length_s=1)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
