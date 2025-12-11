@@ -1143,7 +1143,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
 
         sequence_output = decoder_outputs[0]
 
-        # WTF IS THIS FOR?
         if self.config.scale_decoder_outputs:
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
