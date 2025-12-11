@@ -342,7 +342,6 @@ class DeepseekV2Attention(nn.Module):
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         batch_size, seq_length = hidden_states.shape[:-1]
