@@ -278,7 +278,9 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return next(state_dict.values()).dtype
+    if len(state_dict) == 0:
+        raise ValueError("The provided state_dict is empty.")
+    return next(iter(state_dict.values())).dtype
 
 
 str_to_torch_dtype = {
@@ -798,7 +800,7 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        dtype = self._dtype
+        dtype = self._dtype or next(param.dtype for param in self.parameters() if param.is_floating_point())
         if isinstance(dtype, str):
             if hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
@@ -1081,7 +1083,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _keep_in_fp32_modules_strict = None
 
     dtype_plan: Optional[dict[str, torch.dtype]] = None
-    _dtype: Optional[Union[str, torch.dtype]] = None
+    _dtype: Optional[Union[str, torch.dtype]] = torch.get_default_dtype()
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1228,8 +1230,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config = config
         default_dtype = torch.get_default_dtype()
         self._dtype = default_dtype
-        if hasattr(self.config, "dtype") and self.config.dtype is not None:
-            self._dtype = self.config.dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -3824,7 +3824,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        dtype = kwargs.pop("dtype", "auto")
+        dtype = kwargs.pop("dtype", None)
         torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
         device_map = kwargs.pop("device_map", None)
         max_memory = kwargs.pop("max_memory", None)
@@ -3857,6 +3857,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+        if dtype is None:
+            dtype = "auto"
 
         if is_offline_mode() and not local_files_only:
             local_files_only = True
@@ -4445,7 +4447,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param = model_state_dict[key]
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
-                value = torch.empty_like(param, dtype=self.dtype, device="cpu")
+                value = torch.empty_like(param, dtype=dtype, device="cpu")
                 if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
                     _load_parameter_into_model(self, key, value)
 
