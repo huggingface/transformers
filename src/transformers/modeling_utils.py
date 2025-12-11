@@ -4629,8 +4629,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             unused_memory = torch_accelerator_module.memory_reserved(
                 index
             ) - torch_accelerator_module.memory_allocated(index)
-            byte_count = max(0, byte_count - unused_memory)
-        # Allocate memory
+            byte_count = int(max(0, byte_count - unused_memory))
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
