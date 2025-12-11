@@ -2223,6 +2223,10 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_error_in_weight_conversion_is_raised(self):
         """Test that errors in `ConversionOps` are correctly re-raised after loading."""
+        # needs to be imported explicitly otherwise complains that `transformers` has no attribute `core_model_loading`
+        # during `patch`
+        import transformers.core_model_loading  # noqa
+
         small_config = MixtralConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, num_attention_heads=8)
         model = MixtralModel(small_config)
         weight_conversions = get_model_conversion_mapping(model)
