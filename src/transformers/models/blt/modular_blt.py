@@ -1136,4 +1136,6 @@ __all__ = [
     "BltModel",
     "BltPatcher",
     "BltForCausalLM",
+    "BltVisionModel",
+    "BltTextModel",
 ]
