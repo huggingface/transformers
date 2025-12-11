@@ -13,7 +13,7 @@ jobs:
             const fs = require('fs');
             const { execSync } = require('child_process');
             
-            const workflowRunId = '19906468964';
+            const workflowRunId = '20132741120';
             
             // Get ALL artifacts from the workflow run (with pagination)
             const allArtifacts = [];
