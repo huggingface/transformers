@@ -107,8 +107,6 @@ class ErnieEmbeddings(BertEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
-        inputs_embeds = inputs_embeds.to(token_type_embeddings.device)
         embeddings = inputs_embeds + token_type_embeddings
 
         position_embeddings = self.position_embeddings(position_ids)
@@ -174,7 +172,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 
 
 class ErnieModel(BertModel):
-    _no_split_modules = ["ErnieLayer"]
+    _no_split_modules = ["ErnieLayer", "ErnieEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(self, config)

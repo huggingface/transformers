@@ -316,8 +316,6 @@ class AlignVisionSqueezeExciteLayer(nn.Module):
 
         hidden_states = self.expand(hidden_states)
         hidden_states = self.act_expand(hidden_states)
-
-        inputs = inputs.to(hidden_states.device)
         hidden_states = torch.mul(inputs, hidden_states)
 
         return hidden_states
@@ -978,6 +976,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
+    _no_split_modules = ["AlignVisionBlock"]
 
     def __init__(self, config: AlignVisionConfig):
         super().__init__(config)

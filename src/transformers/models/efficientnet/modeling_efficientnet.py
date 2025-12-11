@@ -220,8 +220,6 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
 
         hidden_states = self.expand(hidden_states)
         hidden_states = self.act_expand(hidden_states)
-
-        inputs = inputs.to(hidden_states.device)
         hidden_states = torch.mul(inputs, hidden_states)
 
         return hidden_states
@@ -437,7 +435,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = []
+    _no_split_modules = ["EfficientNetBlock"]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
