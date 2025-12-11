@@ -35,6 +35,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
+    MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
@@ -271,6 +272,10 @@ class MiniMaxM2Attention(FlexOlmoAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+
+class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
 
 class MiniMaxM2Model(MixtralModel):
