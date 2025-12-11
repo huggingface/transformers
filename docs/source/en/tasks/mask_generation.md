@@ -309,7 +309,7 @@ ax.set_axis_off()
 plt.show() 
 ```
 
-Now we can define our dataset for loading the data. SAMDataset wraps an our dataset and formats each sample the way the SAM processor expects. So instead of raw images and masks, you get processed images, bounding boxes, and ground-truth masks ready for training.
+Now we can define our dataset for loading the data. SAMDataset wraps our dataset and formats each sample the way the SAM processor expects. So instead of raw images and masks, you get processed images, bounding boxes, and ground-truth masks ready for training.
 
 By default, processor resizes images, so on top of images and masks, it also returns original sizes. We also need to binarize the mask as it has values [0, 255].
 
