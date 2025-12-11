@@ -19,7 +19,6 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
-    get_device_properties,
     require_accelerate,
     require_gptqmodel,
     require_torch_accelerator,
@@ -57,22 +56,6 @@ class AwqConfigTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             AwqConfig(bits=4, backend="unexisting-backend")
-
-        # Only cuda and xpu devices can run this function
-        support_llm_awq = False
-        device_type, major, _ = get_device_properties()
-        if device_type == "cuda" and major >= 8:
-            support_llm_awq = True
-        elif device_type == "xpu":
-            support_llm_awq = True
-
-        if support_llm_awq:
-            # LLMAWQ should work on an A100
-            AwqConfig(bits=4, backend="llm-awq")
-        else:
-            # LLMAWQ does not work on a T4
-            with self.assertRaises(ValueError):
-                AwqConfig(bits=4, backend="llm-awq")
 
     def test_to_dict(self):
         """
