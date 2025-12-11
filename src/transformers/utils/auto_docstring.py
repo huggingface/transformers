@@ -18,6 +18,7 @@ import os
 import textwrap
 from pathlib import Path
 from typing import Union, get_args, get_origin
+from types import UnionType
 
 import regex as re
 
@@ -1292,7 +1293,7 @@ def _process_parameter_type(param, param_name, func):
     optional = False
     if param.annotation == inspect.Parameter.empty:
         return "", False
-    elif get_origin(param.annotation) is Union:
+    elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
         subtypes = get_args(param.annotation)
     else:
         subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
