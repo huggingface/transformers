@@ -15,16 +15,31 @@ jobs:
             
             const workflowRunId = '19906468964';
             
-            // Get all artifacts from the workflow run
-            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: workflowRunId
-            });
+            // Get ALL artifacts from the workflow run (with pagination)
+            const allArtifacts = [];
+            let page = 1;
+            while (true) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: workflowRunId,
+                per_page: 100,
+                page: page
+              });
+              
+              allArtifacts.push(...artifacts.data.artifacts);
+              
+              if (artifacts.data.artifacts.length < 100) break;
+              page++;
+            }
+            
+            console.log(`Found ${allArtifacts.length} total artifacts`);
             
             // Filter artifacts matching the pattern
             const pattern = /^single-gpu_run_models_gpu_models_(.+)_test_reports$/;
-            const matchingArtifacts = artifacts.data.artifacts.filter(a => pattern.test(a.name));
+            const matchingArtifacts = allArtifacts.filter(a => pattern.test(a.name));
+            
+            console.log(`Found ${matchingArtifacts.length} matching artifacts`);
             
             // Create working directory
             fs.mkdirSync('captured', { recursive: true });
