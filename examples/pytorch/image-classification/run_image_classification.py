@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers @ git+https://github.com/huggingface/transformers.git",
+#     "transformers==5.0.0rc1",
 #     "accelerate>=0.12.0",
 #     "torch>=1.5.0",
 #     "torchvision>=0.6.0",
@@ -67,7 +67,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.57.0.dev0")
+check_min_version("5.0.0rc1")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
