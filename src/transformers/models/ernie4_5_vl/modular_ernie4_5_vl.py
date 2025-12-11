@@ -61,7 +61,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -470,7 +470,7 @@ class Ernie4_5_VLTextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             cos = freqs.cos() * self.attention_scaling
             sin = freqs.sin() * self.attention_scaling
