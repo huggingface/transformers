@@ -180,9 +180,7 @@ def grouped_mm_moe_forward(
     num_tokens_per_expert = torch.bincount(expert_ids_g, minlength=num_experts)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
-    # Important: torch._grouped_mm requires mat_a.dtype == out_dtype when out_dtype is provided.
-    # Important: torch._grouped_mm requires mat_a and mat_b to have strides that are multiples of 16
-    # still can't find a reference for this constraint but I had models failing if not respected
+    # --- Up projection per expert (grouped_mm) ---
     mat_a_up = current_states_g
     mat_b_up = gate_up_proj.transpose(-2, -1)
 
