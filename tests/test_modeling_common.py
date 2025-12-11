@@ -3261,10 +3261,7 @@ class ModelTesterMixin:
                 "flash_attention_3": "kernels-community/vllm-flash-attn3",
             }
             if base in kernel_map:
-                if prefix:
-                    expected.add(f"{prefix}{kernel_map[base]}")
-                else:
-                    expected.add(kernel_map[base])
+                expected.add(f"{prefix}{kernel_map[base]}")
             return expected
 
         for model_class in self.all_model_classes:
