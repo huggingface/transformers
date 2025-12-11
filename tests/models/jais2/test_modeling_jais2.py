@@ -245,7 +245,7 @@ class Jais2IntegrationTest(unittest.TestCase):
         )
 
         generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        
+
         # Verify exact token count (deterministic)
         self.assertEqual(generated_ids.shape[1], input_ids.shape[1] + 10)
         # Verify generation produced reasonable output
