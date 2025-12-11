@@ -206,7 +206,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
         ]  # fmt: skip
         chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-        input_ids = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        print(f"{input_ids[0] = } {type(input_ids[0]) = }")
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
