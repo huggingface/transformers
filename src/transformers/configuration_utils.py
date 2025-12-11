@@ -1267,6 +1267,7 @@ ALLOWED_MLP_LAYER_TYPES = (
     "dense",
 )
 
+
 def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None, attention: bool = True):
     """Check that `layer_types` is correctly defined."""
     allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
