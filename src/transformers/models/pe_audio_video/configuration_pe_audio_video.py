@@ -231,10 +231,6 @@ class PEAudioVideoConfig(PretrainedConfig):
         self.audio_video_config = audio_video_config
 
         self.projection_dim = projection_dim
-        self.nth_text_layer = nth_text_layer
-
-        self.logit_scale_init_value = 1.0
-        self.logit_bias_init_value = 0.0
 
 
 __all__ = ["PEAudioVideoEncoderConfig", "PEAudioVideoConfig"]

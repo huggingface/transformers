@@ -4,25 +4,25 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam_audio_judge.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs
+from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
 from .configuration_sam_audio_judge import SamAudioJudgeConfig
 
@@ -102,10 +102,14 @@ class SamAudioJudgeEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.resnet_block = SamAudioJudgeResnetBlock1d(config)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
-        hidden_states = torch.cat([self.cls_token.expand(inputs_embeds.size(0), -1, -1), inputs_embeds], dim=1)
+        # Embedding step: prepend class token and run the ResNet block.
+        hidden_states = torch.cat(
+            [self.class_embedding.expand(inputs_embeds.size(0), -1, -1), inputs_embeds],
+            dim=1,
+        )
 
         if padding_mask is not None:
             # TODO: any reason why we take padding_mask[0] and not just 1?
@@ -113,76 +117,6 @@ class SamAudioJudgeEmbeddings(nn.Module):
 
         hidden_states = self.resnet_block(hidden_states, padding_mask=padding_mask)
         return hidden_states, padding_mask
-
-
-class SamAudioJudgeRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: SamAudioJudgeConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict):
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -223,32 +157,29 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class SamAudioJudgeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        SamAudioJudgeRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+def stack_freqs(cos: torch.Tensor, sin: torch.Tensor):
+    dim = cos.size(-1)
+    cos = cos.narrow(-1, 0, dim // 2)
+    sin = sin.narrow(-1, 0, dim // 2)
+    freqs_cis = torch.stack((cos, -sin, sin, cos), dim=-1).view(*cos.size(), 2, 2)
+    return freqs_cis
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    freqs_cis = stack_freqs(cos, sin)
+    freqs_cis = freqs_cis.unsqueeze(unsqueeze_dim)
+    q_ = q.reshape(*q.shape[:-1], -1, 1, 2)
+    k_ = k.reshape(*k.shape[:-1], -1, 1, 2)
+    return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
 class SamAudioJudgeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -277,7 +208,6 @@ class SamAudioJudgeAttention(nn.Module):
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -339,7 +269,7 @@ class SamAudioJudgeMLP(nn.Module):
         return down_proj
 
 
-class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
+class SamAudioJudgeEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -350,7 +280,6 @@ class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = SamAudioJudgeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SamAudioJudgeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -359,7 +288,7 @@ class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -385,54 +314,90 @@ class SamAudioJudgeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class SamAudioJudgeTransformer(nn.Module):
-    _can_record_outputs = {
-        "attentions": SamAudioJudgeAttention,
-        "hidden_states": SamAudioJudgeDecoderLayer,
-    }
-
-    def __init__(self, config):
+@use_kernel_forward_from_hub("RMSNorm")
+class SamAudioJudgeRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        SamAudioJudgeRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class SamAudioJudgeRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: SamAudioJudgeConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
         self.config = config
-        self.embeddings = SamAudioJudgeEmbeddings(config)
-        self.layers = nn.ModuleList(
-            [SamAudioJudgeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = inv_freq
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[SamAudioJudgeConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        self.norm = SamAudioJudgeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.rope_embeddings = SamAudioJudgeRotaryEmbedding(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        return inv_freq, attention_factor
 
-    @check_model_inputs
-    def forward(
-        self,
-        inputs_embeds: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=attention_mask)
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
 
-        if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
-        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-        position_embeddings = self.rope_embeddings(inputs_embeds, position_ids)
-
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        hidden_states = self.output(hidden_states)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states[:, 1:],
-            pooler_output=hidden_states[:, 0],
-        )
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class SamAudioJudgePretrainedModel(PreTrainedModel):
@@ -445,16 +410,7 @@ class SamAudioJudgePretrainedModel(PreTrainedModel):
 
 
 @dataclass
-class SamAudioJudgeOutput(ModelOutput):
-    r"""
-    overall (torch.Tensor, optional): Overall score tensor of shape (batch_size, 1).
-    recall (torch.Tensor, optional): Recall score tensor of shape (batch_size, 1).
-    precision (torch.Tensor, optional): Precision score tensor of shape (batch_size, 1).
-    faithfulness (torch.Tensor, optional): Faithfulness score tensor of shape (batch_size, 1).
-    text_model_output (BaseModelOutputWithPooling): Output from the text model.
-    audio_model_output (BaseModelOutputWithPooling): Output from the audio model.
-    """
-
+class SamAudioJudgeOutput(BaseModelOutput):
     overall: Optional[torch.Tensor] = None
     recall: Optional[torch.Tensor] = None
     precision: Optional[torch.Tensor] = None
@@ -471,18 +427,25 @@ class SamAudioJudgeModel(SamAudioJudgePretrainedModel):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = AutoModel.from_config(config.audio_config)
-        self.transformer = SamAudioJudgeTransformer(config)
-
-        self.text_proj1 = nn.Linear(
-            in_features=config.text_config.hidden_size, out_features=config.audio_config.hidden_size, bias=False
-        )
-        self.text_proj2 = nn.Linear(in_features=config.audio_config.hidden_size, out_features=config.bottleneck_dim)
 
         self.cat_audio_proj = nn.Linear(2 * config.audio_config.hidden_size, config.bottleneck_dim)
-        self.proj_audio_and_text = nn.Linear(2 * config.bottleneck_dim, config.bottleneck_dim)
-        self.data_proj = nn.Linear(config.bottleneck_dim, config.hidden_size)
-        self.head = nn.Linear(config.hidden_size, 4, bias=False)
+        self.text_proj_1 = nn.Linear(
+            in_features=config.text_config.hidden_size, out_features=config.audio_config.hidden_size, bias=False
+        )
+        self.text_proj_2 = nn.Linear(in_features=config.audio_config.hidden_size, out_features=config.bottleneck_dim)
+        self.audio_text_proj_1 = nn.Linear(2 * config.bottleneck_dim, config.bottleneck_dim)
+        self.audio_text_proj_2 = nn.Linear(config.bottleneck_dim, config.hidden_size)
+        self.output_proj = nn.Linear(config.hidden_size, 4, bias=False)
         self.layer_norm = nn.LayerNorm(config.bottleneck_dim)
+
+        # transformer
+        self.embeddings = SamAudioJudgeEmbeddings(config)
+        self.layers = nn.ModuleList(
+            [SamAudioJudgeEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = SamAudioJudgeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = SamAudioJudgeRotaryEmbedding(config=config)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
         self.register_buffer("mean", torch.zeros(4))
         self.register_buffer("std", torch.ones(4))
@@ -491,53 +454,73 @@ class SamAudioJudgeModel(SamAudioJudgePretrainedModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        separated_values: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> SamAudioJudgeOutput:
-        stacked_audio = torch.cat([input_values, separated_values], dim=0)
-
-        audio_output: BaseModelOutputWithPooling = self.audio_encoder(
-            input_values=stacked_audio,
+        audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
+            input_values=input_values,
             padding_mask=padding_mask,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
         )
 
-        feature_padding_mask = None
-        if padding_mask is not None:
-            feature_padding_mask = padding_mask[:, :: self.config.audio_config.dac_config.hop_length]
-
-        text_output = self.text_model(
+        text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=self.config.nth_text_layer,
-            return_dict=True,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
         )
 
-        if self.config.nth_text_layer is not None:
-            text_embeds = text_output.hidden_states[self.config.nth_text_layer]
-        else:
-            text_embeds = text_output.last_hidden_state
-
-        text_embeds = self.text_proj1(text_embeds)
-
-        audio_embeds, audio_hyp_embeds = audio_output.last_hidden_state.chunk(2, 0)
+        audio_embeds, audio_hyp_embeds = audio_outputs.last_hidden_state.chunk(2, 0)
         audio_embeds = torch.cat([audio_hyp_embeds, audio_embeds], dim=2)
         audio_embeds = self.cat_audio_proj(audio_embeds)
 
-        text_embeds = self.text_proj2(text_embeds.unsqueeze(1).expand_as(audio_embeds))
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_proj_1(text_embeds)
+        text_embeds = self.text_proj_2(text_embeds)
         text_embeds = self.layer_norm(text_embeds)
+        text_embeds = text_embeds[:, None, :].expand_as(audio_embeds)
 
         audio_text_embeds = torch.cat([audio_embeds, text_embeds], dim=2)
-        audio_text_embeds = self.proj_audio_and_text(audio_text_embeds)
-        audio_text_embeds = self.data_proj(audio_text_embeds)
-        audio_text_output = self.transformer(audio_text_embeds, padding_mask=feature_padding_mask)
+        audio_text_embeds = self.audio_text_proj_1(audio_text_embeds)
+        audio_text_embeds = self.audio_text_proj_2(audio_text_embeds)
 
-        logits = self.head(audio_text_output.last_hidden_state)
-        pooled = torch.masked.mean(logits, mask=feature_padding_mask, dim=1)
-        de_normalized = pooled * self.std + self.mean
+        output_mask = audio_outputs.output_mask
+        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=output_mask)
 
-        return SamAudioJudgeOutput(*de_normalized.chunk(4, dim=1))
+        if attention_mask is not None:
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+
+        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.output(hidden_states)
+
+        logits = self.output_proj(hidden_states[:, 1:])
+        pooled_logits = torch.masked.mean(logits, mask=output_mask, dim=1)
+        de_normalized_logits = pooled_logits * self.std + self.mean
+
+        overall, recall, precision, faithfulness = de_normalized_logits.chunk(4, dim=1)
+
+        return SamAudioJudgeOutput(
+            overall=overall,
+            recall=recall,
+            precision=precision,
+            faithfulness=faithfulness,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
+            last_hidden_state=hidden_states[:, 1:],
+        )
 
 
 __all__ = ["SamAudioJudgeModel"]
