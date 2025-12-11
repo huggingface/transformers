@@ -27,18 +27,11 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils import is_gptqmodel_available, is_ipex_available
+from transformers.utils import is_ipex_available
 
 
 if is_torch_available():
     import torch
-
-
-if is_gptqmodel_available():
-    from gptqmodel import BACKEND
-    from gptqmodel.quantization import METHOD
-    from gptqmodel.utils.importer import hf_select_quant_linear_v2
-
 
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):
@@ -84,6 +77,8 @@ class GPTQConfigTest(unittest.TestCase):
 @require_optimum
 @require_gptqmodel
 class GPTQTest(unittest.TestCase):
+    from gptqmodel import BACKEND
+
     model_name = "bigscience/bloom-560m"
 
     input_text = "Hello my name is"
@@ -189,6 +184,8 @@ class GPTQTest(unittest.TestCase):
         Simple test to check if the model conversion has been done correctly by checking on
         the class type of the linear layers of the converted models
         """
+        from gptqmodel import METHOD, hf_select_quant_linear_v2
+        
         if hasattr(self.config, "quantization_config"):
             checkpoint_format = self.config.quantization_config.get("checkpoint_format")
             meta = self.config.quantization_config.get("meta")
@@ -305,7 +302,7 @@ class GPTQTestActOrderExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
-
+    from gptqmodel import BACKEND
     # `act_group_aware` == `True` requires `desc_act` == `False` when both are explicitly set
     desc_act = True
     act_group_aware = False
@@ -375,6 +372,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
     More information on those arguments here:
     https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
     """
+    from gptqmodel import BACKEND
 
     load_backend = BACKEND.EXLLAMA_V2
     EXPECTED_OUTPUTS = set()
