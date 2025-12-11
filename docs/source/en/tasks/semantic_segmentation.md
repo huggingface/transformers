@@ -219,7 +219,7 @@ Start by loading a smaller subset of the SceneParse150 dataset from the 🤗 Dat
 ```py
 >>> from datasets import load_dataset
 
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = load_dataset("merve/scene_parse_150", split="train[:50]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
