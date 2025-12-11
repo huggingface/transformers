@@ -277,7 +277,9 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return next(state_dict.values()).dtype
+    if len(state_dict) == 0:
+        return torch.float32
+    return next(iter(state_dict.values())).dtype
 
 
 str_to_torch_dtype = {
@@ -769,7 +771,7 @@ def _get_dtype(
         for key in config.sub_configs:
             if (sub_config := getattr(config, key)) is not None:
                 sub_config.dtype = default_dtype
-
+    dtype = dtype if isinstance(dtype, torch.dtype) else getattr(torch, dtype)
     return config, dtype, dtype_orig
 
 
@@ -796,7 +798,11 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        return next(param.dtype for param in self.parameters() if param.is_floating_point())
+        dtype = self._dtype or next(param.dtype for param in self.parameters() if param.is_floating_point())
+        if isinstance(dtype, str):
+            if hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+        return dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -1075,6 +1081,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _keep_in_fp32_modules_strict = None
 
     dtype_plan: Optional[dict[str, torch.dtype]] = None
+    _dtype: Optional[Union[str, torch.dtype]] = torch.get_default_dtype()
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1219,6 +1226,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
+        default_dtype = torch.get_default_dtype()
+        self._dtype = default_dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1457,6 +1466,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
         `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
         """
+        if isinstance(dtype, str):
+            if hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+            else:
+                raise ValueError(f"Received an invalid string dtype: {dtype}")
         if not dtype.is_floating_point:
             raise ValueError(
                 f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
@@ -1465,6 +1479,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
+        cls._dtype = dtype
         return dtype_orig
 
     @property
@@ -3822,6 +3837,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+        if dtype is None:
+            dtype = "auto"
 
         if is_offline_mode() and not local_files_only:
             local_files_only = True

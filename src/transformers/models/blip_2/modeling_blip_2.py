@@ -603,7 +603,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
+        attention_probs_dropped = self.dropout(attention_probs).to(value_layer.dtype)
 
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 

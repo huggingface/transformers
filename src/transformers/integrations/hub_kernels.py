@@ -350,6 +350,9 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             mapping[kernel_name] = kernel
         except FileNotFoundError:
             mapping[kernel_name] = None
+        except AssertionError:
+            # Happens when torch is built without an accelerator backend; fall back to slow path.
+            mapping[kernel_name] = None
 
     else:
         # Try to import is_{kernel_name}_available from ..utils
