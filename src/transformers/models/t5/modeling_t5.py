@@ -169,6 +169,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
+    position_bias: Optional[torch.Tensor] = None,
     scaling: Optional[float] = None,
     dropout: float = 0.0,
     has_relative_attention_bias: bool = False,
@@ -208,6 +209,11 @@ def eager_attention_forward(
         return relative_buckets
 
     attn_weights = torch.matmul(query, key.transpose(2, 3))  # (bsz, heads, q_len, k_len)
+
+    if position_bias is not None:
+        # slice to current key length to be safe
+        position_bias = position_bias[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + position_bias
 
     computed_position_bias = None
     if has_relative_attention_bias:
@@ -370,6 +376,7 @@ class T5Attention(nn.Module):
             key_states,
             value_states,
             attention_mask=mask,
+            position_bias=position_bias,
             dropout=0.0 if not self.training else self.dropout,
             # T5 relative bias params
             has_relative_attention_bias=self.has_relative_attention_bias,
