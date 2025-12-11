@@ -1165,7 +1165,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
@@ -1178,8 +1177,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if inputs_embeds is None:
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
@@ -1215,7 +1212,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1311,7 +1307,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             pixel_values=pixel_values,
             rope_deltas=rope_deltas,
             cache_position=cache_position,
