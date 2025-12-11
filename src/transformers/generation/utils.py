@@ -2436,7 +2436,7 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
-        # Check length values before updating the config with defaults. We'll use it later in (# 6)
+        # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
         has_default_max_length = kwargs.get("max_length") is None and (
             generation_config is None or generation_config.max_length is None
         )
