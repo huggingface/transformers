@@ -1880,7 +1880,7 @@ class ModelUtilsTest(TestCasePlus):
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with patch("torch.set_default_dtype", new_callable=debug):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", dtype=torch.float16)
         # default should still be float32
@@ -1896,9 +1896,7 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        config = AutoConfig.from_pretrained(
-            TINY_MISTRAL,
-        )
+        config = AutoConfig.from_pretrained(TINY_MISTRAL)
 
         # Mock injection point which is right after the call to `torch.set_default_dtype`
         original_set_default_dtype = torch.set_default_dtype
@@ -1908,7 +1906,7 @@ class ModelUtilsTest(TestCasePlus):
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with patch("torch.set_default_dtype", new_callable=debug):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 config.dtype = torch.float16
                 _ = AutoModelForCausalLM.from_config(config)
