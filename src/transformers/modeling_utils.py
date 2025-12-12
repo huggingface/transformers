@@ -1834,7 +1834,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return applicable_attn_implementation
 
     def _check_and_adjust_experts_implementation(self, experts_implementation: Optional[str]) -> str:
-        return self.get_correct_experts_implementation(experts_implementation)
+        applicable_experts_implementation = "eager" if experts_implementation is None else experts_implementation
+        if applicable_experts_implementation not in ["eager", "batched_mm", "grouped_mm"]:
+            raise ValueError(
+                f'Specified `experts_implementation="{applicable_experts_implementation}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `experts_implementation="batched_mm"` and `experts_implementation="grouped_mm"`.'
+            )
+        return applicable_experts_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
@@ -1870,15 +1876,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attention
 
-    def get_correct_experts_implementation(self, requested_moe: Optional[str]) -> str:
-        applicable_moe = "eager" if requested_moe is None else requested_moe
-        if applicable_moe not in ["eager", "batched_mm", "grouped_mm"]:
-            raise ValueError(
-                f'Specified `experts_implementation="{applicable_moe}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `experts_implementation="batched_mm"` and `experts_implementation="grouped_mm"`.'
-            )
-        return applicable_moe
-
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
@@ -1895,21 +1892,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
-            return True
-
-    @classmethod
-    def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its MoE implementation dynamically. It is an ugly check based on
-        opening the file, but avoids maintaining yet another property flag.
-        """
-        class_file = sys.modules[cls.__module__].__file__
-        with open(class_file, "r") as f:
-            code = f.read()
-        # heuristic -> if we find those patterns, the model uses the correct interface
-        if re.search(r"class \w+Experts\(nn.Module\)", code):
-            return "use_experts_implementation" in code
-        else:
-            # If no MoE layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
