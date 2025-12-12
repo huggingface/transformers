@@ -1624,9 +1624,11 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-            image_embeds, projection_attentions = self.get_image_features(
-                pixel_values, return_attentions=True, interpolate_pos_encoding=interpolate_pos_encoding
+            image_features = self.get_image_features(
+                pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
             )
+            image_embeds = image_features.pooler_output
+            projection_attentions = image_features.projection_attentions
 
         outputs = self.text_model(
             input_ids=input_ids,
