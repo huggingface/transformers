@@ -996,6 +996,50 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
                                 line_end=arg_pos.end.line
                             )
                             return
+
+                    # Handle inline numeric literals
+                    elif isinstance(arg.value, (cst.Integer, cst.Float)):
+                        arg_pos = self.get_metadata(PositionProvider, arg.value)
+                        self.info = PatternInfo(
+                            pattern_type="plain_number",
+                            base_indent=arg_pos.start.column,
+                            line_start=arg_pos.start.line,
+                            line_end=arg_pos.end.line
+                        )
+                        return
+
+                    # Handle inline list literals
+                    elif isinstance(arg.value, cst.List):
+                        arg_pos = self.get_metadata(PositionProvider, arg.value)
+                        self.info = PatternInfo(
+                            pattern_type="plain_list",
+                            base_indent=arg_pos.start.column,
+                            line_start=arg_pos.start.line,
+                            line_end=arg_pos.end.line
+                        )
+                        return
+
+                    # Handle inline dict literals
+                    elif isinstance(arg.value, cst.Dict):
+                        arg_pos = self.get_metadata(PositionProvider, arg.value)
+                        self.info = PatternInfo(
+                            pattern_type="plain_dict",
+                            base_indent=arg_pos.start.column,
+                            line_start=arg_pos.start.line,
+                            line_end=arg_pos.end.line
+                        )
+                        return
+
+                    # Handle inline tuple literals
+                    elif isinstance(arg.value, cst.Tuple):
+                        arg_pos = self.get_metadata(PositionProvider, arg.value)
+                        self.info = PatternInfo(
+                            pattern_type="plain_tuple",
+                            base_indent=arg_pos.start.column,
+                            line_start=arg_pos.start.line,
+                            line_end=arg_pos.end.line
+                        )
+                        return
             except Exception:
                 pass
 
@@ -1555,6 +1599,48 @@ def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> b
     return True
 
 
+def update_inline_simple(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """
+    Update an inline literal (number, tuple, etc) that appears as an argument.
+
+    This is a simple replacement that finds and replaces the literal value
+    using the position information from CST.
+
+    Args:
+        filepath: Path to file
+        task: UpdateTask
+        info: PatternInfo with exact line positions from CST
+
+    Returns:
+        True if successful
+    """
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    start_idx = info.line_start - 1
+    end_idx = info.line_end - 1
+
+    if start_idx >= len(lines) or end_idx >= len(lines):
+        return False
+
+    # Only handle single-line literals
+    if start_idx == end_idx:
+        line = lines[start_idx]
+        # Use column information to replace exactly at the right position
+        # For now, just replace the old value with the new value in the line
+        old_val = task.expectations_var
+        if old_val in line:
+            # Simple replacement - replace first occurrence
+            new_line = line.replace(old_val, task.new_value_str, 1)
+            lines[start_idx] = new_line
+
+            with open(filepath, 'w') as f:
+                f.writelines(lines)
+            return True
+
+    return False
+
+
 def update_inline_string(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
     """
     Update an inline string literal that appears as an argument in a function call.
@@ -1772,6 +1858,12 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
                 success = update_inline_string(filepath, task, info)
             else:
                 success = update_plain_string(filepath, task, info)
+        elif info.pattern_type == "plain_number":
+            # Numbers are always inline, use simple replacement
+            success = update_inline_simple(filepath, task, info)
+        elif info.pattern_type == "plain_tuple":
+            # Tuples are always inline, use simple replacement
+            success = update_inline_simple(filepath, task, info)
         else:
             print(f"    ✗ Unknown pattern")
             continue
