@@ -883,11 +883,7 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        # Use config dtype, if it's a proper `torch.dtype`
-        config_dtype = getattr(self.config, "dtype", None)
-        config_dtype = config_dtype if isinstance(config_dtype, torch.dtype) else None
-        dtype = config_dtype or next(param.dtype for param in self.parameters() if param.is_floating_point())
-        return dtype
+        return next(param.dtype for param in self.parameters() if param.is_floating_point())
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
