@@ -770,11 +770,21 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         output = deepcopy(self.__dict__)
-        output.pop("model_valid_processing_keys", None)
-        output.pop("_valid_kwargs_names", None)
-        output["video_processor_type"] = self.__class__.__name__
+        filtered_dict = {}
+        for key, value in output.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
 
-        return output
+        filtered_dict.pop("model_valid_processing_keys", None)
+        filtered_dict.pop("_valid_kwargs_names", None)
+        filtered_dict["video_processor_type"] = self.__class__.__name__
+
+        return filtered_dict
 
     def to_json_string(self) -> str:
         """

@@ -936,6 +936,18 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def to_dict(self):
         encoder_dict = super().to_dict()
-        encoder_dict.pop("_valid_processor_keys", None)
-        encoder_dict.pop("_valid_kwargs_names", None)
-        return encoder_dict
+
+        # Filter out None values that are class defaults, but preserve explicitly set None values
+        filtered_dict = {}
+        for key, value in encoder_dict.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
+
+        filtered_dict.pop("_valid_processor_keys", None)
+        filtered_dict.pop("_valid_kwargs_names", None)
+        return filtered_dict
