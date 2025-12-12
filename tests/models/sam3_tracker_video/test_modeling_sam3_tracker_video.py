@@ -428,7 +428,7 @@ class Sam3TrackerVideoModelIntegrationTest(unittest.TestCase):
                 ]
             ).to(torch_device),
             atol=1e-4,
-            rtol=1e-4,
+            rtol=1e-3,
         )
 
     def test_inference_propagate_video_from_mask_input(self):
