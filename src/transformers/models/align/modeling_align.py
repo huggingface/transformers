@@ -976,6 +976,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
+    _no_split_modules = ["AlignVisionBlock"]
 
     def __init__(self, config: AlignVisionConfig):
         super().__init__(config)

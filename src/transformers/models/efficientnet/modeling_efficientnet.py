@@ -435,7 +435,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = []
+    _no_split_modules = ["EfficientNetBlock"]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
