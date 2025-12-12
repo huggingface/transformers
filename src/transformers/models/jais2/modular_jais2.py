@@ -155,9 +155,6 @@ class Jais2Config(LlamaConfig):
         del self.rms_norm_eps
         self.layer_norm_eps = self.rms_norm_eps
 
-        # Validate and standardize RoPE parameters
-        self.standardize_rope_params()
-        self.validate_rope()
 
 
 __all__ = ["Jais2Config"]
