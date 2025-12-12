@@ -72,7 +72,7 @@ else:
     group_streams = None
 
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -96,7 +96,6 @@ from ...models.auto.tokenization_auto import AutoTokenizer
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
