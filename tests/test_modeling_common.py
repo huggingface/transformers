@@ -3243,7 +3243,7 @@ class ModelTesterMixin:
 
         dtype = torch.bfloat16
 
-        def _expected_attn_impls(attention_implementation: str) -> set[str]:
+        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
             # Allow kernels fallbacks for flash attention tests.
             requested = attention_implementation
             base = requested.removeprefix("paged|")
@@ -3254,7 +3254,7 @@ class ModelTesterMixin:
                 expected.add(f"{prefix}{_FLASH_ATTN_KERNEL_FALLBACK[base]}")
             return expected
 
-        expected_attn_impls = _expected_attn_impls(attn_implementation)
+        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3288,7 +3288,7 @@ class ModelTesterMixin:
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
-                            self.assertIn(sub_config._attn_implementation, expected_attn_impls)
+                            self.assertIn(sub_config._attn_implementation, expected_attn_implementations)
 
                     has_fa = False
                     for name, submodule in model_fa.named_modules():
@@ -3296,7 +3296,7 @@ class ModelTesterMixin:
                         if (
                             "Attention" in class_name
                             and getattr(submodule, "config", None)
-                            and submodule.config._attn_implementation in expected_attn_impls
+                            and submodule.config._attn_implementation in expected_attn_implementations
                         ):
                             has_fa = True
                             break
