@@ -67,6 +67,12 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
 
+        if position_ids is None:
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
+
         return super().forward(position_ids + self.offset)
 
 

@@ -61,6 +61,12 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
 
+        if position_ids is None:
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
+
         return super().forward(position_ids + self.offset)
 
 
@@ -432,8 +438,13 @@ class OPTDecoder(OPTPreTrainedModel):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
+
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            # position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_seen_tokens` is > 0
+            position_ids = position_ids[:, past_seen_tokens:]
 
         causal_mask = create_causal_mask(
             config=self.config,
