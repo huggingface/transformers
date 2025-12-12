@@ -3943,6 +3943,9 @@ class Trainer:
         # Both standard transformer models and Liger-patched models handle shift_labels correctly,
         # so we can directly use the computed loss from the model output.
         # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+        if "labels" not in inputs and "shift_labels" in inputs:
+            # DeepSpeed SP Dataloader removes "labels" but we need it, otherwise, we won't compute the loss.
+            inputs["labels"] = inputs["shift_labels"]
         outputs = model(**inputs)
         loss = outputs.loss
 
