@@ -346,7 +346,12 @@ class GenerationConfig(PushToHubMixin):
         self.stop_strings = kwargs.pop("stop_strings", None)
 
         # Parameters that control the generation strategy used
-        self.do_sample = kwargs.pop("do_sample", False)
+        do_sample = kwargs.pop("do_sample", None)
+        if do_sample is None:
+            do_sample = False
+        kwargs["do_sample"] = do_sample
+        self.do_sample = do_sample
+
         self.num_beams = kwargs.pop("num_beams", 1)
 
         # Parameters that control the cache
