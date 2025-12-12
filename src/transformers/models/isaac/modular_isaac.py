@@ -1,84 +1,17 @@
-# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
-# Perceptron, Inc. Non-Production License (2024-01-01)
-
-
-### 1. Scope and acceptance
-
-# **1.1. Scope of the Agreement.**
-# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+# coding=utf-8
+# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
-# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# ## 2. License
-# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
-#
-# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
-# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
-# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
-#
-# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
-# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
-# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
-# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
-#
-# ## 3. Limitations
-# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
-#
-# **3.2. Usage Limitation**
-# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
-# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
-#
-# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
-#
-# ## 4. Intellectual Property
-# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
-#
-# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
-#
-# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
-#
-# # 5. Liability
-# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
-#
-# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
-#
-# ## 6. Warranty
-# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
-#
-# # 7. Termination
-# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
-#
-# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
-#
-# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
-#
-# # 8. General provisions
-# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
-#
-# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
-#
-# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
-#
-# # 9. Definitions
-# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
-#
-# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
-#
-# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
-#
-# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
-#
-# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
-#
-# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
-#
-# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
-#
-# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
-#
-# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
@@ -86,7 +19,7 @@ import copy
 import math
 import re
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
 
 from ...utils.import_utils import (
@@ -139,7 +72,7 @@ else:
     group_streams = None
 
 
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -154,7 +87,7 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
 )
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_masks_for_generate, eager_mask, packed_sequence_mask_function, sdpa_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -163,13 +96,12 @@ from ...models.auto.tokenization_auto import AutoTokenizer
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple
+from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -193,7 +125,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
     model_type = "isaac_vision"
     base_config_key = "vision_config"
-    _attn_implementation: Optional[str] = None
 
     def __init__(
         self,
@@ -225,16 +156,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
-
-        if self._attn_implementation is None:
-            self._attn_implementation = "flash_attention_2"
-
-        # Keep legacy and new attention implementation fields in sync
-        existing_attn_impl = getattr(self, "attn_implementation", None)
-        if existing_attn_impl is None:
-            self.attn_implementation = self._attn_implementation
-        else:
-            self._attn_implementation = existing_attn_impl
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
@@ -439,16 +360,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 .repeat(batch_size, 1)
             )
 
-            if pixel_shuffle_scale > 1:
-                if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
-                    raise ValueError(
-                        "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
-                    )
-                virtual_height = height_tokens // pixel_shuffle_scale
-                virtual_width = width_tokens // pixel_shuffle_scale
-            else:
-                virtual_height = height_tokens
-                virtual_width = width_tokens
+            if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
+                raise ValueError(
+                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
+                )
+            virtual_height = height_tokens // pixel_shuffle_scale
+            virtual_width = width_tokens // pixel_shuffle_scale
 
             virtual_dim = (
                 torch.tensor(
@@ -486,13 +403,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         )
 
 
-def build_document_attention_mask(
-    cu_seqlens: Optional[torch.Tensor],
-    total_tokens: int,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> Optional[torch.Tensor]:
-    """Creates an additive attention mask that blocks cross-document attention."""
+def document_mask_function_from_cu_seqlens(cu_seqlens: Optional[torch.Tensor]) -> Optional[Callable]:
+    """Return a mask function that blocks cross-document attention from packed ``cu_seqlens``.
+
+    The returned callable matches the signature expected by ``masking_utils`` mask factories and
+    yields ``True`` only when query/key positions belong to the same packed segment.
+    """
 
     if cu_seqlens is None:
         return None
@@ -504,11 +420,10 @@ def build_document_attention_mask(
     if seq_sizes.numel() == 0:
         return None
 
-    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=device), seq_sizes)
-    block_mask = seg_ids[:, None] != seg_ids[None, :]
-    additive_mask = torch.zeros((total_tokens, total_tokens), dtype=dtype, device=device)
-    additive_mask.masked_fill_(block_mask, float("-inf"))
-    return additive_mask.view(1, 1, total_tokens, total_tokens)
+    total_tokens = int(seq_sizes.sum().item())
+    seg_ids = torch.repeat_interleave(torch.arange(seq_sizes.numel(), device=cu_seqlens.device), seq_sizes)
+    packed_sequence_mask = seg_ids.view(1, total_tokens)
+    return packed_sequence_mask_function(packed_sequence_mask)
 
 
 def ensure_document_attention_mask(
@@ -517,16 +432,26 @@ def ensure_document_attention_mask(
     total_tokens: int,
     dtype: torch.dtype,
     device: torch.device,
-) -> Optional[torch.Tensor]:
-    if attention_mask is not None or cu_seqlens is None:
+    *,
+    return_mask_function: bool = False,
+) -> Optional[Union[torch.Tensor, Callable]]:
+    """Return the provided mask, a callable mask from ``cu_seqlens``, or ``None``.
+
+    ``return_mask_function=True`` yields a callable suitable for ``masking_utils``; otherwise
+    ``None`` is returned when no explicit ``attention_mask`` is provided. The legacy additive mask
+    has been removed in favor of the callable-based path.
+    """
+
+    if attention_mask is not None:
         return attention_mask
 
-    return build_document_attention_mask(
-        cu_seqlens=cu_seqlens,
-        total_tokens=total_tokens,
-        dtype=dtype,
-        device=device,
-    )
+    if cu_seqlens is None:
+        return None
+
+    if return_mask_function:
+        return document_mask_function_from_cu_seqlens(cu_seqlens)
+
+    return None
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -708,15 +633,30 @@ class IsaacVisionAttention(Siglip2Attention):
         self._variable_length_metadata = None
         return cu_seqlens, max_seqlen
 
-    def forward(self, hidden_states, attention_mask=None, **kwargs):
-        cu_seqlens = kwargs.pop("cu_seqlens", None)
-        max_seqlen = kwargs.pop("max_seqlen", None)
-        kwargs.pop("output_attentions", None)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        past_key_value: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        is_causal: bool = False,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        **kwargs,
+    ):
+        # Unused arguments are accepted for interface compatibility
+        _ = position_ids
+        _ = past_key_value
+        _ = is_causal
+        _ = output_attentions
+
         kwargs.pop("output_hidden_states", None)
         kwargs.pop("return_dict", None)
         if kwargs:
             unexpected = ", ".join(sorted(kwargs))
             raise TypeError(f"Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}")
+
         cached_cu, cached_max = self._consume_variable_length_metadata()
         if cu_seqlens is None:
             cu_seqlens = cached_cu
@@ -738,7 +678,9 @@ class IsaacVisionAttention(Siglip2Attention):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = getattr(self.config, "_attn_implementation", "flash_attention_3")
+        resolved_key = "isaac_sdpa"
+        if self.config._attn_implementation != "sdpa":
+            resolved_key = self.ATTENTION_KEY_MAP.get(self.config._attn_implementation, resolved_key)
 
         attn_mask = ensure_document_attention_mask(
             attention_mask,
@@ -746,9 +688,8 @@ class IsaacVisionAttention(Siglip2Attention):
             L,
             q.dtype,
             q.device,
+            return_mask_function=True,
         )
-
-        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl, attn_impl)
 
         attn_weights = None
         if resolved_key in self._FLASH_IMPLS:
@@ -780,7 +721,7 @@ class IsaacVisionAttention(Siglip2Attention):
         else:
             attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key)
             if attention_fn is None:
-                raise ValueError(f"Attention implementation {attn_impl} not found.")
+                raise ValueError(f"Attention implementation {resolved_key} not found.")
 
             query_states = q.transpose(0, 1).unsqueeze(0)
             key_states = k.transpose(0, 1).unsqueeze(0)
@@ -866,19 +807,30 @@ class IsaacVisionAttention(Siglip2Attention):
         q_lhd: torch.Tensor,
         k_lhd: torch.Tensor,
         v_lhd: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, Callable]],
         cu_seqlens: Optional[torch.Tensor],
         dropout: float,
     ) -> torch.Tensor:
         L = q_lhd.size(0)
         attn_mask = attention_mask
-        if attn_mask is None:
-            attn_mask = build_document_attention_mask(
-                cu_seqlens=cu_seqlens,
-                total_tokens=L,
-                dtype=q_lhd.dtype,
-                device=q_lhd.device,
+
+        if callable(attn_mask):
+            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
+            attn_mask = sdpa_mask(
+                batch_size=1,
+                cache_position=cache_position,
+                kv_length=L,
+                kv_offset=0,
+                mask_function=attn_mask,
+                attention_mask=None,
+                allow_is_causal_skip=False,
+                allow_is_bidirectional_skip=False,
+                allow_torch_fix=False,
+                use_vmap=False,
             )
+            # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
+            if attn_mask is not None and attn_mask.dtype == torch.bool:
+                attn_mask = ~attn_mask
 
         q = q_lhd.permute(1, 0, 2).unsqueeze(0)
         k = k_lhd.permute(1, 0, 2).unsqueeze(0)
@@ -904,15 +856,30 @@ class IsaacVisionAttention(Siglip2Attention):
         q_lhd: torch.Tensor,
         k_lhd: torch.Tensor,
         v_lhd: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
+        attention_mask: Optional[Union[torch.Tensor, Callable]],
         dropout: float,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        L = q_lhd.size(0)
+        attn_mask = attention_mask
+        if callable(attn_mask):
+            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
+            attn_mask = eager_mask(
+                batch_size=1,
+                cache_position=cache_position,
+                kv_length=L,
+                kv_offset=0,
+                mask_function=attn_mask,
+                attention_mask=None,
+                allow_is_bidirectional_skip=False,
+                use_vmap=False,
+                dtype=q_lhd.dtype,
+            )
+        if attn_mask is not None and attn_mask.dim() == 4:
+            attn_mask = attn_mask.squeeze(0).squeeze(0)
+
         attn_weights = torch.matmul(q_lhd, k_lhd.transpose(1, 2)) * self.scale
-        if attention_mask is not None:
-            mask = attention_mask
-            if mask.dim() == 4:
-                mask = mask.squeeze(0).squeeze(0)
-            attn_weights = attn_weights + mask
+        if attn_mask is not None:
+            attn_weights = attn_weights + attn_mask
 
         attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_lhd.dtype)
         if dropout and self.training:
@@ -1181,17 +1148,36 @@ class IsaacVisionTransformer(nn.Module):
         # Apply final layer normalization
         hidden_states = self.post_layernorm(hidden_states)
 
-        if self.pixel_shuffle_scale_factor > 1:
-            hidden_states = pixel_shuffle_varlen(
-                x=hidden_states,
-                token_grids=token_grids,
-                scale_factor=self.pixel_shuffle_scale_factor,
-            )
+        hidden_states = pixel_shuffle_varlen(
+            x=hidden_states,
+            token_grids=token_grids,
+            scale_factor=self.pixel_shuffle_scale_factor,
+        )
         # Remove the pseudo batch dimension we added earlier
         hidden_states = hidden_states.squeeze(0)
 
         # Return the full sequence of embeddings
         return hidden_states
+
+
+class IsaacVisionEmbedding(nn.Module):
+    """Vision embedding wrapper exposing tower and projector."""
+
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        vision_cfg = config.vision_config
+        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
+
+        self.vision_tower = IsaacVisionTransformer(vision_cfg)
+        self.multimodal_projector = nn.Sequential(
+            nn.Linear(hidden_dim, 4 * hidden_dim, bias=False),
+            nn.SiLU(),
+            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
+        )
+
+    def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        hidden_states = self.vision_tower(vision_tokens)
+        return self.multimodal_projector(hidden_states)
 
 
 def get_scaled_image_size(
@@ -1331,9 +1317,7 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_scaling: Optional[dict[str, Any]] = None
         self._rope_parameters: Optional[dict[str, Any]] = None
-
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -1346,83 +1330,37 @@ class IsaacConfig(PretrainedConfig):
 
         text_config_kwargs.update(kwargs)
 
-        legacy_rope_theta = text_config_kwargs.pop("rope_theta", None)
-        incoming_rope_params = text_config_kwargs.pop("rope_parameters", None)
-        incoming_rope_scaling = text_config_kwargs.pop("rope_scaling", None)
-        normalized_rope_params = incoming_rope_params or incoming_rope_scaling
-        if normalized_rope_params is None and legacy_rope_theta is not None:
-            normalized_rope_params = {"rope_type": "default", "rope_theta": legacy_rope_theta}
-        elif (
-            normalized_rope_params is not None
-            and legacy_rope_theta is not None
-            and "rope_theta" not in normalized_rope_params
-        ):
-            normalized_rope_params = {**normalized_rope_params, "rope_theta": legacy_rope_theta}
-        if normalized_rope_params is not None:
-            text_config_kwargs["rope_parameters"] = normalized_rope_params
-
         self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-
-        # Normalize rope parameters on the text config (prefer rope_parameters; alias rope_scaling)
-        self._rope_parameters = getattr(self.text_config, "rope_parameters", None)
-        if self._rope_parameters is None:
-            self._rope_parameters = getattr(self.text_config, "rope_scaling", None)
-        if self._rope_parameters is None and normalized_rope_params is not None:
-            self._rope_parameters = normalized_rope_params
-        if self._rope_parameters is None:
-            self._rope_parameters = {"rope_type": "default"}
-
-        try:
-            self.text_config.rope_parameters = self._rope_parameters
-        except AttributeError:
-            setattr(self.text_config, "rope_parameters", self._rope_parameters)
-        if hasattr(self.text_config, "rope_scaling"):
-            self.text_config.rope_scaling = self._rope_parameters
-        else:
-            try:
-                setattr(self.text_config, "rope_scaling", self._rope_parameters)
-            except Exception:
-                pass
+        if not hasattr(self.text_config, "rope_theta"):
+            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
+            if rope_theta_override is None:
+                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
+            self.text_config.rope_theta = rope_theta_override
 
         super().__init__(**kwargs)
 
+        if self._rope_scaling is None:
+            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
+        else:
+            self.text_config.rope_scaling = self._rope_scaling
+
         # Keep rope parameters alias in sync with upstream expectations
-        self._rope_scaling = self._rope_parameters
+        self._rope_parameters = self._rope_scaling
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
-        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
         self.vocab_size = self.text_config.vocab_size
-        self.max_position_embeddings = self.text_config.max_position_embeddings
         self.hidden_size = self.text_config.hidden_size
-        self.intermediate_size = self.text_config.intermediate_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
         self.num_attention_heads = self.text_config.num_attention_heads
-        self.use_sliding_window = getattr(self.text_config, "use_sliding_window", False)
-        sliding_window = getattr(self.text_config, "sliding_window", None)
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = getattr(self.text_config, "max_window_layers", None)
-        self.num_key_value_heads = getattr(self.text_config, "num_key_value_heads", None)
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
-        self.initializer_range = self.text_config.initializer_range
-        self.rms_norm_eps = self.text_config.rms_norm_eps
         self.use_cache = self.text_config.use_cache
-        self.attention_bias = getattr(self.text_config, "attention_bias", False)
-        self.attention_dropout = getattr(self.text_config, "attention_dropout", 0.0)
+        self.rope_theta = self.text_config.rope_theta
 
         # Validate rotary parameters now that they have been mirrored locally.
         rope_config_validation(self)
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Handle vision config - either dict or IsaacVisionConfig instance
@@ -1440,42 +1378,24 @@ class IsaacConfig(PretrainedConfig):
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
 
-    def get_text_config(self, *_, **kwargs) -> Qwen3Config:
-        # Accept optional decoder/encoder flags to align with HF composite configs
-        kwargs.pop("decoder", None)
-        kwargs.pop("encoder", None)
-        return self.text_config
-
     @property
     def rope_scaling(self):
         if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
-        return self._rope_parameters
+            return getattr(self.text_config, "rope_scaling", None)
+        return self._rope_scaling
 
     @rope_scaling.setter
     def rope_scaling(self, value):
-        self._rope_parameters = value
         self._rope_scaling = value
         if hasattr(self, "text_config") and self.text_config is not None:
-            try:
-                self.text_config.rope_parameters = value
-            except AttributeError:
-                setattr(self.text_config, "rope_parameters", value)
-            try:
-                self.text_config.rope_scaling = value
-            except AttributeError:
-                pass
+            self.text_config.rope_scaling = value
 
     @property
     def rope_parameters(self) -> dict[str, Any] | None:
         """Alias introduced upstream for rope scaling dictionaries."""
         value = self._rope_parameters
-        if value is None and hasattr(self, "text_config") and self.text_config is not None:
-            value = getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
+        if value is None:
+            value = self.rope_scaling
         if value is None:
             return {"rope_type": "default"}
         return value
@@ -1483,37 +1403,13 @@ class IsaacConfig(PretrainedConfig):
     @rope_parameters.setter
     def rope_parameters(self, value: dict[str, Any] | None) -> None:
         self._rope_parameters = value
-        self._rope_scaling = value
         self.rope_scaling = value
-
-    @property
-    def vision_attn_implementation(self) -> Optional[str]:
-        value = getattr(self.vision_config, "_attn_implementation", None)
-        if value is None:
-            value = getattr(self.vision_config, "attn_implementation", None)
-        return value
-
-    @vision_attn_implementation.setter
-    def vision_attn_implementation(self, value: Optional[str]) -> None:
-        self.vision_config._attn_implementation = value
-        if value is not None:
-            self.vision_config.attn_implementation = value
-        elif hasattr(self.vision_config, "attn_implementation"):
-            delattr(self.vision_config, "attn_implementation")
 
     def to_dict(self):
         output = super().to_dict()
-        rope_params = self.rope_parameters
-        output["rope_parameters"] = rope_params
-        output.pop("rope_scaling", None)
-        output.pop("rope_theta", None)
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
-            text_config_dict = self.text_config.to_dict()
-            text_config_dict.pop("rope_theta", None)
-            text_config_dict.pop("rope_scaling", None)
-            text_config_dict["rope_parameters"] = rope_params
-            output["text_config"] = text_config_dict
+            output["text_config"] = self.text_config.to_dict()
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
@@ -1673,26 +1569,8 @@ class IsaacProcessor(ProcessorMixin):
         Returns:
             BatchFeature with input_ids and tensor_stream
         """
-        # Normalize inputs to lists and support BatchEncoding (v5 apply_chat_template default)
-        encoding_input = None
-        if isinstance(text, BatchEncoding):
-            encoding_input = text
-        elif isinstance(text, dict) and "input_ids" in text:
-            encoding_input = BatchEncoding(text)
-
-        if encoding_input is not None:
-            input_ids_field = encoding_input["input_ids"]
-            if isinstance(input_ids_field, torch.Tensor):
-                ids = input_ids_field
-            else:
-                ids = torch.tensor(input_ids_field)
-            if ids.ndim == 1:
-                ids = ids.unsqueeze(0)
-            if ids.size(0) != 1:
-                raise ValueError("IsaacProcessor currently supports batch_size=1 for chat templates.")
-            decoded_text = self.tokenizer.decode(ids[0].tolist(), skip_special_tokens=False)
-            texts = [decoded_text]
-        elif isinstance(text, str):
+        # Normalize inputs to lists
+        if isinstance(text, str):
             texts = [text]
         else:
             texts = text
@@ -1775,29 +1653,17 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_params = (
-            getattr(rope_source_cfg, "rope_parameters", None) or getattr(rope_source_cfg, "rope_scaling", None) or {}
-        )
-        legacy_rope_theta = getattr(rope_source_cfg, "rope_theta", None)
-        if legacy_rope_theta is not None and isinstance(rope_params, dict) and "rope_theta" not in rope_params:
-            rope_params = {**rope_params, "rope_theta": legacy_rope_theta}
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
 
-        sanitized_params = {k: v for k, v in rope_params.items() if k not in self.EXTRA_ROPE_KEYS}
+        sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
         config_for_rope = copy.copy(rope_source_cfg)
-        config_for_rope.rope_parameters = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_scaling"):
-            config_for_rope.rope_scaling = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_theta"):
-            try:
-                delattr(config_for_rope, "rope_theta")
-            except Exception:
-                config_for_rope.rope_theta = None
+        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_params.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
@@ -1873,9 +1739,8 @@ class IsaacModel(Qwen3PreTrainedModel):
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
 
-        text_cfg_source = getattr(config, "get_text_config", lambda: config)()
+        text_cfg_source = config.text_config
         text_cfg = copy.deepcopy(text_cfg_source)
-        text_cfg._attn_implementation = config._attn_implementation
         self.text_model = AutoModel.from_config(text_cfg)
         # Ensure downstream callers observe the composed config
         self.text_model.config = config
@@ -1885,17 +1750,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         if config.vision_config is None:
             raise ValueError("IsaacConfig should always have vision_config")
 
-        hidden_dim = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
-        self.vision_embedding = nn.Sequential(
-            IsaacVisionTransformer(config.vision_config),
-            nn.Linear(
-                hidden_dim,
-                4 * hidden_dim,
-                bias=False,
-            ),
-            nn.SiLU(),
-            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
-        )
+        self.vision_embedding = IsaacVisionEmbedding(config)
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
@@ -1929,11 +1784,6 @@ class IsaacModel(Qwen3PreTrainedModel):
     @property
     def norm(self) -> nn.Module:
         return self.text_model.norm
-
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func=None):
-        self.text_model._set_gradient_checkpointing(
-            enable=enable, gradient_checkpointing_func=gradient_checkpointing_func
-        )
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
@@ -1982,6 +1832,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         h = embedded_ts.compact()  # (B, T, D)
         return h
 
+    @auto_docstring
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2001,12 +1853,17 @@ class IsaacModel(Qwen3PreTrainedModel):
         Forward pass with MRoPE position embeddings.
 
         Computes position embeddings once and passes them through all layers.
+
+        Args:
+            tensor_stream (`TensorStream`, *optional*):
+                Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+                `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+                if they are not supplied.
+            modality_tensor (`torch.LongTensor`, *optional*):
+                Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
+                values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
+                omitted.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Get inputs
         if tensor_stream is not None and inputs_embeds is not None:
@@ -2060,18 +1917,28 @@ class IsaacModel(Qwen3PreTrainedModel):
         sin = sin.to(inputs_embeds.dtype)
 
         # Prepare attention mask
-        if attention_mask is not None:
-            attention_mask = self._update_causal_mask(
-                attention_mask, inputs_embeds, cache_position, past_key_values, False
-            )
+
+        if not isinstance(attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            attention_mask = create_masks_for_generate(**mask_kwargs)
 
         # Initialize hidden states
         hidden_states = inputs_embeds
 
         for decoder_layer in self.text_model.layers:
+            layer_attention_mask = (
+                attention_mask[decoder_layer.attention_type] if isinstance(attention_mask, dict) else attention_mask
+            )
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=layer_attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -2089,158 +1956,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and past_key_values is not None:
-                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
-                if is_padding_right:
-                    raise ValueError(
-                        "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Qwen3. Make sure to "
-                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
-                    )
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-        using_sliding_window_cache = isinstance(past_key_values, SlidingWindowCache)
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if (
-            self.config._attn_implementation == "sdpa"
-            and not (using_static_cache or using_sliding_window_cache)
-            and not output_attentions
-        ):
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                sliding_window=self.config.sliding_window,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = input_tensor.shape[1]
-        # SlidingWindowCache or StaticCache
-        if using_sliding_window_cache or using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        # DynamicCache or no cache
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-            config=self.config,
-            past_key_values=past_key_values,
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        config: Qwen3Config,
-        past_key_values: Cache,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-            config (`Qwen3Config`):
-                The model's configuration class
-            past_key_values (`Cache`):
-                The cache class that is being used currently to generate
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            diagonal_attend_mask = torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            if config.sliding_window is not None:
-                # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
-                # the check is needed to verify is current checkpoint was trained with sliding window or not
-                if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
-                    sliding_attend_mask = torch.arange(target_length, device=device) <= (
-                        cache_position.reshape(-1, 1) - config.sliding_window
-                    )
-                    diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
-            causal_mask *= diagonal_attend_mask
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                if attention_mask.shape[-1] > target_length:
-                    attention_mask = attention_mask[:, :target_length]
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-        return causal_mask
 
 
 class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
@@ -2305,6 +2020,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of

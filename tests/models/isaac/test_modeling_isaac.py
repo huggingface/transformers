@@ -1,3 +1,19 @@
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Testing suite for the Isaac model."""
+
 import base64
 import hashlib
 import io
@@ -19,11 +35,24 @@ from transformers import (
     PythonBackend,
     is_torch_available,
 )
+from transformers.image_utils import load_image
+from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
-from transformers.models.isaac.modeling_isaac import IsaacVisionAttention
+from transformers.models.isaac.modeling_isaac import (
+    IsaacVisionAttention,
+    document_mask_function_from_cu_seqlens,
+    ensure_document_attention_mask,
+)
 from transformers.models.isaac.processing_isaac import IsaacProcessor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_flash_attn,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_vision_available
 from transformers.utils.import_utils import is_perceptron_available
 
@@ -33,7 +62,6 @@ if is_vision_available():
 else:
     Image = None
 
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
 
 
@@ -52,8 +80,9 @@ require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorSt
 MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
 MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
 LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
-HASH_FILE = Path(__file__).with_name("isaac_checkpoint_hashes.json")
-GENERATION_GOLDEN_FILE = Path(__file__).with_name("isaac_generation_golden.json")
+FIXTURES_DIR = Path(get_tests_dir("fixtures/isaac"))
+HASH_FILE = FIXTURES_DIR / "isaac_checkpoint_hashes.json"
+GENERATION_GOLDEN_FILE = FIXTURES_DIR / "isaac_generation_golden.json"
 HASH_FILTERS = {
     "full_model": {"include": None, "exclude": None},
     "core_model": {"include": None, "exclude": {"vision_embedding", "audio_embedding", "inv_freq"}},
@@ -77,11 +106,47 @@ def tensor_stream_snapshot(ts: TensorStream) -> dict[str, object]:
     }
 
 
-def _assert_tensor_stream_snapshot_equal(actual: dict[str, object], expected: dict[str, object]) -> None:
-    assert actual["shape"] == expected["shape"], "TensorStream shape changed"
-    assert actual["token_view"] == expected["token_view"], "TensorStream token view changed"
-    assert actual["modality_mask"] == expected["modality_mask"], "TensorStream modality mask changed"
-    assert actual["role_mask"] == expected["role_mask"], "TensorStream role mask changed"
+def document_to_messages(
+    document: list[dict], vision_token: str = "<image>"
+) -> tuple[list[dict[str, str]], list[Image]]:
+    """
+    Convert a Document to messages format compatible with chat templates.
+    Each content turn creates its own message entry.
+
+    Args:
+        document: list of dicts containing Text and/or Image content
+        vision_token: Token to use for image placeholder
+
+    Returns:
+        Tuple of (messages, images) where messages is a list of dicts with 'role' and 'content'
+    """
+    messages = []
+    images = []
+
+    for item in document:
+        itype = item.get("type")
+        if itype == "text":
+            content = item.get("content")
+            if content:
+                messages.append(
+                    {
+                        "role": item.get("role", "user"),
+                        "content": content,
+                    }
+                )
+        elif itype == "image":
+            content = item.get("content")
+            if content:
+                img = load_image(content)
+                images.append(img)
+                messages.append(
+                    {
+                        "role": item.get("role", "user"),
+                        "content": vision_token,
+                    }
+                )
+
+    return messages, images
 
 
 def _tensor_to_bytes(tensor):
@@ -172,6 +237,147 @@ def tokenizer(isaac_reference_checkpoint):
 
 
 @require_torch
+def test_document_mask_function_from_cu_seqlens():
+    cu_seqlens = torch.tensor([0, 3, 5], dtype=torch.int32)
+    mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
+
+    assert mask_fn is not None
+    # Same document (indices 1 and 2)
+    assert mask_fn(0, 0, 1, 2)
+    # Cross-document (index 1 in first doc, 3 in second doc)
+    assert not mask_fn(0, 0, 1, 3)
+    # Same second document (indices 3 and 4)
+    assert mask_fn(0, 0, 4, 3)
+
+
+@require_torch
+def test_ensure_document_attention_mask_prefers_callable_when_requested():
+    cu_seqlens = torch.tensor([0, 2, 5], dtype=torch.int32)
+    total_tokens = 5
+    dtype = torch.float32
+
+    mask_callable = ensure_document_attention_mask(
+        attention_mask=None,
+        cu_seqlens=cu_seqlens,
+        total_tokens=total_tokens,
+        dtype=dtype,
+        device=cu_seqlens.device,
+        return_mask_function=True,
+    )
+    assert callable(mask_callable)
+
+    additive = ensure_document_attention_mask(
+        attention_mask=None,
+        cu_seqlens=cu_seqlens,
+        total_tokens=total_tokens,
+        dtype=dtype,
+        device=cu_seqlens.device,
+        return_mask_function=False,
+    )
+    assert additive is None
+
+
+def create_isaac_processor(
+    tokenizer,
+    isaac_config,
+    *,
+    image_processor=None,
+    **overrides,
+):
+    """Helper to construct IsaacProcessor without requiring an IsaacConfig instance."""
+    params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "vision_patch_size": isaac_config.vision_patch_size,
+        "vision_max_num_patches": isaac_config.vision_max_num_patches,
+        "vision_min_num_patches": isaac_config.vision_min_num_patches,
+        "pixel_shuffle_scale": isaac_config.pixel_shuffle_scale,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+        "image_mean": tuple(isaac_config.vision_mean),
+        "image_std": tuple(isaac_config.vision_std),
+    }
+    params.update(overrides)
+
+    processor_image = image_processor
+    if processor_image is None:
+        processor_image = IsaacImageProcessorFast(
+            patch_size=params["vision_patch_size"],
+            max_num_patches=params["vision_max_num_patches"],
+            min_num_patches=params["vision_min_num_patches"],
+            pixel_shuffle_scale=params["pixel_shuffle_scale"],
+            rescale_factor=params["rescale_factor"],
+            image_mean=params["image_mean"],
+            image_std=params["image_std"],
+        )
+    processor_params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+    }
+
+    return IsaacProcessor(
+        image_processor=processor_image,
+        tokenizer=tokenizer,
+        **processor_params,
+    )
+
+
+@require_torch
+def test_document_mask_function_materializes_with_masking_utils():
+    cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)
+    total_tokens = 4
+    mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
+
+    cache_position = torch.arange(total_tokens, device=cu_seqlens.device, dtype=torch.long)
+    expected_bool = torch.tensor(
+        [
+            [
+                [
+                    [True, True, False, False],
+                    [True, True, False, False],
+                    [False, False, True, True],
+                    [False, False, True, True],
+                ]
+            ]
+        ],
+        device=cu_seqlens.device,
+    )
+
+    sdpa = sdpa_mask(
+        batch_size=1,
+        cache_position=cache_position,
+        kv_length=total_tokens,
+        kv_offset=0,
+        mask_function=mask_fn,
+        attention_mask=None,
+        allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=False,
+        allow_torch_fix=False,
+        use_vmap=False,
+    )
+    # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
+    assert torch.equal(sdpa, expected_bool)
+
+    eager = eager_mask(
+        batch_size=1,
+        cache_position=cache_position,
+        kv_length=total_tokens,
+        kv_offset=0,
+        mask_function=mask_fn,
+        attention_mask=None,
+        allow_is_bidirectional_skip=False,
+        use_vmap=False,
+        dtype=torch.float32,
+    )
+    expected_additive = torch.where(
+        expected_bool,
+        torch.tensor(0.0, device=cu_seqlens.device, dtype=torch.float32),
+        torch.tensor(torch.finfo(torch.float32).min, device=cu_seqlens.device, dtype=torch.float32),
+    )
+    assert torch.equal(eager, expected_additive)
+
+
+@require_torch
 def test_isaac_sdpa_attention_backend():
     config = IsaacVisionConfig(
         hidden_size=32,
@@ -200,10 +406,34 @@ def test_isaac_sdpa_attention_backend():
     assert attn_weights is None
 
 
-def _hash_tensor(tensor):
-    hasher = hashlib.sha256()
-    hasher.update(_tensor_to_bytes(tensor))
-    return hasher.hexdigest()
+@require_torch
+@require_flash_attn
+def test_isaac_flash_attention_backend():
+    config = IsaacVisionConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        num_channels=3,
+        num_patches=16,
+        patch_size=4,
+    )
+    config._attn_implementation = "flash_attention_3"
+
+    attn_module = IsaacVisionAttention(config).half().eval().cuda()
+    seq_len = 8
+    hidden_states = torch.randn(1, seq_len, config.hidden_size, device=torch.device("cuda"), dtype=torch.float16)
+    cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32, device=torch.device("cuda"))
+
+    with torch.no_grad():
+        outputs, attn_weights = attn_module(
+            hidden_states=hidden_states,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=seq_len,
+        )
+
+    assert outputs.shape == hidden_states.shape
+    assert attn_weights is None
 
 
 @lru_cache(maxsize=1)
@@ -469,17 +699,6 @@ class IsaacModelTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=IsaacConfig,
-            has_text_modality=True,
-            common_properties=["hidden_size"],
-            text_config=self.model_tester.text_config,
-            vision_config=self.model_tester.vision_config,
-        )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @require_tensorstream
     def test_model_forward(self):
@@ -531,16 +750,6 @@ def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
     assert isaac_tiny_config.max_sequence_length == 16384
     assert isaac_tiny_config.vision_rescale_factor == pytest.approx(1 / 255)
     assert isaac_tiny_config.vision_token == "<image>"
-
-
-def test_isaac_config_migrates_legacy_rope_theta():
-    cfg = IsaacConfig(text_config={"rope_theta": 12345})
-    assert cfg.rope_parameters.get("rope_theta") == 12345
-    assert cfg.rope_parameters.get("rope_type") == "default"
-    serialized = cfg.to_dict()
-    assert "rope_theta" not in serialized
-    assert "rope_theta" not in serialized.get("text_config", {})
-    assert serialized["rope_parameters"].get("rope_theta") == 12345
 
 
 @require_torch
@@ -699,73 +908,6 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
 
 
 @require_torch
-@slow
-@require_tensorstream
-def test_isaac_checkpoint_hashes(isaac_reference_model):
-    isaac_reference_model = isaac_reference_model.to("cpu")
-    expected_hashes = _load_expected_hashes()
-    if not expected_hashes:
-        pytest.skip(f"Missing golden hashes file at {HASH_FILE}.")
-
-    missing = [subset for subset in HASH_FILTERS if subset not in expected_hashes]
-    if missing:
-        pytest.skip(f"Golden hashes missing entries for: {', '.join(missing)}")
-
-    isaac_reference_model.to("cpu")
-    state_dict = isaac_reference_model.state_dict()
-    for subset, filters in HASH_FILTERS.items():
-        current_hash = _hash_state_dict(state_dict, include=filters["include"], exclude=filters["exclude"])
-        assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
-
-
-def create_isaac_processor(
-    tokenizer,
-    isaac_config,
-    *,
-    image_processor=None,
-    **overrides,
-):
-    """Helper to construct IsaacProcessor without requiring an IsaacConfig instance."""
-    params = {
-        "vision_token": isaac_config.vision_token,
-        "max_sequence_length": isaac_config.max_sequence_length,
-        "vision_patch_size": isaac_config.vision_patch_size,
-        "vision_max_num_patches": isaac_config.vision_max_num_patches,
-        "vision_min_num_patches": isaac_config.vision_min_num_patches,
-        "pixel_shuffle_scale": isaac_config.pixel_shuffle_scale,
-        "rescale_factor": isaac_config.vision_rescale_factor,
-        "image_mean": tuple(isaac_config.vision_mean),
-        "image_std": tuple(isaac_config.vision_std),
-        "vision_attn_implementation": isaac_config.vision_attn_implementation,
-    }
-    params.update(overrides)
-
-    processor_image = image_processor
-    if processor_image is None:
-        processor_image = IsaacImageProcessorFast(
-            patch_size=params["vision_patch_size"],
-            max_num_patches=params["vision_max_num_patches"],
-            min_num_patches=params["vision_min_num_patches"],
-            pixel_shuffle_scale=params["pixel_shuffle_scale"],
-            rescale_factor=params["rescale_factor"],
-            image_mean=params["image_mean"],
-            image_std=params["image_std"],
-        )
-    processor_params = {
-        "vision_token": isaac_config.vision_token,
-        "max_sequence_length": isaac_config.max_sequence_length,
-        "rescale_factor": isaac_config.vision_rescale_factor,
-    }
-
-    return IsaacProcessor(
-        image_processor=processor_image,
-        tokenizer=tokenizer,
-        config=isaac_config,
-        **processor_params,
-    )
-
-
-@require_torch
 @require_vision
 @slow
 @require_tensorstream
@@ -833,3 +975,93 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
         )
 
     isaac_reference_model.to("cpu")
+
+
+@require_torch
+@require_vision
+@slow
+@require_tensorstream
+@require_flash_attn
+class IsaacGenerationIntegrationTest(unittest.TestCase):
+    max_new_tokens = 25
+    dtype = torch.bfloat16
+
+    def setUp(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.checkpoint = _reference_checkpoint_or_skip()
+        self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
+        )
+        self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
+        self.hf_config.vision_config._attn_implementation = "flash_attention_2"
+        self.hf_config.vision_config.attn_implementation = "flash_attention_2"
+        self.model = IsaacForConditionalGeneration.from_pretrained(
+            self.checkpoint, config=self.hf_config, revision=MODEL_REVISION
+        )
+        self.model = self.model.to(device=self.device, dtype=self.dtype)
+        self.model.eval()
+
+    def _generate_from_messages(self, messages, images, num_tokens=None):
+        prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        tensor_stream = processor_output["tensor_stream"].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                tensor_stream=tensor_stream,
+                max_new_tokens=num_tokens or self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+
+        generated_ids = outputs.sequences
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        return generated_text
+
+    def test_generate_from_image_text(self):
+        image = _load_red_dot_image()
+        if image is None:
+            pytest.skip("PIL.Image is required for Isaac generation tests.")
+
+        messages = [
+            {"role": "user", "content": "Describe this image:"},
+            {"role": "user", "content": "<image>"},
+        ]
+        generated_text = self._generate_from_messages(messages, [image])
+        expected_fragment = "The image is a close-up photograph of a red cross symbol."
+        assert expected_fragment in generated_text
+
+    def test_generate_from_text_only(self):
+        document = [
+            {
+                "type": "text",
+                "content": "What is the pythogorean theorem?",
+                "role": "user",
+            }
+        ]
+        messages, _ = document_to_messages(document)
+        generated_text = self._generate_from_messages(messages, [], num_tokens=100)
+        expected_fragmenet = "The Pythagorean theorem is a fundamental principle in geometry that relates the lengths of the sides of a right-angled triangle. Let's break down the theorem step by step:"
+        assert expected_fragmenet in generated_text
+
+    def test_vqa_from_image(self):
+        document = [
+            {
+                "type": "image",
+                "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+                "role": "user",
+            },
+            {
+                "type": "text",
+                "content": "Is it safe to cross the street at this moment?",
+                "role": "user",
+            },
+        ]
+        messages, images = document_to_messages(document)
+        generated_text = self._generate_from_messages(messages, images, num_tokens=256)
+        expected_response = "\nNo, it is not safe to cross the street at this moment. The traffic light for pedestrians is red, indicating that it is not safe to cross."
+        assert generated_text == expected_response

@@ -4,87 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_isaac.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright (c) 2024 Perceptron, Inc.  All rights reserved.
-# Perceptron, Inc. Non-Production License (2024-01-01)
-
-
-### 1. Scope and acceptance
-
-# **1.1. Scope of the Agreement.**
-# This Agreement applies to any use, modification, or Distribution of any Perceptron Model by You, regardless of the source You obtained a copy of such Perceptron Model.
+# coding=utf-8
+# Copyright 2025 Perceptron, Inc and The HuggingFace Team. All rights reserved.
 #
-# **1.2. Acceptance.** By accessing, using, modifying, Distributing a Perceptron Model, or by creating, using or distributing a Derivative of the Perceptron Model, You agree to be bound by this Agreement.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# **1.3. Acceptance on behalf of a third-party.** If You accept this Agreement on behalf of Your employer or another person or entity, You warrant and represent that You have the authority to act and accept this Agreement on their behalf. In such a case, the word “You” in this Agreement will refer to Your employer or such other person or entity.
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# ## 2. License
-# **2.1. Grant of rights.** Subject to Section 3 below, Perceptron, Inc. hereby grants You a non-exclusive, royalty-free, worldwide, non-sublicensable, non-transferable, limited license to use, copy, modify, and Distribute under the conditions provided in Section 2.2 below, the Perceptron Model and any Derivatives made by or for Perceptron, Inc. and to create Derivatives of the Perceptron Model.
-#
-# **2.2. Distribution of Perceptron Model and Derivatives made by or for Perceptron, Inc..** Subject to Section 3 below, You may Distribute copies of the Perceptron Model and/or Derivatives made by or for Perceptron, Inc., under the following conditions:
-# - You must make available a copy of this Agreement to third-party recipients of the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. you Distribute, it being specified that any rights to use the Perceptron Models and/or Derivatives made by or for Perceptron, Inc. shall be directly granted by Perceptron, Inc. to said third-party recipients pursuant to the Perceptron, Inc. Non-Production License agreement executed between these parties;
-# - You must retain in all copies of the Perceptron Models the following attribution notice within a “Notice” text file distributed as part of such copies: “Licensed by Perceptron, Inc. under the Perceptron, Inc. Non-Production License”.
-#
-# **2.3. Distribution of Derivatives made by or for You.** Subject to Section 3 below, You may Distribute any Derivatives made by or for You under additional or different terms and conditions, provided that:
-# - In any event, the use and modification of Perceptron Model and/or Derivatives made by or for Perceptron, Inc. shall remain governed by the terms and conditions of this Agreement;
-# - You include in any such Derivatives made by or for You prominent notices stating that You modified the concerned Perceptron Model; and
-# - Any terms and conditions You impose on any third-party recipients relating to Derivatives made by or for You shall neither limit such third-party recipients’ use of the Perceptron Model or any Derivatives made by or for Perceptron, Inc. in accordance with the Perceptron, Inc. Non-Production License nor conflict with any of its terms and conditions.
-#
-# ## 3. Limitations
-# **3.1. Misrepresentation.** You must not misrepresent or imply, through any means, that the Derivatives made by or for You and/or any modified version of the Perceptron Model You Distribute under your name and responsibility is an official product of Perceptron, Inc. or has been endorsed, approved or validated by Perceptron, Inc., unless You are authorized by Us to do so in writing.
-#
-# **3.2. Usage Limitation**
-# - You shall only use the Perceptron Models and Derivatives (whether or not created by Perceptron, Inc.) for testing, research, Personal, or evaluation purposes in Non-Production Environments;
-# - Subject to the foregoing, You shall not supply the Perceptron Models or Derivatives in the course of a commercial activity, whether in return for payment or free of charge, in any medium or form, including but not limited to through a hosted or managed service (e.g. SaaS, cloud instances, etc.), or behind a software layer.
-#
-# **3.3. Usage not permitted under this Agreement.** If You want to use a Perceptron Model or a Derivative for any purpose that is not expressly authorized under this Agreement, You must request a license from Perceptron, Inc., which Perceptron, Inc. may grant to You in Perceptron, Inc.’s sole discretion. Please contact Perceptron, Inc. at the following e-mail address if You want to discuss such a license: sales@perceptron.inc
-#
-# ## 4. Intellectual Property
-# **4.1. Trademarks.** No trademark licenses are granted under this Agreement, and in connection with the Perceptron Models, You may not use any name or mark owned by or associated with Perceptron, Inc. or any of its affiliates, except (i) as required for reasonable and customary use in describing and Distributing the Perceptron Models and Derivatives made by or for Perceptron, Inc. and (ii) for attribution purposes as required by this Agreement.
-#
-# **4.2. Outputs.** We claim no ownership rights in and to the Outputs. You are solely responsible for the Outputs You generate and their subsequent uses in accordance with this Agreement.
-#
-# **4.3. Derivatives.** By entering into this Agreement, You accept that any Derivatives that You may create or that may be created for You shall be subject to the restrictions set out in Section 3 of this Agreement.
-#
-# # 5. Liability
-# **5.1. Limitation of liability.** In no event, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall Perceptron, Inc. be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this Agreement or out of the use or inability to use the Perceptron Models and Derivatives (including but not limited to damages for loss of data, loss of goodwill, loss of expected profit or savings, work stoppage, computer failure or malfunction, or any damage caused by malware or security breaches), even if  Perceptron, Inc. has been advised of the possibility of such damages.
-#
-# **5.2. Indemnification.** You agree to indemnify and hold harmless Perceptron, Inc. from and against any claims, damages, or losses arising out of or related to Your use or Distribution of the Perceptron Models and Derivatives.
-#
-# ## 6. Warranty
-# **6.1. Disclaimer.** Unless required by applicable law or agreed to in writing, Perceptron, Inc. provides the Perceptron Models and Derivatives on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. Perceptron, Inc. does not represent nor warrant that the Perceptron Models and Derivatives will be error-free, meet Your or any third party’s requirements, be secure or will allow You or any third party to achieve any kind of result or generate any kind of content. You are solely responsible for determining the appropriateness of using or Distributing the Perceptron Models and Derivatives and assume any risks associated with Your exercise of rights under this Agreement.
-#
-# # 7. Termination
-# **7.1. Term.** This Agreement is effective as of the date of your acceptance of this Agreement or access to the concerned Perceptron Models or Derivatives and will continue until terminated in accordance with the following terms.
-#
-# **7.2. Termination.** Perceptron, Inc. may terminate this Agreement at any time if You are in breach of this Agreement. Upon termination of this Agreement, You must cease to use all Perceptron Models and Derivatives and shall permanently delete any copy thereof. Sections 5, 6, 7 and 8 shall survive the termination of this Agreement.
-#
-# **7.3. Litigation.** If You initiate any legal action or proceedings against Us or any other entity (including a cross-claim or counterclaim in a lawsuit), alleging that the Model or a Derivative, or any part thereof, infringe upon intellectual property or other rights owned or licensable by You, then any licenses granted to You under this Agreement will immediately terminate as of the date such legal action or claim is filed or initiated.
-#
-# # 8. General provisions
-# 8.1. Governing Law. This Agreement will be governed by and construed in accordance with the laws of the State of Washington, without regard to its conflict of law principles.
-#
-# 8.2. Jurisdiction. The state and federal courts located in King County, Washington shall have exclusive jurisdiction over any dispute arising out of or relating to this Agreement, and You and We consent to personal jurisdiction and venue in such courts.
-#
-# **8.3. Severability.** If any provision of this Agreement is held to be invalid, illegal or unenforceable, the remaining provisions shall be unaffected thereby and remain valid as if such provision had not been set forth herein.
-#
-# # 9. Definitions
-# **“Agreement”**: means this Perceptron, Inc. Non-Production License agreement governing the access, use, and Distribution of the Perceptron Models and Derivatives.
-#
-# **“Derivative”**: means any (i) modified version of the Perceptron Model (including but not limited to any customized or fine-tuned version thereof), (ii) work based on the Perceptron Model, or (iii) any other derivative work thereof. For the avoidance of doubt, Outputs are not considered as Derivatives under this Agreement.
-#
-# **“Distribution”**, **“Distributing”**, **“Distribute”** or **“Distributed”**: means providing or making available, by any means, a copy of the Perceptron Models and/or the Derivatives as the case may be, subject to Section 3 of this Agreement.
-#
-# **“Perceptron, Inc.”**, **“We”** or **“Us”**: means Perceptron, Inc., a Delaware corporation with its principal place of business at 10900 NE 8th St Suite 613, Bellevue, WA 98004.
-#
-# **“Perceptron Model”**: means the foundational large language model(s), and its elements which include algorithms, software, instructed checkpoints, parameters, source code (inference code, evaluation code and, if applicable, fine-tuning code) and any other elements associated thereto made available by Perceptron, Inc. under this Agreement, including, if any, the technical documentation, manuals and instructions for the use and operation thereof.
-#
-# **“Non-Production Environment”**: means any setting, use case, or application of the Perceptron Models or Derivatives that expressly excludes live, real-world conditions, commercial operations, revenue-generating activities, or direct interactions with or impacts on end users (such as, for instance, Your employees or customers). Non-Production Environment may include, but is not limited to, any setting, use case, or application for research, development, testing, quality assurance, training, internal evaluation (other than any internal usage by employees in the context of the company’s business activities), and demonstration purposes.
-#
-# **“Outputs”**: means any content generated by the operation of the Perceptron Models or the Derivatives from a prompt (i.e., text instructions) provided by users. For the avoidance of doubt, Outputs do not include any components of a Perceptron Models, such as any fine-tuned versions of the Perceptron Models, the weights, or parameters.
-#
-# **“Personal”**: means any use of a Perceptron Model or a Derivative that is (i) solely for personal, non-profit and non-commercial purposes and (ii) not directly or indirectly connected to any commercial activities, business operations, or employment responsibilities. For illustration purposes, Personal use of a Model or a Derivative does not include any usage by individuals employed in companies in the context of their daily tasks, any activity that is intended to generate revenue, or that is performed on behalf of a commercial entity.
-#
-# **“You”**: means the individual or entity entering into this Agreement with Perceptron, Inc..
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 import copy
@@ -109,7 +42,6 @@ class IsaacVisionConfig(PreTrainedConfig):
 
     model_type = "isaac_vision"
     base_config_key = "vision_config"
-    _attn_implementation: Optional[str] = None
 
     def __init__(
         self,
@@ -142,16 +74,6 @@ class IsaacVisionConfig(PreTrainedConfig):
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
-        if self._attn_implementation is None:
-            self._attn_implementation = "flash_attention_2"
-
-        # Keep legacy and new attention implementation fields in sync
-        existing_attn_impl = getattr(self, "attn_implementation", None)
-        if existing_attn_impl is None:
-            self.attn_implementation = self._attn_implementation
-        else:
-            self._attn_implementation = existing_attn_impl
-
 
 class IsaacConfig(PretrainedConfig):
     """Configuration class for Isaac multimodal model.
@@ -173,9 +95,7 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_scaling: Optional[dict[str, Any]] = None
         self._rope_parameters: Optional[dict[str, Any]] = None
-
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -188,83 +108,37 @@ class IsaacConfig(PretrainedConfig):
 
         text_config_kwargs.update(kwargs)
 
-        legacy_rope_theta = text_config_kwargs.pop("rope_theta", None)
-        incoming_rope_params = text_config_kwargs.pop("rope_parameters", None)
-        incoming_rope_scaling = text_config_kwargs.pop("rope_scaling", None)
-        normalized_rope_params = incoming_rope_params or incoming_rope_scaling
-        if normalized_rope_params is None and legacy_rope_theta is not None:
-            normalized_rope_params = {"rope_type": "default", "rope_theta": legacy_rope_theta}
-        elif (
-            normalized_rope_params is not None
-            and legacy_rope_theta is not None
-            and "rope_theta" not in normalized_rope_params
-        ):
-            normalized_rope_params = {**normalized_rope_params, "rope_theta": legacy_rope_theta}
-        if normalized_rope_params is not None:
-            text_config_kwargs["rope_parameters"] = normalized_rope_params
-
         self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-
-        # Normalize rope parameters on the text config (prefer rope_parameters; alias rope_scaling)
-        self._rope_parameters = getattr(self.text_config, "rope_parameters", None)
-        if self._rope_parameters is None:
-            self._rope_parameters = getattr(self.text_config, "rope_scaling", None)
-        if self._rope_parameters is None and normalized_rope_params is not None:
-            self._rope_parameters = normalized_rope_params
-        if self._rope_parameters is None:
-            self._rope_parameters = {"rope_type": "default"}
-
-        try:
-            self.text_config.rope_parameters = self._rope_parameters
-        except AttributeError:
-            setattr(self.text_config, "rope_parameters", self._rope_parameters)
-        if hasattr(self.text_config, "rope_scaling"):
-            self.text_config.rope_scaling = self._rope_parameters
-        else:
-            try:
-                setattr(self.text_config, "rope_scaling", self._rope_parameters)
-            except Exception:
-                pass
+        if not hasattr(self.text_config, "rope_theta"):
+            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
+            if rope_theta_override is None:
+                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
+            self.text_config.rope_theta = rope_theta_override
 
         super().__init__(**kwargs)
 
+        if self._rope_scaling is None:
+            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
+        else:
+            self.text_config.rope_scaling = self._rope_scaling
+
         # Keep rope parameters alias in sync with upstream expectations
-        self._rope_scaling = self._rope_parameters
+        self._rope_parameters = self._rope_scaling
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
-        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
         self.vocab_size = self.text_config.vocab_size
-        self.max_position_embeddings = self.text_config.max_position_embeddings
         self.hidden_size = self.text_config.hidden_size
-        self.intermediate_size = self.text_config.intermediate_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
         self.num_attention_heads = self.text_config.num_attention_heads
-        self.use_sliding_window = getattr(self.text_config, "use_sliding_window", False)
-        sliding_window = getattr(self.text_config, "sliding_window", None)
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = getattr(self.text_config, "max_window_layers", None)
-        self.num_key_value_heads = getattr(self.text_config, "num_key_value_heads", None)
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
-        self.initializer_range = self.text_config.initializer_range
-        self.rms_norm_eps = self.text_config.rms_norm_eps
         self.use_cache = self.text_config.use_cache
-        self.attention_bias = getattr(self.text_config, "attention_bias", False)
-        self.attention_dropout = getattr(self.text_config, "attention_dropout", 0.0)
+        self.rope_theta = self.text_config.rope_theta
 
         # Validate rotary parameters now that they have been mirrored locally.
         rope_config_validation(self)
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Handle vision config - either dict or IsaacVisionConfig instance
@@ -282,42 +156,24 @@ class IsaacConfig(PretrainedConfig):
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
 
-    def get_text_config(self, *_, **kwargs) -> Qwen3Config:
-        # Accept optional decoder/encoder flags to align with HF composite configs
-        kwargs.pop("decoder", None)
-        kwargs.pop("encoder", None)
-        return self.text_config
-
     @property
     def rope_scaling(self):
         if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
-        return self._rope_parameters
+            return getattr(self.text_config, "rope_scaling", None)
+        return self._rope_scaling
 
     @rope_scaling.setter
     def rope_scaling(self, value):
-        self._rope_parameters = value
         self._rope_scaling = value
         if hasattr(self, "text_config") and self.text_config is not None:
-            try:
-                self.text_config.rope_parameters = value
-            except AttributeError:
-                setattr(self.text_config, "rope_parameters", value)
-            try:
-                self.text_config.rope_scaling = value
-            except AttributeError:
-                pass
+            self.text_config.rope_scaling = value
 
     @property
     def rope_parameters(self) -> dict[str, Any] | None:
         """Alias introduced upstream for rope scaling dictionaries."""
         value = self._rope_parameters
-        if value is None and hasattr(self, "text_config") and self.text_config is not None:
-            value = getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
+        if value is None:
+            value = self.rope_scaling
         if value is None:
             return {"rope_type": "default"}
         return value
@@ -325,37 +181,13 @@ class IsaacConfig(PretrainedConfig):
     @rope_parameters.setter
     def rope_parameters(self, value: dict[str, Any] | None) -> None:
         self._rope_parameters = value
-        self._rope_scaling = value
         self.rope_scaling = value
-
-    @property
-    def vision_attn_implementation(self) -> Optional[str]:
-        value = getattr(self.vision_config, "_attn_implementation", None)
-        if value is None:
-            value = getattr(self.vision_config, "attn_implementation", None)
-        return value
-
-    @vision_attn_implementation.setter
-    def vision_attn_implementation(self, value: Optional[str]) -> None:
-        self.vision_config._attn_implementation = value
-        if value is not None:
-            self.vision_config.attn_implementation = value
-        elif hasattr(self.vision_config, "attn_implementation"):
-            delattr(self.vision_config, "attn_implementation")
 
     def to_dict(self):
         output = super().to_dict()
-        rope_params = self.rope_parameters
-        output["rope_parameters"] = rope_params
-        output.pop("rope_scaling", None)
-        output.pop("rope_theta", None)
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
-            text_config_dict = self.text_config.to_dict()
-            text_config_dict.pop("rope_theta", None)
-            text_config_dict.pop("rope_scaling", None)
-            text_config_dict["rope_parameters"] = rope_params
-            output["text_config"] = text_config_dict
+            output["text_config"] = self.text_config.to_dict()
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
