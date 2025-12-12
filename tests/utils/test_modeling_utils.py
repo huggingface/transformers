@@ -1872,22 +1872,19 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        # Mock injection point which is right after the call to `_set_default_dtype`
-        original_set_default_dtype = MistralForCausalLM._set_default_dtype
+        # Mock injection point which is right after the call to `torch.set_default_dtype`
+        original_set_default_dtype = torch.set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
-            side_effect=debug,
-        ):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", dtype=torch.float16)
         # default should still be float32
-        assert torch.get_default_dtype() == torch.float32
+        self.assertTrue(torch.get_default_dtype() == torch.float32)
         torch.set_default_dtype(old_dtype)
 
     def test_restore_default_dtype_from_config(self):
@@ -1899,29 +1896,23 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        config = AutoConfig.from_pretrained(
-            TINY_MISTRAL,
-        )
+        config = AutoConfig.from_pretrained(TINY_MISTRAL)
 
-        # Mock injection point which is right after the call to `_set_default_dtype`
-        original_set_default_dtype = MistralForCausalLM._set_default_dtype
+        # Mock injection point which is right after the call to `torch.set_default_dtype`
+        original_set_default_dtype = torch.set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
-            side_effect=debug,
-        ):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 config.dtype = torch.float16
-                _ = AutoModelForCausalLM.from_config(
-                    config,
-                )
+                _ = AutoModelForCausalLM.from_config(config)
+
         # default should still be float32
-        assert torch.get_default_dtype() == torch.float32
+        self.assertTrue(torch.get_default_dtype() == torch.float32)
         torch.set_default_dtype(old_dtype)
 
     def test_unknown_quantization_config(self):
