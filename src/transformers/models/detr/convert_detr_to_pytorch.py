@@ -16,9 +16,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -108,31 +109,31 @@ def create_rename_keys(config):
             for i in range(3):
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i+1}.weight",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i + 1}.weight",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.weight",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.weight",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.bias",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.bias",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_mean",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.running_mean",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_var",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.running_var",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
@@ -279,9 +280,10 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()

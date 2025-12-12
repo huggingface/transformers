@@ -16,9 +16,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -93,9 +94,9 @@ def create_rename_keys(config):
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
     for level in range(3):
-        rename_keys.append((f"backbone.conv1.conv1_{level+1}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
+        rename_keys.append((f"backbone.conv1.conv1_{level + 1}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
         for last in last_key:
-            rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
+            rename_keys.append((f"backbone.conv1.conv1_{level + 1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
     for stage_idx in range(len(config.backbone_config.depths)):
         for layer_idx in range(config.backbone_config.depths[stage_idx]):
@@ -538,9 +539,9 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

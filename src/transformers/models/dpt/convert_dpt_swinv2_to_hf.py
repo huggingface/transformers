@@ -15,9 +15,10 @@
 """Convert DPT 3.1 checkpoints from the MiDaS repository. URL: https://github.com/isl-org/MiDaS"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -112,7 +113,7 @@ def create_rename_keys(config):
             rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm2.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
 
         # downsample parameters
-        if i in [0,1,2]:
+        if i in [0, 1, 2]:
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.reduction.weight", f"backbone.encoder.layers.{i}.downsample.reduction.weight"))
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
@@ -120,7 +121,7 @@ def create_rename_keys(config):
     # note: non-Transformer backbones like Swinv2, LeViT et al don't require activation postprocessing (readout projections + resize blocks)
 
     # refinenet (tricky here)
-    mapping = {1:3, 2:2, 3:1, 4:0}
+    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -137,7 +138,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     for i in range(0, 5, 2):
@@ -178,8 +179,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -227,8 +229,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, verify_logits, 
         from torchvision import transforms
 
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         transforms = transforms.Compose(
             [
                 transforms.Resize((image_size, image_size)),

@@ -18,9 +18,10 @@ https://github.com/facebookresearch/dinov2/tree/main"""
 import argparse
 import itertools
 import math
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 from torchvision import transforms
@@ -183,8 +184,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "https://dl.fbaipublicfiles.com/dinov2/images/example.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 name_to_url = {

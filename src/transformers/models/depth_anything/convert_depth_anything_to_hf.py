@@ -16,9 +16,10 @@
 https://github.com/LiheYoung/Depth-Anything"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -118,7 +119,7 @@ def create_rename_keys(config):
             rename_keys.append((f"depth_head.resize_layers.{i}.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
-    mapping = {1:3, 2:2, 3:1, 4:0}
+    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -135,7 +136,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"depth_head.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"depth_head.scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.conv1.weight"))
@@ -176,8 +177,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 name_to_checkpoint = {
@@ -254,7 +256,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     )
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 

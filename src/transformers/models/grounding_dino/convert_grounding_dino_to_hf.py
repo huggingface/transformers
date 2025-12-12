@@ -17,8 +17,9 @@
 URL: https://github.com/IDEA-Research/GroundingDINO"""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 from torchvision import transforms as T
@@ -113,7 +114,7 @@ def create_rename_keys(state_dict, config):
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
 
         # downsample
-        if layer!=len(config.backbone_config.depths)-1:
+        if layer != len(config.backbone_config.depths) - 1:
             rename_keys.append((f"backbone.0.layers.{layer}.downsample.reduction.weight",
                                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.downsample.reduction.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.downsample.norm.weight",
@@ -123,9 +124,9 @@ def create_rename_keys(state_dict, config):
 
     for out_indice in config.backbone_config.out_indices:
         # Grounding DINO implementation of out_indices isn't aligned with transformers
-        rename_keys.append((f"backbone.0.norm{out_indice-1}.weight",
+        rename_keys.append((f"backbone.0.norm{out_indice - 1}.weight",
                         f"model.backbone.conv_encoder.model.hidden_states_norms.stage{out_indice}.weight"))
-        rename_keys.append((f"backbone.0.norm{out_indice-1}.bias",
+        rename_keys.append((f"backbone.0.norm{out_indice - 1}.bias",
                         f"model.backbone.conv_encoder.model.hidden_states_norms.stage{out_indice}.bias"))
 
     ########################################## VISION BACKBONE - END
@@ -380,7 +381,8 @@ def read_in_q_k_v_decoder(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
 
