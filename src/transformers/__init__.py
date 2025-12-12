@@ -266,6 +266,7 @@ _import_structure = {
     ],
     "video_utils": [],
     "utils.kernel_config": ["KernelConfig"],
+    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -750,6 +751,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.import_utils import requires_backends
     from .utils.kernel_config import KernelConfig as KernelConfig
 
     # Quantization config

@@ -1825,6 +1825,20 @@ BACKENDS_MAPPING = OrderedDict(
 
 
 def requires_backends(obj, backends):
+    """
+    Method that automatically raises in case the specified backends are not available. It is often used during class
+    initialization to ensure the required dependencies are installed:
+
+    ```py
+    requires_backends(self, ["torch"])
+    ```
+
+    The backends should be defined in the `BACKEND_MAPPING` defined in `transformers.utils.import_utils`.
+
+    Args:
+        obj: object to be checked
+        backends: list or tuple of backends to check.
+    """
     if not isinstance(backends, (list, tuple)):
         backends = [backends]
 
