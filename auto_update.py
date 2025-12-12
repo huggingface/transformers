@@ -215,6 +215,21 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
         stats["blocks"] += 1
         lines = block.split('\n')
 
+        # Extract test name - appears after "test:" line
+        # Format: "test:\n\ntests/models/MODEL/test_modeling_MODEL.py::ClassName::test_name"
+        test_name = None
+        for i, line in enumerate(lines):
+            if line.strip() == 'test:':
+                # Test name is typically 2 lines after (with blank line in between)
+                if i + 2 < len(lines):
+                    test_name = lines[i + 2].strip()
+                    break
+
+        # Extract test file from test name (part before "::")
+        test_name_file = None
+        if test_name and '::' in test_name:
+            test_name_file = test_name.split('::')[0]
+
         # Extract test context - find line starting with "test context:"
         test_file = None
         assertion_line = None
@@ -231,6 +246,16 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
                 break
 
         if not test_file:
+            stats["skipped"] += 1
+            continue
+
+        # Skip if test context file differs from test name file
+        # This happens when test calls a helper function in a different file
+        # Example: test in test_modeling_altclip.py calls helper in test_modeling_common.py
+        if test_name_file and test_file != test_name_file:
+            print(f"Warning: Skipping cross-file test context")
+            print(f"  Test: {test_name_file}")
+            print(f"  Context: {test_file}")
             stats["skipped"] += 1
             continue
 
