@@ -28,7 +28,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -39,7 +38,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     DUMMY_INPUTS,
@@ -163,86 +162,22 @@ class T5LayerFF(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    position_bias: Optional[torch.Tensor] = None,
     scaling: Optional[float] = None,
     dropout: float = 0.0,
-    has_relative_attention_bias: bool = False,
-    is_decoder: bool = False,
-    relative_attention_bias: Optional[torch.Tensor] = None,
-    relative_attention_num_buckets: Optional[int] = None,
-    relative_attention_max_distance: Optional[int] = None,
-    seq_length: Optional[int] = None,
-    relative_context_positions: Optional[torch.LongTensor] = None,  # shape (q_len, 1)
-    output_attentions: Optional[bool] = False,
     **kwargs: Unpack[TransformersKwargs],
-) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-    def _relative_position_bucket(
-        relative_position: torch.Tensor,
-        bidirectional: bool = True,
-        num_buckets: int = 32,
-        max_distance: int = 128,
-    ) -> torch.Tensor:
-        relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
-        else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-        max_exact = num_buckets // 2
-        is_small = relative_position < max_exact
-        relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_position_if_large = torch.min(
-            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
-        )
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
-        return relative_buckets
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-    attn_weights = torch.matmul(query, key.transpose(2, 3))  # (bsz, heads, q_len, k_len)
-
-    if position_bias is not None:
-        # slice to current key length to be safe
-        position_bias = position_bias[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + position_bias
-
-    computed_position_bias = None
-    if has_relative_attention_bias:
-        assert relative_attention_bias is not None, "relative_attention_bias embedding must be provided"
-        q_len = query.shape[2]
-        k_len = key.shape[2]
-
-        if relative_context_positions is None:
-            context_position = torch.arange(q_len, dtype=torch.long, device=query.device)[:, None]
-        else:
-            context_position = relative_context_positions.to(device=query.device, dtype=torch.long)
-        memory_position = torch.arange(k_len, dtype=torch.long, device=query.device)[None, :]
-        relative_position = memory_position - context_position  # (q_len, k_len)
-
-        relative_position_bucket = _relative_position_bucket(
-            relative_position,
-            bidirectional=(not is_decoder),
-            num_buckets=relative_attention_num_buckets,
-            max_distance=relative_attention_max_distance,
-        )
-        values = relative_attention_bias(relative_position_bucket)  # (q_len, k_len, heads)
-        computed_position_bias = (
-            values.permute(2, 0, 1).unsqueeze(0).to(dtype=attn_weights.dtype)
-        )  # (1, heads, q_len, k_len)
-
-        if seq_length is not None and seq_length != q_len:
-            computed_position_bias = computed_position_bias[:, :, -seq_length:, :]
-
-        attn_weights = attn_weights + computed_position_bias
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
         attention_mask = attention_mask[:, :, :, : key.shape[-2]]
@@ -250,9 +185,11 @@ def eager_attention_forward(
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, (attn_weights if output_attentions else None), computed_position_bias
+
+    return attn_output, attn_weights
 
 
 class T5Attention(nn.Module):
@@ -267,14 +204,15 @@ class T5Attention(nn.Module):
         self.config = config
         self.is_decoder = config.is_decoder
         self.is_causal = is_causal
+        self.scaling = 1.0
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
-        self.key_value_proj_dim = config.d_kv
+        self.head_dim = config.d_kv
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.inner_dim = self.n_heads * self.head_dim
         self.layer_idx = layer_idx
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
@@ -293,35 +231,110 @@ class T5Attention(nn.Module):
 
         self.gradient_checkpointing = False
 
+    @staticmethod
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+
+        Returns:
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
+        """
+        relative_buckets = 0
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_position = torch.abs(relative_position)
+        else:
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # now relative_position is in the range [0, inf)
+
+        # half of the buckets are for exact increments in positions
+        max_exact = num_buckets // 2
+        is_small = relative_position < max_exact
+
+        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        relative_position_if_large = max_exact + (
+            torch.log(relative_position.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
+        ).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
+        )
+
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
+        return relative_buckets
+
+    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
+        """Compute binned relative position bias"""
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        if cache_position is None:
+            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        else:
+            context_position = cache_position[:, None].to(device)
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
+        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,  # shape (query_length, key_length)
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        return values
+
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        mask: Optional[torch.FloatTensor] = None,
-        key_value_states: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[torch.FloatTensor] = None,
-        position_bias: Optional[torch.FloatTensor] = None,
-        query_length: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        batch_size, seq_length = hidden_states.shape[:2]
+        hidden_states,
+        mask=None,
+        key_value_states=None,
+        position_bias=None,
+        past_key_values=None,
+        query_length=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
         is_cross_attention = key_value_states is not None
 
-        # Projections
-        query_states = self.q(hidden_states)
-        query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
 
-        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+
+        # get query proj
+        query_states = self.q(hidden_states).view(*q_input_shape).transpose(1, 2)
+
         is_updated = False
-        if isinstance(past_key_values, EncoderDecoderCache):
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_values = past_key_values.cross_attention_cache
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
+                else:
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_values = past_key_values.self_attention_cache
-        else:
-            curr_past_key_values = past_key_values
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
@@ -331,8 +344,8 @@ class T5Attention(nn.Module):
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
-            key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
+            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -344,67 +357,69 @@ class T5Attention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
-        # relative context position computations
-        relative_context_positions = None
-        if self.has_relative_attention_bias:
-            device = query_states.device
-            q_len = query_states.shape[2]
-
-            # We only need the context positions column (q_len, 1). k_idx is not needed for the caller.
-            q_idx = torch.arange(q_len, device=device, dtype=torch.long)
-            if cache_position is not None:
-                if query_length is not None:
-                    real_seq_len_t = torch.as_tensor(query_length, device=device, dtype=torch.long)
-                else:
-                    real_seq_len_t = cache_position[-1].to(device=device, dtype=torch.long) + 1
-                start_q = real_seq_len_t.sub(q_len)  # tensor op only
-                context_pos = start_q.unsqueeze(0) + q_idx  # [q_len]
-                relative_context_positions = context_pos.view(q_len, 1)
+        if position_bias is None:
+            q_length = query_states.shape[-2]
+            kv_length = key_states.shape[-2]
+            # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
+            real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, q_length, kv_length), device=query_states.device, dtype=query_states.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
             else:
-                relative_context_positions = q_idx.view(q_len, 1)
+                position_bias = self.compute_bias(
+                    real_seq_length, kv_length, device=query_states.device, cache_position=cache_position
+                )
+                position_bias = position_bias[:, :, -q_length:, :]
+
+            if mask is not None:
+                if mask.dtype == torch.bool:
+                    min_dtype = torch.finfo(query_states.dtype).min
+                    # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
+                    mask = torch.where(
+                        mask, torch.tensor(0.0, device=mask.device, dtype=query_states.dtype), min_dtype
+                    )
+
+                mask = mask[:, :, :, : key_states.shape[-2]]
+                position_bias = position_bias + mask
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            raise ValueError(
-                "T5Attention only supports attn_implementation='eager' due to relative position bias."
-                "Got: "
-                f"{self.config._attn_implementation} instead. "
-            )
-        attn_output, attn_weights, computed_position_bias = attention_interface(
+            if self.config._attn_implementation != "sdpa":
+                raise ValueError("TODO")
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask=mask,
-            position_bias=position_bias,
+            position_bias,  # position bias acts as mask
             dropout=0.0 if not self.training else self.dropout,
-            # T5 relative bias params
-            has_relative_attention_bias=self.has_relative_attention_bias,
-            is_decoder=self.is_decoder,
-            relative_attention_bias=getattr(self, "relative_attention_bias", None),
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            relative_attention_max_distance=self.relative_attention_max_distance,
-            seq_length=seq_length,
-            relative_context_positions=relative_context_positions,
-            output_attentions=output_attentions,
+            scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.view(batch_size, -1, self.inner_dim).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.o(attn_output)
 
-        outputs = (attn_output, computed_position_bias if computed_position_bias is not None else position_bias)
-        if output_attentions:
+        outputs = (attn_output, position_bias)
+        if kwargs.get("output_attentions"):
             outputs = outputs + (attn_weights,)
+
         return outputs
 
 
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
-        is_causal = config.is_decoder
         self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx, is_causal=is_causal
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            layer_idx=layer_idx,
+            is_causal=config.is_decoder,
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -596,8 +611,8 @@ class T5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
+    _supports_sdpa = True
     _supports_flash_attn = False
-    _supports_sdpa = False
     _supports_flex_attn = False
     _can_compile_fullgraph = True
 
