@@ -1000,6 +1000,15 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
 
                     # Handle inline list literals
                     elif isinstance(arg.value, cst.List):
+                        # Check if list contains variables (not a pure literal)
+                        has_variables = any(
+                            isinstance(elem.value, cst.Name)
+                            for elem in arg.value.elements
+                        )
+                        if has_variables:
+                            # Not a pure literal - contains variables
+                            continue
+
                         arg_pos = self.get_metadata(PositionProvider, arg.value)
                         self.info = PatternInfo(
                             pattern_type="plain_list",
@@ -1011,6 +1020,15 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
 
                     # Handle inline dict literals
                     elif isinstance(arg.value, cst.Dict):
+                        # Check if dict contains variables (not a pure literal)
+                        has_variables = any(
+                            isinstance(elem.key, cst.Name) or isinstance(elem.value, cst.Name)
+                            for elem in arg.value.elements
+                        )
+                        if has_variables:
+                            # Not a pure literal - contains variables
+                            continue
+
                         arg_pos = self.get_metadata(PositionProvider, arg.value)
                         self.info = PatternInfo(
                             pattern_type="plain_dict",
@@ -1022,6 +1040,15 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
 
                     # Handle inline tuple literals
                     elif isinstance(arg.value, cst.Tuple):
+                        # Check if tuple contains variables (not a pure literal)
+                        has_variables = any(
+                            isinstance(elem.value, cst.Name)
+                            for elem in arg.value.elements
+                        )
+                        if has_variables:
+                            # Not a pure literal - contains variables
+                            continue
+
                         arg_pos = self.get_metadata(PositionProvider, arg.value)
                         self.info = PatternInfo(
                             pattern_type="plain_tuple",
