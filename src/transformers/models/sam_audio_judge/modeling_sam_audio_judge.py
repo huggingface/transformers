@@ -450,6 +450,8 @@ class SamAudioJudgeModel(SamAudioJudgePretrainedModel):
         self.register_buffer("mean", torch.zeros(4))
         self.register_buffer("std", torch.ones(4))
 
+        self.post_init()
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -486,7 +488,7 @@ class SamAudioJudgeModel(SamAudioJudgePretrainedModel):
         audio_text_embeds = self.audio_text_proj_2(audio_text_embeds)
 
         output_mask = audio_outputs.output_mask
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=output_mask)
+        inputs_embeds, attention_mask = self.embeddings(audio_text_embeds, padding_mask=output_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)

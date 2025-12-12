@@ -12,9 +12,9 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForImageClassification, AutoModel
-from ..pe_audio.modeling_pe_audio import PEAudioContrastiveHead, PEAudioEncoderEmbeddings
+from ..pe_audio.modeling_pe_audio import PEAudioContrastiveHead, PEAudioEncoderEmbeddings, PEAudioAttention
 from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
+from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from ..timm_wrapper import TimmWrapperConfig
 from .configuration_pe_video import PEVideoConfig, PEVideoEncoderConfig
 
@@ -172,11 +172,7 @@ class PEVideoContrastiveHead(PEAudioContrastiveHead): ...
 class PEVideoEncoderEmbeddings(PEAudioEncoderEmbeddings): ...
 
 
-class PEVideoEncoderAttention(Qwen3Attention):
-    def __init__(self, config, layer_idx):
-        super().__init__(config, layer_idx)
-        self.is_causal = False
-        self.sliding_window = None
+class PEVideoAttention(PEAudioAttention): ...
 
 
 class PEVideoEncoderLayer(Qwen3DecoderLayer):
@@ -197,7 +193,6 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PEVideoEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -206,7 +201,7 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": PEVideoEncoderLayer,
-        "attentions": PEVideoEncoderAttention,
+        "attentions": PEVideoAttention,
     }
     _checkpoint_conversion_mapping = {
         r"^audio_video_encoder\.video_encoder": "video_encoder",
@@ -231,7 +226,7 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     The PEVideo Encoder model.
     """
 )
-class PEVideoEncoder(PEVideoPreTrainedModel):
+class PEVideoEncoder(PEAudioEncoder):
     config: PEVideoEncoderConfig
     base_model_prefix = "video_encoder"
 
