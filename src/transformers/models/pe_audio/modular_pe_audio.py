@@ -74,7 +74,10 @@ class PeAudioEncoderEmbedder(nn.Module):
 class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 
-class PeAudioPretrainedModel(PeAudioVideoPretrainedModel): ...
+class PeAudioPretrainedModel(PeAudioVideoPretrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"audio_video_encoder\.audio_encoder": "audio_encoder",
+    }
 
 
 @dataclass

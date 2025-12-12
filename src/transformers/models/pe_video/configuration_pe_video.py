@@ -86,6 +86,7 @@ class PeVideoEncoderConfig(PreTrainedConfig):
 
     model_type = "pe_video_encoder"
     sub_configs = {"vision_config": TimmWrapperConfig}
+    base_config_key = "audio_video_config"
 
     _default_vision_config_kwargs = {
         "architecture": "vit_pe_core_large_patch14_336",
@@ -135,7 +136,7 @@ class PeVideoEncoderConfig(PreTrainedConfig):
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
             vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
-                **{**self._default_vision_config_kwargs, **vision_config}
+                {**self._default_vision_config_kwargs, **vision_config}
             )
         elif vision_config is None:
             vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
@@ -176,6 +177,7 @@ class PeVideoConfig(PretrainedConfig):
 
     model_type = "pe_video"
     sub_configs = {"text_config": AutoConfig, "video_config": PeVideoEncoderConfig}
+    base_config_key = "audio_video_config"
 
     _default_text_config_kwargs = {
         "model_type": "modernbert",

@@ -87,6 +87,7 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pe_audio_video_encoder"
+    base_config_key = "audio_video_config"
     sub_configs = {"audio_config": AutoConfig, "video_config": AutoConfig}
 
     def __init__(

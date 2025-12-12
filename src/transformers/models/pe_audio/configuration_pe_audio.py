@@ -85,6 +85,7 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
     model_type = "pe_audio_encoder"
     sub_configs = {"dac_config": AutoConfig}
+    base_config_key = "audio_video_config"
 
     _default_dac_config_kwargs = {
         "downsampling_ratios": [2, 8, 10, 12],
@@ -171,6 +172,7 @@ class PeAudioConfig(PretrainedConfig):
 
     model_type = "pe_audio"
     sub_configs = {"text_config": AutoConfig, "audio_config": PeAudioEncoderConfig}
+    base_config_key = "audio_video_config"
 
     _default_text_config_kwargs = {
         "model_type": "modernbert",

@@ -518,7 +518,6 @@ class PeAudioPretrainedModel(PreTrainedModel):
         "hidden_states": PeAudioEncoderLayer,
         "attentions": PeAudioEncoderAttention,
     }
-
     def _init_weights(self, module):
         super()._init_weights(module)
 
