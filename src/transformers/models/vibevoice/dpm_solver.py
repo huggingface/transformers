@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
 from ...utils import is_diffusers_available, logging
 

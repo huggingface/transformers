@@ -24,7 +24,13 @@ import numpy as np
 import torch
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)

@@ -26,10 +26,12 @@ import torch.utils.checkpoint
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...models.auto import AutoModel
-from ...utils import (
-    logging,
+from ...utils import logging
+from .configuration_vibevoice import (
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceConfig,
+    VibeVoiceDiffusionHeadConfig,
 )
-from .configuration_vibevoice import VibeVoiceAcousticTokenizerConfig, VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
 from .dpm_solver import VibeVoiceDPMSolverMultistepScheduler
 
 logger = logging.get_logger(__name__)
@@ -540,12 +542,12 @@ class Block1D(nn.Module):
 
         self.ffn = FFN(dim, kwargs.get("ffn_expansion", 4) * dim, bias=kwargs.get("bias", False))
         self.gamma = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
         self.ffn_gamma = (
-            nn.Parameter(layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            nn.Parameter(layer_scale_init_value * torch.ones(dim), requires_grad=True)
             if layer_scale_init_value > 0
             else None
         )
