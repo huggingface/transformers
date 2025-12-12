@@ -322,6 +322,4 @@ __all__ = [
     "PeAudioFrameLevelModel",
     "PeAudioModel",
     "PeAudioEncoder",
-    "PeAudioEncoderConfig",
-    "PeAudioConfig",
 ]

@@ -154,4 +154,4 @@ class SamAudioJudgeModel(PeAudioVideoEncoder):
         )
 
 
-__all__ = ["SamAudioJudgeModel", "SamAudioJudgeConfig"]
+__all__ = ["SamAudioJudgeModel"]

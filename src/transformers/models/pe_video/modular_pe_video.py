@@ -245,6 +245,4 @@ class PeVideoModel(PeVideoPreTrainedModel):
 __all__ = [
     "PeVideoEncoder",
     "PeVideoModel",
-    "PeVideoEncoderConfig",
-    "PeVideoConfig",
 ]

@@ -717,6 +717,4 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
 __all__ = [
     "PeAudioVideoModel",
     "PeAudioVideoEncoder",
-    "PeAudioVideoEncoderConfig",
-    "PeAudioVideoConfig",
 ]
