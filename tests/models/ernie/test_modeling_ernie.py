@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-import tempfile
 import unittest
 
 from transformers import ErnieConfig, is_torch_available
@@ -30,7 +28,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        DataCollatorWithFlattening,
         ErnieForCausalLM,
         ErnieForMaskedLM,
         ErnieForMultipleChoice,

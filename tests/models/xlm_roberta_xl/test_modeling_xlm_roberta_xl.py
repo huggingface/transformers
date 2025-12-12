@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import inspect
 import tempfile
 import unittest
 
@@ -30,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        DataCollatorWithFlattening,
         XLMRobertaXLForCausalLM,
         XLMRobertaXLForMaskedLM,
         XLMRobertaXLForMultipleChoice,
@@ -513,7 +511,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds, embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
-
 
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2

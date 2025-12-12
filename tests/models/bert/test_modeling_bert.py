@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-import tempfile
 import unittest
 
 import pytest
@@ -46,7 +44,6 @@ if is_torch_available():
         BertForTokenClassification,
         BertLMHeadModel,
         BertModel,
-        DataCollatorWithFlattening,
     )
 
 

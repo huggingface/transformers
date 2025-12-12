@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-import inspect
-import tempfile
 import unittest
 
 from transformers import ElectraConfig, is_torch_available
@@ -32,7 +30,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        DataCollatorWithFlattening,
         ElectraForCausalLM,
         ElectraForMaskedLM,
         ElectraForMultipleChoice,

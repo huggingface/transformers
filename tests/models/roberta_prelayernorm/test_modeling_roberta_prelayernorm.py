@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-import inspect
-import tempfile
 import unittest
 
 from transformers import RobertaPreLayerNormConfig, is_torch_available
@@ -30,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        DataCollatorWithFlattening,
         RobertaPreLayerNormForCausalLM,
         RobertaPreLayerNormForMaskedLM,
         RobertaPreLayerNormForMultipleChoice,

@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-import inspect
-import tempfile
 import unittest
 
 from transformers import BertGenerationConfig, is_torch_available
@@ -29,7 +27,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import BertGenerationDecoder, BertGenerationEncoder, DataCollatorWithFlattening
+    from transformers import BertGenerationDecoder, BertGenerationEncoder
 
 
 class BertGenerationEncoderTester:

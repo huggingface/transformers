@@ -13,8 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Data2VecAudio model."""
 
-import inspect
-import tempfile
 import unittest
 
 from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -38,7 +36,6 @@ if is_torch_available():
         Data2VecTextForSequenceClassification,
         Data2VecTextForTokenClassification,
         Data2VecTextModel,
-        DataCollatorWithFlattening,
     )
     from transformers.models.data2vec.modeling_data2vec_text import Data2VecTextEmbeddings
 

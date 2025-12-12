@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
-import tempfile
 import unittest
 
 import pytest
@@ -31,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        DataCollatorWithFlattening,
         RobertaForCausalLM,
         RobertaForMaskedLM,
         RobertaForMultipleChoice,

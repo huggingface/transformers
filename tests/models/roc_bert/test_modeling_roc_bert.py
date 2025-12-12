@@ -13,8 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch RoCBert model."""
 
-import inspect
-import tempfile
 import unittest
 
 from transformers import RoCBertConfig, is_torch_available
@@ -31,7 +29,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        DataCollatorWithFlattening,
         RoCBertForCausalLM,
         RoCBertForMaskedLM,
         RoCBertForMultipleChoice,
