@@ -987,6 +987,17 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
                         )
                         return
 
+                    # Handle inline string literals
+                    elif isinstance(arg.value, (cst.SimpleString, cst.ConcatenatedString)):
+                        arg_pos = self.get_metadata(PositionProvider, arg.value)
+                        self.info = PatternInfo(
+                            pattern_type="plain_string",
+                            base_indent=arg_pos.start.column,
+                            line_start=arg_pos.start.line,
+                            line_end=arg_pos.end.line
+                        )
+                        return
+
                     # Handle inline list literals
                     elif isinstance(arg.value, cst.List):
                         arg_pos = self.get_metadata(PositionProvider, arg.value)
@@ -1579,27 +1590,32 @@ def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> b
 
 
 def update_inline_torch_tensor(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
-    """Update inline torch.tensor() call - replace only the data argument."""
+    """Update inline torch.tensor() call - replace only the data argument using CST position."""
     with open(filepath) as f:
         lines = f.readlines()
 
     start_idx = info.line_start - 1
-    if start_idx >= len(lines):
+    end_idx = info.line_end - 1
+
+    if start_idx >= len(lines) or end_idx >= len(lines):
         return False
 
-    line = lines[start_idx]
-    # Just replace the value inside torch.tensor()
-    # The position info points to the data argument
-    old_val = task.expectations_var.split('(')[1].rstrip(')')
-    new_val = task.new_value_str.strip()
+    # Single-line case
+    if start_idx == end_idx:
+        line = lines[start_idx]
+        # Use column info to find exact position
+        # Find the data argument and replace it
+        # For torch.tensor([-4.18, -3.4948, -3.4481]), replace the list part
+        old_val = task.expectations_var.split('(', 1)[1].rsplit(')', 1)[0]
+        new_val = task.new_value_str.strip()
 
-    if old_val in line:
-        new_line = line.replace(old_val, new_val, 1)
-        lines[start_idx] = new_line
+        if old_val in line:
+            new_line = line.replace(old_val, new_val, 1)
+            lines[start_idx] = new_line
 
-        with open(filepath, 'w') as f:
-            f.writelines(lines)
-        return True
+            with open(filepath, 'w') as f:
+                f.writelines(lines)
+            return True
 
     return False
 
