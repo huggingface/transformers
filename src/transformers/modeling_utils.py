@@ -4036,7 +4036,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys())
+        # We need parameters + buffers here, as state_dict does not count non-persistent buffers which are taking space
+        expected_keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
@@ -4519,6 +4521,43 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
+def get_total_byte_count(model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer]= None):
+    """
+    This utility function calculates the total bytes count needed to load the model on each device.
+    This is useful for caching_allocator_warmup as we want to know how much cache we need to pre-allocate.
+    """
+    from .integrations.accelerate import compute_module_sizes
+
+    total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = model.all_tied_weights_keys.keys()
+
+    tp_plan = getattr(model, "_tp_plan", []) or []
+    tp_plan_regex = (
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
+        if _torch_distributed_available and torch.distributed.is_initialized()
+        else None
+    )
+
+    modules_sizes, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+    tested = set(modules_sizes.keys())
+    for param_name, device in accelerator_device_map.items():
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            print(f"skipping {param_name}")
+            continue
+
+        param_byte_count = modules_sizes[param_name]
+
+        tested.remove(param_name)
+
+        if tp_plan_regex is not None:
+            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
+            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+
+        total_byte_count[device] += param_byte_count
+    return total_byte_count
+
+
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
@@ -4538,7 +4577,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
+    factor = 2
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
@@ -4547,37 +4586,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
-    tp_plan = getattr(model, "_tp_plan", []) or []
-    tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
-        if _torch_distributed_available and torch.distributed.is_initialized()
-        else None
-    )
-    total_byte_count = defaultdict(lambda: 0)
-    tied_param_names = model.all_tied_weights_keys.keys()
-    for param_name, device in accelerator_device_map.items():
-        # Skip if the parameter has already been accounted for (tied weights)
-        if param_name in tied_param_names:
-            continue
-
-        try:
-            param = model.get_parameter_or_buffer(param_name)
-        except AttributeError:
-            raise AttributeError(f"Parameter {param_name} not found in model")
-
-        if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, param_name, param)
-        else:
-            dtype_size = param.element_size()
-
-        # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = param.numel() * dtype_size
-
-        if tp_plan_regex is not None:
-            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
-            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
-
-        total_byte_count[device] += param_byte_count
+    total_byte_count = get_total_byte_count(model, accelerator_device_map, hf_quantizer)
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
