@@ -174,8 +174,9 @@ class LwDetrConvNormLayer(nn.Module):
 
 
 class LwDetrRepVggBlock(nn.Module):
-    def __init__(self, config: LwDetrConfig, hidden_channels: int):
+    def __init__(self, config: LwDetrConfig):
         super().__init__()
+        hidden_channels = int(config.d_model * config.hidden_expansion)
         self.conv1 = LwDetrConvNormLayer(
             config, hidden_channels, hidden_channels, 3, 1, activation=config.activation_function
         )
@@ -191,17 +192,21 @@ class LwDetrRepVggBlock(nn.Module):
 
 class LwDetrC2FLayer(nn.Module):
     # Inspired by RTDetrCSPRepLayer
-    def __init__(self, config: LwDetrConfig, in_channels: int, out_channels: int):
+    def __init__(self, config: LwDetrConfig, in_channels: int):
         super().__init__()
         num_blocks = config.c2f_num_blocks
         activation = config.activation_function
+        out_channels = config.d_model
 
         self.hidden_channels = int(out_channels * config.hidden_expansion)
+
         conv1_out_channels = 2 * self.hidden_channels
-        conv2_in_channels = (2 + num_blocks) * self.hidden_channels
         self.conv1 = LwDetrConvNormLayer(config, in_channels, conv1_out_channels, 1, 1, activation=activation)
+
+        conv2_in_channels = (2 + num_blocks) * self.hidden_channels
         self.conv2 = LwDetrConvNormLayer(config, conv2_in_channels, out_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.ModuleList(LwDetrRepVggBlock(config, self.hidden_channels) for _ in range(num_blocks))
+
+        self.bottlenecks = nn.ModuleList(LwDetrRepVggBlock(config) for _ in range(num_blocks))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -268,9 +273,10 @@ class LwDetrSamplingLayer(nn.Module):
 
 
 class LwDetrScaleProjector(nn.Module):
-    def __init__(self, config: LwDetrConfig, intermediate_dims: list[int], scale: float, output_dim: int):
+    def __init__(self, config: LwDetrConfig, scale: float):
         super().__init__()
 
+        intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
         sampling_layers = []
         for channel_size in intermediate_dims:
             sampling_layers.append(LwDetrSamplingLayer(config, channel_size, scale))
@@ -284,8 +290,8 @@ class LwDetrScaleProjector(nn.Module):
                 intermediate_dim = intermediate_dim // 2
         projector_input_dim = intermediate_dim * len(intermediate_dims)
 
-        self.projector_layer = LwDetrC2FLayer(config, projector_input_dim, output_dim)
-        self.layer_norm = LwDetrLayerNorm(output_dim, data_format="channels_first")
+        self.projector_layer = LwDetrC2FLayer(config, projector_input_dim)
+        self.layer_norm = LwDetrLayerNorm(config.d_model, data_format="channels_first")
 
     def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
         sampled_hidden_states = []
@@ -299,19 +305,13 @@ class LwDetrScaleProjector(nn.Module):
 
 
 class LwDetrMultiScaleProjector(nn.Module):
-    def __init__(self, config: LwDetrConfig, intermediate_channel_sizes: list[int]):
+    def __init__(self, config: LwDetrConfig):
         super().__init__()
 
         self.config = config
         scale_factors = config.projector_scale_factors
-        output_channels = config.d_model
 
-        self.scale_layers = nn.ModuleList(
-            [
-                LwDetrScaleProjector(config, intermediate_channel_sizes, scale, output_channels)
-                for scale in scale_factors
-            ]
-        )
+        self.scale_layers = nn.ModuleList([LwDetrScaleProjector(config, scale) for scale in scale_factors])
 
     def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
         output_hidden_states = []
@@ -324,7 +324,7 @@ class LwDetrConvEncoder(nn.Module):
     def __init__(self, config: LwDetrConfig):
         super().__init__()
         self.backbone = LwDetrViTBackbone(config.backbone_config)
-        self.projector = LwDetrMultiScaleProjector(config, self.backbone.channels)
+        self.projector = LwDetrMultiScaleProjector(config)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
