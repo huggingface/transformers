@@ -630,9 +630,13 @@ class T5Gemma2ModelTester:
         lm_labels,
         pixel_values,
     ):
+        """
+        Checks whether we can use the shortcuts in our mask generation (SDPA) properly,
+        these rely on the `is_causal` flag to function properly
+        """
         model = self.model_class(config=config).to(torch_device).eval()
 
-        # Force full mask (all true)
+        # Force full mask (all true) which can be shortcircuited to `None`
         attention_mask = torch.ones_like(attention_mask)
         decoder_attention_mask = torch.ones_like(decoder_attention_mask)
 
