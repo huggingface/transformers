@@ -199,7 +199,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(self, pixel_values: torch.FloatTensor, return_dict: bool = False, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = False, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
