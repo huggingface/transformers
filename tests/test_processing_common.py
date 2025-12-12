@@ -433,6 +433,9 @@ class ProcessorTesterMixin:
                         self.assertFalse(hasattr(attribute_second, "_processor_class"))
                         self.assertFalse(hasattr(attribute_first, "_processor_class"))
 
+                        self.assertFalse(hasattr(attribute_second, "processor_class"))
+                        self.assertFalse(hasattr(attribute_first, "processor_class"))
+
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
 
     def test_processor_from_and_save_pretrained_as_nested_dict(self):
