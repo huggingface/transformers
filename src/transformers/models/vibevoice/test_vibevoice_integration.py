@@ -1,13 +1,8 @@
-import unittest
 import shutil
 import tempfile
+import unittest
 
-import torch
 from transformers import VibeVoiceConfig, VibeVoiceForConditionalGeneration
-
-from ...utils import logging
-from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
-from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 
 class VibeVoiceIntegrationTest(unittest.TestCase):

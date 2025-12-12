@@ -22,7 +22,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.nn.utils.parametrizations import weight_norm
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -736,7 +735,6 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
 
-        dtype = torch.float32
         if hasattr(config, "torch_dtype") and config.torch_dtype:
             pass
 

@@ -15,6 +15,7 @@
 """Processor class for VibeVoice."""
 
 import json
+import math
 import os
 import re
 from typing import Any, Optional, Union
