@@ -152,7 +152,7 @@ class Jais2Config(LlamaConfig):
             rope_parameters=rope_parameters,
             **kwargs,
         )
-        # Rename the attribute from rms_norm_eps to layer_norm_eps
+        del self.rms_norm_eps
         self.layer_norm_eps = self.rms_norm_eps
 
         # Validate and standardize RoPE parameters
