@@ -192,6 +192,8 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         else ()
     )
 
+    has_moes = True
+
     def setUp(self):
         self.model_tester = Qwen3VLMoeVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3VLMoeConfig, has_text_modality=False)

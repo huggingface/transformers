@@ -509,6 +509,104 @@ def _test_eager_matches_sdpa_inference(
                 )
 
 
+TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION = [
+    (
+        # test name for the test runner
+        f"{dtype}",
+        # parameterization
+        *(dtype,),
+    )
+    for dtype in ("fp16", "fp32", "bf16")
+]
+
+
+def _get_output_tensors(outputs):
+    output_tensors = []
+
+    if hasattr(outputs, "logits"):
+        output_tensors.append(outputs.logits)
+    if hasattr(outputs, "last_hidden_state"):
+        output_tensors.append(outputs.last_hidden_state)
+    if hasattr(outputs, "start_logits"):
+        output_tensors.append(outputs.start_logits)
+    if hasattr(outputs, "end_logits"):
+        output_tensors.append(outputs.end_logits)
+
+    return output_tensors
+
+
+def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+    if not self.has_moes:
+        self.skipTest(reason="Model architecture does not support Mixture of Experts (MoE)")
+
+    # convert shorthand name to torch.dtype
+    if dtype == "fp16":
+        dtype = torch.float16
+    elif dtype == "bf16":
+        dtype = torch.bfloat16
+    elif dtype == "fp32":
+        dtype = torch.float32
+
+    if not is_torch_fp16_available_on_device(torch_device) and dtype == torch.float16:
+        self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+    if not is_torch_bf16_available_on_device(torch_device) and dtype == torch.bfloat16:
+        self.skipTest(
+            f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+        )
+
+    for model_class in self.all_model_classes:
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Make sure the dimensions are multiples of 8 to avoid issues with torch._grouped_mm
+        # 8 multiples here because we test with fp32 (4 bytes) and fp16/bf16 (2 bytes)
+        # giving us at least 16 bytes alignment (which is the requirement for torch._grouped_mm)
+        if hasattr(config, "intermediate_size"):
+            config.intermediate_size += (-config.intermediate_size) % 8
+        if hasattr(config, "moe_intermediate_size"):
+            config.moe_intermediate_size += (-config.moe_intermediate_size) % 8
+        if hasattr(config, "text_config") and hasattr(config.text_config, "intermediate_size"):
+            config.text_config.intermediate_size += (-config.text_config.intermediate_size) % 8
+
+        set_config_for_less_flaky_test(config)
+        model = model_class(config)
+        set_model_for_less_flaky_test(model)
+
+        # Load with dtype
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
+
+        # Disable cache for now
+        inputs_dict.pop("use_cache", None)
+        for module in model.modules():
+            if hasattr(module, "config") and hasattr(module.config, "use_cache"):
+                module.config.use_cache = False
+
+        with torch.no_grad():
+            inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            model.set_moe_implementation("eager")
+            outputs_eager = model(**prepared_inputs)
+            outputs_eager = _get_output_tensors(outputs_eager)
+
+            model.set_moe_implementation("batched_mm")
+            outputs_batched_mm = model(**prepared_inputs)
+            outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
+
+            model.set_moe_implementation("grouped_mm")
+            outputs_grouped_mm = model(**prepared_inputs)
+            outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
+
+        self.assertTrue(outputs_eager, "No outputs from eager implementation")
+        self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
+        self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
+
+        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
+
+
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__:
@@ -579,6 +677,7 @@ class ModelTesterMixin:
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
+    has_moes = False
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 
@@ -3081,6 +3180,10 @@ class ModelTesterMixin:
         _test_eager_matches_sdpa_inference(
             self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     @require_torch_accelerator
     @slow
