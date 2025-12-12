@@ -490,7 +490,14 @@ class AutoTokenizerTest(unittest.TestCase):
             EnvironmentError, "bert-base is not a local folder and is not a valid model identifier"
         ):
             _ = AutoTokenizer.from_pretrained("bert-base")
+    def test_voxtral_missing_tokenizer_error():
+        from transformers import AutoTokenizer
+        import pytest
 
+        with pytest.raises(OSError) as exc:
+            AutoTokenizer.from_pretrained("Qwen/Qwen2.5-VL-Voxtral")
+
+        assert "unsupported tokenizer type" in str(exc.value)
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
