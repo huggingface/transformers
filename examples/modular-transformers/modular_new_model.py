@@ -23,11 +23,10 @@ class NewModelConfig(GemmaConfig):
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
+        rope_parameters=None,
         attention_bias=False,
         attention_dropout=0.0,
         use_bidirectional_attention=False,
-        layer_types=None,
         **kwargs,
     ):
         super().__init__(self, **kwargs)
