@@ -20,9 +20,10 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 import argparse
 import os
 import re
+from io import BytesIO
 from typing import Optional
 
-import requests
+import httpx
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from PIL import Image
@@ -84,7 +85,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ConvNextConfig:
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
 

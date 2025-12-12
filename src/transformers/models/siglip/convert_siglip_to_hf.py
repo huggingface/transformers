@@ -20,9 +20,10 @@ URL: https://github.com/google-research/big_vision/tree/main
 import argparse
 import collections
 import os
+from io import BytesIO
 
+import httpx
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from numpy import load
@@ -359,7 +360,8 @@ def read_in_q_k_v_head(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -415,9 +417,11 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # Verify forward pass on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
-    image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url_1) as response:
+        image_1 = Image.open(BytesIO(response.read())).convert("RGB")
     url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
-    image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url_2) as response:
+        image_2 = Image.open(BytesIO(response.read())).convert("RGB")
     texts = ["an apple", "a picture of an apple"]
 
     inputs = processor(images=[image_1, image_2], text=texts, padding="max_length", max_length=64, return_tensors="pt")

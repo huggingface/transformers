@@ -22,9 +22,10 @@ Notebook to get the original logits: https://colab.research.google.com/drive/1QD
 import argparse
 import os
 import re
+from io import BytesIO
 from typing import Optional
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -182,7 +183,8 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 

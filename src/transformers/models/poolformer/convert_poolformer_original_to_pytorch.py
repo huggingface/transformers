@@ -17,9 +17,10 @@
 import argparse
 import json
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -84,8 +85,8 @@ def rename_keys(state_dict):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 

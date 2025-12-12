@@ -17,8 +17,9 @@
 URL: https://github.com/om-ai-lab/OmDet"""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -74,7 +75,7 @@ def create_rename_keys_vision(state_dict, config):
                 if "downsample" in layer_name:
                     # get layer number
                     layer_num = int(layer_name.split(".")[2])
-                    layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num+1}.downsample")
+                    layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num + 1}.downsample")
             else:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone")
                 layer_name_replace = layer_name_replace.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
@@ -91,9 +92,9 @@ def create_rename_keys_vision(state_dict, config):
             layer_num = int(layer_name.split("norm")[1].split(".")[0])
             if config.use_timm_backbone:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone")
-                layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
+                layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num - 1}")
             else:
-                layer_name_replace = layer_name.replace(f"backbone.norm{layer_num}", f"vision_backbone.vision_backbone.hidden_states_norms.stage{layer_num+1}")
+                layer_name_replace = layer_name.replace(f"backbone.norm{layer_num}", f"vision_backbone.vision_backbone.hidden_states_norms.stage{layer_num + 1}")
         else:
             continue
         rename_keys.append((layer_name, layer_name_replace))
@@ -237,7 +238,8 @@ def read_in_q_k_v_decoder(state_dict, config):
 def run_test(model, processor):
     # We will verify our results on an image of cute cats
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     classes = ["cat", "remote"]
     task = "Detect {}.".format(", ".join(classes))

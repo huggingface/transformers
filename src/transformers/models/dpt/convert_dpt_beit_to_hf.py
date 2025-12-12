@@ -15,9 +15,10 @@
 """Convert DPT 3.1 checkpoints from the MiDaS repository. URL: https://github.com/isl-org/MiDaS"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -96,18 +97,18 @@ def create_rename_keys(config):
 
     # activation postprocessing (readout projections + resize blocks)
     for i in range(4):
-        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i + 1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
         rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
 
-        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
-        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
+        rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
 
         if i != 2:
-            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
-            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
+            rename_keys.append((f"pretrained.act_postprocess{i + 1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
+            rename_keys.append((f"pretrained.act_postprocess{i + 1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
-    mapping = {1:3, 2:2, 3:1, 4:0}
+    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -124,7 +125,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     for i in range(0, 5, 2):
@@ -166,8 +167,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -218,12 +220,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("Mean of pixel values:", pixel_values.mean().item())
     print("Shape of pixel values:", pixel_values.shape)
 
-    import requests
     from PIL import Image
     from torchvision import transforms
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     transforms = transforms.Compose(
         [

@@ -10,7 +10,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-import requests
+import httpx
 from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
 from packaging import version
@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 def get_last_stable_minor_release():
     # Get the last stable release of transformers
     url = "https://pypi.org/pypi/transformers/json"
-    release_data = requests.get(url).json()
+    release_data = httpx.get(url).json()
 
     # Find the last stable release of transformers (version below current version)
     major_version, minor_version, patch_version, _ = current_version.split(".")
