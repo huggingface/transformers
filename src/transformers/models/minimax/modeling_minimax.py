@@ -480,7 +480,7 @@ class MiniMaxExperts(nn.Module):
 
     def __init__(self, config: MiniMaxConfig):
         super().__init__()
-        self.config = config
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.num_experts = config.num_local_experts
         self.intermediate_dim = config.intermediate_size

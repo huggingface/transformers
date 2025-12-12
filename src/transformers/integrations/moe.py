@@ -190,7 +190,12 @@ ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
 
 def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
+    original_init = experts_class.__init__
     original_forward = experts_class.forward
+
+    def __init__(self, config):
+        original_init(self, config)
+        self.config = config
 
     def forward(self, *args, **kwargs):
         experts_forward = original_forward
@@ -200,5 +205,6 @@ def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[tor
 
         return experts_forward(self, *args, **kwargs)
 
+    experts_class.__init__ = __init__
     experts_class.forward = forward
     return experts_class
