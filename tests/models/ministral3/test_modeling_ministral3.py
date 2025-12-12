@@ -110,14 +110,14 @@ class Ministral3IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_model_3b_generation(self):
         # fmt: off
-        EXPECTED_TEXT_COMPLETIONS = Expectations(
+        EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", None): ["My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",],
-                ("xpu", None): ["My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",],
+                ("cuda", None): "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
+                ("xpu", None): "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",
             }
         )
         # fmt: on
-        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
         model = Mistral3ForConditionalGeneration.from_pretrained(
@@ -128,7 +128,7 @@ class Ministral3IntegrationTest(unittest.TestCase):
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertIn(text, EXPECTED_TEXT_COMPLETION)
+        self.assertEqual(text, EXPECTED_TEXT)
 
         del model
         backend_empty_cache(torch_device)
