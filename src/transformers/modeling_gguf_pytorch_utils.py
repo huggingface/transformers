@@ -20,6 +20,7 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from .integrations import (
+    GGUF_CONFIG_DEFAULTS_MAPPING,
     GGUF_CONFIG_MAPPING,
     GGUF_TOKENIZER_MAPPING,
     _gguf_parse_value,
@@ -436,6 +437,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     parsed_parameters["config"]["tie_word_embeddings"] = (
         all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
     )
+
+    # Set GGUF-specific default values
+    config_defaults = GGUF_CONFIG_DEFAULTS_MAPPING.get(
+        updated_architecture, GGUF_CONFIG_DEFAULTS_MAPPING.get(architecture) or {}
+    )
+    for key, value in config_defaults.items():
+        parsed_parameters["config"].setdefault(key, value)
 
     # List all key-value pairs in a columnized format
     for gguf_key, field in reader.fields.items():
