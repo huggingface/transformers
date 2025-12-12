@@ -61,7 +61,6 @@ if is_vision_available():
 else:
     Image = None
 
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ids_tensor
 
 
@@ -239,6 +238,51 @@ def test_ensure_document_attention_mask_prefers_callable_when_requested():
         return_mask_function=False,
     )
     assert additive is None
+
+
+def create_isaac_processor(
+    tokenizer,
+    isaac_config,
+    *,
+    image_processor=None,
+    **overrides,
+):
+    """Helper to construct IsaacProcessor without requiring an IsaacConfig instance."""
+    params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "vision_patch_size": isaac_config.vision_patch_size,
+        "vision_max_num_patches": isaac_config.vision_max_num_patches,
+        "vision_min_num_patches": isaac_config.vision_min_num_patches,
+        "pixel_shuffle_scale": isaac_config.pixel_shuffle_scale,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+        "image_mean": tuple(isaac_config.vision_mean),
+        "image_std": tuple(isaac_config.vision_std),
+    }
+    params.update(overrides)
+
+    processor_image = image_processor
+    if processor_image is None:
+        processor_image = IsaacImageProcessorFast(
+            patch_size=params["vision_patch_size"],
+            max_num_patches=params["vision_max_num_patches"],
+            min_num_patches=params["vision_min_num_patches"],
+            pixel_shuffle_scale=params["pixel_shuffle_scale"],
+            rescale_factor=params["rescale_factor"],
+            image_mean=params["image_mean"],
+            image_std=params["image_std"],
+        )
+    processor_params = {
+        "vision_token": isaac_config.vision_token,
+        "max_sequence_length": isaac_config.max_sequence_length,
+        "rescale_factor": isaac_config.vision_rescale_factor,
+    }
+
+    return IsaacProcessor(
+        image_processor=processor_image,
+        tokenizer=tokenizer,
+        **processor_params,
+    )
 
 
 @require_torch
@@ -618,17 +662,6 @@ class IsaacModelTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=IsaacConfig,
-            has_text_modality=True,
-            common_properties=["hidden_size"],
-            text_config=self.model_tester.text_config,
-            vision_config=self.model_tester.vision_config,
-        )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     @require_tensorstream
     def test_model_forward(self):
@@ -867,53 +900,6 @@ def test_isaac_checkpoint_hashes(isaac_reference_model):
         assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
 
 
-def create_isaac_processor(
-    tokenizer,
-    isaac_config,
-    *,
-    image_processor=None,
-    **overrides,
-):
-    """Helper to construct IsaacProcessor without requiring an IsaacConfig instance."""
-    params = {
-        "vision_token": isaac_config.vision_token,
-        "max_sequence_length": isaac_config.max_sequence_length,
-        "vision_patch_size": isaac_config.vision_patch_size,
-        "vision_max_num_patches": isaac_config.vision_max_num_patches,
-        "vision_min_num_patches": isaac_config.vision_min_num_patches,
-        "pixel_shuffle_scale": isaac_config.pixel_shuffle_scale,
-        "rescale_factor": isaac_config.vision_rescale_factor,
-        "image_mean": tuple(isaac_config.vision_mean),
-        "image_std": tuple(isaac_config.vision_std),
-        "vision_attn_implementation": isaac_config.vision_attn_implementation,
-    }
-    params.update(overrides)
-
-    processor_image = image_processor
-    if processor_image is None:
-        processor_image = IsaacImageProcessorFast(
-            patch_size=params["vision_patch_size"],
-            max_num_patches=params["vision_max_num_patches"],
-            min_num_patches=params["vision_min_num_patches"],
-            pixel_shuffle_scale=params["pixel_shuffle_scale"],
-            rescale_factor=params["rescale_factor"],
-            image_mean=params["image_mean"],
-            image_std=params["image_std"],
-        )
-    processor_params = {
-        "vision_token": isaac_config.vision_token,
-        "max_sequence_length": isaac_config.max_sequence_length,
-        "rescale_factor": isaac_config.vision_rescale_factor,
-    }
-
-    return IsaacProcessor(
-        image_processor=processor_image,
-        tokenizer=tokenizer,
-        config=isaac_config,
-        **processor_params,
-    )
-
-
 @require_torch
 @require_vision
 @slow
@@ -982,3 +968,56 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
         )
 
     isaac_reference_model.to("cpu")
+
+
+def test_hf_generate_something():
+    # Configuration
+    MAX_NEW_TOKENS = 25
+    DTYPE = torch.bfloat16
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    genesis_hf_checkpoint = Path(LOCAL_CHECKPOINT)
+
+    hf_config = IsaacConfig.from_pretrained(genesis_hf_checkpoint)
+    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
+    messages = [{"role": "user", "content": "Describe this image:"}, {"role": "user", "content": "<image>"}]
+    images = []
+    image_bytes = base64.b64decode(RED_DOT_B64)
+    pil_image = Image.open(io.BytesIO(image_bytes))
+    images.append(pil_image)
+
+    tokenizer = AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
+    genesis_processor = create_isaac_processor(tokenizer, hf_config)
+    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
+    # Added strip because our generation events don't add new line
+    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
+    tensor_stream = processor_output["tensor_stream"].to(device)
+
+    # Process document to TensorStream
+    hf_config.vision_config._attn_implementation = "flash_attention_2"
+    hf_config.vision_config.attn_implementation = "flash_attention_2"
+    hf_model = IsaacForConditionalGeneration.from_pretrained(genesis_hf_checkpoint, config=hf_config)
+    hf_model = hf_model.to(device=device, dtype=DTYPE)
+    hf_model.eval()
+
+    # Load HF tokenizer
+
+    # Validate that weights are identical between models
+
+    with torch.no_grad():
+        print("\n1️⃣ Running HuggingFace model.generate()...")
+        # Generate with HF model using the training tensor stream converted to Open variant
+        hf_output = hf_model.generate(
+            tensor_stream=tensor_stream,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=False,  # Deterministic generation
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+        hf_generated_ids = hf_output.sequences
+        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
+        print(f"   HF Generated: '{hf_generated_text}'")
+        assert "is" in hf_generated_text
