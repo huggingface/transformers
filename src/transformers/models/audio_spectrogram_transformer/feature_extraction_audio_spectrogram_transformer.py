@@ -106,22 +106,34 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
     def _extract_fbank_features(
         self,
-        waveform: np.ndarray,
+        waveform: Union[np.ndarray, "torch.Tensor"],
         max_length: int,
-    ) -> np.ndarray:
+        convert_to_tensor: bool = False,
+    ) -> Union[np.ndarray, "torch.Tensor"]:
         """
         Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
         and hence the waveform should not be normalized before feature extraction.
         """
         # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
         if is_speech_available():
-            waveform = torch.from_numpy(waveform).unsqueeze(0)
-            fbank = ta_kaldi.fbank(
-                waveform,
-                sample_frequency=self.sampling_rate,
-                window_type="hanning",
-                num_mel_bins=self.num_mel_bins,
-            )
+            if is_torch_available() and isinstance(waveform, torch.Tensor):
+                if waveform.ndim != 1:
+                    raise ValueError(f"Input waveform must be 1D, but got {waveform.ndim}D tensor.")
+                waveform = waveform.unsqueeze(0)
+                fbank = ta_kaldi.fbank(
+                    waveform,
+                    sample_frequency=self.sampling_rate,
+                    window_type="hanning",
+                    num_mel_bins=self.num_mel_bins,
+                )
+            else:
+                waveform = torch.from_numpy(waveform).unsqueeze(0)
+                fbank = ta_kaldi.fbank(
+                    waveform,
+                    sample_frequency=self.sampling_rate,
+                    window_type="hanning",
+                    num_mel_bins=self.num_mel_bins,
+                )
         else:
             waveform = np.squeeze(waveform)
             fbank = spectrogram(
@@ -151,7 +163,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         elif difference < 0:
             fbank = fbank[0:max_length, :]
 
-        fbank = fbank.numpy()
+        if not convert_to_tensor and not isinstance(waveform, torch.Tensor):
+            fbank = fbank.numpy()
 
         return fbank
 
@@ -196,26 +209,51 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
-        )
-
-        if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
+        is_batched = False
+        if is_torch_available() and isinstance(raw_speech, torch.Tensor):
+            if raw_speech.ndim == 2:
+                is_batched = True
+                # Split 2D tensor [B, L] into list of 1D tensors [L]
+                raw_speech = list(raw_speech.unbind(0))
+            elif raw_speech.ndim == 1:
+                is_batched = False
+                raw_speech = [raw_speech]
+            elif raw_speech.ndim > 2:
+                raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        else:
+            is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+            if is_batched_numpy and len(raw_speech.shape) > 2:
+                raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+    
+            is_batched = is_batched_numpy or (
+                isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            )
+    
+            if is_batched:
+                raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
+            elif not is_batched and not isinstance(raw_speech, np.ndarray):
+                raw_speech = np.asarray(raw_speech, dtype=np.float32)
+            elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+                raw_speech = raw_speech.astype(np.float32)
+    
+            # always return batch
+            if not is_batched:
+                raw_speech = [raw_speech]
 
         # extract fbank features and pad/truncate to max_length
-        features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
+        features = [
+            self._extract_fbank_features(
+                waveform, 
+                max_length=self.max_length, 
+                convert_to_tensor=(return_tensors == "pt")
+            ) 
+            for waveform in raw_speech
+        ]
+
+        if is_torch_available() and isinstance(features[0], torch.Tensor) and return_tensors == "pt":
+            features = torch.stack(features)
+        elif isinstance(features[0], torch.Tensor) and return_tensors != "pt":
+             features = [f.numpy() for f in features]
 
         # convert into BatchFeature
         padded_inputs = BatchFeature({"input_values": features})
@@ -227,7 +265,10 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
         # normalization
         if self.do_normalize:
-            padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
+            if is_torch_available() and isinstance(input_values, torch.Tensor):
+                padded_inputs["input_values"] = self.normalize(input_values)
+            else:
+                padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
