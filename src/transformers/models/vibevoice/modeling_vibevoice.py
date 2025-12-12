@@ -30,8 +30,7 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -545,19 +544,6 @@ class VibeVoiceSemanticTokenizerModel(VibeVoicePreTrainedModel):
             latents=latents,
             padding_cache=padding_cache if use_cache else None,
         )
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, audio, padding_cache=None, use_cache=None, **kwargs: Unpack[TransformersKwargs]):
-        r"""
-        audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input audio waveform to be encoded into latent representations.
-        padding_cache (`VibeVoiceConv1dCache`, *optional*):
-            Cache object for streaming mode to maintain convolution states across layers.
-        use_cache (`bool`, *optional*):
-            Whether to use caching for convolution states.
-        """
-        return self.encode(audio, padding_cache=padding_cache, use_cache=use_cache)
 
 
 @auto_docstring(
