@@ -32,6 +32,9 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # composite model that enforces its own logic over to encoder-decoder
+    "T5Gemma2DecoderConfig:": ["use_bidirectional_attention"],
+    "T5Gemma2TextConfig::": ["use_bidirectional_attention"],
     "AfmoeConfig": [
         "global_attn_every_n_layers",  # used internally in config to generate `layer_types`
         "rope_scaling",  # used internally in config to generate `rope_parameters`
