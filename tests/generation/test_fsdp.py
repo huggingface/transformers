@@ -17,7 +17,7 @@ import textwrap
 from collections.abc import Callable
 from typing import Any
 
-from transformers import is_torch_available, is_torch_xpu_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -34,7 +34,6 @@ if is_torch_available():
     import functools
 
     import torch
-
     import torch.distributed
     from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
     from torch.distributed.device_mesh import init_device_mesh
