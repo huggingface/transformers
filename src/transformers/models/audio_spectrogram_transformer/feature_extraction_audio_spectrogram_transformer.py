@@ -151,7 +151,6 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
-
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -231,5 +230,4 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         return padded_inputs
 
 
-__all__ = ["ASTFeatureExtractor"] 
-
+__all__ = ["ASTFeatureExtractor"]

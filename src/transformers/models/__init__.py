@@ -365,6 +365,7 @@ if TYPE_CHECKING:
     from .univnet import *
     from .upernet import *
     from .vaultgemma import *
+    from .vibevoice import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
@@ -373,7 +374,7 @@ if TYPE_CHECKING:
     from .vision_encoder_decoder import *
     from .vision_text_dual_encoder import *
     from .visual_bert import *
-    from .vibevoice import *
+
     from .vit import *
     from .vit_mae import *
     from .vit_msn import *
