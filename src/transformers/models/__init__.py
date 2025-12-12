@@ -208,6 +208,7 @@ if TYPE_CHECKING:
     from .longformer import *
     from .longt5 import *
     from .luke import *
+    from .lw_detr import *
     from .lxmert import *
     from .m2m_100 import *
     from .mamba import *
@@ -307,6 +308,7 @@ if TYPE_CHECKING:
     from .regnet import *
     from .rembert import *
     from .resnet import *
+    from .rf_detr import *
     from .roberta import *
     from .roberta_prelayernorm import *
     from .roc_bert import *
