@@ -55,10 +55,16 @@ def select_target_argument(arg_expressions: List[str], arg_names: List[str] = No
     - Which is the expected value to update
 
     Strategy:
-    1. Prefer literal expressions (torch.tensor(...), [1,2,3], etc.) - these appear inline
-    2. Check argument names: prefer 'expected' over 'actual'
-    3. Prefer argument starting with "EXPECT" (case-insensitive)
-    4. Otherwise, use the second argument (index 1)
+    1. Check if any argument starts with "EXPECT" (case-insensitive) - HIGHEST PRIORITY
+       These are clearly expected values that should be updated
+    2. Prefer literal expressions (torch.tensor(...), [1,2,3], etc.) - these appear inline
+    3. For torch.testing.assert_close: use 'actual' parameter (confusingly named - it's the expected value)
+    4. For other assertions: prefer argument named 'expected'
+    5. Otherwise, use the first argument (index 0) as default
+
+    Note: torch.testing.assert_close has confusing parameter names:
+    - actual = reference/expected value (constant, should be updated)
+    - expected = computed/runtime value (from test execution)
 
     Args:
         arg_expressions: List of argument expressions (we only use first 2)
@@ -71,24 +77,34 @@ def select_target_argument(arg_expressions: List[str], arg_names: List[str] = No
     first_two_exprs = arg_expressions[:2]
     first_two_names = arg_names[:2] if arg_names else []
 
-    # Strategy 1: Prefer literal expressions (these are inline constants to update)
-    for arg in first_two_exprs:
-        if is_literal_expression(arg):
-            return arg
-
-    # Strategy 2: Use argument names if available
-    if first_two_names and len(first_two_names) == len(first_two_exprs):
-        for i, name in enumerate(first_two_names):
-            if name and name.lower() in ['expected', 'expect']:
-                return first_two_exprs[i]
-
-    # Strategy 3: Check if any argument starts with "EXPECT" (case-insensitive)
+    # Strategy 1: Prefer arguments starting with "EXPECT" - HIGHEST PRIORITY
+    # These are clearly expected values that should be updated
     for arg in first_two_exprs:
         if arg.upper().startswith("EXPECT"):
             return arg
 
-    # Strategy 4: Default to second argument
-    return first_two_exprs[1] if len(first_two_exprs) > 1 else first_two_exprs[0]
+    # Strategy 2: Prefer literal expressions (these are inline constants to update)
+    for arg in first_two_exprs:
+        if is_literal_expression(arg):
+            return arg
+
+    # Strategy 3 & 4: Use argument names if available
+    if first_two_names and len(first_two_names) == len(first_two_exprs):
+        # Special handling for torch.testing.assert_close which has backwards naming
+        # In assert_close(actual, expected): 'actual' is the expected value to update
+        if 'actual' in [n.lower() for n in first_two_names if n]:
+            for i, name in enumerate(first_two_names):
+                if name and name.lower() == 'actual':
+                    return first_two_exprs[i]
+
+        # For other assertions, prefer 'expected' parameter
+        for i, name in enumerate(first_two_names):
+            if name and name.lower() in ['expected', 'expect']:
+                return first_two_exprs[i]
+
+    # Strategy 5: Default to first argument
+    # In most assertions: assertEqual(expected, actual), the first is expected
+    return first_two_exprs[0] if len(first_two_exprs) > 0 else first_two_exprs[0]
 
 
 def is_literal_expression(expr: str) -> bool:
@@ -353,7 +369,7 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
 
     # First pass: look for exact variable name (skip self-referential and derived)
     start = min(from_line - 1, len(lines) - 1)
-    stop = max(0, start - 50)
+    stop = max(0, start - 150)  # Increased from 50 to 150 to handle larger test functions
     for i in range(start, stop, -1):
         if i >= len(lines):
             continue
@@ -378,7 +394,7 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
 
     # Second pass: look for Expectations pattern (if exact variable not found)
     start = min(from_line - 1, len(lines) - 1)
-    stop = max(0, start - 50)
+    stop = max(0, start - 150)  # Increased from 50 to 150
     for i in range(start, stop, -1):
         if i >= len(lines):
             continue
@@ -402,7 +418,7 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
 
     # Third pass: look for torch.tensor patterns
     start = min(from_line - 1, len(lines) - 1)
-    stop = max(0, start - 50)
+    stop = max(0, start - 150)  # Increased from 50 to 150
     for i in range(start, stop, -1):
         if i >= len(lines):
             continue
