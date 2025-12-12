@@ -21,6 +21,7 @@ import pytest
 
 from transformers import AutoTokenizer, Mistral3ForConditionalGeneration, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     cleanup,
     require_deterministic_for_xpu,
@@ -90,11 +91,15 @@ class Ministral3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = (
-            torch.tensor([[-0.9800, -2.4773, -0.2386, -1.0664, -1.8994, -1.3792, -1.0531, -1.8832]])
-            if model.device.type == "xpu"
-            else torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]])
+        # fmt: off
+        EXPECTED_MEANS = Expectations(
+            {
+                ("cuda", None): torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]]),
+                ("xpu", None): torch.tensor([[-0.9800, -2.4773, -0.2386, -1.0664, -1.8994, -1.3792, -1.0531, -1.8832]]),
+            }
         )
+        # fmt: on
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
 
         del model
@@ -104,10 +109,15 @@ class Ministral3IntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_model_3b_generation(self):
-        EXPECTED_TEXT_COMPLETION = [
-            "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
-            "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",  # XPU
-        ]
+        # fmt: off
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", None): ["My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",],
+                ("xpu", None): ["My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512")
         model = Mistral3ForConditionalGeneration.from_pretrained(
