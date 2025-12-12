@@ -15,25 +15,28 @@ rendered properly in your Markdown viewer.
 
 # Assisted decoding
 
-Advanced decoding methods aim at either tackling specific generation quality issues (e.g. repetition) or at improving the generation throughput in certain situations. These techniques are more complex, and may not work correctly with all models.
+Assisted decoding speeds up text generation by allowing a helper propose candidate tokens before the main model commits to them. The main model verifies the candidate tokens in one forward pass. The helper is fast and cheap and can replace dozens of more expensive forward passes by the main model.
+
+This guide covers assisted decoding methods in Transformers.
 
 ## Speculative decoding
 
-[Speculative](https://hf.co/papers/2211.17192) or assistive decoding isn't a search or sampling strategy. Instead, speculative decoding adds a second smaller model to generate candidate tokens. The main model verifies the candidate tokens in a single `forward` pass, which speeds up the decoding process overall. This method is especially useful for LLMs where it can be more costly and slower to generate tokens. Refer to the [speculative decoding](./llm_optims#speculative-decoding) guide to learn more.
+[Speculative decoding](https://hf.co/papers/2211.17192) uses a smaller assistant model to draft candidate tokens. The main model checks these tokens in one pass. Validated tokens enter the final output and rejected tokens trigger standard sampling. Generation is faster because the main model runs fewer expensive forward passes.
 
-Currently, only greedy search and multinomial sampling are supported with speculative decoding. Batched inputs aren't supported either.
+The method works best when the assistant model is significantly smaller than the main model and uses the same tokenizer. Speculative decoding supports greedy search and sampling but not batched inputs.
 
-Enable speculative decoding with the `assistant_model` parameter. You'll notice the fastest speed up with an assistant model that is much smaller than the main model. Add `do_sample=True` to enable token validation with resampling.
+Pass `assistant_model` to [`~GenerationMixin.generate`]. Set `do_sample=True` to resample if token validation fails.
 
 <hfoptions id="spec-decoding">
 <hfoption id="greedy search">
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype="auto")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
 outputs = model.generate(**inputs, assistant_model=assistant_model)
@@ -41,33 +44,32 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 'Hugging Face is an open-source company that provides a platform for developers to build and deploy machine'
 ```
 
-Speculative decoding is also supported in [`Pipeline`] with the `assistant_model` parameter.
+The `assistant_model` argument is also available in the [`Pipeline`] API.
 
 ```python
-from transformers import pipeline
 import torch
+from transformers import pipeline
 
-pipe = pipeline(
+pipeline = pipeline(
     "text-generation",
     model="meta-llama/Llama-3.1-8B",
     assistant_model="meta-llama/Llama-3.2-1B",
-    dtype=torch.bfloat16
+    dtype="auto"
 )
-pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
-pipe_output[0]["generated_text"]
+pipeline("Hugging Face is an open-source company, ", max_new_tokens=50, do_sample=False)
 ```
 
 </hfoption>
-<hfoption id="multinomial sampling">
+<hfoption id="sampling">
 
-Add the `temperature` parameter to control sampling randomness. For speculative decoding, a lower temperature may improve latency.
+Set `temperature` to control randomness. Lower temperatures often improve latency.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype="auto")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
 outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
@@ -80,69 +82,86 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## Prompt lookup decoding
 
-[Prompt lookup decoding](./llm_optims#prompt-lookup-decoding) is a variant of speculative decoding that uses overlapping n-grams as the candidate tokens. It works well for input-grounded tasks such as summarization. Refer to the [prompt lookup decoding](./llm_optims#prompt-lookup-decoding) guide to learn more.
+Prompt lookup decoding doesn't need an assistant model. It finds overlapping n-grams in the prompt to propose candidate tokens. If no match exists, it falls back to normal autoregressive decoding. This suits input-grounded tasks like summarization and translation because candidate tokens often mirror local patterns in the source text.
 
-Enable prompt lookup decoding with the `prompt_lookup_num_tokens` parameter.
+Pass `prompt_lookup_num_tokens` to [`~GenerationMixin.generate`]. This sets how many tokens the algorithm tries to copy from earlier in the prompt when it detects a repeated pattern.
+
+<hfoptions id="prompt-lookup-decoding">
+<hfoption id="greedy decoding">
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
-
-device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
-model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
-assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype=torch.float16).to(device)
-inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
-outputs = model.generate(**inputs, assistant_model=assistant_model, max_new_tokens=20, prompt_lookup_num_tokens=5)
+outputs = model.generate(**inputs, prompt_lookup_num_tokens=5)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 'Hugging Face is an open-source company that provides a platform for developers to build and deploy machine learning models. It offers a variety of tools'
 ```
 
-## Self-speculative decoding
-
-Early exiting uses the earlier hidden states from the language modeling head as inputs, effectively skipping layers to yield a lower quality output. The lower quality output is used as the assistant output and self-speculation is applied to fix the output using the remaining layers. The final generated result from this self-speculative method is the same (or has the same distribution) as the original models generation.
-
-The assistant model is also part of the target model, so the caches and weights can be shared, resulting in lower memory requirements.
-
-For a model trained with early exit, pass `assistant_early_exit` to [`~GenerationMixin.generate`].
+</hfoption>
+<hfoption id="sampling">
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-prompt = "Alice and Bob"
-checkpoint = "facebook/layerskip-llama3.2-1B"
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-inputs = tokenizer(prompt, return_tensors="pt")
+outputs = model.generate(**inputs, prompt_lookup_num_tokens=5, do_sample=True, temperature=0.5)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+'Hugging Face is an open-source company that provides a platform for developers to build and deploy machine learning models. It offers a variety of tools'
+```
 
-model = AutoModelForCausalLM.from_pretrained(checkpoint)
+</hfoption>
+</hfoptions>
+
+## Self-speculative decoding
+
+Self-speculative decoding uses a model's intermediate layers as the assistant to propose candidate tokens. If the proposal matches, the model exits early and the remaining layers verify or correct the tokens.
+
+Because it's all one model, weights and caches are shared, which boosts speed without extra memory overhead. This technique only works for models trained to support early-exit logits from intermediate layers.
+
+Pass `assistant_early_exit` to [`~GenerationMixin.generate`] to set the exit layer.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("facebook/layerskip-llama3.2-1B")
+model = AutoModelForCausalLM.from_pretrained("facebook/layerskip-llama3.2-1B", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
+
 outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
 ## Universal assisted decoding
 
-Universal assisted decoding (UAD) enables the main and assistant models to use different tokenizers. The main models input tokens are re-encoded into assistant model tokens. Candidate tokens are generated in the assistant encoding which are re-encoded into the main model candidate tokens. The candidate tokens are verified as explained in [speculative decoding](#speculative-decoding).
+Universal assisted decoding (UAD) makes speculative decoding possible even when the main and assistant models have different tokenizers. It lets you pair any small assistant model with the main model. Candidate tokens are re-encoded and the algorithm computes the longest common subsequence so the continuation stays aligned.
 
-Re-encoding involves decoding token ids into text and encoding the text with a different tokenizer. To prevent tokenization discrepancies during re-encoding, UAD finds the longest common sub-sequence between the source and target encodings to ensure the new tokens include the correct prompt suffix.
-
-Add the `tokenizer` and `assistant_tokenizer` parameters to [`~GenerationMixin.generate`] to enable UAD.
+Pass `tokenizer`, `assistant_tokenizer`, and `assistant_model` to [`~GenerationMixin.generate`] to enable UAD.
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-prompt = "Alice and Bob"
 
 assistant_tokenizer = AutoTokenizer.from_pretrained("double7/vicuna-68m")
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
-inputs = tokenizer(prompt, return_tensors="pt")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2-9b", dtype="auto")
+assistant_model = AutoModelForCausalLM.from_pretrained("double7/vicuna-68m", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
 
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2-9b")
-assistant_model = AutoModelForCausalLM.from_pretrained("double7/vicuna-68m")
 outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+'Hugging Face is an open-source company that is dedicated to creating a better world through technology.'
 ```
+
+## Resources
+
+- Read the [Assisted Generation: a new direction toward low-latency text generation](https://huggingface.co/blog/assisted-generation) blog post for more context about text generation latency and assisted generation.
