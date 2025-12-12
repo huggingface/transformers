@@ -57,7 +57,7 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV2ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
-    has_moes = True
+    has_experts = True
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV2ForCausalLM if is_torch_available() else None

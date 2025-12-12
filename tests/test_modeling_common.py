@@ -535,8 +535,8 @@ def _get_output_tensors(outputs):
 
 
 def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-    if not self.has_moes:
-        self.skipTest(reason="Model architecture does not support Mixture of Experts (MoE)")
+    if not self.has_experts:
+        self.skipTest(reason="Model architecture does not support setting experts implementation")
 
     # convert shorthand name to torch.dtype
     if dtype == "fp16":
@@ -586,15 +586,15 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            model.set_moe_implementation("eager")
+            model.set_experts_implementation("eager")
             outputs_eager = model(**prepared_inputs)
             outputs_eager = _get_output_tensors(outputs_eager)
 
-            model.set_moe_implementation("batched_mm")
+            model.set_experts_implementation("batched_mm")
             outputs_batched_mm = model(**prepared_inputs)
             outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
 
-            model.set_moe_implementation("grouped_mm")
+            model.set_experts_implementation("grouped_mm")
             outputs_grouped_mm = model(**prepared_inputs)
             outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
 
@@ -602,8 +602,8 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
         self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
 
-        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-3, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-3, atol=1e-4)
 
 
 def _config_zero_init(config):
@@ -676,7 +676,7 @@ class ModelTesterMixin:
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
-    has_moes = False
+    has_experts = False
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 

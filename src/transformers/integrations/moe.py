@@ -12,54 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 
 import torch
 
+from ..utils.generic import GeneralInterface
 
-def eager_moe_forward(
+
+# Can be removed, only here to show what the eager implementation in modeling files looks like
+def eager_experts_forward(
+    self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    gate_up_proj: torch.Tensor,
-    down_proj: torch.Tensor,
-    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
-    num_experts = gate_up_proj.size(0)
     final_hidden_states = torch.zeros_like(hidden_states)
 
     with torch.no_grad():
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
+        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
         expert_mask = expert_mask.permute(2, 1, 0)
         expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
     for expert_idx in expert_hit:
         expert_idx = expert_idx[0]
-        if expert_idx == num_experts:
+        if expert_idx == self.num_experts:
             continue
         top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
         current_state = hidden_states[token_idx]
-        gate, up = torch.nn.functional.linear(current_state, gate_up_proj[expert_idx]).chunk(2, dim=-1)
-        current_hidden_states = act_fn(gate) * up
-        current_hidden_states = torch.nn.functional.linear(current_hidden_states, down_proj[expert_idx])
+        gate, up = torch.nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+        current_hidden_states = self.act_fn(gate) * up
+        current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
         current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
         final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
     return final_hidden_states
 
 
-def batched_mm_moe_forward(
+def batched_mm_experts_forward(
+    self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    gate_up_proj: torch.Tensor,
-    down_proj: torch.Tensor,
-    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
-    num_experts = gate_up_proj.size(0)
+    num_experts = self.gate_up_proj.size(0)
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -82,8 +79,8 @@ def batched_mm_moe_forward(
     current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
 
     # Select projection matrices for selected experts
-    selected_gate_up = gate_up_proj[expert_ids]  # (S, hidden_dim, 2 * intermediate_dim)
-    selected_down = down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
+    selected_gate_up = self.gate_up_proj[expert_ids]  # (S, hidden_dim, 2 * intermediate_dim)
+    selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
 
     # --- Up projection per expert (batched) ---
     gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
@@ -92,7 +89,7 @@ def batched_mm_moe_forward(
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
     # Apply activation
-    hidden_after_activation = act_fn(gate) * up  # (S, intermediate_dim)
+    hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
     out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
@@ -106,18 +103,22 @@ def batched_mm_moe_forward(
     return final_hidden_states
 
 
-def grouped_mm_moe_forward(
+def grouped_mm_experts_forward(
+    self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
-    gate_up_proj: torch.Tensor,
-    down_proj: torch.Tensor,
-    act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
+    # TODO: we might wanna add more checks here, e.g. check the inputs and weights strides and raise a meaningful error
+    if not hasattr(torch, "_grouped_mm"):
+        raise ImportError(
+            "torch._grouped_mm is not available. Please make sure you are using a PyTorch version that includes it (2.9+)."
+        )
+
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
-    num_experts = gate_up_proj.size(0)
+    num_experts = self.gate_up_proj.size(0)
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -153,16 +154,16 @@ def grouped_mm_moe_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    gate_up_out = torch._grouped_mm(current_states_g, gate_up_proj.transpose(-2, -1), offs=offsets)
+    gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
 
     # Split into gate and up components
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
     # Apply activation
-    hidden_after_activation = act_fn(gate) * up  # (S, intermediate_dim)
+    hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    out_per_sample_g = torch._grouped_mm(hidden_after_activation, down_proj.transpose(-2, -1), offs=offsets)
+    out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
 
     # Apply routing weights
     out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
@@ -174,3 +175,30 @@ def grouped_mm_moe_forward(
     final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
 
     return final_hidden_states
+
+
+class ExpertsInterface(GeneralInterface):
+    """Interface for registering custom experts implementations."""
+
+    _global_mapping = {
+        "batched_mm": batched_mm_experts_forward,
+        "grouped_mm": grouped_mm_experts_forward,
+    }
+
+
+ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
+
+
+def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
+    original_forward = experts_class.forward
+
+    def forward(self, *args, **kwargs):
+        experts_forward = original_forward
+
+        if self.config._experts_implementation != "eager":
+            experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
+
+        return experts_forward(self, *args, **kwargs)
+
+    experts_class.forward = forward
+    return experts_class

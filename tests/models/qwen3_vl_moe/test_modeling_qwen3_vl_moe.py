@@ -192,7 +192,7 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         else ()
     )
 
-    has_moes = True
+    has_experts = True
 
     def setUp(self):
         self.model_tester = Qwen3VLMoeVisionText2TextModelTester(self)

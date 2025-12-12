@@ -55,7 +55,7 @@ class Qwen3NextModelTester(CausalLMModelTester):
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3NextModelTester
-    has_moes = True
+    has_experts = True
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3-Next has a special Cache as it alternates with gated deltanet layers"

@@ -187,7 +187,7 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    has_moes = True
+    has_experts = True
 
     def setUp(self):
         self.model_tester = OlmoeModelTester(self)

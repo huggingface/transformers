@@ -46,7 +46,7 @@ class HunYuanMoEV1ModelTester(CausalLMModelTester):
 class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
-    has_moes = True
+    has_experts = True
 
     def is_pipeline_test_to_skip(
         self,

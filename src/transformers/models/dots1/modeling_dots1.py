@@ -30,12 +30,13 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations.moe import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ALL_MOE_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
@@ -308,37 +309,7 @@ class Dots1TopkRouter(nn.Module):
         return router_logits
 
 
-def eager_moe_forward(
-    hidden_states: torch.Tensor,
-    top_k_index: torch.Tensor,
-    top_k_weights: torch.Tensor,
-    gate_up_proj: torch.Tensor,
-    down_proj: torch.Tensor,
-    act_fn: Callable,
-) -> torch.Tensor:
-    num_experts = gate_up_proj.size(0)
-    final_hidden_states = torch.zeros_like(hidden_states)
-
-    with torch.no_grad():
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts)
-        expert_mask = expert_mask.permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-    for expert_idx in expert_hit:
-        expert_idx = expert_idx[0]
-        if expert_idx == num_experts:
-            continue
-        top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-        current_state = hidden_states[token_idx]
-        gate, up = nn.functional.linear(current_state, gate_up_proj[expert_idx]).chunk(2, dim=-1)
-        current_hidden_states = act_fn(gate) * up
-        current_hidden_states = nn.functional.linear(current_hidden_states, down_proj[expert_idx])
-        current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-        final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-    return final_hidden_states
-
-
+@use_experts_implementation
 class Dots1NaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -358,18 +329,24 @@ class Dots1NaiveMoe(nn.Module):
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
-        moe_forward: Callable = eager_moe_forward
-        if self.config._moe_implementation != "eager":
-            moe_forward = ALL_MOE_FUNCTIONS[self.config._moe_implementation]
+        final_hidden_states = torch.zeros_like(hidden_states)
 
-        final_hidden_states = moe_forward(
-            hidden_states,
-            top_k_index,
-            top_k_weights,
-            gate_up_proj=self.gate_up_proj,
-            down_proj=self.down_proj,
-            act_fn=self.act_fn,
-        )
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
 

@@ -71,7 +71,6 @@ from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import is_kernel
-from .integrations.moe import batched_mm_moe_forward, grouped_mm_moe_forward
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -1230,8 +1229,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
         # Check the MoE implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
-        self.config._moe_implementation_internal = self._check_and_adjust_moe_implementation(
-            self.config._moe_implementation
+        self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
+            self.config._experts_implementation
         )
         if self.can_generate():
             self.generation_config = GenerationConfig.from_model_config(config)
@@ -1429,9 +1428,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        # If passing `moe_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
-        if "moe_implementation" in kwargs:
-            config._moe_implementation = kwargs.pop("moe_implementation")
+        # If passing `experts_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
 
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -1834,8 +1833,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attn_implementation
 
-    def _check_and_adjust_moe_implementation(self, moe_implementation: Optional[str]) -> str:
-        return self.get_correct_moe_implementation(moe_implementation)
+    def _check_and_adjust_experts_implementation(self, experts_implementation: Optional[str]) -> str:
+        return self.get_correct_experts_implementation(experts_implementation)
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
@@ -1871,12 +1870,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attention
 
-    def get_correct_moe_implementation(self, requested_moe: Optional[str]) -> str:
+    def get_correct_experts_implementation(self, requested_moe: Optional[str]) -> str:
         applicable_moe = "eager" if requested_moe is None else requested_moe
-        if applicable_moe not in ["eager"] + ALL_MOE_FUNCTIONS.valid_keys():
+        if applicable_moe not in ["eager", "batched_mm", "grouped_mm"]:
             raise ValueError(
-                f'Specified `moe_implementation="{applicable_moe}"` is not supported. The only possible arguments are '
-                '`moe_implementation="eager"`, `moe_implementation="batched_mm"` and `moe_implementation="grouped_mm"`.'
+                f'Specified `experts_implementation="{applicable_moe}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `experts_implementation="batched_mm"` and `experts_implementation="grouped_mm"`.'
             )
         return applicable_moe
 
@@ -1899,7 +1898,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return True
 
     @classmethod
-    def _can_set_moe_implementation(cls) -> bool:
+    def _can_set_experts_implementation(cls) -> bool:
         """Detect whether the class supports setting its MoE implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
@@ -1908,7 +1907,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Experts\(nn.Module\)", code):
-            return "eager_moe_forward" in code and "ALL_MOE_FUNCTIONS[self.config._moe_implementation]" in code
+            return "use_experts_implementation" in code
         else:
             # If no MoE layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
@@ -2012,19 +2011,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
 
-    def set_moe_implementation(self, moe_implementation: str):
+    def set_experts_implementation(self, experts_implementation: str):
         """
-        Set the requested `moe_implementation` for this model.
+        Set the requested `experts_implementation` for this model.
 
         Args:
-            moe_implementation (`str`):
+            experts_implementation (`str`):
                 The MoE implementation to set for this model.
         """
-        applicable_implementation = self._check_and_adjust_moe_implementation(moe_implementation)
+        applicable_implementation = self._check_and_adjust_experts_implementation(experts_implementation)
 
-        if applicable_implementation != self.config._moe_implementation:
+        if applicable_implementation != self.config._experts_implementation:
             # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._moe_implementation_internal = applicable_implementation
+            self.config._experts_implementation_internal = applicable_implementation
 
         # Apply it to all submodels as well
         for submodule in self.modules():
@@ -2036,7 +2035,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and submodule.config.__class__ != self.config.__class__
             ):
                 # Set the moe on the submodule
-                submodule.config._moe_implementation_internal = applicable_implementation
+                submodule.config._experts_implementation_internal = applicable_implementation
 
     def enable_input_require_grads(self):
         """
@@ -3981,8 +3980,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        if "moe_implementation" in kwargs:
-            config._moe_implementation = kwargs.pop("moe_implementation")
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
 
         hf_quantizer, config, dtype, device_map = get_hf_quantizer(
             config, quantization_config, dtype, device_map, weights_only, user_agent
@@ -4747,24 +4746,6 @@ class AttentionInterface(GeneralInterface):
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
 ALL_ATTENTION_FUNCTIONS: AttentionInterface = AttentionInterface()
-
-
-class MoEInterface(GeneralInterface):
-    """
-    Dict-like object keeping track of allowed MoE functions. You can easily add a new MoE function
-    with a call to `register()`. If a model needs to locally overwrite an existing MoE function,
-    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
-    """
-
-    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
-    # a new instance is created (in order to locally override a given function)
-    _global_mapping = {
-        "batched_mm": batched_mm_moe_forward,
-        "grouped_mm": grouped_mm_moe_forward,
-    }
-
-
-ALL_MOE_FUNCTIONS: MoEInterface = MoEInterface()
 
 
 class PreTrainedAudioTokenizerBase(PreTrainedModel):
