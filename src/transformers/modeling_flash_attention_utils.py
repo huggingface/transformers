@@ -112,9 +112,11 @@ def _lazy_imports(implementation: Optional[str], attention_wrapper: Optional[Cal
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
             if flash_attn_varlen_func is None:
+                from .modeling_utils import _FLASH_ATTN_KERNEL_FALLBACK
+
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
+                    f"Make sure that you request a valid kernel from the hub, e.g. `{_FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`."
                 )
             if flash_attn_func is None:
                 logger.warning(

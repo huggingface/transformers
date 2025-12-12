@@ -52,7 +52,7 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_utils import _get_tied_weight_keys
+from transformers.modeling_utils import _FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -2749,12 +2749,6 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
-
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -3249,28 +3243,24 @@ class ModelTesterMixin:
 
         dtype = torch.bfloat16
 
-        def _expected_attn_impls(attn_impl: str) -> set[str]:
+        def _expected_attn_impls(attention_implementation: str) -> set[str]:
             # Allow kernels fallbacks for flash attention tests.
-            requested = attn_impl
+            requested = attention_implementation
             base = requested.removeprefix("paged|")
             prefix = "paged|" if requested.startswith("paged|") else ""
 
             expected = {requested}
-            kernel_map = {
-                "flash_attention_2": "kernels-community/flash-attn2",
-                "flash_attention_3": "kernels-community/vllm-flash-attn3",
-            }
-            if base in kernel_map:
-                expected.add(f"{prefix}{kernel_map[base]}")
+            if base in _FLASH_ATTN_KERNEL_FALLBACK:
+                expected.add(f"{prefix}{_FLASH_ATTN_KERNEL_FALLBACK[base]}")
             return expected
+
+        expected_attn_impls = _expected_attn_impls(attn_implementation)
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not self._is_composite:
                 self.skipTest("This model is not a composite model!")
-
-            expected_attn_impls = _expected_attn_impls(attn_implementation)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
