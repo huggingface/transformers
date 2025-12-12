@@ -34,9 +34,13 @@ from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 class LasrEncoderSubsampling(nn.Module):
@@ -304,7 +308,7 @@ class LasrEncoderConvolutionModule(nn.Module):
             channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
         )
 
-    def forward(self, hidden_states, attention_mask=None):
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Union[torch.Tensor, "BlockMask"]):
         """
         Compute convolution module.
 
@@ -325,7 +329,7 @@ class LasrEncoderConvolutionModule(nn.Module):
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         # Apply padding mask before convolution
-        if attention_mask is not None:
+        if attention_mask is not None and not isinstance(attention_mask, BlockMask):
             if attention_mask.dtype == torch.bool:
                 all_masked_rows = torch.all(~attention_mask, dim=2)
             else:
