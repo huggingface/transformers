@@ -14,7 +14,7 @@
 # limitations under the License.
 """VibeVoice model configuration"""
 
-from typing import List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -48,11 +48,11 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         weight_init_value: float = 1e-2,
         # encoder specific
         encoder_n_filters: int = 32,
-        encoder_ratios: Optional[List[int]] = None,
+        encoder_ratios: Optional[list[int]] = None,
         encoder_depths: str = "3-3-3-3-3-3-8",
         # decoder specific
         decoder_n_filters: int = 32,
-        decoder_ratios: Optional[List[int]] = None,  # if None, same as encoder
+        decoder_ratios: Optional[list[int]] = None,  # if None, same as encoder
         decoder_depths: Optional[str] = None,
         **kwargs,
     ):
@@ -114,7 +114,7 @@ class VibeVoiceSemanticTokenizerConfig(PretrainedConfig):
         weight_init_value: float = 1e-2,
         # encoder specific
         encoder_n_filters: int = 32,
-        encoder_ratios: Optional[List[int]] = None,
+        encoder_ratios: Optional[list[int]] = None,
         encoder_depths: str = "3-3-3-3-3-3-8",
         **kwargs,
     ):

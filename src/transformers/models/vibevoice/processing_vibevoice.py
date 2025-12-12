@@ -14,12 +14,10 @@
 # limitations under the License.
 """Processor class for VibeVoice."""
 
-import math
-import warnings
-from typing import List, Optional, Union, Dict, Any, Tuple
+import json
 import os
 import re
-import json
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -95,9 +93,9 @@ class VibeVoiceProcessor(ProcessorMixin):
     def __call__(
         self,
         text: Optional[
-            Union[str, List[str], TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[str, list[str], TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
-        voice_samples: Optional[Union[List[Union[str, np.ndarray]], List[List[Union[str, np.ndarray]]]]] = None,
+        voice_samples: Optional[Union[list[Union[str, np.ndarray]], list[list[Union[str, np.ndarray]]]]] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
@@ -141,8 +139,8 @@ class VibeVoiceProcessor(ProcessorMixin):
     def _process_single(
         self,
         text: Union[str, TextInput],
-        voice_samples: Optional[List[Union[str, np.ndarray]]] = None,
-    ) -> Dict[str, Any]:
+        voice_samples: Optional[list[Union[str, np.ndarray]]] = None,
+    ) -> dict[str, Any]:
         script = None
         if isinstance(text, str):
             if text.endswith(".json") and os.path.exists(text):
@@ -156,7 +154,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             raise ValueError(f"Could not process input text: {text}")
 
         parsed_lines = self._parse_script(script)
-        all_speakers = list(set(speaker_id for speaker_id, _ in parsed_lines))
+        all_speakers = list({speaker_id for speaker_id, _ in parsed_lines})
 
         system_tokens = self.tokenizer.encode(self.system_prompt)
 
@@ -193,7 +191,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             "all_speakers": all_speakers,
         }
 
-    def _parse_script(self, script: str) -> List[Tuple[int, str]]:
+    def _parse_script(self, script: str) -> list[tuple[int, str]]:
         lines = script.strip().split("\n")
         parsed_lines = []
         speaker_ids = []
@@ -224,8 +222,8 @@ class VibeVoiceProcessor(ProcessorMixin):
             return parsed_lines
 
     def _create_voice_prompt(
-        self, speaker_samples: List[Union[str, np.ndarray]]
-    ) -> Tuple[List[int], List[np.ndarray], List[bool]]:
+        self, speaker_samples: list[Union[str, np.ndarray]]
+    ) -> tuple[list[int], list[np.ndarray], list[bool]]:
         vae_token_id = self.tokenizer.speech_diffusion_id
         voice_full_tokens = self.tokenizer.encode(" Voice input:\n", add_special_tokens=False)
         voice_speech_inputs = []
@@ -262,11 +260,11 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def prepare_speech_inputs(
         self,
-        speech_inputs: List[np.ndarray],
+        speech_inputs: list[np.ndarray],
         return_tensors: Optional[Union[str, TensorType]] = None,
         device: Optional[Union[str, torch.device]] = None,
         dtype: Optional[torch.dtype] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if not speech_inputs:
             return {"padded_speeches": None, "speech_masks": None}
 
@@ -298,7 +296,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def _batch_encode(
         self,
-        encodings: List[Dict[str, Any]],
+        encodings: list[dict[str, Any]],
         padding: Union[bool, str, PaddingStrategy] = True,
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,

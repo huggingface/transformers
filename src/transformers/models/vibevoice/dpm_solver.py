@@ -14,13 +14,12 @@
 # limitations under the License.
 """DPM-Solver++ scheduler for VibeVoice."""
 
-import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import numpy as np
 
-from ...utils import logging, is_diffusers_available
+from ...utils import is_diffusers_available, logging
 
 if is_diffusers_available():
     from diffusers import DPMSolverMultistepScheduler
@@ -28,7 +27,25 @@ else:
     # If diffusers is not available, we define a dummy class to avoid import errors
     # until the user installs diffusers (checked at runtime or model init)
     class DPMSolverMultistepScheduler:
-        def __init__(self, *args, **kwargs):
+        def __init__(
+            self,
+            beta_start: float = 0.0001,
+            beta_end: float = 0.02,
+            beta_schedule: str = "linear",
+            trained_betas: Optional[Union[np.ndarray, list[float]]] = None,
+            solver_order: int = 2,
+            prediction_type: str = "epsilon",
+            thresholding: bool = False,
+            dynamic_thresholding_ratio: float = 0.995,
+            sample_max_value: float = 1.0,
+            algorithm_type: str = "dpmsolver++",
+            solver_type: str = "midpoint",
+            lower_order_final: bool = True,
+            use_karras_sigmas: bool = False,
+            use_lu_lambdas: bool = False,
+            lambda_min_clipped: float = -float("inf"),
+            variance_type: Optional[str] = None,
+        ):
             raise ImportError(
                 "VibeVoice requires the `diffusers` library. Please install it with `pip install diffusers`."
             )

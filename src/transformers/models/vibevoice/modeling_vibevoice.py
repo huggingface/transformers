@@ -14,27 +14,24 @@
 # limitations under the License.
 """PyTorch VibeVoice model."""
 
-import math
 import copy
-from typing import Optional, Any
+import math
+from typing import Any, Optional
 
-
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch.nn.utils.parametrizations import weight_norm
 
-
-from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
+from ...modeling_utils import PreTrainedModel
+from ...models.auto import AutoModel
 from ...utils import (
     logging,
 )
-from ...models.auto import AutoModel
-
-
-# Use the scheduler wrapper
+from .configuration_vibevoice import VibeVoiceAcousticTokenizerConfig, VibeVoiceConfig, VibeVoiceDiffusionHeadConfig
 from .dpm_solver import VibeVoiceDPMSolverMultistepScheduler
-from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceAcousticTokenizerConfig, VibeVoiceDiffusionHeadConfig
 
 logger = logging.get_logger(__name__)
 
@@ -689,7 +686,7 @@ class VibeVoiceAcousticTokenizerModel(PreTrainedModel):
 
 class BinaryClassifier(nn.Module):
     def __init__(self, hidden_size):
-        super(BinaryClassifier, self).__init__()
+        super().__init__()
         self.fc1 = nn.Linear(hidden_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, 1)
 
@@ -741,7 +738,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
         dtype = torch.float32
         if hasattr(config, "torch_dtype") and config.torch_dtype:
-            dtype = config.torch_dtype
+            pass
 
         # Initialize Qwen2 for text encoding (lower layers)
         lm_config = copy.deepcopy(config.decoder_config)

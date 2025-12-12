@@ -1,7 +1,7 @@
 import argparse
 import os
+
 import torch
-import copy
 from transformers import VibeVoiceConfig, VibeVoiceForConditionalGeneration, VibeVoiceTokenizer
 
 
@@ -41,10 +41,11 @@ def convert_vibevoice_checkpoint(checkpoint_path, pytorch_dump_folder_path, mode
         # new_prefix: model.language_model
         # layer_mapping: {0:0, 1:1, ... 15:0, 16:1...}
 
-        parts = old_key.split(".")
         # Assuming format: llm.model.layers.X... or llm.layers.X...
         # Let's clean up prefix "llm." or "llm.model."
-        if old_key.startswith("llm.model."):
+        if old_key in ["model.embed_tokens.weight", "model.norm.weight"]:
+            remaining = old_key[10:]
+        elif old_key.startswith("llm.model."):
             remaining = old_key[10:]
         elif old_key.startswith("llm."):
             remaining = old_key[4:]
@@ -74,8 +75,8 @@ def convert_vibevoice_checkpoint(checkpoint_path, pytorch_dump_folder_path, mode
             # If they share embeddings, we might need to duplicate or it's tied.
             # VibeVoiceModel logic doesn't explicitly tie them yet in my code?
             # Usually we duplicate weight for initialization.
-            new_key_lm = f"model.language_model.embed_tokens.weight"
-            new_key_tts = f"model.tts_language_model.embed_tokens.weight"
+            new_key_lm = "model.language_model.embed_tokens.weight"
+            new_key_tts = "model.tts_language_model.embed_tokens.weight"
             return [new_key_lm, new_key_tts], state_dict[old_key]
 
         elif remaining.startswith("norm."):
