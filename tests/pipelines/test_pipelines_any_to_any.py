@@ -184,7 +184,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             [
                 {
                     "input_text": "What is the capital of France? Assistant:",
-                    "generated_None": "What is the capital of France? Assistant: The capital of France is Paris.\n",
+                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
                 }
             ],
         )
@@ -219,14 +219,14 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
                             }
                         ],
-                        "generated_None": [
+                        "generated_text": [
                             {
                                 "role": "user",
                                 "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
                             },
                             {
                                 "role": "assistant",
-                                "content": "A digital embrace, a friendly face,\nHugging Face rises, setting the pace.\nFor AI's heart, a vibrant core,\nOpen source models, and so much more.\n\nFrom transformers deep, a powerful might,\nNLP's future, shining so bright.\nDatasets curated, a treasure trove found,\nFor researchers and builders, on fertile ground.\n\nA community thriving, a collaborative art,\nSharing knowledge, playing a vital part.\nSpaces to showcase, creations unfold,\nStories in code, bravely told.\n\nWith libraries sleek, and tools so refined,\nDemocratizing AI, for all humankind.\nFrom sentiment analysis to text generation's grace,\nHugging Face empowers, at a rapid pace.\n\nA platform of learning, a place to explore,\nUnlocking potential, and asking for more.\nSo let's give a cheer, for this innovative team,\nHugging Face's vision, a beautiful dream. \n",
+                                "content": "A digital embrace, a friendly face,Hugging Face, a vibrant space.Where models bloom and knowledge flows,And AI's potential brightly glows.From transformers deep, a powerful core,To datasets vast, and so much more.A community thrives, a helping hand,Sharing insights across the land.Pipelines built with elegant ease,For NLP tasks, designed to please.Fine-tuning models, a joyful art,To tailor AI to play its part.Spaces open wide, for demos bright,Showcasing wonders, day and night.From text to image, code to sound,Innovation's fertile ground.A platform built on open grace,Democratizing AI's embrace.For researchers, builders, and all who seek,To unlock the future, bold and sleek.So raise a glass to the Face so kind,Hugging Face, expanding the mind.Connecting minds, with code and care,A future of AI, beyond compare."
                             },
                         ],
                     }
@@ -236,9 +236,9 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                         "input_text": [
                             {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
                         ],
-                        "generated_None": [
+                        "generated_text": [
                             {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
+                            {"role": "assistant", "content": "The capital of France is **Paris**. "},
                         ],
                     }
                 ],
@@ -278,7 +278,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_None": "user\nWhat do you hear in this audio?\n\n\n\n\nmodel\nThe audio contains the repeated sound of someone **coughing**. It's a fairly consistent, forceful cough throughout the duration.",
+                    "generated_text": "userWhat do you hear in this audio?modelThe audio contains a repeated sound that resembles someone **coughing or choking**. It's a series of short, sharp, and somewhat strained sounds.",
                 }
             ],
         )
@@ -322,7 +322,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_None": [
+                    "generated_text": [
                         {
                             "role": "user",
                             "content": [
@@ -335,7 +335,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                            "content": "The video begins with a man standing in a kitchen, wearing a black shirt. He is positioned in front of a refrigerator and wooden cabinets. The man is speaking and gesturing with his hands, possibly explaining something or giving instructions. The kitchen appears to be well-lit and has a clean, organized appearance.\n\nAs the video progresses, the man continues to speak and gesture, maintaining his position in the kitchen. The camera remains focused on him, capturing his upper body and face. The background remains consistent, showing the refrigerator and wooden cabinets. The lighting in the kitchen stays bright, and the overall atmosphere remains calm and focused.\n\nThroughout the video, the man's movements and expressions suggest that he is engaged in a conversation or presentation. His gestures and facial expressions indicate that he is actively communicating and possibly demonstrating something related to cooking or food preparation. The kitchen setting provides a practical and relatable backdrop for his actions and words.\n\nOverall, the video depicts a man in a kitchen, speaking and gesturing while possibly explaining or demonstrating something related to cooking or food preparation. The kitchen setting, with its well-lit and organized appearance, serves as a suitable environment for his actions and words.",
                         },
                     ],
                 }
