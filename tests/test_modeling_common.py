@@ -2749,12 +2749,6 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
-
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -3385,6 +3379,9 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16
@@ -4036,12 +4033,14 @@ class ModelTesterMixin:
                 for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
                     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
                     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+
                     for (k1, v1), (k2, v2) in zip(
                         model_torch_dtype.named_parameters(), model_dtype.named_parameters()
                     ):
-                        self.assertEqual(k1, k2)
-                        self.assertEqual(v1.dtype, v2.dtype)
-                    torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+                        with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
+                            self.assertEqual(k1, k2)
+                            self.assertEqual(v1.dtype, v2.dtype)
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
     def test_tp_plan_matches_params(self):
         """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
