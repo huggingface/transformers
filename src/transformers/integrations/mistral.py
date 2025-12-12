@@ -77,6 +77,7 @@ def convert_tekken_tokenizer(tokenizer_file: str):
     """Convert a "tekken" tokenizer to a fast Tokenizer."""
     # Tekken format -- need to use the Converter
 
+    from mistral_common.tokens.tokenizers.base import SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 
     # Load directly using their lib
@@ -105,5 +106,16 @@ def convert_tekken_tokenizer(tokenizer_file: str):
 
     # Post-process
     tokenizer.add_special_tokens({"additional_special_tokens": all_special})
+
+    MAP_SPECAL = {
+        "bos_token": SpecialTokens.bos.value,
+        "eos_token": SpecialTokens.eos.value,
+        "pad_token": SpecialTokens.pad.value,
+        "unk_token": SpecialTokens.unk.value,
+    }
+
+    for special_key, special_token in MAP_SPECAL.items():
+        if special_token in all_special:
+            tokenizer.add_special_tokens({special_key: special_token})
 
     return tokenizer
