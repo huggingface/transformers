@@ -1,0 +1,713 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Dino DETR model."""
+
+import copy
+import inspect
+import math
+import unittest
+from functools import cached_property
+
+import numpy as np
+
+from transformers import (
+    DinoDetrConfig,
+    ResNetConfig,
+    is_torch_available,
+    is_vision_available,
+)
+from transformers.models.dino_detr.image_processing_dino_detr import (
+    DinoDetrImageProcessor,
+)
+from transformers.testing_utils import (
+    require_timm,
+    require_torch,
+    require_torch_bf16,
+    require_vision,
+    slow,
+    torch_device,
+)
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import DinoDetrForObjectDetection, DinoDetrModel
+
+
+if is_vision_available():
+    from PIL import Image
+
+CHECKPOINT = "kostaspitas/dino_detr"  # "/Users/konstantinospitas/Desktop/checkpoint_tmp"
+
+
+class DinoDetrModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=8,
+        is_training=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        intermediate_size=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        num_queries=900,
+        num_channels=3,
+        image_size=256,
+        n_targets=8,
+        num_labels=91,
+        num_feature_levels=4,
+        encoder_n_points=4,
+        decoder_n_points=4,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_queries = num_queries
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.n_targets = n_targets
+        self.num_labels = num_labels
+        self.num_feature_levels = num_feature_levels
+        self.encoder_n_points = encoder_n_points
+        self.decoder_n_points = decoder_n_points
+
+        # we also set the expected seq length for both encoder and decoder
+        self.encoder_seq_length = (
+            math.ceil(self.image_size / 8) ** 2
+            + math.ceil(self.image_size / 16) ** 2
+            + math.ceil(self.image_size / 32) ** 2
+            + math.ceil(self.image_size / 64) ** 2
+        )
+        self.decoder_seq_length = self.num_queries
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+
+        pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+
+        labels = None
+        if self.use_labels:
+            # labels is a list of Dict (each Dict being the labels for a given example in the batch)
+            labels = []
+            for i in range(self.batch_size):
+                target = {}
+                target["class_labels"] = torch.randint(
+                    high=self.num_labels, size=(self.n_targets,), device=torch_device
+                )
+                target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["masks"] = torch.rand(
+                    self.n_targets,
+                    self.image_size,
+                    self.image_size,
+                    device=torch_device,
+                )
+                labels.append(target)
+
+        config = self.get_config(
+            d_model=self.hidden_size,
+            num_queries=self.num_queries,
+            num_hidden_layers=self.num_hidden_layers,
+        )
+        return config, pixel_values, pixel_mask, labels
+
+    def get_config(self, d_model, num_queries, num_hidden_layers):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
+        return DinoDetrConfig(
+            d_model=d_model,
+            num_queries=num_queries,
+            num_encoder_layers=num_hidden_layers,
+            num_decoder_layers=num_hidden_layers,
+            backbone=None,
+            use_timm_backbone=False,
+            backbone_kwargs=None,
+            use_pretrained_backbone=False,
+            backbone_config=resnet_config,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        return config, inputs_dict
+
+    def create_and_check_dino_detr_model(self, config, pixel_values, pixel_mask, labels):
+        model = DinoDetrModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(
+            result.hidden_states_model[-1].shape,
+            (self.batch_size, self.num_queries, self.hidden_size),
+        )
+
+    def create_and_check_dino_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+        model = DinoDetrForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+
+@require_torch
+class DinoDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (DinoDetrModel, DinoDetrForObjectDetection) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-feature-extraction": DinoDetrModel,
+            "object-detection": DinoDetrForObjectDetection,
+        }
+        if is_torch_available()
+        else {}
+    )
+    is_encoder_decoder = True
+    test_torchscript = False
+    test_pruning = False
+    test_head_masking = False
+    test_missing_keys = False
+    test_torch_exportable = False
+
+    # special case for head models
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "DinoDetrForObjectDetection":
+                labels = []
+                for i in range(self.model_tester.batch_size):
+                    target = {}
+                    target["class_labels"] = torch.ones(
+                        size=(self.model_tester.n_targets,),
+                        device=torch_device,
+                        dtype=torch.long,
+                    )
+                    target["boxes"] = torch.ones(
+                        self.model_tester.n_targets,
+                        4,
+                        device=torch_device,
+                        dtype=torch.float,
+                    )
+                    target["masks"] = torch.ones(
+                        self.model_tester.n_targets,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                        device=torch_device,
+                        dtype=torch.float,
+                    )
+                    labels.append(target)
+                inputs_dict["labels"] = labels
+
+        return inputs_dict
+
+    def setUp(self):
+        self.model_tester = DinoDetrModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=DinoDetrConfig,
+            has_text_modality=False,
+            common_properties=[
+                "num_channels",
+                "d_model",
+                "num_heads",
+                "decoder_n_points",
+            ],
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_dino_detr_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_dino_detr_model(*config_and_inputs)
+
+    def test_dino_detr_object_detection_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_dino_detr_object_detection_head_model(*config_and_inputs)
+
+    @unittest.skip(reason="Dino DETR does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Dino DETR does not use inputs_embeds")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @unittest.skip(reason="Dino DETR does not have a get_input_embeddings method")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Dino DETR is not a generative model")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="Dino DETR does not use token embeddings")
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Feed forward chunking is not implemented")
+    def test_feed_forward_chunking(self):
+        pass
+
+    # @unittest.skip(reason="Output attention is not implemented")
+    # def test_attention_outputs(self):
+    #    pass
+    #
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs_dict["output_encoder_self_attentions"] = True
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_self_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_encoder_self_attentions"] = False
+
+            inputs_dict["output_decoder_self_attentions"] = True
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.decoder_self_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_decoder_self_attentions"] = False
+
+            inputs_dict["output_decoder_cross_attentions"] = True
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.decoder_cross_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            inputs_dict["output_decoder_cross_attentions"] = False
+
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_determinism(first, second):
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0][0]
+
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_determinism(tensor1, tensor2)
+            else:
+                check_determinism(first, second)
+
+    def test_model_outputs_equivalence(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def set_nan_tensor_to_zero(t):
+            t[t != t] = 0
+            return t
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (list, tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif isinstance(tuple_object, dict):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object.values(), dict_object.values()
+                        ):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
+                            ),
+                            msg=(
+                                "Tuple and dict output are not equal. Difference:"
+                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
+                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
+                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
+                            ),
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            print("Model class:", model_class)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers,
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+            hidden_states = outputs.decoder_hidden_states
+
+            self.assertIsInstance(hidden_states, (list, tuple))
+            self.assertEqual(len(hidden_states), expected_num_layers)
+            seq_len = getattr(self.model_tester, "seq_length", None)
+            decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape),
+                [decoder_seq_length, self.model_tester.batch_size, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_encoder_hidden_states"] = True
+            inputs_dict["output_decoder_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["output_encoder_self_attentions"] = True
+        inputs_dict["output_decoder_self_attentions"] = True
+        inputs_dict["output_decoder_cross_attentions"] = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[1]
+        model = model_class(config)
+        model.to(torch_device)
+        model.train()
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        # attentions
+        encoder_self_attentions = outputs.encoder_self_attentions[0]
+        decoder_self_attentions = outputs.decoder_self_attentions[0]
+        decoder_cross_attentions = outputs.decoder_cross_attentions[0]
+
+        encoder_self_attentions.retain_grad()
+        decoder_self_attentions.retain_grad()
+        decoder_cross_attentions.retain_grad()
+
+        # Use last_hidden_state for gradient testing
+        loss = outputs["logits"]
+        loss = loss.sum()
+
+        # Perform a backward pass to compute gradients
+        loss.backward()
+
+        self.assertIsNotNone(encoder_self_attentions.grad)
+        self.assertIsNotNone(decoder_cross_attentions.grad)
+        self.assertIsNone(decoder_self_attentions.grad)
+
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = ["pixel_values", "pixel_mask"]
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" in arg_names
+                    else []
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                expected_arg_names = ["pixel_values", "pixel_mask"]
+                self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_different_timm_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # let's pick a random timm backbone
+        config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [1, 2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DinoDetrForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+
+            self.assertTrue(outputs)
+
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-50"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DinoDetrForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+
+            self.assertTrue(outputs)
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_checkpoints(self):
+        pass
+
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
+    def test_save_load_low_cpu_mem_usage_no_safetensors(self):
+        pass
+
+    def create_and_check_model_fp16_forward(self):
+        model_class = DinoDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config)
+        model.to(torch_device)
+        model.half()
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    @require_torch_bf16
+    def create_and_check_model_bf16_forward(self):
+        model_class = DinoDetrForObjectDetection
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = model_class(config, torch_dtype=torch.bfloat16)
+        model.to(torch_device)
+        model.eval()
+        inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+        output = model(**inputs)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+
+TOLERANCE = 1e-4
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+@require_timm
+@require_vision
+@slow
+class DinoDetrModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return DinoDetrImageProcessor() if is_vision_available() else None
+
+    def test_inference_object_detection_head(self):
+        model = DinoDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        pixel_values = encoding["pixel_values"].to(torch_device)
+        pixel_mask = encoding["pixel_mask"].to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values, pixel_mask)
+
+        # verify unprocessed
+        # Define expected output pred logits and pred boxes
+        expected_logits = torch.tensor(
+            [
+                [-8.3676, -4.9979, -6.5358],
+                [-8.0614, -3.9570, -6.5324],
+                [-8.6825, -4.5079, -6.9632],
+            ]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [
+                [0.1689, 0.1989, 0.2123],
+                [0.7672, 0.4147, 0.4655],
+                [0.5491, 0.2758, 0.0583],
+            ]
+        ).to(torch_device)
+
+        # Verify pred logits
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
+
+        # Verify pred boxes shapes
+        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
+
+        # verify postprocessing
+        target_sizes = torch.tensor(pixel_values.shape[-2:]).unsqueeze(0).to(torch_device)
+        results = image_processor.post_process_object_detection(
+            outputs,
+            target_sizes=target_sizes,
+        )[0]
+        expected_scores = torch.tensor([0.7475, 0.7341, 0.7229, 0.4707, 0.4449, 0.3086]).to(torch_device)
+        expected_labels = [17, 17, 75, 75, 63, 63]
+        expected_slice_boxes = torch.tensor([569.7284, 41.1137, 1065.9333, 622.4651]).to(torch_device)
+
+        self.assertEqual(len(results["scores"]), 6)
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
