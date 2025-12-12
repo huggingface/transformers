@@ -2749,12 +2749,6 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
-
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -3385,6 +3379,9 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16
