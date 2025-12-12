@@ -308,7 +308,7 @@ class T5Attention(nn.Module):
         past_key_values=None,
         query_length=None,
         cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -388,7 +388,9 @@ class T5Attention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation != "sdpa":
-                raise ValueError("TODO")
+                raise ValueError(
+                    f"Relative bias attention is only supported by `eager` and `sdpa` but found {self.config._attn_implementation}."
+                )
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
@@ -426,7 +428,7 @@ class T5LayerSelfAttention(nn.Module):
         position_bias=None,
         past_key_values=None,
         cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attn_output, position_bias, attn_weights = self.SelfAttention(
@@ -459,7 +461,7 @@ class T5LayerCrossAttention(nn.Module):
         past_key_values=None,
         query_length=None,
         cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attn_output, position_bias, attn_weights = self.EncDecAttention(
@@ -499,7 +501,7 @@ class T5Block(GradientCheckpointingLayer):
         encoder_decoder_position_bias=None,
         past_key_values=None,
         cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         self_attention_output, self_attention_position_bias, _ = self.layer[0](
             hidden_states,
@@ -715,7 +717,7 @@ class T5Stack(T5PreTrainedModel):
         past_key_values=None,
         use_cache=None,
         cache_position=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -852,7 +854,7 @@ class T5Model(T5PreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -999,7 +1001,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1146,7 +1148,7 @@ class T5EncoderModel(T5PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1211,7 +1213,7 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1343,7 +1345,7 @@ class T5ForTokenClassification(T5PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1438,7 +1440,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
