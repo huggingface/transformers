@@ -1058,6 +1058,11 @@ class TrackioCallback(TrainerCallback):
             metrics = rewrite_logs(metrics)
             self._trackio.log(metrics)
 
+    def on_push_begin(self, args, state, control, model, **kwargs):
+        if self._trackio is None:
+            return
+        
+
 
 class CometCallback(TrainerCallback):
     """
