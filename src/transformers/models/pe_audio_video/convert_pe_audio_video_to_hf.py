@@ -3,7 +3,7 @@ import re
 
 import safetensors.torch
 
-from transformers.models.pe_audio_video.modeling_pe_audio_video import PEAudioVideoConfig, PEAudioVideoModel
+from transformers.models.pe_audio_video.modeling_pe_audio_video import PeAudioVideoConfig, PeAudioVideoModel
 from transformers.utils import cached_file
 
 
@@ -45,8 +45,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 path = cached_file("facebook/pe-av-large", "model.safetensors")
 state_dict = safetensors.torch.load_file(path)
 
-config = PEAudioVideoConfig()
-model = PEAudioVideoModel(config)
+config = PeAudioVideoConfig()
+model = PeAudioVideoModel(config)
 
 def convert_key(key, mapping):
     for pattern, replacement in mapping.items():
@@ -106,5 +106,5 @@ del state_dict, model
 # Safety check: reload the converted model
 gc.collect()
 print("Reloading the model to check if it's saved correctly.")
-PEAudioVideoModel.from_pretrained("/raid/eustache/sam-audio/converted", device_map="auto")
+PeAudioVideoModel.from_pretrained("/raid/eustache/sam-audio/converted", device_map="auto")
 print("Model reloaded successfully.")

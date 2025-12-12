@@ -9,12 +9,12 @@ from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_typ
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class PEAudioVideoEncoderConfig(PreTrainedConfig):
+class PeAudioVideoEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PEAudioVideoEncoderModel`]. It is used to instantiate a
-    PEAudioVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PeAudioVideoEncoderModel`]. It is used to instantiate a
+    PeAudioVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    PEAudioVideoEncoder-8B [Qwen/PEAudioVideoEncoder-8B](https://huggingface.co/Qwen/PEAudioVideoEncoder-8B).
+    PeAudioVideoEncoder-8B [Qwen/PeAudioVideoEncoder-8B](https://huggingface.co/Qwen/PeAudioVideoEncoder-8B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -22,8 +22,8 @@ class PEAudioVideoEncoderConfig(PreTrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the PEAudioVideoEncoder model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PEAudioVideoEncoderModel`]
+            Vocabulary size of the PeAudioVideoEncoder model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PeAudioVideoEncoderModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -73,13 +73,13 @@ class PEAudioVideoEncoderConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import PEAudioVideoEncoderModel, PEAudioVideoEncoderConfig
+    >>> from transformers import PeAudioVideoEncoderModel, PeAudioVideoEncoderConfig
 
-    >>> # Initializing a PEAudioVideoEncoder style configuration
-    >>> configuration = PEAudioVideoEncoderConfig()
+    >>> # Initializing a PeAudioVideoEncoder style configuration
+    >>> configuration = PeAudioVideoEncoderConfig()
 
-    >>> # Initializing a model from the PEAudioVideoEncoder-8B style configuration
-    >>> model = PEAudioVideoEncoderModel(configuration)
+    >>> # Initializing a model from the PeAudioVideoEncoder-8B style configuration
+    >>> model = PeAudioVideoEncoderModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -88,7 +88,7 @@ class PEAudioVideoEncoderConfig(PreTrainedConfig):
     model_type = "pe_audio_video_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `PEAudioVideoEncoder`
+    # Default tensor parallel plan for base model `PeAudioVideoEncoder`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -192,9 +192,9 @@ class PEAudioVideoEncoderConfig(PreTrainedConfig):
         self.video_config = video_config
 
 
-class PEAudioVideoConfig(PretrainedConfig):
+class PeAudioVideoConfig(PretrainedConfig):
     model_type = "pe_audio"
-    sub_configs = {"text_config": AutoConfig, "audio_video_config": PEAudioVideoEncoderConfig}
+    sub_configs = {"text_config": AutoConfig, "audio_video_config": PeAudioVideoEncoderConfig}
 
     _default_text_config_kwargs = {
         "model_type": "modernbert",
@@ -222,9 +222,9 @@ class PEAudioVideoConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
         if isinstance(audio_video_config, dict):
-            audio_video_config = PEAudioVideoEncoderConfig(**audio_video_config)
+            audio_video_config = PeAudioVideoEncoderConfig(**audio_video_config)
         elif audio_video_config is None:
-            audio_video_config = PEAudioVideoEncoderConfig()
+            audio_video_config = PeAudioVideoEncoderConfig()
             # TODO: add log
 
         self.text_config = text_config
@@ -233,4 +233,4 @@ class PEAudioVideoConfig(PretrainedConfig):
         self.projection_dim = projection_dim
 
 
-__all__ = ["PEAudioVideoEncoderConfig", "PEAudioVideoConfig"]
+__all__ = ["PeAudioVideoEncoderConfig", "PeAudioVideoConfig"]

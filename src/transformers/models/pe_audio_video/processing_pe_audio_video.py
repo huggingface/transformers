@@ -1,11 +1,11 @@
 from ...processing_utils import ProcessorMixin
 
 
-class PEAudioVideoProcessor(ProcessorMixin):
+class PeAudioVideoProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "video_processor", "tokenizer"]
-    feature_extractor_class = "PEAudioFeatureExtractor"
+    feature_extractor_class = "PeAudioFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
-    video_processor_class = "PEVideoVideoProcessor"
+    video_processor_class = "PeVideoVideoProcessor"
 
 
-__all__ = ["PEAudioVideoProcessor"]
+__all__ = ["PeAudioVideoProcessor"]

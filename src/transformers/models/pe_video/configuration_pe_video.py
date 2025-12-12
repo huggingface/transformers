@@ -10,12 +10,12 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
 
 
-class PEVideoEncoderConfig(PreTrainedConfig):
+class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PEVideoEncoderModel`]. It is used to instantiate a
-    PEVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PeVideoEncoderModel`]. It is used to instantiate a
+    PeVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    PEVideoEncoder-8B [Qwen/PEVideoEncoder-8B](https://huggingface.co/Qwen/PEVideoEncoder-8B).
+    PeVideoEncoder-8B [Qwen/PeVideoEncoder-8B](https://huggingface.co/Qwen/PeVideoEncoder-8B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -23,8 +23,8 @@ class PEVideoEncoderConfig(PreTrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the PEVideoEncoder model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PEVideoEncoderModel`]
+            Vocabulary size of the PeVideoEncoder model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PeVideoEncoderModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -74,13 +74,13 @@ class PEVideoEncoderConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import PEVideoEncoderModel, PEVideoEncoderConfig
+    >>> from transformers import PeVideoEncoderModel, PeVideoEncoderConfig
 
-    >>> # Initializing a PEVideoEncoder style configuration
-    >>> configuration = PEVideoEncoderConfig()
+    >>> # Initializing a PeVideoEncoder style configuration
+    >>> configuration = PeVideoEncoderConfig()
 
-    >>> # Initializing a model from the PEVideoEncoder-8B style configuration
-    >>> model = PEVideoEncoderModel(configuration)
+    >>> # Initializing a model from the PeVideoEncoder-8B style configuration
+    >>> model = PeVideoEncoderModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -89,7 +89,7 @@ class PEVideoEncoderConfig(PreTrainedConfig):
     model_type = "pe_video_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `PEVideoEncoder`
+    # Default tensor parallel plan for base model `PeVideoEncoder`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -191,9 +191,9 @@ class PEVideoEncoderConfig(PreTrainedConfig):
         )
 
 
-class PEVideoConfig(PretrainedConfig):
+class PeVideoConfig(PretrainedConfig):
     model_type = "pe_video"
-    sub_configs = {"text_config": AutoConfig, "video_config": PEVideoEncoderConfig}
+    sub_configs = {"text_config": AutoConfig, "video_config": PeVideoEncoderConfig}
 
     def __init__(
         self,
@@ -211,13 +211,13 @@ class PEVideoConfig(PretrainedConfig):
             # TODO: add log
 
         if isinstance(video_config, dict):
-            video_config = PEVideoEncoderConfig(**video_config)
+            video_config = PeVideoEncoderConfig(**video_config)
         elif video_config is None:
-            video_config = PEVideoEncoderConfig()
+            video_config = PeVideoEncoderConfig()
             # TODO: add log
 
         self.text_config = text_config
         self.video_config = video_config
 
 
-__all__ = ["PEVideoEncoderConfig", "PEVideoConfig"]
+__all__ = ["PeVideoEncoderConfig", "PeVideoConfig"]

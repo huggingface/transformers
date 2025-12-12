@@ -24,13 +24,13 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForImageClassification
-from .configuration_pe_video import PEVideoConfig, PEVideoEncoderConfig
+from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 
 
 # TODO: not sure about the typing for text_model_output
 @dataclass
 # @auto_docstring
-class PEVideoOutput(ModelOutput):
+class PeVideoOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
@@ -41,13 +41,13 @@ class PEVideoOutput(ModelOutput):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`PEVideoTextModel`].
+        The text embeddings obtained by applying the projection layer to the pooled output of [`PeVideoTextModel`].
     video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The video embeddings obtained by applying the projection layer to the pooled output of [`PEVideoVisionModel`].
+        The video embeddings obtained by applying the projection layer to the pooled output of [`PeVideoVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PEVideoTextModel`].
+        The output of the [`PeVideoTextModel`].
     video_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PEVideoVisionModel`].
+        The output of the [`PeVideoVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -65,7 +65,7 @@ class PEVideoOutput(ModelOutput):
         )
 
 
-class PEVideoContrastiveHead(nn.Module):
+class PeVideoContrastiveHead(nn.Module):
     def __init__(
         self,
         in_dim: int,
@@ -79,7 +79,7 @@ class PEVideoContrastiveHead(nn.Module):
         return self.proj(self.layer_norm(x))
 
 
-class PEVideoMaskedGroupNorm(nn.GroupNorm):
+class PeVideoMaskedGroupNorm(nn.GroupNorm):
     def forward(self, x, padding_mask=None):
         if padding_mask is None:
             return super().forward(x)
@@ -103,10 +103,10 @@ class PEVideoMaskedGroupNorm(nn.GroupNorm):
         return x_norm * padding_mask
 
 
-class PEVideoConvBlock1d(nn.Module):
+class PeVideoConvBlock1d(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.groupnorm = PEVideoMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.groupnorm = PeVideoMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
         self.activation = nn.SiLU()
         self.project = nn.Conv1d(
             in_channels=config.hidden_size,
@@ -121,11 +121,11 @@ class PEVideoConvBlock1d(nn.Module):
         return self.project(x)
 
 
-class PEVideoResnetBlock1d(nn.Module):
+class PeVideoResnetBlock1d(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.block1 = PEVideoConvBlock1d(config)
-        self.block2 = PEVideoConvBlock1d(config)
+        self.block1 = PeVideoConvBlock1d(config)
+        self.block2 = PeVideoConvBlock1d(config)
 
     def forward(self, hidden_states, padding_mask=None):
         """
@@ -150,10 +150,10 @@ class PEVideoResnetBlock1d(nn.Module):
         return hidden_states.transpose(1, 2)
 
 
-class PEVideoEncoderEmbeddings(nn.Module):
+class PeVideoEncoderEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.resnet_block = PEVideoResnetBlock1d(config)
+        self.resnet_block = PeVideoResnetBlock1d(config)
         self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
@@ -226,7 +226,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class PEVideoAttention(nn.Module):
+class PeVideoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx):
@@ -252,8 +252,8 @@ class PEVideoAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = PEVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = PEVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.q_norm = PeVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = PeVideoRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -292,7 +292,7 @@ class PEVideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PEVideoMLP(nn.Module):
+class PeVideoMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -308,16 +308,16 @@ class PEVideoMLP(nn.Module):
         return down_proj
 
 
-class PEVideoEncoderLayer(GradientCheckpointingLayer):
+class PeVideoEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = PEVideoAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = PeVideoAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = PEVideoMLP(config)
-        self.input_layernorm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = PeVideoMLP(config)
+        self.input_layernorm = PeVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = PeVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -354,10 +354,10 @@ class PEVideoEncoderLayer(GradientCheckpointingLayer):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class PEVideoRMSNorm(nn.Module):
+class PeVideoRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        PEVideoRMSNorm is equivalent to T5LayerNorm
+        PeVideoRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -374,10 +374,10 @@ class PEVideoRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class PEVideoRotaryEmbedding(nn.Module):
+class PeVideoRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: PEVideoConfig, device=None):
+    def __init__(self, config: PeVideoConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -395,7 +395,7 @@ class PEVideoRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PEVideoConfig] = None,
+        config: Optional[PeVideoConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
     ) -> tuple["torch.Tensor", float]:
@@ -440,11 +440,11 @@ class PEVideoRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class PEVideoPreTrainedModel(PreTrainedModel):
-    config: PEVideoConfig
+class PeVideoPreTrainedModel(PreTrainedModel):
+    config: PeVideoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PEVideoEncoderLayer"]
+    _no_split_modules = ["PeVideoEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -452,8 +452,8 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": PEVideoEncoderLayer,
-        "attentions": PEVideoAttention,
+        "hidden_states": PeVideoEncoderLayer,
+        "attentions": PeVideoAttention,
     }
     _checkpoint_conversion_mapping = {
         r"^audio_video_encoder\.video_encoder": "video_encoder",
@@ -468,33 +468,33 @@ class PEVideoPreTrainedModel(PreTrainedModel):
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
-        if isinstance(module, PEVideoEncoderEmbeddings):
+        if isinstance(module, PeVideoEncoderEmbeddings):
             embed_dim = module.class_embedding.shape[-1]
             nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 @auto_docstring(
     custom_intro="""
-    The PEVideo Encoder model.
+    The PeVideo Encoder model.
     """
 )
-class PEVideoEncoder(PEVideoPreTrainedModel):
-    config: PEVideoEncoderConfig
+class PeVideoEncoder(PeVideoPreTrainedModel):
+    config: PeVideoEncoderConfig
     base_model_prefix = "video_encoder"
 
-    def __init__(self, config: PEVideoEncoderConfig):
+    def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)
         self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
         self.proj = nn.Linear(config.vision_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
         # TODO: should it be named patch_embedding?
-        self.embeddings = PEVideoEncoderEmbeddings(config)
+        self.embeddings = PeVideoEncoderEmbeddings(config)
         self.layers = nn.ModuleList(
-            [PEVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [PeVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = PEVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = PEVideoRotaryEmbedding(config=config)
+        self.norm = PeVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PeVideoRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def get_video_features(
@@ -553,14 +553,14 @@ class PEVideoEncoder(PEVideoPreTrainedModel):
         )
 
 
-class PEVideoModel(PEVideoPreTrainedModel):
-    def __init__(self, config: PEVideoConfig):
+class PeVideoModel(PeVideoPreTrainedModel):
+    def __init__(self, config: PeVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.video_encoder = PEVideoEncoder(config.video_config)
+        self.video_encoder = PeVideoEncoder(config.video_config)
 
-        self.text_video_head = PEVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
-        self.video_head = PEVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
+        self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.video_head = PeVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
 
         self.video_logit_scale = nn.Parameter(torch.zeros(1))
         self.video_logit_bias = nn.Parameter(torch.zeros(1))
@@ -598,7 +598,7 @@ class PEVideoModel(PEVideoPreTrainedModel):
         padding_mask_videos: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         **kwargs,
-    ) -> PEVideoOutput:
+    ) -> PeVideoOutput:
         video_output: BaseModelOutputWithPooling = self.video_encoder(
             pixel_values_videos=pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
@@ -627,7 +627,7 @@ class PEVideoModel(PEVideoPreTrainedModel):
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
-        return PEVideoOutput(
+        return PeVideoOutput(
             logits_per_text=logits_per_text,
             logits_per_video=logits_per_video,
             text_embeds=text_embeds,
@@ -638,4 +638,4 @@ class PEVideoModel(PEVideoPreTrainedModel):
         )
 
 
-__all__ = ["PEVideoEncoder", "PEVideoModel"]
+__all__ = ["PeVideoEncoder", "PeVideoModel"]

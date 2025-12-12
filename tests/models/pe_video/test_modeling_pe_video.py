@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import PEVideoConfig, PEVideoEncoderConfig
+from transformers import PeVideoConfig, PeVideoEncoderConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -35,12 +35,12 @@ if is_torch_available():
 
     from transformers import (
         ModernBertConfig,
-        PEVideoEncoder,
-        PEVideoModel,
+        PeVideoEncoder,
+        PeVideoModel,
     )
 
 
-class PEVideoEncoderTester:
+class PeVideoEncoderTester:
     def __init__(
         self,
         parent,
@@ -111,10 +111,10 @@ class PEVideoEncoderTester:
         return config, pixel_values_videos, padding_mask_videos
 
     def get_config(self):
-        return PEVideoEncoderConfig(**self.config_kwargs)
+        return PeVideoEncoderConfig(**self.config_kwargs)
 
     def create_and_check_model(self, config, pixel_values_videos, padding_mask_videos):
-        model = PEVideoEncoder(config=config)
+        model = PeVideoEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -129,17 +129,17 @@ class PEVideoEncoderTester:
 
 
 @require_torch
-class PEVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (PEVideoEncoder,)
+class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (PeVideoEncoder,)
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEVideoEncoderTester(self)
+        self.model_tester = PeVideoEncoderTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEVideoEncoderConfig, has_text_modality=False, hidden_size=37
+            self, config_class=PeVideoEncoderConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -149,7 +149,7 @@ class PEVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEVideoEncoder does not have usual input embeddings")
+    @unittest.skip(reason="PeVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -173,14 +173,14 @@ class PEVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         pass
 
-    @unittest.skip(reason="PEVideoEncoder does not support feedforward chunking yet")
+    @unittest.skip(reason="PeVideoEncoder does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
 
 
-class PEVideoTextModelTester:
+class PeVideoTextModelTester:
     """
-    Only a ModelTester and no PEVideoTextModelTest since text model is ModernBertModel that is already tested.
+    Only a ModelTester and no PeVideoTextModelTest since text model is ModernBertModel that is already tested.
     """
     def __init__(
         self,
@@ -241,7 +241,7 @@ class PEVideoTextModelTester:
         return config, inputs_dict
 
 
-class PEVideoModelTester:
+class PeVideoModelTester:
     def __init__(self, parent, text_kwargs=None, video_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -249,8 +249,8 @@ class PEVideoModelTester:
             video_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = PEVideoTextModelTester(parent, **text_kwargs)
-        self.video_model_tester = PEVideoEncoderTester(parent, **video_kwargs)
+        self.text_model_tester = PeVideoTextModelTester(parent, **text_kwargs)
+        self.video_model_tester = PeVideoEncoderTester(parent, **video_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
@@ -265,14 +265,14 @@ class PEVideoModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         video_config = self.video_model_tester.get_config()
-        return PEVideoConfig(
+        return PeVideoConfig(
             text_config=text_config.to_dict(),
             video_config=video_config.to_dict(),
             projection_dim=32,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos):
-        model = PEVideoModel(config).to(torch_device).eval()
+        model = PeVideoModel(config).to(torch_device).eval()
         with torch.no_grad():
             _ = model(input_ids, pixel_values_videos, attention_mask, padding_mask_videos)
 
@@ -288,9 +288,9 @@ class PEVideoModelTester:
 
 
 @require_torch
-class PEVideoModelTest(ModelTesterMixin, unittest.TestCase):
+class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
-    all_model_classes = (PEVideoModel,)
+    all_model_classes = (PeVideoModel,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_pruning = False
     test_resize_embeddings = False
@@ -299,9 +299,9 @@ class PEVideoModelTest(ModelTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEVideoModelTester(self)
+        self.model_tester = PeVideoModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEVideoConfig, has_text_modality=False, common_properties=[], hidden_size=37
+            self, config_class=PeVideoConfig, has_text_modality=False, common_properties=[], hidden_size=37
         )
 
     def test_config(self):
@@ -311,7 +311,7 @@ class PEVideoModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEVideoModel does not have usual input embeddings")
+    @unittest.skip(reason="PeVideoModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -325,7 +325,7 @@ class PEVideoModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class PEVideoIntegrationTest(unittest.TestCase):
+class PeVideoIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         # TODO: Add integration test when pretrained model is available

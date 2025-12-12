@@ -11,7 +11,7 @@ from ...tokenization_utils_base import (
 
 class SamAudioJudgeProcessor(ProcessorMixin):
     attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "PEAudioFeatureExtractor"
+    feature_extractor_class = "PeAudioFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __call__(

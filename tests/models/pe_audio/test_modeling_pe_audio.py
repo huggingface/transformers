@@ -13,7 +13,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import PEAudioConfig, PEAudioEncoderConfig
+from transformers import PeAudioConfig, PeAudioEncoderConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -35,12 +35,12 @@ if is_torch_available():
 
     from transformers import (
         ModernBertConfig,
-        PEAudioEncoder,
-        PEAudioModel,
+        PeAudioEncoder,
+        PeAudioModel,
     )
 
 
-class PEAudioEncoderTester:
+class PeAudioEncoderTester:
     def __init__(
         self,
         parent,
@@ -108,11 +108,11 @@ class PEAudioEncoderTester:
 
     def get_config(self):
         if not hasattr(self, '_config'):
-            self._config = PEAudioEncoderConfig(**self.config_kwargs)
+            self._config = PeAudioEncoderConfig(**self.config_kwargs)
         return self._config
 
     def create_and_check_model(self, config, input_values, padding_mask):
-        model = PEAudioEncoder(config=config)
+        model = PeAudioEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -127,17 +127,17 @@ class PEAudioEncoderTester:
 
 
 @require_torch
-class PEAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (PEAudioEncoder,)
+class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (PeAudioEncoder,)
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEAudioEncoderTester(self)
+        self.model_tester = PeAudioEncoderTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEAudioEncoderConfig, has_text_modality=False, hidden_size=37
+            self, config_class=PeAudioEncoderConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -147,14 +147,14 @@ class PEAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEAudioEncoder does not have usual input embeddings")
+    @unittest.skip(reason="PeAudioEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
 
-class PEAudioTextModelTester:
+class PeAudioTextModelTester:
     """
-    Only a ModelTester and no PEAudioTextModelTest since text model is ModernBertModel that is already tested.
+    Only a ModelTester and no PeAudioTextModelTest since text model is ModernBertModel that is already tested.
     """
     def __init__(
         self,
@@ -215,7 +215,7 @@ class PEAudioTextModelTester:
         return config, inputs_dict
 
 
-class PEAudioModelTester:
+class PeAudioModelTester:
     def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -223,8 +223,8 @@ class PEAudioModelTester:
             audio_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = PEAudioTextModelTester(parent, **text_kwargs)
-        self.audio_model_tester = PEAudioEncoderTester(parent, **audio_kwargs)
+        self.text_model_tester = PeAudioTextModelTester(parent, **text_kwargs)
+        self.audio_model_tester = PeAudioEncoderTester(parent, **audio_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
@@ -239,14 +239,14 @@ class PEAudioModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         audio_config = self.audio_model_tester.get_config()
-        return PEAudioConfig(
+        return PeAudioConfig(
             text_config=text_config.to_dict(),
             audio_config=audio_config.to_dict(),
             projection_dim=32,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
-        model = PEAudioModel(config).to(torch_device).eval()
+        model = PeAudioModel(config).to(torch_device).eval()
         with torch.no_grad():
             _ = model(input_ids, input_values, attention_mask, padding_mask)
 
@@ -262,9 +262,9 @@ class PEAudioModelTester:
 
 
 @require_torch
-class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
-    all_model_classes = (PEAudioModel,)
+    all_model_classes = (PeAudioModel,)
     additional_model_inputs = ["input_values", "padding_mask"]
     test_pruning = False
     test_resize_embeddings = False
@@ -273,9 +273,9 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEAudioModelTester(self)
+        self.model_tester = PeAudioModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEAudioConfig, has_text_modality=False, common_properties=[], hidden_size=37
+            self, config_class=PeAudioConfig, has_text_modality=False, common_properties=[], hidden_size=37
         )
 
     def test_config(self):
@@ -285,7 +285,7 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEAudioModel does not have usual input embeddings")
+    @unittest.skip(reason="PeAudioModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -299,7 +299,7 @@ class PEAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class PEAudioIntegrationTest(unittest.TestCase):
+class PeAudioIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         # TODO: Add integration test when pretrained model is available

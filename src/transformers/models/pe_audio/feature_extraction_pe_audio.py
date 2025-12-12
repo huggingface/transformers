@@ -11,9 +11,9 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class PEAudioFeatureExtractor(SequenceFeatureExtractor):
+class PeAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a PEAudioFeatureExtractor feature extractor.
+    Constructs a PeAudioFeatureExtractor feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -145,4 +145,4 @@ class PEAudioFeatureExtractor(SequenceFeatureExtractor):
         return padded_inputs
 
 
-__all__ = ["PEAudioFeatureExtractor"]
+__all__ = ["PeAudioFeatureExtractor"]

@@ -15,7 +15,7 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import PEAudioVideoEncoderConfig, PEAudioVideoProcessor
+from transformers import PeAudioVideoEncoderConfig, PeAudioVideoProcessor
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -36,12 +36,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        PEAudioVideoEncoder,
-        PEAudioVideoModel,
+        PeAudioVideoEncoder,
+        PeAudioVideoModel,
     )
 
 
-class PEAudioVideoEncoderTester:
+class PeAudioVideoEncoderTester:
     def __init__(
         self,
         parent,
@@ -172,11 +172,11 @@ class PEAudioVideoEncoderTester:
 
     def get_config(self):
         if not hasattr(self, '_config'):
-            self._config = PEAudioVideoEncoderConfig(**self.config_kwargs)
+            self._config = PeAudioVideoEncoderConfig(**self.config_kwargs)
         return self._config
 
     def create_and_check_model(self, config, input_values, padding_mask, pixel_values_videos, padding_mask_videos):
-        model = PEAudioVideoEncoder(config=config)
+        model = PeAudioVideoEncoder(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -196,8 +196,8 @@ class PEAudioVideoEncoderTester:
 
 
 @require_torch
-class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (PEAudioVideoEncoder,)
+class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (PeAudioVideoEncoder,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
     test_pruning = False
     test_resize_embeddings = False
@@ -205,9 +205,9 @@ class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PEAudioVideoEncoderTester(self)
+        self.model_tester = PeAudioVideoEncoderTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=PEAudioVideoEncoderConfig, has_text_modality=False, hidden_size=37
+            self, config_class=PeAudioVideoEncoderConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -217,7 +217,7 @@ class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="PEAudioVideoEncoder does not have usual input embeddings")
+    @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -226,7 +226,7 @@ class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        "PEAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector."
+        "PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector."
     )
     def test_sdpa_can_dispatch_composite_models(self):
         pass
@@ -245,11 +245,11 @@ class PEAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class PEAudioVideoModelIntegrationTest(unittest.TestCase):
+class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint_name = "/raid/eustache/sam-audio/converted"
         self.dtype = torch.float32
-        self.processor = PEAudioVideoProcessor.from_pretrained("facebook/pe-av-large")
+        self.processor = PeAudioVideoProcessor.from_pretrained("facebook/pe-av-large")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -274,7 +274,7 @@ class PEAudioVideoModelIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True
         ).to(torch_device)
-        model = PEAudioVideoModel.from_pretrained(
+        model = PeAudioVideoModel.from_pretrained(
             self.checkpoint_name, dtype=self.dtype, device_map=torch_device, attn_implementation="eager"
         )
 

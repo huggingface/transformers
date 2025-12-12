@@ -9,12 +9,12 @@ from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_typ
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class PEAudioEncoderConfig(PreTrainedConfig):
+class PeAudioEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PEAudioEncoderModel`]. It is used to instantiate a
-    PEAudioEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PeAudioEncoderModel`]. It is used to instantiate a
+    PeAudioEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    PEAudioEncoder-8B [Qwen/PEAudioEncoder-8B](https://huggingface.co/Qwen/PEAudioEncoder-8B).
+    PeAudioEncoder-8B [Qwen/PeAudioEncoder-8B](https://huggingface.co/Qwen/PeAudioEncoder-8B).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -22,8 +22,8 @@ class PEAudioEncoderConfig(PreTrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the PEAudioEncoder model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PEAudioEncoderModel`]
+            Vocabulary size of the PeAudioEncoder model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`PeAudioEncoderModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 22016):
@@ -73,13 +73,13 @@ class PEAudioEncoderConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import PEAudioEncoderModel, PEAudioEncoderConfig
+    >>> from transformers import PeAudioEncoderModel, PeAudioEncoderConfig
 
-    >>> # Initializing a PEAudioEncoder style configuration
-    >>> configuration = PEAudioEncoderConfig()
+    >>> # Initializing a PeAudioEncoder style configuration
+    >>> configuration = PeAudioEncoderConfig()
 
-    >>> # Initializing a model from the PEAudioEncoder-8B style configuration
-    >>> model = PEAudioEncoderModel(configuration)
+    >>> # Initializing a model from the PeAudioEncoder-8B style configuration
+    >>> model = PeAudioEncoderModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -88,7 +88,7 @@ class PEAudioEncoderConfig(PreTrainedConfig):
     model_type = "pe_audio_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `PEAudioEncoder`
+    # Default tensor parallel plan for base model `PeAudioEncoder`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -185,9 +185,9 @@ class PEAudioEncoderConfig(PreTrainedConfig):
         )
 
 
-class PEAudioConfig(PretrainedConfig):
+class PeAudioConfig(PretrainedConfig):
     model_type = "pe_audio"
-    sub_configs = {"text_config": AutoConfig, "audio_config": PEAudioEncoderConfig}
+    sub_configs = {"text_config": AutoConfig, "audio_config": PeAudioEncoderConfig}
 
     _default_text_config_kwargs = {
         "model_type": "modernbert",
@@ -214,13 +214,13 @@ class PEAudioConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
         if isinstance(audio_config, dict):
-            audio_config = PEAudioEncoderConfig(**audio_config)
+            audio_config = PeAudioEncoderConfig(**audio_config)
         elif audio_config is None:
-            audio_config = PEAudioEncoderConfig()
+            audio_config = PeAudioEncoderConfig()
             # TODO: add log
 
         self.text_config = text_config
         self.audio_config = audio_config
 
 
-__all__ = ["PEAudioEncoderConfig", "PEAudioConfig"]
+__all__ = ["PeAudioEncoderConfig", "PeAudioConfig"]

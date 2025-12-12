@@ -25,13 +25,13 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel
-from .configuration_pe_audio import PEAudioConfig, PEAudioEncoderConfig
+from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
 
 # TODO: not sure about the typing for text_model_output
 @dataclass
 # @auto_docstring
-class PEAudioOutput(ModelOutput):
+class PeAudioOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
@@ -42,13 +42,13 @@ class PEAudioOutput(ModelOutput):
         The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-image
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`PEAudioTextModel`].
+        The text embeddings obtained by applying the projection layer to the pooled output of [`PeAudioTextModel`].
     audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`PEAudioVisionModel`].
+        The image embeddings obtained by applying the projection layer to the pooled output of [`PeAudioVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PEAudioTextModel`].
+        The output of the [`PeAudioTextModel`].
     audio_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PEAudioVisionModel`].
+        The output of the [`PeAudioVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -66,7 +66,7 @@ class PEAudioOutput(ModelOutput):
         )
 
 
-class PEAudioMaskedGroupNorm(nn.GroupNorm):
+class PeAudioMaskedGroupNorm(nn.GroupNorm):
     def forward(self, x, padding_mask=None):
         if padding_mask is None:
             return super().forward(x)
@@ -90,10 +90,10 @@ class PEAudioMaskedGroupNorm(nn.GroupNorm):
         return x_norm * padding_mask
 
 
-class PEAudioConvBlock1d(nn.Module):
+class PeAudioConvBlock1d(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.groupnorm = PEAudioMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
+        self.groupnorm = PeAudioMaskedGroupNorm(num_groups=1, num_channels=config.hidden_size)
         self.activation = nn.SiLU()
         self.project = nn.Conv1d(
             in_channels=config.hidden_size,
@@ -108,11 +108,11 @@ class PEAudioConvBlock1d(nn.Module):
         return self.project(x)
 
 
-class PEAudioResnetBlock1d(nn.Module):
+class PeAudioResnetBlock1d(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.block1 = PEAudioConvBlock1d(config)
-        self.block2 = PEAudioConvBlock1d(config)
+        self.block1 = PeAudioConvBlock1d(config)
+        self.block2 = PeAudioConvBlock1d(config)
 
     def forward(self, hidden_states, padding_mask=None):
         """
@@ -154,7 +154,7 @@ class Snake1d(nn.Module):
         return hidden_states
 
 
-class PEAudioResidualUnit(nn.Module):
+class PeAudioResidualUnit(nn.Module):
     """
     A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
     """
@@ -191,16 +191,16 @@ class PEAudioResidualUnit(nn.Module):
         return output_tensor
 
 
-class PEAudioEncoderBlock(nn.Module):
+class PeAudioEncoderBlock(nn.Module):
     """Encoder block used in PE_AUDIO encoder."""
 
-    def __init__(self, config: PEAudioConfig, stride: int = 1, stride_index: int = 1):
+    def __init__(self, config: PeAudioConfig, stride: int = 1, stride_index: int = 1):
         super().__init__()
 
         dimension = config.encoder_hidden_size * 2**stride_index
-        self.res_unit1 = PEAudioResidualUnit(dimension // 2, dilation=1)
-        self.res_unit2 = PEAudioResidualUnit(dimension // 2, dilation=3)
-        self.res_unit3 = PEAudioResidualUnit(dimension // 2, dilation=9)
+        self.res_unit1 = PeAudioResidualUnit(dimension // 2, dilation=1)
+        self.res_unit2 = PeAudioResidualUnit(dimension // 2, dilation=3)
+        self.res_unit3 = PeAudioResidualUnit(dimension // 2, dilation=9)
         self.snake1 = Snake1d(dimension // 2)
         self.conv1 = nn.Conv1d(
             dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
@@ -215,10 +215,10 @@ class PEAudioEncoderBlock(nn.Module):
         return hidden_state
 
 
-class PEAudioDacEncoder(nn.Module):
+class PeAudioDacEncoder(nn.Module):
     """P_E_AUDIO_DAC Encoder"""
 
-    def __init__(self, config: PEAudioConfig):
+    def __init__(self, config: PeAudioConfig):
         super().__init__()
 
         strides = config.downsampling_ratios
@@ -229,7 +229,7 @@ class PEAudioDacEncoder(nn.Module):
         # Create EncoderBlocks that double channels as they downsample by `stride`
         for stride_index, stride in enumerate(strides):
             stride_index = stride_index + 1
-            self.block += [PEAudioEncoderBlock(config, stride=stride, stride_index=stride_index)]
+            self.block += [PeAudioEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
         d_model = config.encoder_hidden_size * 2**stride_index
@@ -248,7 +248,7 @@ class PEAudioDacEncoder(nn.Module):
         return hidden_state
 
 
-class PEAudioContrastiveHead(nn.Module):
+class PeAudioContrastiveHead(nn.Module):
     def __init__(
         self,
         in_dim: int,
@@ -262,10 +262,10 @@ class PEAudioContrastiveHead(nn.Module):
         return self.proj(self.layer_norm(x))
 
 
-class PEAudioEncoderEmbeddings(nn.Module):
+class PeAudioEncoderEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.resnet_block = PEAudioResnetBlock1d(config)
+        self.resnet_block = PeAudioResnetBlock1d(config)
         self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
@@ -338,7 +338,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class PEAudioAttention(nn.Module):
+class PeAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx):
@@ -364,8 +364,8 @@ class PEAudioAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = PEAudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = PEAudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.q_norm = PeAudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = PeAudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -404,7 +404,7 @@ class PEAudioAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PEAudioMLP(nn.Module):
+class PeAudioMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -420,16 +420,16 @@ class PEAudioMLP(nn.Module):
         return down_proj
 
 
-class PEAudioEncoderLayer(GradientCheckpointingLayer):
+class PeAudioEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = PEAudioAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = PeAudioAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = PEAudioMLP(config)
-        self.input_layernorm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = PeAudioMLP(config)
+        self.input_layernorm = PeAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = PeAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -466,10 +466,10 @@ class PEAudioEncoderLayer(GradientCheckpointingLayer):
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class PEAudioRMSNorm(nn.Module):
+class PeAudioRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        PEAudioRMSNorm is equivalent to T5LayerNorm
+        PeAudioRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -486,10 +486,10 @@ class PEAudioRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class PEAudioRotaryEmbedding(nn.Module):
+class PeAudioRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: PEAudioConfig, device=None):
+    def __init__(self, config: PeAudioConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -507,7 +507,7 @@ class PEAudioRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PEAudioConfig] = None,
+        config: Optional[PeAudioConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
     ) -> tuple["torch.Tensor", float]:
@@ -554,20 +554,20 @@ class PEAudioRotaryEmbedding(nn.Module):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Class for outputs of [`PEAudioEncoder`].
+    Class for outputs of [`PeAudioEncoder`].
     """
 )
-class PEAudioEncoderOutput(BaseModelOutputWithPooling):
+class PeAudioEncoderOutput(BaseModelOutputWithPooling):
     codec_features: Optional[torch.FloatTensor] = None
     output_mask: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
-class PEAudioPretrainedModel(PreTrainedModel):
-    config: PEAudioConfig
+class PeAudioPretrainedModel(PreTrainedModel):
+    config: PeAudioConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PEAudioEncoderLayer"]
+    _no_split_modules = ["PeAudioEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -575,8 +575,8 @@ class PEAudioPretrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": PEAudioEncoderLayer,
-        "attentions": PEAudioAttention,
+        "hidden_states": PeAudioEncoderLayer,
+        "attentions": PeAudioAttention,
     }
     _checkpoint_conversion_mapping = {
         r"^audio_video_encoder\.audio_encoder": "audio_encoder",
@@ -591,24 +591,24 @@ class PEAudioPretrainedModel(PreTrainedModel):
             # 0.02 is the standard default value across the library
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
-        if isinstance(module, PEAudioEncoderEmbeddings):
+        if isinstance(module, PeAudioEncoderEmbeddings):
             embed_dim = module.class_embedding.shape[-1]
             nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 @auto_docstring(
     custom_intro="""
-    The PEAudio Encoder model.
+    The PeAudio Encoder model.
     """
 )
-class PEAudioEncoder(PEAudioPretrainedModel):
-    config: PEAudioEncoderConfig
+class PeAudioEncoder(PeAudioPretrainedModel):
+    config: PeAudioEncoderConfig
     main_input_name = "input_values"
     base_model_prefix = "audio_encoder"
 
-    def __init__(self, config: PEAudioEncoderConfig):
+    def __init__(self, config: PeAudioEncoderConfig):
         super().__init__(config)
-        self.dac_encoder = PEAudioDacEncoder(config.dac_config)
+        self.dac_encoder = PeAudioDacEncoder(config.dac_config)
         self.bottleneck = nn.Conv1d(
             config.dac_config.hidden_size,
             config.dac_config.codebook_dim * 2,
@@ -617,12 +617,12 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         self.data_proj = nn.Linear(config.dac_config.codebook_dim, config.hidden_size)
 
         # TODO: should it be named patch_embedding?
-        self.embeddings = PEAudioEncoderEmbeddings(config)
+        self.embeddings = PeAudioEncoderEmbeddings(config)
         self.layers = nn.ModuleList(
-            [PEAudioEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [PeAudioEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = PEAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = PEAudioRotaryEmbedding(config=config)
+        self.norm = PeAudioRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PeAudioRotaryEmbedding(config=config)
         self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
         self.post_init()
@@ -681,21 +681,21 @@ class PEAudioEncoder(PEAudioPretrainedModel):
         hidden_states = self.norm(hidden_states)
         hidden_states = self.output(hidden_states)
 
-        return PEAudioEncoderOutput(
+        return PeAudioEncoderOutput(
             last_hidden_state=hidden_states[:, 1:],
             pooler_output=hidden_states[:, 0],
             output_mask=padding_mask,
         )
 
 
-class PEAudioModel(PEAudioPretrainedModel):
-    def __init__(self, config: PEAudioConfig):
+class PeAudioModel(PeAudioPretrainedModel):
+    def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.audio_encoder = PEAudioEncoder(config.audio_config)
+        self.audio_encoder = PeAudioEncoder(config.audio_config)
 
-        self.text_audio_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
-        self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.text_audio_head = PeAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.audio_head = PeAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
         self.audio_logit_scale = nn.Parameter(torch.zeros(1))
         self.audio_logit_bias = nn.Parameter(torch.zeros(1))
@@ -735,7 +735,7 @@ class PEAudioModel(PEAudioPretrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         **kwargs,
-    ) -> PEAudioOutput:
+    ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
@@ -764,7 +764,7 @@ class PEAudioModel(PEAudioPretrainedModel):
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
-        return PEAudioOutput(
+        return PeAudioOutput(
             logits_per_text=logits_per_text,
             logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
@@ -778,7 +778,7 @@ class PEAudioModel(PEAudioPretrainedModel):
 # TODO: underline in documentation that logits output shape is
 # 1. Model: (n_audio, n_text)
 # 2. Frame-level: (n_audio, n_text, n_frames)
-class PEAudioFrameLevelModel(PEAudioModel):
+class PeAudioFrameLevelModel(PeAudioModel):
     @can_return_tuple
     def forward(
         self,
@@ -788,7 +788,7 @@ class PEAudioFrameLevelModel(PEAudioModel):
         padding_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         **kwargs,
-    ) -> PEAudioOutput:
+    ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
@@ -817,7 +817,7 @@ class PEAudioFrameLevelModel(PEAudioModel):
             labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
             loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
 
-        return PEAudioOutput(
+        return PeAudioOutput(
             logits_per_text=logits_per_text,
             logits_per_audio=logits_per_audio,
             text_embeds=text_embeds,
@@ -828,4 +828,4 @@ class PEAudioFrameLevelModel(PEAudioModel):
         )
 
 
-__all__ = ["PEAudioFrameLevelModel", "PEAudioModel", "PEAudioEncoder"]
+__all__ = ["PeAudioFrameLevelModel", "PeAudioModel", "PeAudioEncoder"]

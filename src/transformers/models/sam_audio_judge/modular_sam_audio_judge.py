@@ -8,7 +8,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, Base
 from ...modeling_utils import PreTrainedModel
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ..auto import AutoModel
-from ..pe_audio.modeling_pe_audio import PEAudioResnetBlock1d, PEAudioEncoderEmbeddings
+from ..pe_audio.modeling_pe_audio import PeAudioResnetBlock1d, PeAudioEncoderEmbeddings
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -101,7 +101,7 @@ class SamAudioJudgeConfig(Qwen3Config):
         self.bottleneck_dim = bottleneck_dim
 
 
-class SamAudioJudgeEmbeddings(PEAudioEncoderEmbeddings): ...
+class SamAudioJudgeEmbeddings(PeAudioEncoderEmbeddings): ...
 
 
 class SamAudioJudgeAttention(Qwen3Attention):
