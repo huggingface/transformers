@@ -445,8 +445,10 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
-
     _can_compile_fullgraph = True
+
+    # No longer used as we directly use our masks instead
+    _keys_to_ignore_on_load_unexpected = ["attn.bias", "crossattention.bias"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
