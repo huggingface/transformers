@@ -126,7 +126,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
     model_type = "isaac_vision"
     base_config_key = "vision_config"
-    _attn_implementation: Optional[str] = None
 
     def __init__(
         self,
@@ -643,7 +642,6 @@ class IsaacVisionAttention(Siglip2Attention):
         past_key_value: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         is_causal: bool = False,
-        attn_implementation: Optional[str] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         **kwargs,
@@ -681,7 +679,9 @@ class IsaacVisionAttention(Siglip2Attention):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = attn_implementation or getattr(self.config, "_attn_implementation", "flash_attention_3")
+        resolved_key = "isaac_sdpa"
+        if self.config._attn_implementation != "sdpa":
+            resolved_key = self.ATTENTION_KEY_MAP.get(self.config._attn_implementation, resolved_key)
 
         attn_mask = ensure_document_attention_mask(
             attention_mask,
@@ -691,8 +691,6 @@ class IsaacVisionAttention(Siglip2Attention):
             q.device,
             return_mask_function=True,
         )
-
-        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl, attn_impl)
 
         attn_weights = None
         if resolved_key in self._FLASH_IMPLS:
@@ -724,7 +722,7 @@ class IsaacVisionAttention(Siglip2Attention):
         else:
             attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key)
             if attention_fn is None:
-                raise ValueError(f"Attention implementation {attn_impl} not found.")
+                raise ValueError(f"Attention implementation {resolved_key} not found.")
 
             query_states = q.transpose(0, 1).unsqueeze(0)
             key_states = k.transpose(0, 1).unsqueeze(0)
@@ -1475,21 +1473,6 @@ class IsaacConfig(PretrainedConfig):
         self._rope_scaling = value
         self.rope_scaling = value
 
-    @property
-    def vision_attn_implementation(self) -> Optional[str]:
-        value = getattr(self.vision_config, "_attn_implementation", None)
-        if value is None:
-            value = getattr(self.vision_config, "attn_implementation", None)
-        return value
-
-    @vision_attn_implementation.setter
-    def vision_attn_implementation(self, value: Optional[str]) -> None:
-        self.vision_config._attn_implementation = value
-        if value is not None:
-            self.vision_config.attn_implementation = value
-        elif hasattr(self.vision_config, "attn_implementation"):
-            delattr(self.vision_config, "attn_implementation")
-
     def to_dict(self):
         output = super().to_dict()
         rope_params = self.rope_parameters
@@ -2040,7 +2023,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         cos = cos.to(inputs_embeds.dtype)
         sin = sin.to(inputs_embeds.dtype)
 
-        # Prepare attention mask(s)
+        # Prepare attention mask
+
         if not isinstance(attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -2059,7 +2043,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             layer_attention_mask = (
                 attention_mask[decoder_layer.attention_type] if isinstance(attention_mask, dict) else attention_mask
             )
-
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_attention_mask,
@@ -2144,6 +2127,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
