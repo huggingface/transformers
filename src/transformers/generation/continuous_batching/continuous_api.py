@@ -725,8 +725,8 @@ class ContinuousBatchProcessor:
             # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1) # shape is [1, seq_len]
-            next_tokens = next_tokens.squeeze(0) # shape is [seq_len]
+            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
+            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
         tokens = next_tokens.size(0)  # Get seq_len dimension
         self.output_ids[:tokens].copy_(next_tokens)
 
