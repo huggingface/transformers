@@ -473,8 +473,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         assert quantized_total_byte_count == quantized_model_size[""]
 
         # we should at least have 1.5 times memory reduction in total
-        print(model_size[""])
-        print(quantized_model_size[""])
         assert model_size[""] > quantized_model_size[""] * 1.5
 
 
