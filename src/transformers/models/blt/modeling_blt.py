@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -27,13 +28,14 @@ import torch.distributions
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -45,6 +47,8 @@ from .configuration_blt import (
     BltLocalDecoderConfig,
     BltLocalEncoderConfig,
     BltPatcherConfig,
+    BltTextConfig,
+    BltVisionConfig,
 )
 
 
@@ -427,6 +431,771 @@ class BltCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class BltPrecomputedAspectRatioEmbedding(nn.Module):
+    def __init__(self, config: BltVisionConfig, is_gated: bool = True):
+        super().__init__()
+        self.max_num_tiles = config.max_num_tiles
+        self.hidden_size = config.hidden_size
+        self.max_aspect_ratio_id = config.max_aspect_ratio_id
+        self.is_gated = is_gated
+
+        self.embedding = nn.Embedding(self.max_aspect_ratio_id + 1, self.max_num_tiles * self.hidden_size)
+        if is_gated:
+            self.gate = nn.Parameter(torch.zeros(1))
+
+    def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
+        embeddings = self.embedding(aspect_ratio_ids)
+        embeddings = embeddings.reshape(-1, self.max_num_tiles, 1, self.hidden_size)
+
+        if self.is_gated:
+            embeddings = embeddings * self.gate.tanh()
+
+        hidden_state = hidden_state + embeddings
+        return hidden_state
+
+
+class BltPrecomputedPositionEmbedding(nn.Module):
+    def __init__(self, config: BltVisionConfig):
+        super().__init__()
+        self.max_num_tiles = config.max_num_tiles
+        self.max_aspect_ratio_id = config.max_aspect_ratio_id
+        self.num_patches = (config.image_size // config.patch_size) ** 2 + 1
+        self.hidden_size = config.hidden_size
+        self.scale = config.hidden_size**-0.5
+
+        self.gate = nn.Parameter(torch.zeros(1))
+
+        # position embedding
+        position_embedding = torch.randn(self.num_patches, self.hidden_size)
+        self.embedding = nn.Parameter(self.scale * position_embedding)
+
+        # tile position embedding
+        self.tile_embedding = nn.Embedding(
+            self.max_aspect_ratio_id + 1, self.max_num_tiles * self.num_patches * self.hidden_size
+        )
+
+    def forward(self, hidden_state: torch.Tensor, aspect_ratio_ids: torch.Tensor) -> torch.Tensor:
+        # position embeddings
+        gated_position_embedding = (1 - self.gate.tanh()) * self.embedding
+        hidden_state = hidden_state + gated_position_embedding.view(1, 1, self.num_patches, self.hidden_size)
+
+        # precomputed tile position embeddings
+        tile_position_embedding = self.tile_embedding(aspect_ratio_ids)
+        batch_size = hidden_state.shape[0]
+        tile_position_embedding = tile_position_embedding.reshape(
+            batch_size, self.max_num_tiles, self.num_patches, self.hidden_size
+        )
+        gated_tile_position_embedding = self.gate.tanh() * tile_position_embedding
+        hidden_state = hidden_state + gated_tile_position_embedding
+
+        return hidden_state
+
+
+class BltVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class BltVisionAttention(nn.Module):
+    def __init__(self, config: BltVisionConfig):
+        super().__init__()
+
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.attention_heads
+        self.head_dim = config.hidden_size // config.attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.num_key_value_groups = 1
+
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim, bias=False)
+
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        query = self.q_proj(hidden_state)
+        key = self.k_proj(hidden_state)
+        value = self.v_proj(hidden_state)
+
+        batch_size, q_seq_len, _ = query.shape
+        _, kv_seq_len, _ = key.shape
+
+        query = query.view(batch_size, q_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, kv_seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, q_seq_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class BltVisionEncoderLayer(nn.Module):
+    def __init__(self, config: BltVisionConfig, is_gated: bool = False):
+        super().__init__()
+
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.attention_heads
+        self.is_gated = is_gated
+        self.intermediate_size = config.intermediate_size
+
+        self.self_attn = BltVisionAttention(config)
+        self.mlp = BltVisionMLP(config)
+
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.norm_eps)
+
+        if is_gated:
+            self.gate_attn = nn.Parameter(torch.ones(1) * math.pi / 4)
+            self.gate_ffn = nn.Parameter(torch.ones(1) * math.pi / 4)
+
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
+        # Self Attention
+        residual = hidden_state
+        hidden_state = self.input_layernorm(hidden_state)
+        hidden_state, attn_weights = self.self_attn(hidden_state, attention_mask=attention_mask)
+        if self.is_gated:
+            hidden_state = self.gate_attn.tanh() * hidden_state
+        hidden_state = residual + hidden_state
+
+        # Feed forward
+        residual = hidden_state
+        hidden_state = self.post_attention_layernorm(hidden_state)
+        hidden_state = self.mlp(hidden_state)
+        if self.is_gated:
+            hidden_state = self.gate_ffn.tanh() * hidden_state
+        hidden_state = residual + hidden_state
+
+        return hidden_state
+
+
+class BltVisionEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`BltEncoderLayer`].
+
+    Args:
+        config: BltConfig
+    """
+
+    def __init__(self, config: BltVisionConfig, num_layers=32, is_gated=False):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([BltVisionEncoderLayer(config, is_gated) for _ in range(num_layers)])
+        self.gradient_checkpointing = False
+        self.config = config
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> BaseModelOutput:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+
+        """
+        encoder_states = ()
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_state=hidden_states,
+                attention_mask=attention_mask,
+            )
+            encoder_states = encoder_states + (hidden_states,)
+
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
+
+
+class BltTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        BltTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class BltTextCrossAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        config: Optional[BltTextConfig] = None,
+        layer_idx: Optional[int] = None,
+    ):
+        super().__init__()
+        self.config = config
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.hidden_size // self.num_heads
+        self.layer_idx = layer_idx
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
+        self.q_norm = BltTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = BltTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        bsz, q_len, _ = hidden_states.size()
+        query_states = self.q_proj(hidden_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_norm(query_states)
+
+        if cross_attention_states is not None:
+            key_states = self.k_proj(cross_attention_states)
+            value_states = self.v_proj(cross_attention_states)
+            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+            key_states = self.k_norm(key_states)
+            if past_key_values is not None:
+                # if we have a new image + new tokens, we only computed key_states on that new image
+                # we still update the cross key states, past_image, new_image. And use it!
+                key_states, value_states = past_key_values.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+        elif cache_position[0] != 0:
+            key_states, value_states = (
+                past_key_values.layers[self.layer_idx].keys,
+                past_key_values.layers[self.layer_idx].values,
+            )
+        else:
+            raise ValueError(
+                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
+            )
+
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class BltTextSelfAttention(nn.Module):
+    def __init__(self, config: BltTextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.dropout
+        self.hidden_size = config.hidden_size
+        self.num_key_value_heads = config.num_key_value_heads
+        self.head_dim = config.hidden_size // self.num_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+
+        self.layer_idx = layer_idx
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        past_key_values=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class BltTextMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        # Ignore copy
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+# Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
+class BltSelfAttentionDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: BltTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = BltTextSelfAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = BltTextMLP(config)
+        self.input_layernorm = BltTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = BltTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.layer_idx = layer_idx
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: Optional[torch.Tensor] = None,
+        cross_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class BltCrossAttentionDecoderLayer(GradientCheckpointingLayer):
+    """Cross-attention transformer block with tanh-gated attention and feedforward."""
+
+    def __init__(self, config: BltTextConfig, layer_idx: int) -> None:
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.cross_attn = BltTextCrossAttention(config, layer_idx=layer_idx)
+
+        self.input_layernorm = BltTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
+
+        self.mlp = BltTextMLP(config)
+        self.post_attention_layernorm = BltTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.cross_attn_mlp_gate = torch.nn.Parameter(torch.zeros(1))
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cross_attention_states: torch.Tensor,
+        cross_attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor,
+        full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor],
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states, attn_weights = self.cross_attn(
+            hidden_states=hidden_states,
+            attention_mask=cross_attention_mask,
+            cross_attention_states=cross_attention_states,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        if full_text_row_masked_out_mask is not None:
+            hidden_states = full_text_row_masked_out_mask[:, 0] * hidden_states  # type: ignore
+        hidden_states = residual + self.cross_attn_mlp_gate.tanh() * hidden_states
+
+        return hidden_states
+
+
+@auto_docstring(
+    custom_intro="""
+    The Blt Vision Model which consists of two vision encoders.
+    """
+)
+class BltVisionModel(BltPreTrainedModel):
+    config: BltVisionConfig
+    base_model_prefix = "vision_model"
+    input_modalities = ("image",)
+
+    def __init__(self, config: BltVisionConfig):
+        super().__init__(config)
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+        self.max_num_tiles = config.max_num_tiles
+        self.hidden_size = config.hidden_size
+        self.num_channels = config.num_channels
+        self.intermediate_layers_indices = config.intermediate_layers_indices
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2 + 1
+        self.scale = config.hidden_size**-0.5
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.hidden_size,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+            bias=False,
+        )
+
+        self.class_embedding = nn.Parameter(self.scale * torch.randn(self.hidden_size))
+        self.gated_positional_embedding = BltPrecomputedPositionEmbedding(config)
+
+        self.pre_tile_positional_embedding = BltPrecomputedAspectRatioEmbedding(config, is_gated=True)
+        self.post_tile_positional_embedding = BltPrecomputedAspectRatioEmbedding(config, is_gated=True)
+
+        # layer norms
+        self.layernorm_pre = nn.LayerNorm(self.hidden_size)
+        self.layernorm_post = nn.LayerNorm(self.hidden_size)
+
+        # encoders
+        self.transformer = BltVisionEncoder(config, config.num_hidden_layers, is_gated=False)
+        self.global_transformer = BltVisionEncoder(config, config.num_global_layers, is_gated=True)
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        """
+        This function is used to fetch the first embedding layer to activate grads on inputs.
+        """
+        return self.patch_embedding
+
+    def apply_class_embedding(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        batch_size, _, hidden_size = hidden_state.shape
+        class_embedding = self.class_embedding.expand(batch_size, 1, hidden_size)
+        hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
+        return hidden_state
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
+    ) -> BaseModelOutput:
+        r"""
+        aspect_ratio_ids (`torch.Tensor` of shape `(batch_size, max_num_images)`, *optional*):
+            Aspect ratio ids used to select the appropriate precomputed tile embeddings based on the aspect ratio of each input image.
+            These ids correspond to indices in the model's list of supported aspect ratios, offset by 1.
+
+            For example, if the model supports aspect ratios [[1, 1], [1, 2], [2, 1]]:
+            - An image with aspect ratio [1, 1] would have ID 1
+            - An image with aspect ratio [1, 2] would have ID 2
+            - An image with aspect ratio [2, 1] would have ID 3
+
+            The id 0 is reserved for padding (i.e., no image).
+
+            If an image has aspect ratio [1, 2], that means it was split into 2 tiles horizontally, and its `aspect_ratio_id` would be 2.
+        aspect_ratio_mask (`torch.Tensor` of shape `(batch_size, max_num_images, max_num_tiles)`, *optional*):
+            Mask to avoid performing attention on padding tiles. Mask values selected in `[0, 1]`:
+
+            - 1 for tiles that are **not masked**,
+            - 0 for tiles that are **masked**.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, BltVisionModel
+
+        >>> checkpoint = "meta-llama/Llama-3.2-11B-Vision"
+        >>> model = BltVisionModel.from_pretrained(checkpoint)
+        >>> processor = AutoProcessor.from_pretrained(checkpoint)
+
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> output = model(**inputs)
+
+        >>> print(output.last_hidden_state.shape)
+        torch.Size([1, 1, 4, 1025, 7680])
+        ```
+        """
+        batch_size, num_concurrent_media, num_tiles, num_channels, height, width = pixel_values.shape
+
+        pixel_values = pixel_values.reshape(batch_size * num_concurrent_media * num_tiles, num_channels, height, width)
+        aspect_ratio_ids = aspect_ratio_ids.reshape(batch_size * num_concurrent_media, -1)
+
+        # Patch embedding
+        target_dtype = self.patch_embedding.weight.dtype
+        target_device = self.patch_embedding.weight.device
+        patch_embeds = self.patch_embedding(pixel_values.to(target_device, target_dtype))
+        hidden_state = patch_embeds.flatten(2).transpose(1, 2)
+
+        # Tile embeddings
+        _, num_patches, dim = hidden_state.shape
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, -1, dim)
+        hidden_state = self.pre_tile_positional_embedding(hidden_state, aspect_ratio_ids)
+
+        # Add cls token
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media * num_tiles, num_patches, dim)
+        hidden_state = self.apply_class_embedding(hidden_state)
+        num_patches += 1
+
+        # Position embeddings
+        hidden_state = hidden_state.reshape(batch_size * num_concurrent_media, num_tiles, num_patches, dim)
+        hidden_state = self.gated_positional_embedding(hidden_state, aspect_ratio_ids)
+
+        hidden_state = self.layernorm_pre(hidden_state)
+
+        # Compute the number of tokens to pad
+        num_padding_patches = (8 - (hidden_state.shape[-2] % 8)) % 8
+        # Compute padding tuple for pad function
+        padding = (0, 0, 0, num_padding_patches)  # (pad_left, pad_right, pad_left for dim -2, pad_right for dim -2)
+        # Pad the tensor
+        hidden_state = F.pad(hidden_state, padding, mode="constant", value=0)
+        slice_index = -num_padding_patches if num_padding_patches > 0 else None
+
+        # Prepare attention mask
+        attention_mask = aspect_ratio_mask.reshape(batch_size * num_concurrent_media, -1)
+        attention_mask = _prepare_aspect_ratio_attention_mask(
+            aspect_ratio_mask=attention_mask,
+            num_patches=self.num_patches,
+            target_length=hidden_state.shape[2],
+            dtype=self.dtype,
+        )
+
+        # Apply encoder
+        hidden_state = hidden_state.view(batch_size * num_concurrent_media, -1, dim)
+        output = self.transformer(
+            hidden_state,
+            attention_mask=attention_mask,
+        )
+        hidden_state = output.last_hidden_state
+
+        hidden_state = self.layernorm_post(hidden_state)
+
+        # Apply global encoder
+        hidden_state = hidden_state.reshape(
+            batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
+        )
+        hidden_state = self.post_tile_positional_embedding(hidden_state, aspect_ratio_ids)
+        hidden_state = hidden_state.reshape(
+            batch_size * num_concurrent_media, num_tiles * (num_patches + num_padding_patches), dim
+        )
+        global_output = self.global_transformer(
+            hidden_state,
+            attention_mask=attention_mask,
+        )
+        hidden_state = global_output.last_hidden_state
+
+        # Remove padding form hidden state
+        hidden_state = hidden_state.reshape(
+            batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, dim
+        )
+        hidden_state = hidden_state[:, :, :slice_index]
+        hidden_state = hidden_state.reshape(batch_size, num_concurrent_media, num_tiles, num_patches, dim)
+
+        # Collect intermediate layer outputs from encoder output
+        all_intermediate_hidden_states = [output.hidden_states[i] for i in self.intermediate_layers_indices]
+        intermediate_hidden_states = torch.stack(all_intermediate_hidden_states, dim=-1)
+
+        # Remove padding from intermediate hidden states
+        intermediate_hidden_states = intermediate_hidden_states.reshape(
+            batch_size * num_concurrent_media, num_tiles, num_patches + num_padding_patches, -1
+        )
+        intermediate_hidden_states = intermediate_hidden_states[:, :, :slice_index]
+        intermediate_hidden_states = intermediate_hidden_states.reshape(
+            batch_size, num_concurrent_media, num_tiles, num_patches, -1
+        )
+
+        # Concatenate final hidden state and intermediate hidden states
+        hidden_state = torch.cat([hidden_state, intermediate_hidden_states], dim=-1)
+
+        return BaseModelOutput(last_hidden_state=hidden_state)
+
+
+def _prepare_aspect_ratio_attention_mask(
+    aspect_ratio_mask: torch.Tensor,
+    num_patches: int,
+    target_length: int,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    # Expand aspect ratio mask to target_length
+    batch_size, max_num_tiles = aspect_ratio_mask.shape
+    attention_mask = aspect_ratio_mask.view(batch_size, max_num_tiles, 1, 1).to(dtype)
+    attention_mask = attention_mask.repeat(1, 1, target_length, 1)
+
+    # Mask padding patches
+    pad_patches = target_length - num_patches
+    attention_mask[:, :, -pad_patches:] = 0
+
+    # Invert the mask (0 -> 1, 1 -> 0)
+    attention_mask = 1 - attention_mask
+
+    # Reshape to 2D and create 4D attention mask
+    # (batch_size, 1, max_num_tiles * target_length, max_num_tiles * target_length)
+    attention_mask = attention_mask.reshape(batch_size, max_num_tiles * target_length, 1)
+    attention_mask = attention_mask @ attention_mask.transpose(-1, -2) * torch.finfo(dtype).min
+    attention_mask = attention_mask.unsqueeze(1)
+
+    return attention_mask
+
+
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
@@ -444,11 +1213,38 @@ class BltPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
     }
 
-    def _update_causal_mask(self, module):
-        raise AttributeError("No need to inherit it!")
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, module):
-        raise AttributeError("No need to inherit it!")
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, BltTextRMSNorm):
+            init.ones_(module.weight)
+        elif isinstance(module, BltVisionModel):
+            init.normal_(module.class_embedding, std=std)
+        elif isinstance(module, BltPrecomputedPositionEmbedding):
+            init.normal_(module.embedding, std=std)
+            init.zeros_(module.gate)
+        elif isinstance(module, BltVisionEncoderLayer) and module.is_gated:
+            init.normal_(module.gate_attn, std=std)
+            init.normal_(module.gate_ffn, std=std)
+        elif isinstance(module, BltCrossAttentionDecoderLayer):
+            init.zeros_(module.cross_attn_attn_gate)
+            init.zeros_(module.cross_attn_mlp_gate)
+        elif isinstance(module, BltPrecomputedAspectRatioEmbedding):
+            if module.is_gated:
+                init.zeros_(module.gate)
 
 
 class BltLocalEncoder(BltPreTrainedModel):
