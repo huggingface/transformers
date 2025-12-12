@@ -2521,16 +2521,17 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
+        last_assistant_token_is_eos = [False]  # length: batch_size
         validated_tokens, n_matches = _speculative_sampling(
             candidate_input_ids,
             candidate_logits,
             candidate_length,
             new_logits,
             last_assistant_token_is_eos,
+            pad_token_id=-1,
         )
-        self.assertTrue(n_matches.item() == 2)
-        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
+        self.assertTrue(n_matches.tolist() == [2])
+        self.assertTrue(validated_tokens.tolist()[0] == [-1, 1, 4, 8])
 
     def test_speculative_sampling_target_distribution(self):
         """
@@ -2564,7 +2565,7 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ]
             ]
         )
-        last_assistant_token_is_eos = False
+        last_assistant_token_is_eos = [False]  # length: batch_size
         last_validated_token = []
         for _ in range(10_000):
             validated_tokens, n_matches = _speculative_sampling(
@@ -2573,12 +2574,14 @@ class UtilsFunctionsTest(unittest.TestCase):
                 candidate_length,
                 new_logits,
                 last_assistant_token_is_eos,
+                pad_token_id=-1,
             )
-            self.assertTrue(n_matches.item() == 2)
-            self.assertTrue(validated_tokens.tolist()[0][0] == 1)
-            self.assertTrue(validated_tokens.tolist()[0][1] == 4)
-            self.assertTrue(validated_tokens.tolist()[0][2] in [1, 3, 7, 8])
-            last_validated_token.append(validated_tokens.tolist()[0][2])
+            self.assertTrue(n_matches.tolist() == [2])
+            self.assertTrue(validated_tokens.tolist()[0][0] == -1)  # padding token
+            self.assertTrue(validated_tokens.tolist()[0][1] == 1)
+            self.assertTrue(validated_tokens.tolist()[0][2] == 4)
+            self.assertTrue(validated_tokens.tolist()[0][3] in [1, 3, 7, 8])
+            last_validated_token.append(validated_tokens.tolist()[0][3])
         # check that the most likely tokens are selected more often than the less likely ones
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
@@ -3416,7 +3419,9 @@ class GenerationIntegrationTests(unittest.TestCase):
             "do_sample": False,
             "assistant_model": assistant_model,
         }
-        model.generate(**inputs, **generation_kwargs)
+        output = model.generate(**inputs, **generation_kwargs)
+        print(tokenizer.batch_decode(output, skip_special_tokens=True))
+        print(f"num_assistant_tokens: {assistant_model.generation_config.num_assistant_tokens}")
         # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
         self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
 
@@ -3668,6 +3673,37 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertEqual(expected_out.shape, predicted_out.shape)
         self.assertTrue((expected_out == predicted_out).all().item())
+
+    def test_batched_speculative_decoding_equals_regular_decoding(self):
+        draft_name = "HuggingFaceTB/SmolLM-135M"
+        target_name = "HuggingFaceTB/SmolLM-1.7B"
+
+        batch_size = 4
+        draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
+        target_model = AutoModelForCausalLM.from_pretrained(target_name)
+
+        tokenizer = AutoTokenizer.from_pretrained(target_name, padding_side="left")
+
+        prompt_size = torch.randint(low=20, high=100, size=(1,))
+        max_new_tokens = torch.randint(low=10, high=50, size=(1,))
+        input_ids = (torch.rand(batch_size, prompt_size[0]) * 100).to(int) + 50
+
+        max_new_tokens_item = max_new_tokens[0].item()
+        expected_out = target_model.generate(input_ids, do_sample=False, max_new_tokens=max_new_tokens_item)
+        predicted_out = target_model.generate(
+            input_ids,
+            do_sample=False,
+            max_new_tokens=max_new_tokens_item,
+            assistant_model=draft_model,
+            tokenizer=tokenizer,
+        )
+
+        self.assertEqual(expected_out.shape, predicted_out.shape)
+        expected_out_decoded = tokenizer.batch_decode(expected_out, skip_special_tokens=True)
+        predicted_out_decode = tokenizer.batch_decode(predicted_out, skip_special_tokens=True)
+        for predicted_item, expected_item in zip(predicted_out_decode, expected_out_decoded):
+            min_length = min(len(predicted_item), len(expected_item))
+            self.assertTrue(predicted_item[:min_length] == expected_item[:min_length])
 
     @pytest.mark.generate
     @require_torch_multi_accelerator
@@ -4863,12 +4899,12 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             generation_config=self.assistant_model.generation_config,
             model_kwargs=self.model_kwargs,
         )
-        self.candidate_generator.probs = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-        self.original_probs = self.candidate_generator.probs
         self.original_threshold = self.assistant_model.generation_config.assistant_confidence_threshold
 
     def assert_no_sklearn(self):
         with patch("transformers.generation.candidate_generator.is_sklearn_available", lambda: False):
+            self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]]
+            self.original_probs = self.candidate_generator.probs
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
@@ -4881,76 +4917,95 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
         self.original_matches = []
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 0
+        self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]]
+        self.original_probs = self.candidate_generator.probs
 
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [0])
-            self.assertEqual(self.candidate_generator.probs, [0.9])
+            self.assertEqual(self.candidate_generator.matches, [[0]])
+            self.assertEqual(self.candidate_generator.clean_probs, [[0.9]])
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_with_mix_matches_3(self, sklearn_available):
-        self.original_matches = [1, 0, 1, 0, 1]
+        self.original_matches = [[1, 0], [1, 0], [1]]
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 3
+        self.candidate_generator.probs = [[0.9, 0.8], [0.7, 0.6], [0.5], [0.4, 0.3, 0.2, 0.1]]
+        self.candidate_generator.clean_probs = [[0.9, 0.8], [0.7, 0.6], [0.5]]
+        self.original_probs = self.candidate_generator.probs
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
-            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.candidate_generator.matches, [[1, 0], [1, 0], [1], [1, 1, 1, 0]])
+            self.assertEqual(
+                self.candidate_generator.clean_probs, [[0.9, 0.8], [0.7, 0.6], [0.5], [0.4, 0.3, 0.2, 0.1]]
+            )
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_with_matches_4(self, sklearn_available):
-        self.original_matches = [1, 1, 1, 1, 1]
+        self.original_matches = [[1, 1, 1, 1, 1]]
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 4
+        self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]]
+        self.candidate_generator.clean_probs = [[0.9, 0.8, 0.7, 0.6, 0.5]]
+        self.original_probs = self.candidate_generator.probs
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
-            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.candidate_generator.matches, [[1, 1, 1, 1, 1], [1, 1, 1, 1]])
+            self.assertEqual(self.candidate_generator.clean_probs, [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]])
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_with_matches_3(self, sklearn_available):
-        self.original_matches = [1, 1, 1, 1, 1]
+        self.original_matches = [[1, 1, 1, 1, 1]]
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 3
+        self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]]
+        self.candidate_generator.clean_probs = [[0.9, 0.8, 0.7, 0.6, 0.5]]
+        self.original_probs = self.candidate_generator.probs
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
-            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.candidate_generator.matches, [[1, 1, 1, 1, 1], [1, 1, 1, 0]])
+            self.assertEqual(self.candidate_generator.clean_probs, [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]])
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_with_matches_2(self, sklearn_available):
-        self.original_matches = [1, 1, 1, 1, 1]
+        self.original_matches = [[1, 1, 1, 1, 1]]
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 2
+        self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]]
+        self.candidate_generator.clean_probs = [[0.9, 0.8, 0.7, 0.6, 0.5]]
+        self.original_probs = self.candidate_generator.probs
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
-            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
+            self.assertEqual(self.candidate_generator.matches, [[1, 1, 1, 1, 1], [1, 1, 0]])
+            self.assertEqual(self.candidate_generator.clean_probs, [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2]])
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
         else:
             self.assert_no_sklearn()
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_with_matches_1(self, sklearn_available):
-        self.original_matches = [1, 1, 1, 1, 1]
+        self.original_matches = [[1, 1, 1, 1, 1]]
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 1
+        self.candidate_generator.probs = [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3, 0.2, 0.1]]
+        self.candidate_generator.clean_probs = [[0.9, 0.8, 0.7, 0.6, 0.5]]
+        self.original_probs = self.candidate_generator.probs
         if sklearn_available:
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
-            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
-            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
+            self.assertEqual(self.candidate_generator.matches, [[1, 1, 1, 1, 1], [1, 0]])
+            self.assertEqual(self.candidate_generator.clean_probs, [[0.9, 0.8, 0.7, 0.6, 0.5], [0.4, 0.3]])
             self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()

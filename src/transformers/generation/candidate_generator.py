@@ -41,13 +41,16 @@ if TYPE_CHECKING:
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """
         Fetches the candidates to be tried for the current input.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+            assistant_ids_in_cache (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
@@ -58,7 +61,9 @@ class CandidateGenerator:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call `get_candidates`."
         )
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, assistant_used: bool = True
+    ):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -70,6 +75,8 @@ class CandidateGenerator:
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
                 The number of matches between the candidate sequences and the model predictions.
+            assistant_used (`bool`):
+                Whether the assistant was used to generate the candidates. Assistant was not used if max_new_tokens is 0.
         """
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call "
@@ -192,10 +199,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
             and self.assistant_model.generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
+            # only needed for ROC curve calculation
             self.probs = []
             self.matches = []
+            self.clean_probs = []
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -214,13 +225,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
         if max_new_tokens == 0:
             return input_ids, None
         # Update past key values and masks
-        self._update_past_and_masks(input_ids)
+        self._update_past_and_masks(input_ids, assistant_ids_in_cache=assistant_ids_in_cache)
         # Generate candidates
         generation_args = self._prepare_generation_args(input_ids, min_new_tokens, max_new_tokens)
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
         return candidate_ids, candidate_logits
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, assistant_used: bool = True
+    ):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -230,9 +243,19 @@ class AssistedCandidateGenerator(CandidateGenerator):
             scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
-            num_matches (`int`):
-                The number of matches between the candidate sequences and the model predictions.
+            num_matches (`torch.LongTensor` of shape `(batch_size,)` or `int`):
+                The number of matches between the candidate sequences and the model predictions for each batch item.
+                If `int`, assumes `batch_size=1` for backward compatibility.
+            assistant_used (`bool`):
+                Whether the assistant was used to generate the candidates. Assistant was not used if max_new_tokens is 0.
         """
+        # Handle backward compatibility: convert int to tensor
+        if isinstance(num_matches, int):
+            assert input_ids.shape[0] == 1, "num_matches should be a tensor of shape (batch_size,) when batch_size > 1"
+            num_matches = torch.tensor([num_matches], device=input_ids.device)
+
+        batch_size = input_ids.shape[0]
+
         # Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
         # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
         # cost of forecasting incorrect assistant tokens.
@@ -240,33 +263,51 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "heuristic",
             "heuristic_transient",
         }:
-            # len(scores[0])-1 is the number of candidates according to the target tokenizer.
-            if num_matches == len(scores[0]) - 1:
+            # For batch processing, we can use different strategies:
+            # Option 1: Use average matches across batch
+            avg_matches = num_matches.float().mean().item()
+            # Option 2: Use max matches (more aggressive)
+            # avg_matches = num_matches.float().max().item()
+            # Option 3: Use min matches (more conservative)
+            # avg_matches = num_matches.float().min().item()
+            max_candidate_length = scores.shape[1] - 1
+            if avg_matches == max_candidate_length:
                 self.num_assistant_tokens += 2.0
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
-        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
+        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes.
+        # The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target.
+        # A cost of 25% is assigned to false positives and 75% to false negatives.
         # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
         if (
             is_sklearn_available()
             and self.assistant_model.generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
+            and assistant_used
         ):
-            # update self.matches
-            self.matches.extend([1] * num_matches)
-            if len(self.probs) > len(self.matches):
-                self.matches.append(0)
+            # Update matches: add one match per token for each batch item
+            # Flatten the matches across all batches
+            for batch_idx in range(batch_size):
+                matches_count = num_matches[batch_idx].item()
+                item_matches = [1] * matches_count
+                if len(self.probs[len(self.matches)]) > matches_count:
+                    # if the number of probabilities is greater than the number of matches, add a 0 to the end of the matches.
+                    # this means we reject a token.
+                    item_matches.append(0)
+                # taking only the relevant probabilities. for all the accepted tokens and the first rejected token.
+                self.clean_probs.extend([self.probs[len(self.matches)][: len(item_matches)]])
+                self.matches.extend([item_matches])
 
-            # update self.probs
-            excess_length = len(self.probs) - len(self.matches)
-            if excess_length > 0:
-                del self.probs[-excess_length:]
+            assert len(self.matches) == len(self.clean_probs), "matches and probs must have the same length"
+            clean_matches = np.concatenate(self.matches)
+            clean_probs = np.concatenate(self.clean_probs)
 
+            # calculate ROC curve and update threshold if we have enough samples
             if (
-                len(self.probs) > 5 and {0, 1}.issubset(self.matches)
+                len(clean_probs) > 5 and {0, 1}.issubset(clean_matches)
             ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
-                fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
+                fpr, tpr, thresholds = roc_curve(clean_matches, clean_probs)
                 fnr = 1 - tpr
 
                 # Calculate the cost for each threshold
@@ -286,15 +327,28 @@ class AssistedCandidateGenerator(CandidateGenerator):
         return min_new_tokens, max_new_tokens
 
     def _update_past_and_masks(
-        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
+        self,
+        input_ids: torch.LongTensor,
+        remove_from_pkv: int = 0,
+        num_added_tokens: int = 1,
+        assistant_ids_in_cache: torch.LongTensor = None,
     ) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
-            new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
-            self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
+            if input_ids.shape[0] > 1:
+                self.assistant_kwargs["past_key_values"].align(
+                    input_ids, assistant_ids_in_cache, self.generation_config._pad_token_tensor.item()
+                )
+            else:
+                new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
+                self.assistant_kwargs["past_key_values"].crop(new_cache_size - num_added_tokens)
             self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+                self.assistant_kwargs,
+                input_ids.shape[-1],
+                self.assistant_model.config.is_encoder_decoder,
+                input_ids,
+                self.generation_config._pad_token_tensor.item(),
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
 
@@ -318,17 +372,24 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        candidate_logits = torch.stack(
+            assistant_output.scores, dim=1
+        )  # shape: (batch_size, candidate_length, vocab_size)
         if (
             is_sklearn_available()
             and self.assistant_model.generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
-            scores_tensor = torch.cat(assistant_output.scores, dim=0)
-            scores_softmax = torch.softmax(scores_tensor, dim=-1)
-            ids = assistant_output.sequences[-1, -len(assistant_output.scores) :]
-            p = scores_softmax[range(len(ids)), ids]
+            scores_softmax = torch.softmax(
+                candidate_logits, dim=-1
+            )  # shape: (batch_size, candidate_length, vocab_size)
+            ids = assistant_output.sequences[
+                :, -len(assistant_output.scores) :
+            ]  # shape: (batch_size, candidate_length)
+            p = torch.gather(scores_softmax, dim=-1, index=ids.unsqueeze(-1)).squeeze(
+                -1
+            )  # shape: (batch_size, candidate_length)
             self.probs.extend(p.tolist())
-        candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
 
@@ -494,14 +555,17 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """
         Fetches the candidates to be tried for the current input.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-
+            assistant_ids_in_cache (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the assistant vocabulary that are in the cache.
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
             assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
@@ -519,7 +583,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - assistant_input_ids.shape[-1]), 0)
 
-        self._update_past_and_masks(assistant_input_ids, remove_from_pkv)
+        self._update_past_and_masks(
+            assistant_input_ids, remove_from_pkv, assistant_ids_in_cache=assistant_ids_in_cache
+        )
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         self.assistant_kwargs.pop("attention_mask", None)
 
@@ -797,7 +863,7 @@ class AssistantToTargetTranslator:
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
 
-        num_new_tokens = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
+        num_new_tokens = assistant_candidate_ids.shape[1] - assistant_input_ids.shape[1]
         if num_new_tokens == 0:
             return target_input_ids
         else:
@@ -919,7 +985,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates: int = 0
         self._prev_assistant_ids: torch.LongTensor | None = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """
         Simplified version of get_candidates that uses the translator cache for token conversion.
         """
@@ -930,7 +998,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        self._update_past_and_masks(
+            assistant_input_ids, num_added_tokens=num_added_tokens, assistant_ids_in_cache=assistant_ids_in_cache
+        )
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
         # Ensure scores are returned
@@ -951,7 +1021,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         return target_candidate_ids, target_candidate_logits
 
-    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor, num_added_tokens: int = 1) -> bool:
+    def _update_past_and_masks(
+        self,
+        assistant_input_ids: torch.LongTensor,
+        num_added_tokens: int = 1,
+        assistant_ids_in_cache: torch.LongTensor = None,
+    ) -> bool:
         if self._prev_assistant_ids is None:
             # Prepare attention mask for the first generation.
             # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
@@ -1045,13 +1120,17 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         """
         Fetches the candidates to be tried for the current input.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
+            assistant_ids_in_cache (`torch.LongTensor`, *optional*):
+                Assistant model input IDs that are already in the cache. Not used by prompt lookup decoding.
 
         Return:
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
@@ -1139,7 +1218,9 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # assisted_generation expects logits as well, but we don't have those here, so returning None
         return candidate_input_ids, None
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int, assistant_used: bool = True
+    ):
         """
         Updates the candidate generation strategy based on the outcomes.
 
@@ -1151,6 +1232,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
                 The number of matches between the candidate sequences and the model predictions.
+            assistant_used (`bool`):
+                Whether the assistant was used to generate the candidates. Assistant was not used if max_new_tokens is 0.
         """
         # Currently does nothing
         return
@@ -1202,17 +1285,27 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         self.assistant_early_exit = self.generation_config.assistant_early_exit
         self.generation_config.assistant_early_exit = None
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def get_candidates(
+        self, input_ids: torch.LongTensor, assistant_ids_in_cache: torch.LongTensor = None
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
         # Temporarily sets the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
         original_num_hidden_layers = base_model.config.num_hidden_layers
         base_model.config.num_hidden_layers = self.assistant_early_exit
-        candidate_ids, candidate_logits = super().get_candidates(input_ids)
+        candidate_ids, candidate_logits = super().get_candidates(
+            input_ids, assistant_ids_in_cache=assistant_ids_in_cache
+        )
         base_model.config.num_hidden_layers = original_num_hidden_layers
         return candidate_ids, candidate_logits
 
 
-def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
+def _prepare_attention_mask(
+    model_kwargs: dict[str, Any],
+    new_length: int,
+    is_encoder_decoder: bool,
+    input_ids: torch.LongTensor | None = None,
+    pad_token_id: int | None = None,
+) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
     mask_key = "decoder_attention_mask" if is_encoder_decoder else "attention_mask"
@@ -1221,8 +1314,12 @@ def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_en
 
     mask = model_kwargs[mask_key]
     mask_length_diff = new_length - mask.shape[1]
-
-    if mask_length_diff < 0:
+    if mask_length_diff == 0:
+        pass  # no need to do anything
+    elif input_ids is not None and pad_token_id is not None:
+        # this could be a problem if the original mask is ignoring tokens that are not pad tokens.
+        model_kwargs[mask_key] = (input_ids != pad_token_id).to(mask.dtype)
+    elif mask_length_diff < 0:
         model_kwargs[mask_key] = mask[:, :mask_length_diff]
     elif mask_length_diff > 0:
         model_kwargs[mask_key] = torch.cat([mask, mask.new_ones((mask.shape[0], mask_length_diff))], dim=-1)
