@@ -1163,6 +1163,26 @@ class IsaacVisionTransformer(nn.Module):
         return hidden_states
 
 
+class IsaacVisionEmbedding(nn.Module):
+    """Vision embedding wrapper exposing tower and projector."""
+
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        vision_cfg = config.vision_config
+        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
+
+        self.vision_tower = IsaacVisionTransformer(vision_cfg)
+        self.multimodal_projector = nn.Sequential(
+            nn.Linear(hidden_dim, 4 * hidden_dim, bias=False),
+            nn.SiLU(),
+            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
+        )
+
+    def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        hidden_states = self.vision_tower(vision_tokens)
+        return self.multimodal_projector(hidden_states)
+
+
 def get_scaled_image_size(
     scale: float,
     original_size: int,
@@ -1854,17 +1874,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         if config.vision_config is None:
             raise ValueError("IsaacConfig should always have vision_config")
 
-        hidden_dim = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
-        self.vision_embedding = nn.Sequential(
-            IsaacVisionTransformer(config.vision_config),
-            nn.Linear(
-                hidden_dim,
-                4 * hidden_dim,
-                bias=False,
-            ),
-            nn.SiLU(),
-            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
-        )
+        self.vision_embedding = IsaacVisionEmbedding(config)
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
