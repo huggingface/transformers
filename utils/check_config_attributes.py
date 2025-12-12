@@ -115,6 +115,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "BioGptConfig": ["layer_norm_eps"],
     # having default values other than `1e-5` - we can't fix them without breaking
     "GLPNConfig": ["layer_norm_eps"],
+    # `dtype` is passed to parent PretrainedConfig class
+    # `num_hidden_layers` is used internally in config to set default values for `h_layers` and `l_layers`
+    "HrmConfig": ["dtype", "num_hidden_layers"],
     # having default values other than `1e-5` - we can't fix them without breaking
     "SegformerConfig": ["layer_norm_eps"],
     # having default values other than `1e-5` - we can't fix them without breaking
