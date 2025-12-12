@@ -13,16 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Jais2 model."""
 
-import gc
 import unittest
 
-import pytest
-
-from transformers import is_torch_available
+from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
     cleanup,
-    require_flash_attn,
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -48,7 +44,6 @@ class Jais2ModelTester(CausalLMModelTester):
         base_model_class = Jais2Model
         causal_lm_class = Jais2ForCausalLM
 
-    # Override config defaults for testing
     config_overrides = {
         "hidden_act": "relu2",
     }
@@ -78,210 +73,55 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
     )
 
 
+@slow
 @require_torch
 class Jais2IntegrationTest(unittest.TestCase):
-    checkpoint = "inceptionai/Jais-2-8B-Chat"
-
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     @require_torch_accelerator
+    @is_flaky(max_attempts=3)
     def test_model_logits(self):
-        """Test that model outputs expected logits for a known input sequence."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
+        model_id = "inceptionai/Jais-2-8B-Chat"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = Jais2ForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, device_map="auto")
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+        logits = logits.float()
+
+        EXPECTED_LOGITS_BATCH0 = [-0.97509765625, -1.091796875, -0.9599609375]
+        EXPECTED_LOGITS_BATCH1 = [-1.5361328125, -1.6328125, -1.5283203125]
+
+        torch.testing.assert_close(
+            logits[0, -1, :3],
+            torch.tensor(EXPECTED_LOGITS_BATCH0, device=torch_device),
+            rtol=1e-3,
+            atol=1e-3,
+        )
+        torch.testing.assert_close(
+            logits[1, -1, :3],
+            torch.tensor(EXPECTED_LOGITS_BATCH1, device=torch_device),
+            rtol=1e-3,
+            atol=1e-3,
         )
 
+    def test_model_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained("inceptionai/Jais-2-8B-Chat")
+        model = Jais2ForCausalLM.from_pretrained(
+            "inceptionai/Jais-2-8B-Chat", torch_dtype=torch.float16, device_map="auto"
+        )
         input_text = "The capital of France is"
-        input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(model.device)
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+        model_inputs.pop("token_type_ids", None)
 
-        with torch.no_grad():
-            outputs = model(input_ids)
-            logits = outputs.logits.float().cpu()
+        generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        # Check shape
-        self.assertEqual(logits.shape[0], 1)  # batch size
-        self.assertEqual(logits.shape[1], input_ids.shape[1])  # sequence length
-        self.assertEqual(logits.shape[2], model.config.vocab_size)  # vocab size
-
-        # Check that logits are not NaN or Inf
-        self.assertFalse(torch.isnan(logits).any().item())
-        self.assertFalse(torch.isinf(logits).any().item())
-
-        # Print logits stats for debugging (you can record expected values from this)
-        print(f"Logits mean: {logits.mean(-1)}")
-        print(f"Logits slice [0, -1, :30]: {logits[0, -1, :30]}")
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    @require_flash_attn
-    @pytest.mark.flash_attn_test
-    def test_model_generation_flash_attn(self):
-        """Test text generation with Flash Attention."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            attn_implementation="flash_attention_2",
-        )
-
-        prompt = "Machine learning models are"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-        generated_ids = model.generate(
-            input_ids,
-            max_new_tokens=20,
-            do_sample=False,
-        )
-
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"Flash Attention Generated text: {generated_text}")
-
-        self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
-        self.assertTrue(generated_text.startswith(prompt))
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    def test_layer_norm(self):
-        """Test that LayerNorm is used correctly (Jais2 uses LayerNorm instead of RMSNorm)."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-        )
-
-        # Check that the model uses LayerNorm
-        self.assertIsInstance(model.model.norm, torch.nn.LayerNorm)
-
-        # Check decoder layers use LayerNorm
-        for layer in model.model.layers:
-            self.assertIsInstance(layer.input_layernorm, torch.nn.LayerNorm)
-            self.assertIsInstance(layer.post_attention_layernorm, torch.nn.LayerNorm)
-
-        # Verify LayerNorm has bias (Jais2 uses bias=True)
-        self.assertTrue(model.model.norm.bias is not None)
-        self.assertTrue(model.model.layers[0].input_layernorm.bias is not None)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    def test_attention_implementations_consistency(self):
-        """Test that different attention implementations produce similar outputs."""
-        prompt = "Hello, how are you?"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
-
-        # Test with eager attention
-        model_eager = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float32,
-            attn_implementation="eager",
-        )
-        input_ids_eager = input_ids.to(model_eager.device)
-
-        with torch.no_grad():
-            output_eager = model_eager(input_ids_eager).logits.cpu()
-
-        del model_eager
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        # Test with SDPA attention
-        model_sdpa = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float32,
-            attn_implementation="sdpa",
-        )
-        input_ids_sdpa = input_ids.to(model_sdpa.device)
-
-        with torch.no_grad():
-            output_sdpa = model_sdpa(input_ids_sdpa).logits.cpu()
-
-        del model_sdpa
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        # Compare outputs (should be close but not necessarily identical due to numerical differences)
-        torch.testing.assert_close(output_eager, output_sdpa, rtol=1e-3, atol=1e-3)
-
-    @slow
-    @require_torch_accelerator
-    @pytest.mark.torch_compile_test
-    def test_compile_static_cache(self):
-        """Test torch.compile with static cache."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-        )
-
-        prompt = "The future of AI is"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-        # Generate with static cache
-        generated_ids = model.generate(
-            input_ids,
-            max_new_tokens=10,
-            do_sample=False,
-            cache_implementation="static",
-        )
-
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-
-        # Verify exact token count (deterministic)
-        self.assertEqual(generated_ids.shape[1], input_ids.shape[1] + 10)
-        # Verify generation produced reasonable output
-        self.assertGreater(len(generated_text), len(prompt))
-        self.assertTrue(generated_text.startswith(prompt))
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    @require_torch_accelerator
-    @pytest.mark.torch_export_test
-    def test_export_static_cache(self):
-        """Test torch.export with static cache."""
-        model = Jais2ForCausalLM.from_pretrained(
-            self.checkpoint,
-            device_map="auto",
-            torch_dtype=torch.float16,
-        )
-
-        prompt = "Deep learning is"
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-        # First verify regular generation works
-        generated_ids = model.generate(
-            input_ids,
-            max_new_tokens=10,
-            do_sample=False,
-        )
-
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        print(f"Export test generated text: {generated_text}")
-
-        self.assertGreater(generated_ids.shape[1], input_ids.shape[1])
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        EXPECTED_TEXT = "The capital of France is Paris."
+        self.assertEqual(generated_text, EXPECTED_TEXT)

@@ -27,10 +27,13 @@ from ...modeling_rope_utils import RopeParameters
 
 class Jais2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Jais2Model`].
-    It inherits from [`LlamaConfig`] and can be used to control the model outputs.
+    This is the configuration class to store the configuration of a [`Jais2Model`]. It is used to instantiate a Jais2
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Jais2
+    [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat) architecture.
 
-    Read more from the [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat).
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 150272):
@@ -81,12 +84,13 @@ class Jais2Config(PreTrainedConfig):
 
     model_type = "jais2"
     keys_to_ignore_at_inference = ["past_key_values"]
-
+    # Default tensor parallel plan for base model `Jais2Model`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
@@ -158,12 +162,7 @@ class Jais2Config(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        # Rename the attribute from rms_norm_eps to layer_norm_eps
         self.layer_norm_eps = self.rms_norm_eps
-
-        # Validate and standardize RoPE parameters
-        self.standardize_rope_params()
-        self.validate_rope()
 
 
 __all__ = ["Jais2Config"]

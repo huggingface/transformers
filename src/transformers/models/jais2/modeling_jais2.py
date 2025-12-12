@@ -204,6 +204,7 @@ class Jais2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Jais2Attention(config=config, layer_idx=layer_idx)
+
         self.mlp = Jais2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -248,7 +249,7 @@ class Jais2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Jais2DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -259,8 +260,6 @@ class Jais2PreTrainedModel(PreTrainedModel):
         "hidden_states": Jais2DecoderLayer,
         "attentions": Jais2Attention,
     }
-    config_class = Jais2Config
-    _supports_flash_attn_2 = True
 
 
 class Jais2RotaryEmbedding(nn.Module):
