@@ -23,6 +23,13 @@ from ..qwen2.configuration_qwen2 import Qwen2Config
 
 logger = logging.get_logger(__name__)
 
+__all__ = [
+    "VibeVoiceAcousticTokenizerConfig",
+    "VibeVoiceConfig",
+    "VibeVoiceDiffusionHeadConfig",
+    "VibeVoiceSemanticTokenizerConfig",
+]
+
 
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     model_type = "vibevoice_acoustic_tokenizer"

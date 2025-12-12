@@ -21,6 +21,8 @@ from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 logger = logging.get_logger(__name__)
 
+__all__ = ["VibeVoiceTokenizer", "VibeVoiceTokenizerFast"]
+
 
 class VibeVoiceTokenizer(Qwen2Tokenizer):
     """

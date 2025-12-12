@@ -40,6 +40,12 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/VibeVoice-1.5B"
 _CONFIG_FOR_DOC = "VibeVoiceConfig"
 
+__all__ = [
+    "VibeVoiceAcousticTokenizerModel",
+    "VibeVoiceForConditionalGeneration",
+    "VibeVoiceModel",
+    "VibeVoicePreTrainedModel",
+]
 
 # =================================================================================================
 # Helper Classes (Diffusion Head)

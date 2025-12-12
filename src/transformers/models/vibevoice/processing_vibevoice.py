@@ -36,6 +36,8 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
+__all__ = ["VibeVoiceProcessor"]
+
 
 class AudioNormalizer:
     def __init__(self, target_dB_FS=-25, eps=1e-6):
