@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Dynamic weight loading
 
-Transformers provides a set of composable operations in [`WeightConverter`] for defining how to map checkpoint tensors to model tensors. These operations allow you to reshape checkpoint tensors into any expected model format during loading, like fusing the query (Q), key (K), and value (V) layers for example.
+Checkpoints are often serialized in a format that does not match what a model expects at runtime. Quantization and parallelism frequently require reshaping, splitting, or merging tensors into the expected model format instead of loading weights as-is.
 
-This allows Transformers to adapt to new model or weight formats instead of manually adding code for them. It is especially useful for loading mixture-of-experts (MoE) models with different expert representations, handling quantized checkpoints with special tensor layouts, supporting tensor parallelism during loading, or a combination of all of these.
+Dynamic weight loading addresses this by applying scheduled, reversible operations to checkpoint tensors as they are loaded. Transformers makes this available through [`WeightConverter`], which maps one or more source keys to target keys by running a list of composable conversion operations. This approach adapts to new weight layouts, and supports loading quantized mixture-of-experts (MoEs) or enabling tensor parallelism and MoEs.
 
 This guide demonstrates how to use the [`WeightConverter`] to convert tensors. Your [`WeightConverter`] should be added inside [_build_checkpoint_conversion_mapping()](https://github.com/huggingface/transformers/blob/4c9fde2a2a3aece0bcf1be93f696e88297da9397/src/transformers/conversion_mapping.py#L34) in the [conversion_mapping.py](https://github.com/huggingface/transformers/blob/main/src/transformers/conversion_mapping.py) file.
 
@@ -98,6 +98,8 @@ WeightConverter(
 
 Loading a model is faster and uses less memory because the loader knows which tensors are required for operations and schedules their materialization lazily.
 
-The loader scans the checkpoint *once* to discover pattern matches and collect tensors. Tensors are collected as `Future` objects and not loaded into memory immediately. They're kept as lazy references until needed to defer memory allocation. Tensor loading is scheduled asynchronously without blocking the GIL.
+The loader scans the checkpoint *once* to discover pattern matches and collect tensors. It collects them as `Future` objects and submits them to a thread pool for asynchronous loading without blocking the GIL. Loading begins as soon as a thread becomes available.
 
-Tensors are materialized once all `Future` objects are collected. Operations are batched together and applied to return the transformed tensors.
+When converting a weight, the converter waits for required tensors to materialize if they haven't loaded yet. This happens when the largest conversion runs last. It also happens when other parameters finish loading before the most memory-demanding conversion. The theoretical memory peak is roughly the model size plus the largest parameter set needed for a single conversion.
+
+Often, the tensors are already loaded. The actual memory peak tends to be lower, and in practice, stays closer to the model size.
