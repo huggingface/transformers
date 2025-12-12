@@ -233,23 +233,28 @@ def set_zero3_state():
         _is_ds_init_called = False
 
 
-def restore_default_dtype(func):
+@contextmanager
+def local_torch_dtype(dtype: torch.dtype, class_name: str | None = None):
     """
-    Decorator to restore the default torch dtype
-    at the end of the function. Serves
-    as a backup in case calling the function raises
-    an error after the function has changed the default dtype but before it could restore it.
+    Locally change the torch default dtype to `dtype`, and restore the old one upon exiting the context.
+    If `class_name` is provided, it's used to provide a more helpful error message if `dtype` is not valid.
     """
+    # Just a more helping error before we set `torch.set_default_dtype` later on which would crash in this case
+    if not dtype.is_floating_point:
+        if class_name is not None:
+            error_message = (
+                f"{class_name} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
+            )
+        else:
+            error_message = f"Cannot set `{dtype}` as torch's default as it's not a floating-point dtype"
+        raise ValueError(error_message)
 
-    @wraps(func)
-    def _wrapper(*args, **kwargs):
-        old_dtype = torch.get_default_dtype()
-        try:
-            return func(*args, **kwargs)
-        finally:
-            torch.set_default_dtype(old_dtype)
-
-    return _wrapper
+    original_dtype = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(dtype)
+        yield
+    finally:
+        torch.set_default_dtype(original_dtype)
 
 
 def get_torch_context_manager_or_global_device():
@@ -1398,7 +1403,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model_tags.append(tag)
 
     @classmethod
-    @restore_default_dtype
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
@@ -1416,38 +1420,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
-        # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
-        if dtype is not None and not dtype.is_floating_point:
-            raise ValueError(
-                f"{cls.__name__} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
-            )
-
-        # override default dtype if needed
-        dtype_orig = None
-        if dtype is not None:
-            dtype_orig = torch.get_default_dtype()
-            torch.set_default_dtype(dtype)
-
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        init_contexts = []
+        if dtype is not None:
+            init_contexts.append(local_torch_dtype(dtype, cls.__name__))
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             import deepspeed
 
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
-            with ContextManagers(init_contexts):
-                model = cls(config, **kwargs)
+            init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
 
-        else:
+        # Instantiate the model
+        with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
-
-        # restore default dtype if it was modified
-        if dtype_orig is not None:
-            torch.set_default_dtype(dtype_orig)
 
         return model
 
@@ -3506,11 +3496,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
+    def get_init_context(cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool):
+        # Need to instantiate with correct dtype
+        init_contexts = [local_torch_dtype(dtype, cls.__name__)]
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            init_contexts = [no_init_weights()]
+            init_contexts.append(no_init_weights())
             # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3518,7 +3510,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([init_empty_weights(), set_quantized_state()])
         else:
-            init_contexts = [no_init_weights(), init_empty_weights()]
+            init_contexts.extend([no_init_weights(), init_empty_weights()])
 
         return init_contexts
 
@@ -3552,7 +3544,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.use_kernels = False
 
     @classmethod
-    @restore_default_dtype
     def from_pretrained(
         cls: type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -3933,17 +3924,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
-        # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
-        if not dtype.is_floating_point:
-            raise ValueError(
-                f"{cls.__name__} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
-            )
-        # Save current default for later, and set asked dtype
-        dtype_orig = torch.get_default_dtype()
-        torch.set_default_dtype(dtype)
 
         config.name_or_path = pretrained_model_name_or_path
-        model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
+        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
@@ -3971,9 +3954,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-
-        # restore default dtype
-        torch.set_default_dtype(dtype_orig)
 
         # Finalize model weight initialization
         model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
