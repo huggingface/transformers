@@ -1059,9 +1059,21 @@ class TrackioCallback(TrainerCallback):
             self._trackio.log(metrics)
 
     def on_push_begin(self, args, state, control, model, **kwargs):
-        if self._trackio is None:
+        if not state.is_world_process_zero or self._trackio is None:
             return
         
+        import trackio
+        
+        trackio_version = packaging.version.parse(trackio.__version__)
+        if trackio_version <= packaging.version.parse("0.12.0"):
+            return
+        
+        space_url = trackio.sync(project, force=True)
+        
+        if getattr(model, "model_tags", None) is not None:
+            model.model_tags.append(f"trackio:{space_url}")
+        else:
+            model.model_tags = [f"trackio:{space_url}"]
 
 
 class CometCallback(TrainerCallback):
