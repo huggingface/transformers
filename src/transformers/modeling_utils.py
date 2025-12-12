@@ -756,6 +756,12 @@ def _get_dtype(
     else:
         main_dtype = dtype
 
+    # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
+    if not main_dtype.is_floating_point:
+        raise ValueError(
+            f"The model cannot be instantiated under `dtype={main_dtype}` as it's not a floating-point dtype"
+        )
+
     # Set it on the config and subconfigs
     config.dtype = main_dtype
     for sub_config_key in config.sub_configs:
