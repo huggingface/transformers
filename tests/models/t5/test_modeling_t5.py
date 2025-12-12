@@ -748,6 +748,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(reason="T5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -930,6 +934,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             return True
 
         return False
+
+    @unittest.skip(reason="T5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 def use_task_specific_params(model, task):
