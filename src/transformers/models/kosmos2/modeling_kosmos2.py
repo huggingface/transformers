@@ -15,6 +15,7 @@
 """PyTorch KOSMOS-2 model."""
 
 import math
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Union
@@ -72,6 +73,32 @@ def _make_causal_mask(
     if past_key_values_length > 0:
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+@dataclass
+class BaseModelOutputWithProjectionAttentions(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        projection_attentions (`tuple(torch.FloatTensor)`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+            the weighted average in the self-attention heads.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    projection_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1483,9 +1510,9 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_attentions: Optional[bool] = False,  # TODO: @Tom neatly deprecate this
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: bool = False,
+        return_attentions: Optional[bool] = False,  # TODO: @Tom neatly deprecate this
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -1493,13 +1520,21 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
-            return_attentions (`bool`, *optional*, defaults to `False`):
-                Whether to return `projection_attentions` or not.
             interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
                 Whether to interpolate positional embeddings or not.
             return_dict (`bool`, *optional*, default to `False`):
                 Whether to return a `ModelOutput` instead of a pooled embedding.
         """
+
+        # NOTE: @Tom backwards incompatibility
+        if return_attentions:
+            warnings.warn(
+                "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"
+                " and access `projection_attentions` from the returned `ModelOutput` instead.",
+                FutureWarning,
+            )
+            return_dict = True
+
         vision_model_output = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1511,10 +1546,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         if return_dict:
-            return BaseModelOutputWithPooling(
+            return BaseModelOutputWithProjectionAttentions(
                 last_hidden_state=vision_model_output.last_hidden_state,
                 pooler_output=image_embeds,
-                attentions=projection_attentions,  # TODO: @Tom does this match expectations?
+                projection_attentions=projection_attentions,
             )
 
         return image_embeds

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -21,7 +22,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -42,6 +43,28 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     ret = y_hard - y_soft.detach() + y_soft
 
     return ret
+
+
+@dataclass
+class BaseModelOutputWithVisualIndicatorFeatures(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+            Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    visual_indicator_features: Optional[torch.FloatTensor] = None
 
 
 class Ovis2ModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -176,7 +199,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, pixel_values: torch.FloatTensor, return_dict: bool = False, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -209,6 +232,12 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         elif self.config.tokenize_function == "softmax":
             prob_token = nn.functional.softmax(logits, dim=-1)
 
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=last_hidden_state,
+                pooler_output=prob_token,
+            )
+
         return prob_token
 
 
@@ -229,8 +258,10 @@ class Ovis2Model(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        return_dict: bool = False,
     ) -> torch.FloatTensor:
-        image_features = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True)
+        image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -242,15 +273,21 @@ class Ovis2Model(LlavaModel):
         image_features = torch.cat([image_features, padding_tensor], dim=2)
         image_features = self.visual_embeddings_table(image_features)
 
-        visual_indicator = torch.arange(
-            self.visual_vocab_size - self.vision_tower.num_visual_indicator_tokens,
-            self.visual_vocab_size,
-            dtype=torch.long,
-        ).to(image_features.device)
-        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
+        if return_dict:
+            visual_indicator = torch.arange(
+                self.visual_vocab_size - self.vision_tower.num_visual_indicator_tokens,
+                self.visual_vocab_size,
+                dtype=torch.long,
+            ).to(image_features.device)
+            visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
-        # NOTE: @Tom Not easily converted to the standard format
-        return image_features, visual_indicator_features
+            return BaseModelOutputWithVisualIndicatorFeatures(
+                last_hidden_state=image_outputs.last_hidden_state,
+                pooler_output=image_features,
+                visual_indicator_features=visual_indicator_features,
+            )
+
+        return image_features
 
     @can_return_tuple
     @auto_docstring
@@ -283,7 +320,9 @@ class Ovis2Model(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
+            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            image_features = image_outputs.pooler_output
+            visual_indicator_features = image_outputs.visual_indicator_features
 
             special_image_mask = self.get_placeholder_mask(
                 input_ids,
@@ -339,8 +378,8 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False) -> torch.FloatTensor:
+        return self.model.get_image_features(pixel_values=pixel_values, return_dict=return_dict)
 
     @can_return_tuple
     @auto_docstring
