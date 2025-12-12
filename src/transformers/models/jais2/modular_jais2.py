@@ -32,9 +32,8 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 class Jais2Config(LlamaConfig):
     r"""
     This is the configuration class to store the configuration of a [`Jais2Model`]. It is used to instantiate a Jais2
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Jais2
-    [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat) architecture.
+    model according to the specified arguments, defining the model architecture.
+    [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -118,9 +117,6 @@ class Jais2Config(LlamaConfig):
         if rope_parameters is None:
             rope_parameters = RopeParameters(rope_theta=rope_theta)
 
-        # Define rms_norm_eps for the parent init to use
-        rms_norm_eps = layer_norm_eps
-
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -131,7 +127,6 @@ class Jais2Config(LlamaConfig):
             hidden_act=hidden_act,
             max_position_embeddings=max_position_embeddings,
             initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
             use_cache=use_cache,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -145,7 +140,8 @@ class Jais2Config(LlamaConfig):
             rope_parameters=rope_parameters,
             **kwargs,
         )
-        self.layer_norm_eps = self.rms_norm_eps
+        self.layer_norm_eps = layer_norm_eps
+        del self.rms_norm_eps
 
 
 class Jais2MLP(NemotronMLP):
