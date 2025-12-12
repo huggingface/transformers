@@ -1327,9 +1327,8 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
 
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__()
-        self.config = config
-        self.hidden_dim = config.hidden_size
         self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
@@ -2754,9 +2753,8 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.hidden_dim = config.hidden_size
         self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
