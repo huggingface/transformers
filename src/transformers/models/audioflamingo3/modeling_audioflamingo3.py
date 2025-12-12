@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -443,7 +443,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         return self.language_model.get_decoder()
 
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
+        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor, return_dict: bool = False
     ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
@@ -456,6 +456,8 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
                 Mask to avoid performing attention on padded feature indices.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             `torch.FloatTensor`:
@@ -470,6 +472,13 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=encoder_output.last_hidden_state,
+                pooler_output=audio_embeds,
+            )
+
         return audio_embeds
 
     @can_return_tuple

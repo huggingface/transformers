@@ -1592,11 +1592,14 @@ class ClapModel(ClapPreTrainedModel):
         input_features: torch.Tensor,
         is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        return_dict: bool = False
     ) -> torch.FloatTensor:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
@@ -1621,6 +1624,12 @@ class ClapModel(ClapPreTrainedModel):
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_features = F.normalize(audio_features, dim=-1)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=audio_outputs.last_hidden_state,
+                pooler_output=audio_features,
+            )
 
         return audio_features
 

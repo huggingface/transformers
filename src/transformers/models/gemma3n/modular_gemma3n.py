@@ -2421,7 +2421,7 @@ class Gemma3nModel(PaliGemmaModel):
         )
 
     def get_audio_features(
-        self, input_features: torch.Tensor, input_features_mask: torch.Tensor
+        self, input_features: torch.Tensor, input_features_mask: torch.Tensor, return_dict: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Projects the last hidden state from the audio encoder into language model space.
@@ -2436,7 +2436,15 @@ class Gemma3nModel(PaliGemmaModel):
             audio_features (`torch.Tensor`): Audio feature tensor of shape `(num_images, audio_length, embed_dim)`).
         """
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
-        return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=audio_outputs.last_hidden_state,
+                pooler_output=audio_embeds,
+            )
+
+        return audio_embeds, audio_mask
 
 
 @auto_docstring(
