@@ -102,20 +102,44 @@ def is_literal_expression(expr: str) -> bool:
     - String literals: "text" or 'text'
     - Numeric literals: 42, 3.14
 
-    Variable names:
+    Variable names and method calls:
     - Simple identifiers: expected_output, result, masks
+    - Method calls: output.cpu(), data.numpy() (NOT literals)
 
     Args:
         expr: The expression string
 
     Returns:
-        True if expression is a literal/constant, False if it's a variable name
+        True if expression is a literal/constant, False if it's a variable name or method call
     """
     expr = expr.strip()
 
-    # Check for function/constructor calls (contains parentheses)
+    # Check for method calls (variable.method()) - NOT literals
+    # Pattern: identifier followed by . then identifier then (
+    if '.' in expr and '(' in expr:
+        # This could be torch.tensor(...) OR output.cpu()
+        # torch.tensor is a constructor (literal)
+        # output.cpu is a method call (NOT literal)
+        # Heuristic: if it starts with lowercase, likely a variable (method call)
+        # if it starts with lowercase and looks like module.function, it's a constructor
+        parts = expr.split('(')[0].split('.')
+        if len(parts) >= 2:
+            # Check if it looks like a module.function pattern (torch.tensor, Expectations)
+            first_part = parts[0]
+            # Common module names that indicate constructors
+            if first_part in ['torch', 'Expectations', 'np', 'numpy']:
+                return True
+            # Otherwise, it's likely a method call like output.cpu()
+            return False
+
+    # Check for function/constructor calls (without dots)
     if '(' in expr:
-        return True
+        # Simple function call like Expectations(...)
+        func_name = expr.split('(')[0].strip()
+        # If it starts with capital letter, likely a constructor
+        if func_name and func_name[0].isupper():
+            return True
+        return False
 
     # Check for list literals
     if expr.startswith('['):
