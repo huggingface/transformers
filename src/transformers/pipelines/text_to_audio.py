@@ -117,7 +117,7 @@ class TextToAudioPipeline(Pipeline):
                 else vocoder
             )
 
-        if self.model.config.model_type in ["musicgen"]:
+        if self.model.config.model_type in ["musicgen", "speecht5"]:
             # MusicGen expect to use the tokenizer
             self.processor = None
 
