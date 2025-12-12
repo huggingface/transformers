@@ -47,7 +47,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_vibevoice import (
-        VibeVoiceAcousticTokenizerConfig,
         VibeVoiceConfig,
         VibeVoiceDiffusionHeadConfig,
         VibeVoiceSemanticTokenizerConfig,

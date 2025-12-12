@@ -34,6 +34,7 @@ from .configuration_vibevoice import (
 )
 from .dpm_solver import VibeVoiceDPMSolverMultistepScheduler
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/VibeVoice-1.5B"
