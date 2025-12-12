@@ -42,6 +42,7 @@ from .image_utils import (
     validate_preprocess_arguments,
 )
 from .processing_utils import ImagesKwargs, Unpack
+from .pytorch_utils import compile_compatible_method_lru_cache
 from .utils import (
     TensorType,
     auto_docstring,
@@ -58,6 +59,7 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F_t
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as F
@@ -135,7 +137,7 @@ def get_max_height_width(images: list["torch.Tensor"]) -> tuple[int, ...]:
     Get the maximum height and width across all images in a batch.
     """
 
-    _, max_height, max_width = max_across_indices([img.shape for img in images])
+    max_height, max_width = max_across_indices([img.shape for img in images])[-2:]
 
     return (max_height, max_width)
 
@@ -468,6 +470,17 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
         if is_torchdynamo_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
+        elif torch.compiler.is_compiling():
+            do_unsqueeze = image.ndim == 3
+            image = F_t.interpolate(
+                image.unsqueeze(0).to(torch.float32) if do_unsqueeze else image.to(torch.float32),
+                size=new_size,
+                mode="bilinear",
+                antialias=False,
+                align_corners=False,
+                **kwargs,
+            )
+            image = image.squeeze(0) if do_unsqueeze else image
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     @staticmethod
@@ -538,7 +551,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
-    @lru_cache(maxsize=10)
+    @compile_compatible_method_lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
         do_normalize: Optional[bool] = None,
@@ -837,7 +850,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, intermediate_return=False, *args, **kwargs: Unpack[ImagesKwargs]
+    ) -> BatchFeature:
         # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
 
@@ -864,7 +879,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
         kwargs.pop("data_format")
 
         return self._preprocess_image_like_inputs(
-            images, *args, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+            images,
+            *args,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
+            intermediate_return=intermediate_return,
+            **kwargs,
         )
 
     def _preprocess_image_like_inputs(
@@ -874,6 +895,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
+        intermediate_return: bool = True,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
@@ -885,6 +907,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
+        if intermediate_return:
+            return images, args, kwargs
+
         return self._preprocess(images, *args, **kwargs)
 
     def _preprocess(
