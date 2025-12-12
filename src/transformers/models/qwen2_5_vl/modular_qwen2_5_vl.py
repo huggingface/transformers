@@ -278,7 +278,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):

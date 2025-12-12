@@ -1928,7 +1928,9 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -2076,7 +2078,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.model.set_input_embeddings(value)
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False,
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.

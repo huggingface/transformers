@@ -1133,7 +1133,10 @@ class Glm4vModel(Qwen2_5_VLModel):
             return position_ids, mrope_position_deltas
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.

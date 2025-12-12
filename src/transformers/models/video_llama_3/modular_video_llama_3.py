@@ -603,7 +603,12 @@ class VideoLlama3Model(Qwen2VLModel):
             return_dict (`bool`, *optional*, default to `False`):
                 Whether to return a `ModelOutput` instead of a pooled embedding.
         """
-        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, image_merge_sizes=video_merge_sizes, return_dict=return_dict)
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            return_dict=return_dict,
+        )
 
     def get_image_features(
         self,

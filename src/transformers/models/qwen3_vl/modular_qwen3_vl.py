@@ -65,6 +65,7 @@ from ..qwen3.modeling_qwen3 import (
 
 logger = logging.get_logger(__name__)
 
+
 @dataclass
 class BaseModelOutputWithDeepstackFeatures(ModelOutput):
     """
@@ -649,7 +650,9 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -961,7 +964,12 @@ class Qwen3VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -984,7 +992,10 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return image_embeds, deepstack_image_embeds
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.

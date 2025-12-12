@@ -1594,7 +1594,7 @@ class ClapModel(ClapPreTrainedModel):
         input_features: torch.Tensor,
         is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        return_dict: bool = False
+        return_dict: bool = False,
     ) -> torch.FloatTensor:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):

@@ -1105,7 +1105,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             return position_ids, mrope_position_deltas
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1131,7 +1134,12 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         return video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 

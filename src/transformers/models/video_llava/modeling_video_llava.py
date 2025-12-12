@@ -52,6 +52,7 @@ class BaseModelOutputWithNumFrames(ModelOutput):
         num_frames (`int`):
             Number of frames the videos have.
     """
+
     last_hidden_state: torch.FloatTensor
     pooler_output: torch.FloatTensor
     num_frames: int

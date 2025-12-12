@@ -925,7 +925,9 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, return_dict: bool = False):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, return_dict: bool = False
+    ):
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer

@@ -86,6 +86,7 @@ class BaseModelOutputWithFeatureMaps(ModelOutput):
     feature_maps: Optional[list[torch.Tensor]] = None
     feature_maps_position_embeddings: Optional[list[torch.Tensor]] = None
 
+
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     r"""
     This is the configuration class to store the configuration of a [`Sam3TrackerVideoPromptEncoder`]. The [`Sam3TrackerVideoPromptEncoder`]
