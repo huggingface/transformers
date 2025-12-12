@@ -1547,6 +1547,38 @@ class EdgeTamVideoSegmentationOutput(ModelOutput):
     frame_idx: Optional[int] = None
 
 
+@dataclass
+class BaseModelOutputWithFeatureMaps(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        feature_maps (`list[torch.Tensor]`):
+            List of feature maps from different layers of the model.
+        feature_maps_position_embeddings (`list[torch.Tensor]`):
+            List of position embeddings corresponding to the feature maps.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    feature_maps: Optional[list[torch.Tensor]] = None
+    feature_maps_position_embeddings: Optional[list[torch.Tensor]] = None
+
+
 class EdgeTamVideoPositionalEmbedding(nn.Module):
     def __init__(self, config: EdgeTamVideoPromptEncoderConfig):
         super().__init__()
@@ -2210,6 +2242,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[
         list[torch.Tensor],
@@ -2223,6 +2256,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor`):
                 Input pixel values of shape `(batch_size, num_channels, height, width)`.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             `tuple`: A tuple containing:
@@ -2251,6 +2286,14 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
+
+        if return_dict:
+            return BaseModelOutputWithFeatureMaps(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                attentions=vision_outputs.attentions,
+                feature_maps=feature_maps,
+                feature_maps_position_embeddings=feature_maps_position_embeddings,
+            )
 
         return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 

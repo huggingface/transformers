@@ -37,6 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     SequenceClassifierOutput,
@@ -800,12 +801,24 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Convert pixel image to image features via the encoder and projector."""
+    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False) -> torch.Tensor:
+        """
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
+        Convert pixel image to image features via the encoder and projector.
+        """
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
         vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
         image_features = self.multi_modal_projector(vision_outputs)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     def get_image_placeholder_mask(
@@ -1210,8 +1223,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_image_features(self, pixel_values):
-        return self.get_encoder().get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False):
+        return self.get_encoder().get_image_features(pixel_values, return_dict=return_dict)
 
     @property
     def vision_tower(self):

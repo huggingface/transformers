@@ -823,9 +823,13 @@ class SiglipModel(SiglipPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
+        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`SiglipVisionModel`].
@@ -854,6 +858,9 @@ class SiglipModel(SiglipPreTrainedModel):
             **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
+
+        if return_dict:
+            return vision_outputs
 
         return pooled_output
 

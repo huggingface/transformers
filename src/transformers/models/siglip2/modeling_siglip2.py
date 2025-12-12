@@ -881,12 +881,15 @@ class Siglip2Model(Siglip2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ) -> torch.FloatTensor:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -917,6 +920,9 @@ class Siglip2Model(Siglip2PreTrainedModel):
             spatial_shapes=spatial_shapes,
         )
         pooled_output = vision_outputs.pooler_output
+
+        if return_dict:
+            return vision_outputs
 
         return pooled_output
 

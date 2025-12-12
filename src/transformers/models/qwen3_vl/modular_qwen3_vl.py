@@ -15,6 +15,7 @@
 """PyTorch Qwen3-VL model."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -34,7 +35,7 @@ from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torchdynamo_compiling, logging
+from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 from ..llama.modeling_llama import LlamaRotaryEmbedding
@@ -63,6 +64,27 @@ from ..qwen3.modeling_qwen3 import (
 
 
 logger = logging.get_logger(__name__)
+
+@dataclass
+class BaseModelOutputWithDeepstackFeatures(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        deepstack_features (`List[torch.FloatTensor]`, *optional*):
+            List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
 
 
 class Qwen3VLVisionConfig(PreTrainedConfig):
@@ -627,13 +649,15 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -675,9 +699,16 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        if return_dict:
+            return BaseModelOutputWithDeepstackFeatures(
+                last_hidden_state=hidden_states,
+                pooler_output=merged_hidden_states,
+                deepstack_features=deepstack_feature_lists,
+            )
+
+        return merged_hidden_states, deepstack_feature_lists
 
 
 @auto_docstring(
@@ -930,7 +961,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -939,9 +970,15 @@ class Qwen3VLModel(Qwen2_5_VLModel):
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds, deepstack_image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_output = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=return_dict)
+        if return_dict:
+            return vision_output
+
+        image_embeds, deepstack_image_embeds = vision_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
         return image_embeds, deepstack_image_embeds

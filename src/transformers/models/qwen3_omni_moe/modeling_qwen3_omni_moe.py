@@ -49,7 +49,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
@@ -62,6 +62,28 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
+
+
+@dataclass
+class BaseModelOutputWithDeepstackFeatures(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        deepstack_features (`List[torch.FloatTensor]`, *optional*):
+            List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -1171,13 +1193,17 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1219,9 +1245,16 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        if return_dict:
+            return BaseModelOutputWithDeepstackFeatures(
+                last_hidden_state=hidden_states,
+                pooler_output=merged_hidden_states,
+                deepstack_features=deepstack_feature_lists,
+            )
+
+        return merged_hidden_states, deepstack_feature_lists
 
     @property
     def deepstack_merger_list(self):

@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -177,6 +177,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -191,6 +192,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -222,6 +226,12 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             image_outputs = torch.cat(hs_pool, dim=-1)
 
         image_features = self.multi_modal_projector(image_outputs)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
 
         return image_features
 
@@ -431,11 +441,13 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
     ):
         return self.model.get_image_features(
             pixel_values_images=pixel_values_images,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            return_dict=return_dict,
         )
 
     @can_return_tuple
