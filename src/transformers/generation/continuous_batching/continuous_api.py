@@ -946,6 +946,10 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
     ) -> None:
+        # If there is prefix sharing, we sort the inputs to maximize cache hits
+        if self._allow_prefix_sharing:
+            inputs = sorted(inputs, reverse=True)
+        # Add requests in order
         for input_ids in inputs:
             self.add_request(
                 input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
