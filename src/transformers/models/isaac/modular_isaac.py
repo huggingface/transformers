@@ -1318,9 +1318,7 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_scaling: Optional[dict[str, Any]] = None
         self._rope_parameters: Optional[dict[str, Any]] = None
-
         resolved_text_config = kwargs.pop("text_config", text_config)
         if isinstance(resolved_text_config, Qwen3Config):
             text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
@@ -1333,83 +1331,37 @@ class IsaacConfig(PretrainedConfig):
 
         text_config_kwargs.update(kwargs)
 
-        legacy_rope_theta = text_config_kwargs.pop("rope_theta", None)
-        incoming_rope_params = text_config_kwargs.pop("rope_parameters", None)
-        incoming_rope_scaling = text_config_kwargs.pop("rope_scaling", None)
-        normalized_rope_params = incoming_rope_params or incoming_rope_scaling
-        if normalized_rope_params is None and legacy_rope_theta is not None:
-            normalized_rope_params = {"rope_type": "default", "rope_theta": legacy_rope_theta}
-        elif (
-            normalized_rope_params is not None
-            and legacy_rope_theta is not None
-            and "rope_theta" not in normalized_rope_params
-        ):
-            normalized_rope_params = {**normalized_rope_params, "rope_theta": legacy_rope_theta}
-        if normalized_rope_params is not None:
-            text_config_kwargs["rope_parameters"] = normalized_rope_params
-
         self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-
-        # Normalize rope parameters on the text config (prefer rope_parameters; alias rope_scaling)
-        self._rope_parameters = getattr(self.text_config, "rope_parameters", None)
-        if self._rope_parameters is None:
-            self._rope_parameters = getattr(self.text_config, "rope_scaling", None)
-        if self._rope_parameters is None and normalized_rope_params is not None:
-            self._rope_parameters = normalized_rope_params
-        if self._rope_parameters is None:
-            self._rope_parameters = {"rope_type": "default"}
-
-        try:
-            self.text_config.rope_parameters = self._rope_parameters
-        except AttributeError:
-            setattr(self.text_config, "rope_parameters", self._rope_parameters)
-        if hasattr(self.text_config, "rope_scaling"):
-            self.text_config.rope_scaling = self._rope_parameters
-        else:
-            try:
-                setattr(self.text_config, "rope_scaling", self._rope_parameters)
-            except Exception:
-                pass
+        if not hasattr(self.text_config, "rope_theta"):
+            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
+            if rope_theta_override is None:
+                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
+            self.text_config.rope_theta = rope_theta_override
 
         super().__init__(**kwargs)
 
+        if self._rope_scaling is None:
+            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
+        else:
+            self.text_config.rope_scaling = self._rope_scaling
+
         # Keep rope parameters alias in sync with upstream expectations
-        self._rope_scaling = self._rope_parameters
+        self._rope_parameters = self._rope_scaling
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
-        self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
         self.vocab_size = self.text_config.vocab_size
-        self.max_position_embeddings = self.text_config.max_position_embeddings
         self.hidden_size = self.text_config.hidden_size
-        self.intermediate_size = self.text_config.intermediate_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
         self.num_attention_heads = self.text_config.num_attention_heads
-        self.use_sliding_window = getattr(self.text_config, "use_sliding_window", False)
-        sliding_window = getattr(self.text_config, "sliding_window", None)
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = getattr(self.text_config, "max_window_layers", None)
-        self.num_key_value_heads = getattr(self.text_config, "num_key_value_heads", None)
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
-        self.initializer_range = self.text_config.initializer_range
-        self.rms_norm_eps = self.text_config.rms_norm_eps
         self.use_cache = self.text_config.use_cache
-        self.attention_bias = getattr(self.text_config, "attention_bias", False)
-        self.attention_dropout = getattr(self.text_config, "attention_dropout", 0.0)
+        self.rope_theta = self.text_config.rope_theta
 
         # Validate rotary parameters now that they have been mirrored locally.
         rope_config_validation(self)
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         # Handle vision config - either dict or IsaacVisionConfig instance
@@ -1427,42 +1379,24 @@ class IsaacConfig(PretrainedConfig):
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
 
-    def get_text_config(self, *_, **kwargs) -> Qwen3Config:
-        # Accept optional decoder/encoder flags to align with HF composite configs
-        kwargs.pop("decoder", None)
-        kwargs.pop("encoder", None)
-        return self.text_config
-
     @property
     def rope_scaling(self):
         if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
-        return self._rope_parameters
+            return getattr(self.text_config, "rope_scaling", None)
+        return self._rope_scaling
 
     @rope_scaling.setter
     def rope_scaling(self, value):
-        self._rope_parameters = value
         self._rope_scaling = value
         if hasattr(self, "text_config") and self.text_config is not None:
-            try:
-                self.text_config.rope_parameters = value
-            except AttributeError:
-                setattr(self.text_config, "rope_parameters", value)
-            try:
-                self.text_config.rope_scaling = value
-            except AttributeError:
-                pass
+            self.text_config.rope_scaling = value
 
     @property
     def rope_parameters(self) -> dict[str, Any] | None:
         """Alias introduced upstream for rope scaling dictionaries."""
         value = self._rope_parameters
-        if value is None and hasattr(self, "text_config") and self.text_config is not None:
-            value = getattr(self.text_config, "rope_parameters", None) or getattr(
-                self.text_config, "rope_scaling", None
-            )
+        if value is None:
+            value = self.rope_scaling
         if value is None:
             return {"rope_type": "default"}
         return value
@@ -1470,22 +1404,13 @@ class IsaacConfig(PretrainedConfig):
     @rope_parameters.setter
     def rope_parameters(self, value: dict[str, Any] | None) -> None:
         self._rope_parameters = value
-        self._rope_scaling = value
         self.rope_scaling = value
 
     def to_dict(self):
         output = super().to_dict()
-        rope_params = self.rope_parameters
-        output["rope_parameters"] = rope_params
-        output.pop("rope_scaling", None)
-        output.pop("rope_theta", None)
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
-            text_config_dict = self.text_config.to_dict()
-            text_config_dict.pop("rope_theta", None)
-            text_config_dict.pop("rope_scaling", None)
-            text_config_dict["rope_parameters"] = rope_params
-            output["text_config"] = text_config_dict
+            output["text_config"] = self.text_config.to_dict()
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
@@ -1645,26 +1570,8 @@ class IsaacProcessor(ProcessorMixin):
         Returns:
             BatchFeature with input_ids and tensor_stream
         """
-        # Normalize inputs to lists and support BatchEncoding (v5 apply_chat_template default)
-        encoding_input = None
-        if isinstance(text, BatchEncoding):
-            encoding_input = text
-        elif isinstance(text, dict) and "input_ids" in text:
-            encoding_input = BatchEncoding(text)
-
-        if encoding_input is not None:
-            input_ids_field = encoding_input["input_ids"]
-            if isinstance(input_ids_field, torch.Tensor):
-                ids = input_ids_field
-            else:
-                ids = torch.tensor(input_ids_field)
-            if ids.ndim == 1:
-                ids = ids.unsqueeze(0)
-            if ids.size(0) != 1:
-                raise ValueError("IsaacProcessor currently supports batch_size=1 for chat templates.")
-            decoded_text = self.tokenizer.decode(ids[0].tolist(), skip_special_tokens=False)
-            texts = [decoded_text]
-        elif isinstance(text, str):
+        # Normalize inputs to lists
+        if isinstance(text, str):
             texts = [text]
         else:
             texts = text
@@ -1747,29 +1654,17 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_params = (
-            getattr(rope_source_cfg, "rope_parameters", None) or getattr(rope_source_cfg, "rope_scaling", None) or {}
-        )
-        legacy_rope_theta = getattr(rope_source_cfg, "rope_theta", None)
-        if legacy_rope_theta is not None and isinstance(rope_params, dict) and "rope_theta" not in rope_params:
-            rope_params = {**rope_params, "rope_theta": legacy_rope_theta}
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
 
-        sanitized_params = {k: v for k, v in rope_params.items() if k not in self.EXTRA_ROPE_KEYS}
+        sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
         config_for_rope = copy.copy(rope_source_cfg)
-        config_for_rope.rope_parameters = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_scaling"):
-            config_for_rope.rope_scaling = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_theta"):
-            try:
-                delattr(config_for_rope, "rope_theta")
-            except Exception:
-                config_for_rope.rope_theta = None
+        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_params.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
@@ -1845,9 +1740,8 @@ class IsaacModel(Qwen3PreTrainedModel):
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
 
-        text_cfg_source = getattr(config, "get_text_config", lambda: config)()
+        text_cfg_source = config.text_config
         text_cfg = copy.deepcopy(text_cfg_source)
-        text_cfg._attn_implementation = config._attn_implementation
         self.text_model = AutoModel.from_config(text_cfg)
         # Ensure downstream callers observe the composed config
         self.text_model.config = config
