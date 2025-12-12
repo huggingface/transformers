@@ -37,6 +37,27 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+class BaseModelOutputWithNumFrames(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        num_frames (`int`):
+            Number of frames the videos have.
+    """
+    last_hidden_state: torch.FloatTensor
+    pooler_output: torch.FloatTensor
+    num_frames: int
+
+
+@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLlava base model outputs.
@@ -239,6 +260,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        return_dict: bool = False,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -250,6 +272,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             video_features (`torch.Tensor`): Video feature tensor of shape `(num_videos * num_frames, image_length, embed_dim)`).
             frames (`int`): Number of frames the videos have.
@@ -272,6 +297,13 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             video_features = torch.cat(hs_pool, dim=-1)
 
         video_features = self.multi_modal_projector(video_features)
+
+        if return_dict:
+            return BaseModelOutputWithNumFrames(
+                last_hidden_state=video_outputs.last_hidden_state,
+                pooler_output=video_features,
+                num_frames=num_frames,
+            )
 
         return video_features, num_frames
 

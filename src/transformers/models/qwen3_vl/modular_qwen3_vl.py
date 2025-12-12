@@ -984,7 +984,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         return image_embeds, deepstack_image_embeds
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None, return_dict: bool = False
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
@@ -994,9 +994,11 @@ class Qwen3VLModel(Qwen2_5_VLModel):
                 The tensors corresponding to the input videos.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
         """
         # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw)
+        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=return_dict)
 
     @auto_docstring
     @check_model_inputs

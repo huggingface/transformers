@@ -624,6 +624,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -638,6 +639,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         Returns:
             video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
@@ -670,6 +673,13 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=video_features.last_hidden_state,
+                pooler_output=video_features,
+            )
+
         return video_features
 
 
@@ -961,11 +971,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        return_dict: bool = False,
     ):
         return self.model.get_video_features(
             pixel_values=pixel_values,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            return_dict=return_dict,
         )
 
 

@@ -1249,8 +1249,12 @@ class XCLIPModel(XCLIPPreTrainedModel):
     def get_video_features(
         self,
         pixel_values: torch.Tensor,
+        return_dict: bool = False,
     ) -> torch.FloatTensor:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             video_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The video embeddings obtained by
             applying the projection layer to the pooled output of [`XCLIPVisionModel`] and
@@ -1337,6 +1341,9 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features)
         video_embeds = mit_outputs.pooler_output
+
+        if return_dict:
+            return mit_outputs
 
         return video_embeds
 

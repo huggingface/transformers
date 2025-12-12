@@ -588,6 +588,7 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
+        return_dict: bool = False,
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -599,8 +600,10 @@ class VideoLlama3Model(Qwen2VLModel):
                 The temporal, height and width of feature shape of each video in LLM.
             video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
                 The spatial downsampling ratio of each video feature.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
+        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, image_merge_sizes=video_merge_sizes, return_dict=return_dict)
 
     def get_image_features(
         self,
