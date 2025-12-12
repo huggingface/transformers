@@ -18,10 +18,9 @@ import json
 import math
 import os
 import re
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
-import torch
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
@@ -32,6 +31,10 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import TensorType, logging
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -299,6 +302,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         }
 
         if return_tensors == "pt":
+            import torch
+
             result["padded_speeches"] = torch.tensor(padded_speeches, device=device, dtype=dtype or torch.float32)
             result["speech_masks"] = torch.tensor(speech_masks, device=device, dtype=torch.bool)
 
@@ -364,6 +369,8 @@ class VibeVoiceProcessor(ProcessorMixin):
         batch_encoding = BatchEncoding()
 
         if return_tensors is not None:
+            import torch
+
             batch_encoding["input_ids"] = torch.tensor(input_ids_list, dtype=torch.long)
             if return_attention_mask and attention_masks is not None:
                 batch_encoding["attention_mask"] = torch.tensor(attention_masks, dtype=torch.long)
