@@ -35,14 +35,15 @@ from transformers import (
     PythonBackend,
     is_torch_available,
 )
+from transformers.image_utils import load_image
+from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
-from transformers.models.isaac.modeling_isaac import IsaacVisionAttention
 from transformers.models.isaac.modeling_isaac import (
+    IsaacVisionAttention,
     document_mask_function_from_cu_seqlens,
     ensure_document_attention_mask,
 )
-from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
     get_tests_dir,
@@ -105,11 +106,47 @@ def tensor_stream_snapshot(ts: TensorStream) -> dict[str, object]:
     }
 
 
-def _assert_tensor_stream_snapshot_equal(actual: dict[str, object], expected: dict[str, object]) -> None:
-    assert actual["shape"] == expected["shape"], "TensorStream shape changed"
-    assert actual["token_view"] == expected["token_view"], "TensorStream token view changed"
-    assert actual["modality_mask"] == expected["modality_mask"], "TensorStream modality mask changed"
-    assert actual["role_mask"] == expected["role_mask"], "TensorStream role mask changed"
+def document_to_messages(
+    document: list[dict], vision_token: str = "<image>"
+) -> tuple[list[dict[str, str]], list[Image]]:
+    """
+    Convert a Document to messages format compatible with chat templates.
+    Each content turn creates its own message entry.
+
+    Args:
+        document: list of dicts containing Text and/or Image content
+        vision_token: Token to use for image placeholder
+
+    Returns:
+        Tuple of (messages, images) where messages is a list of dicts with 'role' and 'content'
+    """
+    messages = []
+    images = []
+
+    for item in document:
+        itype = item.get("type")
+        if itype == "text":
+            content = item.get("content")
+            if content:
+                messages.append(
+                    {
+                        "role": item.get("role", "user"),
+                        "content": content,
+                    }
+                )
+        elif itype == "image":
+            content = item.get("content")
+            if content:
+                img = load_image(content)
+                images.append(img)
+                messages.append(
+                    {
+                        "role": item.get("role", "user"),
+                        "content": vision_token,
+                    }
+                )
+
+    return messages, images
 
 
 def _tensor_to_bytes(tensor):
@@ -944,106 +981,87 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
 @require_vision
 @slow
 @require_tensorstream
-def test_hf_generate_from_image(isaac_reference_checkpoint):
-    # Configuration
-    MAX_NEW_TOKENS = 25
-    DTYPE = torch.bfloat16
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+@require_flash_attn
+class IsaacGenerationIntegrationTest(unittest.TestCase):
+    max_new_tokens = 25
+    dtype = torch.bfloat16
 
-    hf_config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
-    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
-    messages = [{"role": "user", "content": "Describe this image:"}, {"role": "user", "content": "<image>"}]
-    images = []
-    image_bytes = base64.b64decode(RED_DOT_B64)
-    pil_image = Image.open(io.BytesIO(image_bytes))
-    images.append(pil_image)
-
-    tokenizer = AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
-    genesis_processor = create_isaac_processor(tokenizer, hf_config)
-    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
-    # Added strip because our generation events don't add new line
-    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
-    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
-    tensor_stream = processor_output["tensor_stream"].to(device)
-
-    # Process document to TensorStream
-    hf_config.vision_config._attn_implementation = "flash_attention_2"
-    hf_config.vision_config.attn_implementation = "flash_attention_2"
-    hf_model = IsaacForConditionalGeneration.from_pretrained(isaac_reference_checkpoint, config=hf_config)
-    hf_model = hf_model.to(device=device, dtype=DTYPE)
-    hf_model.eval()
-
-    # Load HF tokenizer
-
-    # Validate that weights are identical between models
-
-    with torch.no_grad():
-        print("\n1️⃣ Running HuggingFace model.generate()...")
-        # Generate with HF model using the training tensor stream converted to Open variant
-        hf_output = hf_model.generate(
-            tensor_stream=tensor_stream,
-            max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=False,  # Deterministic generation
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_logits=True,
+    def setUp(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.checkpoint = _reference_checkpoint_or_skip()
+        self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
         )
-
-        hf_generated_ids = hf_output.sequences
-        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
-        print(f"   HF Generated: '{hf_generated_text}'")
-        assert "is" in hf_generated_text
-
-
-@require_torch
-@require_vision
-@slow
-@require_tensorstream
-def test_hf_generate_from_text(isaac_reference_checkpoint):
-    # Configuration
-    MAX_NEW_TOKENS = 25
-    DTYPE = torch.bfloat16
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    hf_config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
-    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
-    messages = [{"role": "user", "content": "Explain the pythagorean theorem"}]
-    images = []
-
-    tokenizer = AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
-    genesis_processor = create_isaac_processor(tokenizer, hf_config)
-    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
-    # Added strip because our generation events don't add new line
-    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
-    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
-    tensor_stream = processor_output["tensor_stream"].to(device)
-
-    # Process document to TensorStream
-    hf_config.vision_config._attn_implementation = "flash_attention_2"
-    hf_config.vision_config.attn_implementation = "flash_attention_2"
-    hf_model = IsaacForConditionalGeneration.from_pretrained(isaac_reference_checkpoint, config=hf_config)
-    hf_model = hf_model.to(device=device, dtype=DTYPE)
-    hf_model.eval()
-
-    # Load HF tokenizer
-
-    # Validate that weights are identical between models
-
-    with torch.no_grad():
-        print("\n1️⃣ Running HuggingFace model.generate()...")
-        # Generate with HF model using the training tensor stream converted to Open variant
-        hf_output = hf_model.generate(
-            tensor_stream=tensor_stream,
-            max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=False,  # Deterministic generation
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_logits=True,
+        self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
+        self.hf_config.vision_config._attn_implementation = "flash_attention_2"
+        self.hf_config.vision_config.attn_implementation = "flash_attention_2"
+        self.model = IsaacForConditionalGeneration.from_pretrained(
+            self.checkpoint, config=self.hf_config, revision=MODEL_REVISION
         )
+        self.model = self.model.to(device=self.device, dtype=self.dtype)
+        self.model.eval()
 
-        hf_generated_ids = hf_output.sequences
-        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
-        print(f"   HF Generated: '{hf_generated_text}'")
-        assert "is" in hf_generated_text
+    def _generate_from_messages(self, messages, images, num_tokens=None):
+        prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        tensor_stream = processor_output["tensor_stream"].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                tensor_stream=tensor_stream,
+                max_new_tokens=num_tokens or self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+
+        generated_ids = outputs.sequences
+        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        return generated_text
+
+    def test_generate_from_image_text(self):
+        image = _load_red_dot_image()
+        if image is None:
+            pytest.skip("PIL.Image is required for Isaac generation tests.")
+
+        messages = [
+            {"role": "user", "content": "Describe this image:"},
+            {"role": "user", "content": "<image>"},
+        ]
+        generated_text = self._generate_from_messages(messages, [image])
+        expected_fragment = "The image is a close-up photograph of a red cross symbol."
+        assert expected_fragment in generated_text
+
+    def test_generate_from_text_only(self):
+        document = [
+            {
+                "type": "text",
+                "content": "What is the pythogorean theorem?",
+                "role": "user",
+            }
+        ]
+        messages, _ = document_to_messages(document)
+        generated_text = self._generate_from_messages(messages, [], num_tokens=100)
+        expected_fragmenet = "The Pythagorean theorem is a fundamental principle in geometry that relates the lengths of the sides of a right-angled triangle. Let's break down the theorem step by step:"
+        assert expected_fragmenet in generated_text
+
+    def test_vqa_from_image(self):
+        document = [
+            {
+                "type": "image",
+                "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+                "role": "user",
+            },
+            {
+                "type": "text",
+                "content": "Is it safe to cross the street at this moment?",
+                "role": "user",
+            },
+        ]
+        messages, images = document_to_messages(document)
+        generated_text = self._generate_from_messages(messages, images, num_tokens=256)
+        expected_response = "\nNo, it is not safe to cross the street at this moment. The traffic light for pedestrians is red, indicating that it is not safe to cross."
+        assert generated_text == expected_response
