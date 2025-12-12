@@ -115,8 +115,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        return torch.int8
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            # 8-bit
+            return 1
+        return super().param_element_size(model, param_name, param)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
@@ -132,7 +136,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
+        device_map=None,
         keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
