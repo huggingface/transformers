@@ -17,6 +17,7 @@ see tokenization_utils.py
 """
 
 import copy
+import inspect
 import json
 import os
 from collections import defaultdict
@@ -30,6 +31,8 @@ from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
+from tokenizers.decoders import Sequence as DecoderSequence
+from tokenizers.pre_tokenizers import Sequence as PreTokenizerSequence
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from .integrations.ggml import convert_gguf_tokenizer
@@ -53,6 +56,68 @@ TOKENIZER_FILE = "tokenizer.json"
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 TIKTOKEN_VOCAB_FILE = "tokenizer.model"
+
+
+def _validate_tokenizer_components(tokenizer_instance, tokenizer_json_path):
+    """Validate that tokenizer.json components match the tokenizer instance."""
+    if tokenizer_instance is None or not hasattr(tokenizer_instance, "_tokenizer"):
+        return
+    
+    try:
+        # Get components from tokenizer.json
+        with open(tokenizer_json_path, encoding="utf-8") as f:
+            json_data = json.load(f)
+        
+        def _get_component_type(comp):
+            """Extract component type from either JSON dict or tokenizer object instance"""
+            if comp is None:
+                return None
+
+            # check in JSON dict
+            if isinstance(comp, dict):
+                if comp.get("type") == "Sequence":
+                    return "Sequence"
+                return comp.get("type")
+
+            # check in tokenizer object
+            if isinstance(comp, (DecoderSequence, PreTokenizerSequence)):
+                return "Sequence"
+            return type(comp).__name__
+        
+        json_components = {
+            "normalizer": _get_component_type(json_data.get("normalizer")),
+            "pre_tokenizer": _get_component_type(json_data.get("pre_tokenizer")),
+            "decoder": _get_component_type(json_data.get("decoder")),
+            "model": _get_component_type(json_data.get("model")),
+        }
+        
+        tokenizer = tokenizer_instance._tokenizer
+        expected_components = {
+            "normalizer": _get_component_type(tokenizer.normalizer),
+            "pre_tokenizer": _get_component_type(tokenizer.pre_tokenizer),
+            "decoder": _get_component_type(tokenizer.decoder),
+            "model": _get_component_type(tokenizer.model),
+        }
+        
+        # Compare and warn on mismatches
+        mismatches = []
+        for name in ["normalizer", "pre_tokenizer", "decoder", "model"]:
+            json_val = json_components[name]
+            expected_val = expected_components[name]
+            if json_val != expected_val:
+                mismatches.append(f"{name}: expected {expected_val}, found {json_val}")
+        
+        if mismatches:
+            warning_msg = (
+                f"Tokenizer component mismatch for {tokenizer_instance.__class__.__name__}:\n"
+                + "\n".join(f"  - {m}" for m in mismatches)
+            )
+            logger.warning(warning_msg)
+            import warnings
+            warnings.warn(warning_msg, UserWarning) #TODO: for debugging
+    except Exception:
+        pass  # TODO: Handle errors
+
 
 # Slow tokenizers have an additional added tokens files
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -112,6 +177,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
+            if cls is not TokenizersBackend:
+                _validate_tokenizer_components(cls(), fast_tokenizer_file)
+            
             # we extract vocab / merges from the tokenizer file to pass them to __init__
             processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
