@@ -169,7 +169,6 @@ class Jais2DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Jais2MLP(config)
 
 
 class Jais2PreTrainedModel(LlamaPreTrainedModel):
