@@ -1436,12 +1436,10 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_word_embeddings = True
         self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_word_embeddings = True
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config)
 
