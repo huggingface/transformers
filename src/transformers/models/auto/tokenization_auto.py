@@ -537,6 +537,12 @@ class AutoTokenizer:
     """
 
     def __init__(self):
+        if str(pretrained_model_name_or_path).lower() == "qwen/qwen2.5-vl-voxtral":
+            raise OSError(
+                f"The model '{pretrained_model_name_or_path}' is a Voxtral model and does not provide a tokenizer. "
+                "Please use a compatible tokenizer or provide one manually. "
+                "Check the model card for instructions."
+            )
         raise OSError(
             "AutoTokenizer is designed to be instantiated "
             "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
