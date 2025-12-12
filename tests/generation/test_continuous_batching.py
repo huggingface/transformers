@@ -12,29 +12,62 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
+import itertools
 import unittest
 
 import torch
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, LogitsProcessorList
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    CompileConfig,
+    GenerationConfig,
+    LogitsProcessorList,
+)
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
-    require_kernels,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
 )
+from transformers.utils import is_flash_attn_2_available, is_kernels_available
 
 
-ALLOW_EXPECTED_OUTPUTS = True  # this is a debug flag when you want to measure deviation between CB and non-CB gen
+def flush_memory(flush_compile: bool = True) -> None:
+    gc.collect()
+    # If needed, flush everything related to torch.compile
+    if flush_compile:
+        # Dynamo resets
+        torch._dynamo.reset()
+        torch._dynamo.reset_code_caches()
+        if hasattr(torch._inductor, "codecache"):
+            # Clear FX graph cache
+            if hasattr(torch._inductor.codecache, "FxGraphCache"):
+                torch._inductor.codecache.FxGraphCache.clear()
+            # Clear PyCodeCache
+            if hasattr(torch._inductor.codecache, "PyCodeCache"):
+                torch._inductor.codecache.PyCodeCache.cache_clear()
+            # Clear TritonFuture cache (for async compilation)
+            if hasattr(torch._inductor.codecache, "TritonFuture"):
+                if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
+                    torch._inductor.codecache.TritonFuture._compile_cache.clear()
+    # Clear CUDA cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    elif torch.xpu.is_available():
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
+    gc.collect()
 
 
-class ContinuousBatchingTest(unittest.TestCase):
+class ContinuousBatchingNonGenerationTest(unittest.TestCase):
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -54,6 +87,7 @@ class ContinuousBatchingTest(unittest.TestCase):
         sliding_window: int | None,
         expected_groups: str,
     ) -> None:
+        """Test the layer grouping algorithm of the hybrid allocator."""
         # Take a config and change the layer_types attribute to the mix we want
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
 
@@ -113,6 +147,7 @@ class ContinuousBatchingTest(unittest.TestCase):
         sliding_window: int,  # the sliding window size, 1 means no sliding window
         str_expected_mask: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
     ) -> None:
+        """Tests the correctness of the attention mask used in the continuous batching API."""
         # Build expected mask
         minus_inf = torch.finfo(torch.float32).min
         expected_mask = torch.empty((cumulative_seqlens_q[-1], cumulative_seqlens_k[-1]), dtype=torch.float32)
@@ -138,343 +173,219 @@ class ContinuousBatchingTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
+
+class ContinuousBatchingGenerationTest(unittest.TestCase):
+    # -----------------------------------------------Parity tests----------------------------------------------- #
+    #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
+    # ---------------------------------------------------------------------------------------------------------- #
     @require_deterministic_for_xpu
-    def _continuous_batching_parity(
-        self, model_id: str, attn_implementation: str, expected_outputs: dict[str, str]
+    def _test_continuous_batching_parity(
+        self,
+        model_id: str,
+        allow_prefix_sharing: bool,
+        attn_implementation: str,
+        use_cuda_graph: bool,
+        use_compile: bool,
+        max_new_tokens: int = 20,
     ) -> None:
-        # Prepare common elements
+        """Tests the parity between continuous batching and non-continuous batching generation."""
+
+        # Skip the test if Flash Attention 2 is required but not available
+        if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
+            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip the test if cuda graph is on but the device is not CUDA
+        if use_cuda_graph and torch_device != "cuda":
+            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+
+        # Prepare continuous batching inputs
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        prompts = [
-            "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her "
-                "friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh "
-                "duck egg. How much in dollars does she make every day at the farmers' market? The answer is:",
-            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take? "
-                "The answer is:",
-            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. "
-                "This increased the value of the house by 150%. How much profit did he make? The answer is:",
+        tokenizer.pad_token = tokenizer.eos_token
+        user_messages = [
+            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
+            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
+            "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
         ]  # fmt: skip
-        batched_inputs = [tokenizer.encode(prompt) for prompt in prompts]
+        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        print(f"{input_ids[0] = } {type(input_ids[0]) = }")
+
+        # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
+        # continuous batching but not in generate
+        dtype = "auto" if attn_implementation == "flash_attention_2" else torch.float32
 
         # Generation with continuous batching
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
         model = model.to(torch_device).eval()
-        model.generation_config.max_new_tokens = 40
+        model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = False
+        model.generation_config.use_cuda_graph = use_cuda_graph
+        if use_compile:
+            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
-        cb_outputs = model.generate_batch(inputs=batched_inputs, generation_config=model.generation_config)
+        # Generation with continuous batching
+        continuous_batching_outputs = model.generate_batch(
+            inputs=input_ids, generation_config=model.generation_config, allow_prefix_sharing=allow_prefix_sharing
+        )
+
+        # Prepare non-continuous batching inputs
+        inputs = tokenizer.apply_chat_template(
+            chats,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            padding=True,
+            return_dict=True,
+            return_attention_mask=True,
+        )
+        num_input_tokens = inputs.input_ids.shape[1]
 
         # Generation without continuous batching
-        if attn_implementation == "paged|sdpa":
-            non_cb_attn_implementation = "sdpa"
-        elif attn_implementation == "paged|eager":
-            non_cb_attn_implementation = "eager"
-        elif attn_implementation == "paged|flash_attention_2":
-            non_cb_attn_implementation = "eager"
-        else:
-            raise ValueError(f"Invalid attention implementation: {attn_implementation}")
-
-        # We regenerate the model because just changing the attn_implementation does not work
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=non_cb_attn_implementation, dtype="auto"
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
         model = model.to(torch_device).eval()
-        model.generation_config.max_new_tokens = 40
+        model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = False
+        model.generation_config.use_cuda_graph = use_cuda_graph
+        if use_compile:
+            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
-        for request_id, request in cb_outputs.items():
-            # Generate without continuous batching
-            input_ids = torch.tensor([request.prompt_ids]).to(torch_device)
-            attention_mask = torch.ones_like(input_ids)
-            outputs = model.generate(
-                input_ids, attention_mask=attention_mask, generation_config=model.generation_config
+        generate_outputs = model.generate(**inputs.to(torch_device), generation_config=model.generation_config)
+
+        for i, user_message in enumerate(user_messages):
+            continuous_batching_output = continuous_batching_outputs[f"req_{i}"].generated_tokens
+            generate_output = generate_outputs[i][num_input_tokens:].tolist()
+            while generate_output[-1] == model.generation_config.pad_token_id:
+                generate_output.pop()
+
+            if continuous_batching_output != generate_output:
+                decoded_continuous_batching_output = tokenizer.decode(continuous_batching_output)
+                decoded_generate_output = tokenizer.decode(generate_output)
+                msg = f"Test failed for {model_id = } {allow_prefix_sharing = }, {attn_implementation = }, {use_cuda_graph = }, {use_compile = }\n"
+                msg += f"User message              : {repr(user_message)}\n"
+                msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
+                msg += f"Generate output           : {repr(decoded_generate_output)}"
+                self.fail(msg)
+
+        del model
+        flush_memory(flush_compile=use_compile)
+
+    @parameterized.expand(
+        list(
+            itertools.product(
+                [False, True],
+                ["eager", "sdpa", "flash_attention_2"],
+                [False, True],
+                [False, True],
             )
-            generated_tokens = outputs[0][input_ids.shape[1] :]
-            non_cb_decoded_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-            input_ids = input_ids.tolist()[0]
-
-            # Check that the generated output with and without CB match
-            cb_decoded_output = tokenizer.decode(request.generated_tokens, skip_special_tokens=True)
-            outputs_match = non_cb_decoded_output == cb_decoded_output
-
-            # If they dont, that might be expected: the outputs can differ slightly due to numerical differences
-            # If that's the case, there is an expected output ready
-            if not outputs_match:
-                expected_output = expected_outputs.get(request_id) if ALLOW_EXPECTED_OUTPUTS else None
-
-                if expected_output is None:
-                    self.fail(
-                        f"Test {request_id = } failed, no expected output was provided.\nRef:"
-                        f"{repr(non_cb_decoded_output)}\nOut:{repr(cb_decoded_output)}"
-                    )
-                else:
-                    self.assertEqual(
-                        expected_output,
-                        cb_decoded_output,
-                        msg=f"Test {request_id = } failed, expected output did not match.\n"
-                        f"Exp:{repr(expected_output)}\nOut:{repr(cb_decoded_output)}",
-                    )
-
-    # Eager tests
-    @require_torch_accelerator
-    @require_read_token
-    @slow
-    def test_continuous_batching_parity_llama_eager(self) -> None:
-        expected_outputs = Expectations({
-            ("rocm", (9, 4)): {
-                "req_0": " $16. How did I get that answer? I used the following equation: 16 - 3 - 4 = 9. 9 x $2 = $18. $18 -"
-            },
-            ("cuda", (9, 0)): {
-                "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5. The total number of bolts is 4.5. The total",
-                "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
-            },
-            ("xpu", None): {
-                "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The answer is not 3.5 bolts of blue fiber and 1.5 bolts of white fiber. The answer'",
-                "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|eager", expected_outputs)
-
+        )
+    )
     @require_torch_accelerator
     @slow
-    def test_continuous_batching_parity_gemma_eager(self) -> None:
-        expected_outputs = Expectations({
-            ("rocm", (9, 4)): {
-                "req_1": " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 ="
-            },
-            ("cuda", (9, 0)): {
-                "req_0": "\n\n**$12**\n\n**Here's how to solve it:**\n\n* **Eggs eaten:** 3\n* **Eggs left:** 16 - 3 = 13",
-                "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n "
-            },
-            ("xpu", None): {
-                "req_0": "\n\n**$12**\n\n**Here's how to solve it:**\n\n* **Eggs eaten:** 3\n* **Eggs left:** 16 - 3 = 13",
-                "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n ",
-                "req_2": "\n\n**$100,000**\n\n**Explanation:**\n\nHere's how to calculate the profit:\n\n1. **Calculate the total cost:** $80,00",
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|eager", expected_outputs)
+    def test_continuous_batching_config_combinations(
+        self,
+        allow_prefix_sharing: bool,
+        attn_implementation: str,
+        use_cuda_graph: bool,
+        use_compile: bool,
+    ) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(
+            model_id, allow_prefix_sharing, attn_implementation, use_cuda_graph, use_compile
+        )
 
-    # FIXME: set expected_outputs
-    # @require_torch_accelerator
-    # @slow
-    # def test_continuous_batching_parity_qwen_eager(self) -> None:
-    #     expected_outputs = {}
-    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|eager", expected_outputs)
+    # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
+    # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
 
-    # FIXME: OOMs
-    # @require_torch_accelerator
-    # @slow
-    # def test_continuous_batching_parity_gpt_oss_eager(self) -> None:
-    #     expected_outputs = Expectations({
-    #         ("cuda", (9, 0)): {
-    #             "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
-    #             "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
-    #         },
-    #         ("xpu", None): {
-    #             "req_1": " 2.5 bolts. The question: \"What is the name of the puzzle that involves a robe taking 2 bolts of blue fiber and half that much white fiber?\" The answer: \"The",
-    #             "req_2": " 50%.\"\n\nWe need to parse: He buys a house for $80,000. He puts in $50,000 in repairs. This increased the value of the house by 150%."
-    #         },
-    #     }).get_expectation()  # fmt: skip
-    #     self._continuous_batching_parity("openai/gpt-oss-20b", "paged|eager", expected_outputs)
-
-    # SDPA tests
-    @require_read_token
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["TinyLlama/TinyLlama-1.1B-Chat-v1.0", "google/gemma-2-2b-it"],
+                [False, True],
+                [False, True],
+            )
+        )
+    )
     @require_torch_accelerator
     @slow
-    def test_continuous_batching_parity_llama_sdpa(self) -> None:
-        expected_outputs = Expectations({
-            ("rocm", (9, 4)): {
-                "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
-            },
-            ("xpu", None): {
-                "req_2": " $50,000. This is because the value of the house increased by 150%, which means that the value of the house increased by $50,000. This is because the value of the"
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|sdpa", expected_outputs)
+    def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
+        try:
+            self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
+        finally:
+            flush_memory(flush_compile=use_compile)
 
     @require_torch_accelerator
-    @slow
-    def test_continuous_batching_parity_gemma_sdpa(self) -> None:
-        expected_outputs = Expectations({
-            ("cuda", (9, 0)): {
-                "req_1": " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 =",
-            },
-            ("xpu", None): {
-                "req_1": " \n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 =",
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|sdpa", expected_outputs)
-
-    # FIXME: set expected_outputs
-    # @require_torch_accelerator
-    # @slow
-    # def test_continuous_batching_parity_qwen_sdpa(self) -> None:
-    #     expected_outputs = {}
-    #     self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|sdpa", expected_outputs)
-
-    # GPT-OSS is not compatible with SDPA because it has an attention sink. TODO: is this fixable?
-
-    # Flash attention test
-    @require_torch_accelerator
-    @require_kernels
-    @slow
-    def test_continuous_batching_parity_llama_flash(self) -> None:
-        expected_outputs = Expectations({
-            ("cuda", (9, 0)): {
-                "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5 bolts. The total number of bolts is 4.5 bolts.",
-            },
-            ("xpu", None): {
-                "req_1": " 3 bolts of blue fiber and 1.5 bolts of white fiber. The total number of bolts is 4.5 bolts. The total number of bolts is 4.5 bolts.",
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("meta-llama/Llama-3.1-8B", "paged|flash_attention_2", expected_outputs)
+    def test_continuous_batching_fast(self) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
 
     @require_torch_accelerator
-    @require_kernels
-    @slow
-    def test_continuous_batching_parity_gemma_flash(self) -> None:
-        expected_outputs = Expectations({
-            ("cuda", (9, 0)): {
-                "req_1": " \n \n 2 + 1 = 3 bolts \n \n \n \n \n \n \n \n \n \n \n \n \n ",
-            },
-            ("xpu", None): {
-                "req_0": "\n\n**$128**\n\n**Here's how to solve it:**\n\n* **Eggs eaten:** 3\n* **Eggs left:** 16 - 3 = 1",
-                "req_1":  "\n\n**Answer:** 3 bolts\n\n**Solution:**\n\n* **White fiber:** The robe needs half as much white fiber as blue fiber, so it needs 2 bolts / 2 =",
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("google/gemma-2-2b-it", "paged|flash_attention_2", expected_outputs)
+    def test_continuous_batching_long_generate(self) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
 
-    @require_torch_accelerator
-    @require_kernels
-    @slow
-    def test_continuous_batching_parity_qwen_flash(self) -> None:
-        expected_outputs = Expectations({
-            ("xpu", None): {
-                "req_1":  " 3.5 bolts.\n\nLet's break it down step by step:\n\n- Blue fiber: 2 bolts\n- White fiber: half of 2 bolts = 1 bolt\n\nTotal = ",
-            },
-        }).get_expectation()  # fmt: skip
-        self._continuous_batching_parity("Qwen/Qwen3-4B-Instruct-2507", "paged|flash_attention_2", expected_outputs)
+    # ---------------------------------------Streaming tests--------------------------------------- #
+    #           Ensures the requests have the right behavior with and without streaming             #
+    # --------------------------------------------------------------------------------------------- #
+    def _test_streaming_or_not_request(self, with_streaming: bool, with_non_streaming: bool) -> None:
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        max_new_tokens = 3
 
-    @require_torch_accelerator
-    @require_kernels
-    @slow
-    def test_continuous_batching_parity_gpt_oss_flash(self) -> None:
-        expected_outputs = {}
-        self._continuous_batching_parity("openai/gpt-oss-20b", "paged|flash_attention_2", expected_outputs)
-
-    def test_attn_implementation(self) -> None:
-        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model = AutoModelForCausalLM.from_pretrained(model_id)
         manager = model.init_continuous_batching()
-        assert "paged|sdpa" == manager.model.config._attn_implementation
+        manager.logit_processor = LogitsProcessorList()
+        manager.start()
 
-        model = AutoModelForCausalLM.from_pretrained("gpt2", _attn_implementation="eager")
-        manager = model.init_continuous_batching()
-        assert "paged|eager" == manager.model.config._attn_implementation
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
+        inputs = tokenizer.apply_chat_template(
+            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
+        ).to(model.device)[0]
+
+        # Test with non-streaming
+        if with_non_streaming:
+            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
+
+            # In non-streaming mode, the total number of generated tokens is equal to the max new tokens
+            chunk = next(manager.request_id_iter(request_id))
+            self.assertEqual(len(chunk.generated_tokens), max_new_tokens)
+
+        # Test with streaming
+        if with_streaming:
+            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
+
+            # In streaming mode, the total number of generated tokens is incremented by 1 on each iteration
+            chunk_1 = next(manager.request_id_iter(request_id))
+            self.assertEqual(len(chunk_1.generated_tokens), 1)
+
+            chunk_2 = next(manager.request_id_iter(request_id))
+            self.assertEqual(len(chunk_2.generated_tokens), 2)
+
+            chunk_3 = next(manager.request_id_iter(request_id))
+            self.assertEqual(len(chunk_3.generated_tokens), 3)
+
+        manager.stop(block=True)
 
     @require_torch_accelerator
     def test_streaming_request(self) -> None:
-        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        max_new_tokens = 3
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
-
-        manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
-        manager.start()
-
-        messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
-
-        inputs = tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
-        ).to(model.device)[0]
-
-        request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
-
-        # In streaming mode, the total number of generated tokens is incremented by 1 on each iteration
-        chunk_1 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_1.generated_tokens), 1)
-
-        chunk_2 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_2.generated_tokens), 2)
-
-        chunk_3 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_3.generated_tokens), 3)
-
-        manager.stop(block=True)
+        self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=False)
 
     @require_torch_accelerator
     def test_non_streaming_request(self) -> None:
-        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        max_new_tokens = 3
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
-
-        manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
-        manager.start()
-
-        messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
-
-        inputs = tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
-        ).to(model.device)[0]
-
-        request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
-
-        chunk = next(manager.request_id_iter(request_id))
-
-        # In non-streaming mode, the total number of generated tokens is equal to the max new tokens
-        self.assertEqual(len(chunk.generated_tokens), max_new_tokens)
-
-        manager.stop(block=True)
+        self._test_streaming_or_not_request(with_streaming=False, with_non_streaming=True)
 
     @require_torch_accelerator
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
-        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        max_new_tokens = 3
+        self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
-
-        manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
-        manager.start()
-
-        messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
-
-        inputs = tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
-        ).to(model.device)[0]
-
-        # Non-streaming request
-        request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=False)
-        chunk = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk.generated_tokens), max_new_tokens)
-
-        # Streaming request works afterward
-        request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
-
-        chunk_1 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_1.generated_tokens), 1)
-
-        chunk_2 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_2.generated_tokens), 2)
-
-        chunk_3 = next(manager.request_id_iter(request_id))
-        self.assertEqual(len(chunk_3.generated_tokens), 3)
-
-        manager.stop(block=True)
-
+    # -----------------------------------------Misc. tests----------------------------------------- #
+    #                     Various tests that don't fit into the other categories                    #
+    # --------------------------------------------------------------------------------------------- #
     @require_torch_accelerator
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 32
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(model_id)
 
         generation_config = GenerationConfig(do_sample=False, block_size=32)
         with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
@@ -530,7 +441,3 @@ class ContinuousBatchingTest(unittest.TestCase):
             ("rocm", (9, 4)): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904],
         }).get_expectation()  # fmt: skip
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_generated_tokens)
-
-
-# FIXME: the gemma test seem broken, there is a message about cuda graphs and the sdpa and flash expecteations are
-# inverted on CUDA. On AMD they do fine.
