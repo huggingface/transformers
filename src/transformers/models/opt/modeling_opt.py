@@ -439,6 +439,10 @@ class OPTDecoder(OPTPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if attention_mask is None:
+            seq_length = past_seen_tokens + inputs_embeds.shape[1]
+            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+
         if position_ids is None:
             # position_ids = cache_position.unsqueeze(0)
             position_ids = torch.cumsum(attention_mask, dim=1)
