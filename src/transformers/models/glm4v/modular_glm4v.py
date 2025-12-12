@@ -788,13 +788,17 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -833,8 +837,15 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states = hidden_states.permute(0, 3, 1, 2)
         hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
 
-        hidden_states = self.merger(hidden_states)
-        return hidden_states
+        merged_hidden_states = self.merger(hidden_states)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=hidden_states,
+                pooler_output=merged_hidden_states,
+            )
+
+        return merged_hidden_states
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
