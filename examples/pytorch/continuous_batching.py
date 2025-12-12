@@ -45,9 +45,7 @@ def generate_without_cb(
         key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
         attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(
-            input_ids, attention_mask=attention_mask, generation_config=generation_config, use_model_defaults=False
-        )
+        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
     return decoded_outputs
