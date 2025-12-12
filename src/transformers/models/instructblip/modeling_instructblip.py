@@ -46,6 +46,31 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+class BaseModelOutputWithVisionQformerOutputs(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        vision_outputs (`BaseModelOutputWithPooling`):
+            Outputs of the vision encoder.
+        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+            Outputs of the Q-Former (Querying Transformer).
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    vision_outputs: Optional[torch.FloatTensor] = None
+    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`InstructBlipForConditionalGeneration`].
@@ -1220,9 +1245,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         # NOTE: @Tom backwards incompatibility
         if return_dict:
-            return BaseModelOutputWithPooling(
+            return BaseModelOutputWithVisionQformerOutputs(
                 last_hidden_state=vision_outputs.last_hidden_state,
                 pooler_output=image_features,
+                vision_outputs=vision_outputs,
+                qformer_outputs=query_outputs,
             )
 
         return image_features
@@ -1319,13 +1346,16 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
 
-        language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
+        image_features = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        language_model_inputs = image_features.pooler_output
+        vision_outputs = image_features.vision_outputs
+        query_outputs = image_features.qformer_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1410,12 +1440,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
+        language_model_inputs = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
+            return_dict=False,
         )
 
         if inputs_embeds is None:
