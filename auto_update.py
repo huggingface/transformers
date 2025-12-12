@@ -433,15 +433,18 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
     """
     Analyze an inline literal expression that appears directly in an assertion.
 
-    Example: torch.testing.assert_close(masks, torch.tensor([-4.18, -3.49, -3.45]), rtol=2e-4)
+    Example 1: torch.testing.assert_close(masks, torch.tensor([-4.18, -3.49, -3.45]), rtol=2e-4)
     The expression "torch.tensor([-4.18, -3.49, -3.45])" appears inline as the 2nd argument.
+
+    Example 2: self.assertEqual(generated_text, "A blue bus parked on the side of a road.")
+    The string literal appears inline as the 2nd argument.
 
     Uses CST to find the exact position and pattern of the argument in the call.
 
     Args:
         filepath: Path to the file
         line_number: Line number where the expression appears
-        expr: The expression string (e.g., "torch.tensor([...])")
+        expr: The expression string (e.g., "torch.tensor([...])" or "'some string'")
 
     Returns:
         PatternInfo for the inline expression
@@ -468,6 +471,7 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
                 # This is a call on the target line
                 # Check if any argument matches our expression (is a literal)
                 for arg in node.args:
+                    # Handle torch.tensor(...) case
                     if isinstance(arg.value, cst.Call):
                         # Check if this is our target (e.g., torch.tensor(...))
                         if 'torch.tensor(' in self.target_expr:
@@ -499,6 +503,20 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
                                             line_end=arg_pos.end.line
                                         )
                                         return
+
+                    # Handle inline string literal case
+                    elif isinstance(arg.value, (cst.SimpleString, cst.ConcatenatedString)):
+                        # Check if this looks like our target string
+                        if self.target_expr.startswith('"') or self.target_expr.startswith("'"):
+                            arg_pos = self.get_metadata(PositionProvider, arg.value)
+
+                            self.info = PatternInfo(
+                                pattern_type="plain_string",
+                                base_indent=arg_pos.start.column,
+                                line_start=arg_pos.start.line,
+                                line_end=arg_pos.end.line
+                            )
+                            return
             except Exception:
                 pass
 
@@ -1058,6 +1076,62 @@ def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> b
     return True
 
 
+def update_inline_string(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """
+    Update an inline string literal that appears as an argument in a function call.
+
+    Example: self.assertEqual(generated_text, "old text")
+    Replace "old text" with the new value.
+
+    Args:
+        filepath: Path to file
+        task: UpdateTask
+        info: PatternInfo with exact line positions from CST
+
+    Returns:
+        True if successful
+    """
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # CST gives us exact line positions of the string
+    start_idx = info.line_start - 1
+    end_idx = info.line_end - 1
+
+    if start_idx >= len(lines) or end_idx >= len(lines):
+        return False
+
+    # For single-line inline string
+    if start_idx == end_idx:
+        line = lines[start_idx]
+
+        # The new_value_str from captured_info includes quotes, so strip them
+        new_content = task.new_value_str.strip()
+        if new_content.startswith('"') and new_content.endswith('"'):
+            new_content = new_content[1:-1]
+        elif new_content.startswith("'") and new_content.endswith("'"):
+            new_content = new_content[1:-1]
+
+        # Find the string in the line - look for quotes
+        # Try both " and '
+        for quote_char in ['"', "'"]:
+            quote_pos = line.find(quote_char)
+            if quote_pos != -1:
+                # Find closing quote
+                end_quote = line.find(quote_char, quote_pos + 1)
+                if end_quote != -1:
+                    # Replace the string content
+                    # Keep the quote character from the original
+                    new_line = line[:quote_pos] + quote_char + new_content + quote_char + line[end_quote + 1:]
+                    lines[start_idx] = new_line
+
+                    with open(filepath, 'w') as f:
+                        f.writelines(lines)
+                    return True
+
+    return False
+
+
 def update_inline_list(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
     """
     Update an inline list that appears as an argument in a function call.
@@ -1214,7 +1288,11 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
         elif info.pattern_type == "plain_dict":
             success = update_plain_dict(filepath, task, info)
         elif info.pattern_type == "plain_string":
-            success = update_plain_string(filepath, task, info)
+            if is_inline:
+                # Use inline-specific updater
+                success = update_inline_string(filepath, task, info)
+            else:
+                success = update_plain_string(filepath, task, info)
         else:
             print(f"    ✗ Unknown pattern")
             continue
