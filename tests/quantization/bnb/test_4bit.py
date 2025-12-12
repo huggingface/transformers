@@ -151,7 +151,7 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertEqual(num_params_4bit, num_params_fp16)
 
-    def test_compute_module_sizes_and_catching_allocator_warmup(self):
+    def test_compute_module_sizes(self):
         r"""
         Test if we compute the right module sizes needed to generate the device map.
         Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
@@ -164,10 +164,12 @@ class Bnb4BitTest(Base4bitTest):
         # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
         # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
         with torch.device("meta"):
-            model = AutoModelForCausalLM.from_config(self.model_fp16.config, dtype=torch.bfloat16)
+            model = AutoModelForCausalLM.from_config(self.model_fp16.config, dtype=torch.float16)
             model_size, _ = compute_module_sizes(model, only_modules=False)
 
-            expected_keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
             expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
             total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
 
@@ -176,9 +178,13 @@ class Bnb4BitTest(Base4bitTest):
             hf_quantizer.preprocess_model(model=model, config=model.config)
             quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
-            expected_keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
             expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
-            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[0]
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
 
         for name, module in model.named_modules():
             if isinstance(module, bnb.nn.Linear4bit):

@@ -4521,7 +4521,9 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
-def get_total_byte_count(model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer]= None):
+def get_total_byte_count(
+    model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer] = None
+):
     """
     This utility function calculates the total bytes count needed to load the model on each device.
     This is useful for caching_allocator_warmup as we want to know how much cache we need to pre-allocate.
@@ -4543,7 +4545,6 @@ def get_total_byte_count(model: PreTrainedModel, accelerator_device_map: dict, h
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
-            print(f"skipping {param_name}")
             continue
 
         param_byte_count = modules_sizes[param_name]

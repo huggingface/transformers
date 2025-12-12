@@ -136,7 +136,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        device_map,
+        device_map=None,
         keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
