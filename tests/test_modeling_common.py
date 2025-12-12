@@ -80,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -1995,7 +1996,7 @@ class ModelTesterMixin:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
-                    model_tied.save_pretrained(d, safe_serialization=True)
+                    model_tied.save_pretrained(d)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
                 with self.subTest(model_class):
@@ -2379,7 +2380,10 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
 
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
@@ -2744,12 +2748,6 @@ class ModelTesterMixin:
             # forcing the prefill size to go over sliding window size to check for SWA correctness
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
-
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
 
             model = model_class(config)
             if not all(
@@ -3381,6 +3379,9 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16
@@ -4032,12 +4033,14 @@ class ModelTesterMixin:
                 for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
                     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
                     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+
                     for (k1, v1), (k2, v2) in zip(
                         model_torch_dtype.named_parameters(), model_dtype.named_parameters()
                     ):
-                        self.assertEqual(k1, k2)
-                        self.assertEqual(v1.dtype, v2.dtype)
-                    torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+                        with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
+                            self.assertEqual(k1, k2)
+                            self.assertEqual(v1.dtype, v2.dtype)
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
     def test_tp_plan_matches_params(self):
         """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases

@@ -950,20 +950,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             pipe_information["output_modalities"] = self.model.output_modalities
         return f"{self.__class__.__name__}: {pipe_information}"
 
-    def save_pretrained(
-        self,
-        save_directory: str | os.PathLike,
-        safe_serialization: bool = True,
-        **kwargs: Any,
-    ):
+    def save_pretrained(self, save_directory: str | os.PathLike, **kwargs: Any):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
             save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
-            safe_serialization (`str`):
-                Whether to save the model using `safetensors` or PyTorch serialization.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -992,7 +985,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        kwargs["safe_serialization"] = safe_serialization
         self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:

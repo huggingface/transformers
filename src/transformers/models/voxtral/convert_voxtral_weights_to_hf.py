@@ -176,7 +176,6 @@ def write_model(
     model_name,
     config_name,
     output_dir,
-    safe_serialization=True,
 ):
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
@@ -224,7 +223,7 @@ def write_model(
     model.generation_config.pad_token_id = 11
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -278,9 +277,6 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
-    )
     args = parser.parse_args()
 
     write_model(
@@ -288,7 +284,6 @@ def main():
         args.model_name,
         args.config_name,
         args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     write_processor(
