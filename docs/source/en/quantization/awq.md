@@ -225,31 +225,6 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-## CPU
-
-[Intel Extension for PyTorch (IPEX)](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/) is designed to enable performance optimizations on Intel hardware. Run the command below to install the latest version of autoawq with IPEX support.
-
-```bash
-pip install intel-extension-for-pytorch # for IPEX-GPU refer to https://intel.github.io/intel-extension-for-pytorch/xpu/2.5.10+xpu/ 
-pip install git+https://github.com/casper-hansen/AutoAWQ.git
-```
-
-Set `version="ipex"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
-
-device = "cpu" # set to "xpu" for Intel GPU
-quantization_config = AwqConfig(version="ipex")
-
-model = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
-    quantization_config=quantization_config,
-    device_map=device,
-)
-```
-
 ## Resources
 
 Run the AWQ demo [notebook](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY#scrollTo=Wwsg6nCwoThm) for more examples of how to quantize a model, push a quantized model to the Hub, and more.
