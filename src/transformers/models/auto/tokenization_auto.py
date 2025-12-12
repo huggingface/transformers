@@ -536,7 +536,16 @@ class AutoTokenizer:
     This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
-    def __init__(self):
+    def __init__(self, pretrained_model_name_or_path, *args, **kwargs):
+        # Voxtral-specific error
+        if str(pretrained_model_name_or_path).lower() == "qwen/qwen2.5-vl-voxtral":
+            raise OSError(
+                f"The model '{pretrained_model_name_or_path}' is a Voxtral model and does not provide a tokenizer. "
+                "Please use a compatible tokenizer or provide one manually. "
+                "Check the model card for instructions."
+            )
+
+        # Generic error for other models
         raise OSError(
             "AutoTokenizer is designed to be instantiated "
             "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
