@@ -255,16 +255,15 @@ class PeAudioVideoEncoder(PeAudioVideoPretrainedModel):
         if video_hidden_state.shape[1] == audio_hidden_state.shape[1]:
             return video_hidden_state
 
-        video_lengths = (
-            padding_mask_videos.sum(dim=-1)
-            if padding_mask_videos is not None
-            else video_hidden_state.shape[1] * video_hidden_state.new_ones(video_hidden_state.shape[0], dtype=torch.long)
-        )
-        audio_lengths = (
-            padding_mask.sum(dim=-1)
-            if padding_mask is not None
-            else audio_hidden_state.shape[1] * audio_hidden_state.new_ones(audio_hidden_state.shape[0], dtype=torch.long)
-        )
+        if padding_mask_videos is not None:
+            video_lengths = padding_mask_videos.sum(dim=-1)
+        else:
+            video_lengths = video_hidden_state.shape[1] * video_hidden_state.new_ones(video_hidden_state.shape[0], dtype=torch.long)
+        
+        if padding_mask is not None:
+            audio_lengths = padding_mask.sum(dim=-1)
+        else:
+            audio_lengths = audio_hidden_state.shape[1] * audio_hidden_state.new_ones(audio_hidden_state.shape[0], dtype=torch.long)
 
         if (audio_lengths == video_hidden_state.shape[1]).all() or (
             video_lengths == audio_hidden_state.shape[1]
