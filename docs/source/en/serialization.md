@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Export to production
+# Exporting to production
 
 Export Transformers' models to different formats for optimized runtimes and devices. Deploy the same model to cloud providers or run it on mobile and edge devices. You don't need to rewrite the model from scratch for each deployment environment. Freely deploy across any inference ecosystem.
 

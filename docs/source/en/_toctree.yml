@@ -19,6 +19,8 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
@@ -110,15 +112,17 @@
       title: Writing a chat template
     title: Chat with models
   - sections:
-    - local: serialization
-      title: Export to production
-    - local: transformers_as_backend
-      title: Inference backends
     - local: serving
-      title: Serve CLI
-    - local: serve-cli-integrations
-      title: Serve CLI integrations
-    title: Deployment
+      title: Serving LLMs, VLMs, and other chat-based models
+    - local: jan
+      title: Jan
+    - local: cursor
+      title: Cursor
+    - local: tiny_agents
+      title: Tiny-Agents CLI and MCP tools
+    - local: open_webui
+      title: Open WebUI
+    title: Serving
   - sections:
     - local: perf_torch_compile
       title: torch.compile
@@ -133,8 +137,8 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: continuous_batching
-    title: Continuous Batching
+  - local: transformers_as_backend
+    title: Transformers as modeling backend
   title: Inference
 - isExpanded: false
   sections:
