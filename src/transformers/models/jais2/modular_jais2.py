@@ -175,11 +175,7 @@ class Jais2DecoderLayer(LlamaDecoderLayer):
 
 
 class Jais2PreTrainedModel(LlamaPreTrainedModel):
-    config_class = Jais2Config
-    base_model_prefix = "model"
-    _no_split_modules = ["Jais2DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
+    pass
 
 
 class Jais2Model(LlamaModel):
