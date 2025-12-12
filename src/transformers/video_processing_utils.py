@@ -442,7 +442,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             processed_videos_grouped[shape] = stacked_videos
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
 
         return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
 

@@ -264,8 +264,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
 
         encoded_outputs = BatchFeature(
             data={
-                "flattened_patches": torch.stack(flattened_patches, dim=0) if return_tensors else flattened_patches,
-                "attention_mask": torch.stack(attention_masks, dim=0) if return_tensors else attention_masks,
+                "flattened_patches": flattened_patches,
+                "attention_mask": attention_masks,
                 "width": width,
                 "height": height,
                 "rows": rows,

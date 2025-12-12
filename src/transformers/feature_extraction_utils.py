@@ -67,11 +67,18 @@ class BatchFeature(UserDict):
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+            List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
     """
 
-    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(
+        self,
+        data: Optional[dict[str, Any]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
+        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -110,6 +117,14 @@ class BatchFeature(UserDict):
             import torch
 
             def as_tensor(value):
+                if torch.is_tensor(value):
+                    return value
+
+                # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
+                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    return torch.stack(value)
+
+                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
                 if isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
@@ -138,7 +153,11 @@ class BatchFeature(UserDict):
             is_tensor = is_numpy_array
         return is_tensor, as_tensor
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(
+        self,
+        tensor_type: Optional[Union[str, TensorType]] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         """
         Convert the inner content to tensors.
 
@@ -146,6 +165,8 @@ class BatchFeature(UserDict):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
+            skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+                List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
         """
         if tensor_type is None:
             return self
@@ -154,18 +175,26 @@ class BatchFeature(UserDict):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
+            # Skip keys explicitly marked for no conversion
+            if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
             try:
                 if not is_tensor(value):
                     tensor = as_tensor(value)
-
                     self[key] = tensor
-            except:  # noqa E722
+            except Exception as e:
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        f"Unable to create tensor for '{key}' with overflowing values of different lengths. "
+                        f"Original error: {str(e)}"
+                    ) from e
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
+                    f"Unable to convert output '{key}' (type: {type(value).__name__}) to tensor: {str(e)}\n"
+                    f"You can try:\n"
+                    f"  1. Use padding=True to ensure all outputs have the same shape\n"
+                    f"  2. Set return_tensors=None to return Python objects instead of tensors"
+                ) from e
 
         return self
 

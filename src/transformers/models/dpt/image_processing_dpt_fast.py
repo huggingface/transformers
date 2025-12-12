@@ -225,8 +225,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(data={"pixel_values": processed_images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
