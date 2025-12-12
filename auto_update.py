@@ -46,27 +46,99 @@ def is_multiline(value_str: str) -> bool:
     return '\n' in value_str
 
 
-def select_target_argument(arg_expressions: List[str]) -> str:
+def select_target_argument(arg_expressions: List[str], arg_names: List[str] = None) -> str:
     """
     Select which argument to update from assertion arguments.
 
+    Focus on first 2 arguments only to determine:
+    - Which is the actual runtime value
+    - Which is the expected value to update
+
     Strategy:
-    1. Prefer argument starting with "EXPECT" (case-insensitive)
-    2. Otherwise, use the second argument (index 1)
+    1. Prefer literal expressions (torch.tensor(...), [1,2,3], etc.) - these appear inline
+    2. Check argument names: prefer 'expected' over 'actual'
+    3. Prefer argument starting with "EXPECT" (case-insensitive)
+    4. Otherwise, use the second argument (index 1)
 
     Args:
-        arg_expressions: List of argument expressions from assertion
+        arg_expressions: List of argument expressions (we only use first 2)
+        arg_names: Optional list of argument names (e.g., ['actual', 'expected'])
 
     Returns:
-        The selected argument name to update
+        The selected argument expression to update
     """
-    # First, check if any argument starts with "EXPECT" (case-insensitive)
-    for arg in arg_expressions:
+    # Only consider first 2 arguments
+    first_two_exprs = arg_expressions[:2]
+    first_two_names = arg_names[:2] if arg_names else []
+
+    # Strategy 1: Prefer literal expressions (these are inline constants to update)
+    for arg in first_two_exprs:
+        if is_literal_expression(arg):
+            return arg
+
+    # Strategy 2: Use argument names if available
+    if first_two_names and len(first_two_names) == len(first_two_exprs):
+        for i, name in enumerate(first_two_names):
+            if name and name.lower() in ['expected', 'expect']:
+                return first_two_exprs[i]
+
+    # Strategy 3: Check if any argument starts with "EXPECT" (case-insensitive)
+    for arg in first_two_exprs:
         if arg.upper().startswith("EXPECT"):
             return arg
 
-    # Default: return second argument
-    return arg_expressions[1]
+    # Strategy 4: Default to second argument
+    return first_two_exprs[1] if len(first_two_exprs) > 1 else first_two_exprs[0]
+
+
+def is_literal_expression(expr: str) -> bool:
+    """
+    Determine if an expression is a literal/constant rather than a variable name.
+
+    Literal expressions include:
+    - Function/constructor calls: torch.tensor(...), Expectations(...), etc.
+    - List literals: [1, 2, 3]
+    - Dict literals: {1: 2}
+    - String literals: "text" or 'text'
+    - Numeric literals: 42, 3.14
+
+    Variable names:
+    - Simple identifiers: expected_output, result, masks
+
+    Args:
+        expr: The expression string
+
+    Returns:
+        True if expression is a literal/constant, False if it's a variable name
+    """
+    expr = expr.strip()
+
+    # Check for function/constructor calls (contains parentheses)
+    if '(' in expr:
+        return True
+
+    # Check for list literals
+    if expr.startswith('['):
+        return True
+
+    # Check for dict literals
+    if expr.startswith('{'):
+        return True
+
+    # Check for string literals
+    if (expr.startswith('"') and expr.endswith('"')) or \
+            (expr.startswith("'") and expr.endswith("'")):
+        return True
+
+    # Check for numeric literals (simple check)
+    try:
+        float(expr)
+        return True
+    except ValueError:
+        pass
+
+    # Otherwise, assume it's a variable name
+    return False
 
 
 def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
@@ -122,10 +194,17 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
             stats["skipped"] += 1
             continue
 
-        # Extract variable expressions - find lines with "argument expression:"
+        # Extract argument names and expressions
+        arg_names = []
         arg_expressions = []
         for line in lines:
-            if line.startswith('argument expression: `'):
+            if line.startswith('argument name: `'):
+                # Extract content between backticks
+                start = line.find('`') + 1
+                end = line.find('`', start)
+                if end != -1:
+                    arg_names.append(line[start:end].strip())
+            elif line.startswith('argument expression: `'):
                 # Extract content between backticks
                 start = line.find('`') + 1
                 end = line.find('`', start)
@@ -136,7 +215,7 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
             stats["skipped"] += 1
             continue
 
-        variable_name = select_target_argument(arg_expressions)
+        variable_name = select_target_argument(arg_expressions, arg_names)
 
         # Extract all argument values - each "argument expression:" is followed by "argument value:"
         # We need to match expressions to their values
@@ -179,24 +258,32 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
         if current_expr and value_lines and in_value_section:
             arg_values[current_expr] = '\n'.join(value_lines).strip()
 
-        # Now select the value: use the value from the OTHER argument (not the target)
+        # Select the value from the OTHER argument (not the target)
+        # Only consider first 2 arguments
         new_value_str = None
-        for expr, value in arg_values.items():
-            if expr != variable_name:
-                new_value_str = value
+        for expr in arg_expressions[:2]:
+            if expr != variable_name and expr in arg_values:
+                new_value_str = arg_values[expr]
                 break
 
         if not new_value_str:
             stats["skipped"] += 1
             continue
 
-        # Find the actual assignment in the test file
-        expectations_var, expectations_lineno = find_assignment(test_file, variable_name, assertion_line)
-        if not expectations_var:
-            print(f"Warning: Could not find assignment for {variable_name}")
-            print(f"Skip handling: {test_file}:{assertion_line}")
-            stats["skipped"] += 1
-            continue
+        # Check if variable_name is a literal expression (inline constant)
+        if is_literal_expression(variable_name):
+            # This is an inline literal like torch.tensor([1,2,3]) in the assertion
+            # Update it directly at the assertion line, no need to find assignment
+            expectations_var = variable_name
+            expectations_lineno = assertion_line
+        else:
+            # Find the actual assignment in the test file
+            expectations_var, expectations_lineno = find_assignment(test_file, variable_name, assertion_line)
+            if not expectations_var:
+                print(f"Warning: Could not find assignment for {variable_name}")
+                print(f"Skip handling: {test_file}:{assertion_line}")
+                stats["skipped"] += 1
+                continue
 
         # Skip duplicates
         if tasks and tasks[-1].test_file == test_file and tasks[-1].expectations_lineno == expectations_lineno:
@@ -316,6 +403,86 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
                 return parts[-1], i + 1
 
     return None, None
+
+
+def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Optional[PatternInfo]:
+    """
+    Analyze an inline literal expression that appears directly in an assertion.
+
+    Example: torch.testing.assert_close(masks, torch.tensor([-4.18, -3.49, -3.45]), rtol=2e-4)
+    The expression "torch.tensor([-4.18, -3.49, -3.45])" appears inline as the 2nd argument.
+
+    Uses CST to find the exact position and pattern of the argument in the call.
+
+    Args:
+        filepath: Path to the file
+        line_number: Line number where the expression appears
+        expr: The expression string (e.g., "torch.tensor([...])")
+
+    Returns:
+        PatternInfo for the inline expression
+    """
+    with open(filepath) as f:
+        code = f.read()
+
+    tree = cst.parse_module(code)
+
+    class InlineAnalyzer(cst.CSTVisitor):
+        METADATA_DEPENDENCIES = (PositionProvider,)
+
+        def __init__(self, target_line: int, target_expr: str):
+            self.target_line = target_line
+            self.target_expr = target_expr
+            self.info = None
+
+        def visit_Call(self, node: cst.Call) -> None:
+            try:
+                pos = self.get_metadata(PositionProvider, node)
+                if pos.start.line != self.target_line:
+                    return
+
+                # This is a call on the target line
+                # Check if any argument matches our expression (is a literal)
+                for arg in node.args:
+                    if isinstance(arg.value, cst.Call):
+                        # Check if this is our target (e.g., torch.tensor(...))
+                        if 'torch.tensor(' in self.target_expr:
+                            # Check if this is a torch.tensor call
+                            if isinstance(arg.value.func, cst.Attribute):
+                                if (isinstance(arg.value.func.value, cst.Name) and
+                                        arg.value.func.value.value == "torch" and
+                                        arg.value.func.attr.value == "tensor"):
+                                    # This is torch.tensor(...)
+                                    # Get the first argument (the data)
+                                    if arg.value.args:
+                                        data_arg = arg.value.args[0].value
+                                        arg_pos = self.get_metadata(PositionProvider, data_arg)
+
+                                        # Determine pattern type
+                                        pattern_type = "unknown"
+                                        if isinstance(data_arg, cst.List):
+                                            pattern_type = "plain_list"
+                                        elif isinstance(data_arg, cst.Dict):
+                                            pattern_type = "plain_dict"
+
+                                        # Get base indentation
+                                        base_indent = arg_pos.start.column
+
+                                        self.info = PatternInfo(
+                                            pattern_type=pattern_type,
+                                            base_indent=base_indent,
+                                            line_start=arg_pos.start.line,
+                                            line_end=arg_pos.end.line
+                                        )
+                                        return
+            except Exception:
+                pass
+
+    analyzer = InlineAnalyzer(line_number, expr)
+    wrapper = cst.metadata.MetadataWrapper(tree)
+    wrapper.visit(analyzer)
+
+    return analyzer.info
 
 
 def analyze_with_cst(filepath: str, line_num: int, var_name: str) -> Optional[PatternInfo]:
@@ -867,6 +1034,64 @@ def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> b
     return True
 
 
+def update_inline_list(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """
+    Update an inline list that appears as an argument in a function call.
+
+    Uses position info from CST to replace just the list value.
+
+    Args:
+        filepath: Path to file
+        task: UpdateTask
+        info: PatternInfo with exact line positions from CST
+
+    Returns:
+        True if successful
+    """
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    # CST gives us exact line positions of the list
+    start_idx = info.line_start - 1
+    end_idx = info.line_end - 1
+
+    if start_idx >= len(lines) or end_idx >= len(lines):
+        return False
+
+    # For single-line inline list, just replace the value in place
+    if start_idx == end_idx:
+        line = lines[start_idx]
+        # Find the list in the line - look for '[' and matching ']'
+        list_start = line.find('[')
+        if list_start == -1:
+            return False
+
+        # Find matching ']'
+        bracket_depth = 0
+        list_end = -1
+        for i in range(list_start, len(line)):
+            if line[i] == '[':
+                bracket_depth += 1
+            elif line[i] == ']':
+                bracket_depth -= 1
+                if bracket_depth == 0:
+                    list_end = i
+                    break
+
+        if list_end == -1:
+            return False
+
+        # Replace just the list part
+        new_line = line[:list_start] + task.new_value_str + line[list_end + 1:]
+        lines[start_idx] = new_line
+
+        with open(filepath, 'w') as f:
+            f.writelines(lines)
+        return True
+
+    return False
+
+
 def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) -> bool:
     """
     Update a file with all tasks using the backward update approach.
@@ -902,7 +1127,13 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
     # This captures the original line positions before any modifications
     analyzed_tasks = []
     for task in tasks:
-        info = analyze_with_cst(filepath, task.expectations_lineno, task.expectations_var)
+        # Check if this is an inline literal expression
+        if is_literal_expression(task.expectations_var):
+            # Analyze inline expression
+            info = analyze_inline_expression(filepath, task.expectations_lineno, task.expectations_var)
+        else:
+            # Analyze variable assignment
+            info = analyze_with_cst(filepath, task.expectations_lineno, task.expectations_var)
 
         if not info:
             print(f"  ✗ Could not analyze {task.expectations_var} at line {task.expectations_lineno}")
@@ -932,16 +1163,18 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
         # Apply update based on pattern type
         success = False
 
-        # For Expectations pattern: try different device keys in order of specificity
-        # This handles hardware-specific expected values: ("cuda", (8, 6)) for CUDA 8.6, etc.
-        device_keys_to_try = [
-            ("cuda", (8, 6)),  # Most specific: cuda with nested tuple (version)
-            ("cuda", 8),  # Specific: cuda with simple version number
-            ("cuda", None),  # Less specific: cuda without version
-            (None, None),  # Least specific: fallback key (matches any hardware)
-        ]
+        # Check if this is an inline literal expression (no assignment)
+        is_inline = is_literal_expression(task.expectations_var)
 
         if info.pattern_type == "Expectations":
+            # For Expectations pattern: try different device keys in order of specificity
+            # This handles hardware-specific expected values: ("cuda", (8, 6)) for CUDA 8.6, etc.
+            device_keys_to_try = [
+                ("cuda", (8, 6)),  # Most specific: cuda with nested tuple (version)
+                ("cuda", 8),  # Specific: cuda with simple version number
+                ("cuda", None),  # Less specific: cuda without version
+                (None, None),  # Least specific: fallback key (matches any hardware)
+            ]
             for device in device_keys_to_try:
                 success = update_expectations(filepath, task, info, device)
                 if success:
@@ -949,7 +1182,11 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
         elif info.pattern_type == "torch.tensor":
             success = update_torch_tensor(filepath, task, info)
         elif info.pattern_type == "plain_list":
-            success = update_plain_list(filepath, task, info)
+            if is_inline:
+                # Use inline-specific updater
+                success = update_inline_list(filepath, task, info)
+            else:
+                success = update_plain_list(filepath, task, info)
         elif info.pattern_type == "plain_dict":
             success = update_plain_dict(filepath, task, info)
         elif info.pattern_type == "plain_string":
