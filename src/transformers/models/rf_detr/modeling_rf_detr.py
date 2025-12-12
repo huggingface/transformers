@@ -1563,23 +1563,6 @@ class RfDetrDinov2DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class RfDetrDinov2SwiGLUFFN(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
-
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
-
-
 class RfDetrDinov2MLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -1597,6 +1580,23 @@ class RfDetrDinov2MLP(nn.Module):
         hidden_state = self.activation(hidden_state)
         hidden_state = self.fc2(hidden_state)
         return hidden_state
+
+
+class RfDetrDinov2SwiGLUFFN(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
+        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.weights_in(hidden_state)
+        x1, x2 = hidden_state.chunk(2, dim=-1)
+        hidden = nn.functional.silu(x1) * x2
+        return self.weights_out(hidden)
 
 
 def window_unpartition_before_attention(hidden_states: torch.Tensor, num_windows: int) -> torch.Tensor:
@@ -1622,6 +1622,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
         super().__init__()
+
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = RfDetrDinov2Attention(config)
         self.layer_scale1 = RfDetrDinov2LayerScale(config)
@@ -1634,7 +1635,6 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         else:
             self.mlp = RfDetrDinov2MLP(config)
         self.layer_scale2 = RfDetrDinov2LayerScale(config)
-
         self.num_windows = config.num_windows
         self.global_attention = layer_idx not in config.window_block_indexes
 
@@ -1750,8 +1750,13 @@ def window_unpartition(
     return hidden_state
 
 
+@auto_docstring(
+    custom_intro="""
+    RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
 class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
-    def __init__(self, config: RfDetrDinov2Config):
+    def __init__(self, config):
         super().__init__(config)
         super()._init_backbone(config)
 
@@ -1767,6 +1772,8 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
     def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
+    @check_model_inputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,

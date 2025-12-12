@@ -3,28 +3,21 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import logging, torch_int
-from ...utils.backbone_utils import BackboneMixin, verify_backbone_config_arguments
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TransformersKwargs
 from ..auto import CONFIG_MAPPING
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
-    Dinov2Attention,
-    Dinov2DropPath,
+    Dinov2Backbone,
     Dinov2Embeddings,
     Dinov2Encoder,
     Dinov2Layer,
-    Dinov2LayerScale,
-    Dinov2MLP,
-    Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
     Dinov2SelfAttention,
-    Dinov2SelfOutput,
-    Dinov2SwiGLUFFN,
 )
 from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
@@ -622,15 +615,7 @@ def window_partition(
     return embeddings
 
 
-class RfDetrDinov2PatchEmbeddings(Dinov2PatchEmbeddings):
-    pass
-
-
 class RfDetrDinov2Embeddings(Dinov2Embeddings):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__(config)
-        self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
-
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -721,50 +706,9 @@ class RfDetrDinov2SelfAttention(Dinov2SelfAttention):
         self.num_key_value_groups = 1
 
 
-class RfDetrDinov2SelfOutput(Dinov2SelfOutput):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__(config)
-
-
-class RfDetrDinov2Attention(Dinov2Attention):
-    def __init__(self, config: RfDetrDinov2Config):
-        nn.Module.__init__()
-        self.attention = RfDetrDinov2SelfAttention(config)
-        self.output = RfDetrDinov2SelfOutput(config)
-
-
-class RfDetrDinov2LayerScale(Dinov2LayerScale):
-    pass
-
-
-class RfDetrDinov2DropPath(Dinov2DropPath):
-    pass
-
-
-class RfDetrDinov2SwiGLUFFN(Dinov2SwiGLUFFN):
-    pass
-
-
-class RfDetrDinov2MLP(Dinov2MLP):
-    pass
-
-
 class RfDetrDinov2Layer(Dinov2Layer):
     def __init__(self, config: RfDetrDinov2Config, layer_idx: int):
-        nn.Module.__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = RfDetrDinov2Attention(config)
-        self.layer_scale1 = RfDetrDinov2LayerScale(config)
-        self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_swiglu_ffn:
-            self.mlp = RfDetrDinov2SwiGLUFFN(config)
-        else:
-            self.mlp = RfDetrDinov2MLP(config)
-        self.layer_scale2 = RfDetrDinov2LayerScale(config)
-
+        super().__init__(config)
         self.num_windows = config.num_windows
         self.global_attention = layer_idx not in config.window_block_indexes
 
@@ -807,28 +751,7 @@ class RfDetrDinov2Encoder(Dinov2Encoder):
 
 
 class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
-    config: RfDetrDinov2Config
-    _can_record_outputs = {
-        "attentions": RfDetrDinov2SelfAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, RfDetrDinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if self.config.use_mask_token:
-                init.zeros_(module.mask_token)
-        elif isinstance(module, RfDetrDinov2LayerScale):
-            init.constant_(module.lambda1, self.config.layerscale_value)
+    pass
 
 
 def window_unpartition(
@@ -856,23 +779,7 @@ def window_unpartition(
     return hidden_state
 
 
-class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__(config)
-        super()._init_backbone(config)
-
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = RfDetrDinov2Embeddings(config)
-        self.encoder = RfDetrDinov2Encoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
+class RfDetrDinov2Backbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
