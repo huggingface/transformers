@@ -110,6 +110,10 @@ class Sam3ViTConfig(PreTrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.initializer_range = initializer_range
 
+    def set_image_size(self, image_size):
+        """Set the image size for the ViT backbone."""
+        self.image_size = image_size
+
 
 class Sam3VisionConfig(PreTrainedConfig):
     r"""
@@ -178,6 +182,10 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+    def set_image_size(self, image_size):
+        """Set the image size and propagate to backbone."""
+        self.backbone_config.set_image_size(image_size)
 
 
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
@@ -505,6 +513,10 @@ class Sam3Config(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+    def set_image_size(self, image_size):
+        """Set the image size and propagate to vision config."""
+        self.vision_config.set_image_size(image_size)
 
 
 __all__ = [
