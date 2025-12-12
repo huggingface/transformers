@@ -942,6 +942,10 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
             self.info = None
 
         def visit_Call(self, node: cst.Call) -> None:
+            # If we already found a match, skip further processing
+            if self.info is not None:
+                return
+
             try:
                 pos = self.get_metadata(PositionProvider, node)
                 if pos.start.line != self.target_line:
@@ -950,54 +954,29 @@ def analyze_inline_expression(filepath: str, line_number: int, expr: str) -> Opt
                 # This is a call on the target line
                 # Check if any argument matches our expression (is a literal)
                 for arg in node.args:
-                    # Handle torch.tensor(...) case
+                    # Handle torch.tensor(...) case - CHECK FIRST before other literals
                     if isinstance(arg.value, cst.Call):
-                        # Check if this is our target (e.g., torch.tensor(...))
-                        if 'torch.tensor(' in self.target_expr:
-                            # Check if this is a torch.tensor call
-                            if isinstance(arg.value.func, cst.Attribute):
-                                if (isinstance(arg.value.func.value, cst.Name) and
-                                        arg.value.func.value.value == "torch" and
-                                        arg.value.func.attr.value == "tensor"):
-                                    # This is torch.tensor(...)
-                                    # Get the first argument (the data)
-                                    if arg.value.args:
-                                        data_arg = arg.value.args[0].value
-                                        arg_pos = self.get_metadata(PositionProvider, data_arg)
+                        if isinstance(arg.value.func, cst.Attribute):
+                            if (isinstance(arg.value.func.value, cst.Name) and
+                                    arg.value.func.value.value == "torch" and
+                                    arg.value.func.attr.value == "tensor" and
+                                    'torch.tensor(' in self.target_expr):
+                                # This is torch.tensor(...) AND it matches our target
+                                # Get the first argument (the data)
+                                if arg.value.args:
+                                    data_arg = arg.value.args[0].value
+                                    arg_pos = self.get_metadata(PositionProvider, data_arg)
 
-                                        # Determine pattern type
-                                        pattern_type = "unknown"
-                                        if isinstance(data_arg, cst.List):
-                                            pattern_type = "plain_list"
-                                        elif isinstance(data_arg, cst.Dict):
-                                            pattern_type = "plain_dict"
+                                    # Always mark as torch.tensor pattern for inline calls
+                                    self.info = PatternInfo(
+                                        pattern_type="torch.tensor",
+                                        base_indent=arg_pos.start.column,
+                                        line_start=arg_pos.start.line,
+                                        line_end=arg_pos.end.line
+                                    )
+                                    return
 
-                                        # Get base indentation
-                                        base_indent = arg_pos.start.column
-
-                                        self.info = PatternInfo(
-                                            pattern_type=pattern_type,
-                                            base_indent=base_indent,
-                                            line_start=arg_pos.start.line,
-                                            line_end=arg_pos.end.line
-                                        )
-                                        return
-
-                    # Handle inline string literal case
-                    elif isinstance(arg.value, (cst.SimpleString, cst.ConcatenatedString)):
-                        # Check if this looks like our target string
-                        if self.target_expr.startswith('"') or self.target_expr.startswith("'"):
-                            arg_pos = self.get_metadata(PositionProvider, arg.value)
-
-                            self.info = PatternInfo(
-                                pattern_type="plain_string",
-                                base_indent=arg_pos.start.column,
-                                line_start=arg_pos.start.line,
-                                line_end=arg_pos.end.line
-                            )
-                            return
-
-                    # Handle inline numeric literals
+                    # Handle inline numeric literals (but not inside torch.tensor)
                     elif isinstance(arg.value, (cst.Integer, cst.Float)):
                         arg_pos = self.get_metadata(PositionProvider, arg.value)
                         self.info = PatternInfo(
@@ -1599,6 +1578,32 @@ def update_plain_string(filepath: str, task: UpdateTask, info: PatternInfo) -> b
     return True
 
 
+def update_inline_torch_tensor(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
+    """Update inline torch.tensor() call - replace only the data argument."""
+    with open(filepath) as f:
+        lines = f.readlines()
+
+    start_idx = info.line_start - 1
+    if start_idx >= len(lines):
+        return False
+
+    line = lines[start_idx]
+    # Just replace the value inside torch.tensor()
+    # The position info points to the data argument
+    old_val = task.expectations_var.split('(')[1].rstrip(')')
+    new_val = task.new_value_str.strip()
+
+    if old_val in line:
+        new_line = line.replace(old_val, new_val, 1)
+        lines[start_idx] = new_line
+
+        with open(filepath, 'w') as f:
+            f.writelines(lines)
+        return True
+
+    return False
+
+
 def update_inline_simple(filepath: str, task: UpdateTask, info: PatternInfo) -> bool:
     """
     Update an inline literal (number, tuple, etc) that appears as an argument.
@@ -1843,7 +1848,11 @@ def update_file(filepath: str, tasks: List[UpdateTask], dry_run: bool = True) ->
                 if success:
                     break  # Stop on first successful match
         elif info.pattern_type == "torch.tensor":
-            success = update_torch_tensor(filepath, task, info)
+            if is_inline:
+                # Inline torch.tensor - just replace the argument
+                success = update_inline_torch_tensor(filepath, task, info)
+            else:
+                success = update_torch_tensor(filepath, task, info)
         elif info.pattern_type == "plain_list":
             if is_inline:
                 # Use inline-specific updater
