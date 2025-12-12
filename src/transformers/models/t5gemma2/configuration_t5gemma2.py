@@ -32,9 +32,9 @@ logger = logging.get_logger(__name__)
 
 class T5Gemma2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate an T5Gemma2Text
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the T5Gemma2Text-7B.
+    This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate the encoder's
+    text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the T5Gemma2Text-7B.
     e.g. [google/t5gemma2_text-7b](https://huggingface.co/google/t5gemma2_text-7b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -99,19 +99,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
-            behavior for vision tokens.
-
-    ```python
-    >>> from transformers import T5Gemma2TextModel, T5Gemma2TextConfig
-    >>> # Initializing a T5Gemma2Text t5gemma2_text-7b style configuration
-    >>> configuration = T5Gemma2TextConfig()
-    >>> # Initializing a model from the t5gemma2_text-7b style configuration
-    >>> model = T5Gemma2TextModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "t5gemma2_text"
@@ -321,9 +308,9 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
 
 class T5Gemma2DecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate an T5Gemma2Decoder
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the T5Gemma2Decoder-7B.
+    This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate the decoder
+    text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the T5Gemma2Decoder-7B.
     e.g. [google/t5gemma2_text-7b](https://huggingface.co/google/t5gemma2_text-7b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -388,19 +375,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
-            behavior for vision tokens.
-
-    ```python
-    >>> from transformers import T5Gemma2DecoderModel, T5Gemma2DecoderConfig
-    >>> # Initializing a T5Gemma2Decoder t5gemma2_text-7b style configuration
-    >>> configuration = T5Gemma2DecoderConfig()
-    >>> # Initializing a model from the t5gemma2_text-7b style configuration
-    >>> model = T5Gemma2DecoderModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "t5gemma2_decoder"
