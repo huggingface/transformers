@@ -1989,11 +1989,11 @@ class GenerationTesterMixin:
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
-            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
-                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
-
             if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
                 self.skipTest("Model dummy inputs should contain text input ids")
+
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
 
             # make sure that all models have enough positions for generation
             dummy_input_ids = inputs_dict["input_ids"]
