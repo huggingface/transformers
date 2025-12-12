@@ -550,8 +550,10 @@ def _center_to_corners_format_numpy(bboxes_center: np.ndarray) -> np.ndarray:
 @overload
 def center_to_corners_format(bboxes_center: "torch.Tensor") -> "torch.Tensor": ...
 
+
 @overload
 def center_to_corners_format(bboxes_center: np.ndarray) -> np.ndarray: ...
+
 
 def center_to_corners_format(bboxes_center: "torch.Tensor | np.ndarray") -> Any:
     """
@@ -599,8 +601,10 @@ def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
 @overload
 def corners_to_center_format(bboxes_corners: "torch.Tensor") -> "torch.Tensor": ...
 
+
 @overload
 def corners_to_center_format(bboxes_corners: np.ndarray) -> np.ndarray: ...
+
 
 def corners_to_center_format(bboxes_corners: "torch.Tensor | np.ndarray") -> Any:
     """
