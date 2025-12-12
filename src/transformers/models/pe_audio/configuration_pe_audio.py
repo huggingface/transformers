@@ -108,7 +108,7 @@ class PeAudioEncoderConfig(PreTrainedConfig):
         "encoder_hidden_size": 64,
         "codebook_dim": 128,
     }
-    sub_configs = {"dac_config": CONFIG_MAPPING["dac"]}
+    sub_configs = {"dac_config": AutoConfig}
 
     def __init__(
         self,

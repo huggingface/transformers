@@ -216,7 +216,7 @@ class PeAudioEncoderBlock(nn.Module):
 
 
 class PeAudioDacEncoder(nn.Module):
-    """P_E_AUDIO_DAC Encoder"""
+    """PE_AUDIO_DAC Encoder"""
 
     def __init__(self, config: PeAudioConfig):
         super().__init__()
