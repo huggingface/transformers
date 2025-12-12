@@ -1990,7 +1990,7 @@ class GenerationTesterMixin:
                 self.skipTest("Model is an encoder-decoder")
 
             if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
-                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
 
             if "input_ids" not in inputs_dict or inputs_dict["input_ids"].ndim != 2:
                 self.skipTest("Model dummy inputs should contain text input ids")
@@ -2026,6 +2026,13 @@ class GenerationTesterMixin:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 dummy_input_ids[~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+
+                # We need to prepare position ids according to the attention mask as we use it to extract embeddings that
+                # rely on the correct position - naively increasing sequences do not suffice anymore atp. The solution here
+                # calculates an increasing sequences for all 1s and puts 0s else.
+                inputs_dict["position_ids"] = ((inputs_dict["attention_mask"] == 1).long().cumsum(dim=1) - 1) * (
+                    inputs_dict["attention_mask"] == 1
+                ).long()
 
                 model = (
                     model_class.from_pretrained(
