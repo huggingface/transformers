@@ -134,11 +134,11 @@ class PeVideoEncoderConfig(PreTrainedConfig):
 
         if isinstance(vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](
+            vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
                 **{**self._default_vision_config_kwargs, **vision_config}
             )
         elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"](**self._default_vision_config_kwargs)
+            vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
 
         self.vision_config = vision_config
 
