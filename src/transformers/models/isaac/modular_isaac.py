@@ -159,13 +159,6 @@ class IsaacVisionConfig(Siglip2VisionConfig):
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
-        # Keep legacy and new attention implementation fields in sync
-        existing_attn_impl = getattr(self, "attn_implementation", None)
-        if existing_attn_impl is None:
-            self.attn_implementation = self._attn_implementation
-        else:
-            self._attn_implementation = existing_attn_impl
-
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: Optional[int]
