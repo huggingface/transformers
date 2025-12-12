@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     torch_device,
     torchrun,
 )
-from transformers.utils import is_ccl_available, is_ipex_available
 
 
 if is_torch_available():
@@ -36,11 +35,6 @@ if is_torch_available():
 
     import torch
 
-    if is_torch_xpu_available():
-        if is_ipex_available():
-            import intel_extension_for_pytorch  # noqa: F401
-        if is_ccl_available():
-            import oneccl_bindings_for_pytorch  # noqa: F401
     import torch.distributed
     from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
     from torch.distributed.device_mesh import init_device_mesh
@@ -154,12 +148,21 @@ class TestFSDPGenericTaskModel(TestCasePlus):
             from torch.distributed.fsdp import fully_shard
             from transformers import AutoModelForTokenClassification
 
+            accelerator_type = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+            torch_accelerator_module = getattr(torch, accelerator_type, torch.cuda)
+
+            backend = "gloo"
+            if accelerator_type == "cuda":
+                backend = "nccl"
+            elif accelerator_type == "xpu":
+                backend = "xccl"
+
             torch.distributed.init_process_group(
-                backend="nccl" if torch.cuda.is_available() else "gloo", init_method="env://"
+                backend=backend, init_method="env://"
             )
             rank = torch.distributed.get_rank()
-            if torch.cuda.is_available():
-                torch.cuda.set_device(rank)
+            if torch_accelerator_module.is_available():
+                torch_accelerator_module.set_device(rank)
 
             # Make sure it works
             model = AutoModelForTokenClassification.from_pretrained("Qwen/Qwen2-0.5B")
