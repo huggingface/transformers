@@ -107,7 +107,7 @@ class PeAudioEncoderTester:
         return config, input_values, padding_mask
 
     def get_config(self):
-        if not hasattr(self, '_config'):
+        if not hasattr(self, "_config"):
             self._config = PeAudioEncoderConfig(**self.config_kwargs)
         return self._config
 
@@ -156,6 +156,7 @@ class PeAudioTextModelTester:
     """
     Only a ModelTester and no PeAudioTextModelTest since text model is ModernBertModel that is already tested.
     """
+
     def __init__(
         self,
         parent,
@@ -180,7 +181,7 @@ class PeAudioTextModelTester:
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_labels=True, # TODO: to check
+        use_labels=True,  # TODO: to check
     ):
         self.parent = parent
 
@@ -257,7 +258,12 @@ class PeAudioModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, input_values, padding_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "input_values": input_values, "padding_mask": padding_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "input_values": input_values,
+            "padding_mask": padding_mask,
+        }
         return config, inputs_dict
 
 
@@ -304,4 +310,3 @@ class PeAudioIntegrationTest(unittest.TestCase):
     def test_inference(self):
         # TODO: Add integration test when pretrained model is available
         pass
-

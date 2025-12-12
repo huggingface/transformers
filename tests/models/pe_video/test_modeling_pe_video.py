@@ -104,7 +104,9 @@ class PeVideoEncoderTester:
             ]
         )
         valid_lengths = ids_tensor([self.batch_size], self.num_frames)
-        padding_mask_videos = torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_lengths[:, None]
+        padding_mask_videos = (
+            torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_lengths[:, None]
+        )
         padding_mask_videos = padding_mask_videos.int()
         config = self.get_config()
 
@@ -182,6 +184,7 @@ class PeVideoTextModelTester:
     """
     Only a ModelTester and no PeVideoTextModelTest since text model is ModernBertModel that is already tested.
     """
+
     def __init__(
         self,
         parent,
@@ -283,7 +286,12 @@ class PeVideoModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values_videos": pixel_values_videos, "padding_mask_videos": padding_mask_videos}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values_videos": pixel_values_videos,
+            "padding_mask_videos": padding_mask_videos,
+        }
         return config, inputs_dict
 
 
@@ -330,4 +338,3 @@ class PeVideoIntegrationTest(unittest.TestCase):
     def test_inference(self):
         # TODO: Add integration test when pretrained model is available
         pass
-

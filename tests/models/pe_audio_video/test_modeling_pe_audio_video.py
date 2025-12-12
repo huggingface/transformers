@@ -101,7 +101,7 @@ class PeAudioVideoEncoderTester:
                 "attention_bias": False,
                 "max_window_layers": 28,
                 "attention_dropout": 0.0,
-                },
+            },
             "hidden_size": 32,
             "intermediate_size": 37,
             "num_hidden_layers": 2,
@@ -118,7 +118,7 @@ class PeAudioVideoEncoderTester:
             "attention_bias": False,
             "max_window_layers": 28,
             "attention_dropout": 0.0,
-            },
+        },
         batch_size=12,
         num_audio_channels=1,
         num_video_channels=3,
@@ -163,7 +163,9 @@ class PeAudioVideoEncoderTester:
             ]
         )
         valid_video_lengths = ids_tensor([self.batch_size], self.num_frames)
-        padding_mask_videos = torch.arange(self.num_frames, device=torch_device)[None, :] < valid_video_lengths[:, None]
+        padding_mask_videos = (
+            torch.arange(self.num_frames, device=torch_device)[None, :] < valid_video_lengths[:, None]
+        )
         padding_mask_videos = padding_mask_videos.int()
 
         config = self.get_config()
@@ -171,7 +173,7 @@ class PeAudioVideoEncoderTester:
         return config, input_values, padding_mask, pixel_values_videos, padding_mask_videos
 
     def get_config(self):
-        if not hasattr(self, '_config'):
+        if not hasattr(self, "_config"):
             self._config = PeAudioVideoEncoderConfig(**self.config_kwargs)
         return self._config
 
@@ -180,7 +182,12 @@ class PeAudioVideoEncoderTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_values, padding_mask=padding_mask, pixel_values_videos=pixel_values_videos, padding_mask_videos=padding_mask_videos)
+            result = model(
+                input_values,
+                padding_mask=padding_mask,
+                pixel_values_videos=pixel_values_videos,
+                padding_mask_videos=padding_mask_videos,
+            )
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
@@ -225,13 +232,13 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         pass
 
-    @unittest.skip(
-        "PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector."
-    )
+    @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
 
-    @unittest.skip("TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet.")
+    @unittest.skip(
+        "TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
     def test_can_set_attention_dynamically_composite_model(self):
         pass
 
@@ -257,14 +264,10 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     @slow
     def test(self):
         video_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset",
-            filename="audiobox.mp4",
-            repo_type="dataset"
+            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
         )
         audio_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset",
-            filename="audiobox.mp4",
-            repo_type="dataset"
+            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
         )
 
         inputs = self.processor(
@@ -272,7 +275,7 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
             audio=[audio_path, "/home/eustache_lebihan/add-sam-audio/audiobox_first5sec.mp4"],
             videos=[video_path, "/home/eustache_lebihan/add-sam-audio/audiobox_first5sec.mp4"],
             return_tensors="pt",
-            padding=True
+            padding=True,
         ).to(torch_device)
         model = PeAudioVideoModel.from_pretrained(
             self.checkpoint_name, dtype=self.dtype, device_map=torch_device, attn_implementation="eager"
@@ -280,3 +283,4 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
+            print(outputs)

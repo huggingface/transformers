@@ -1,125 +1,36 @@
-from typing import Any, Optional
+# coding=utf-8
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from dataclasses import dataclass
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...configuration_utils import PretrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForImageClassification, AutoModel
-from ..pe_audio.modeling_pe_audio import PeAudioContrastiveHead, PeAudioEncoderEmbeddings, PeAudioAttention
-from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
-from ..timm_wrapper import TimmWrapperConfig
+from ..auto import AutoModel, AutoModelForImageClassification
+from ..pe_audio_video.modeling_pe_audio_video import (
+    PeAudioVideoContrastiveHead,
+    PeAudioVideoEncoder,
+    PeAudioVideoEncoderPatchEmbedder,
+    PeAudioVideoPretrainedModel,
+)
 from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
-
-
-class PeVideoEncoderConfig(Qwen3Config):
-    model_type = "pe_video_encoder"
-    sub_configs = {"vision_config": TimmWrapperConfig}
-
-    _default_vision_config_kwargs = {
-        "architecture": "vit_pe_core_large_patch14_336",
-        "do_pooling": True,
-        "num_classes": 1024,
-        "global_pool": "map",
-        "initializer_range": 0.02,
-    }
-
-    def __init__(
-        self,
-        vision_config=None,
-        hidden_size=1792,
-        intermediate_size=4800,
-        num_hidden_layers=4,
-        num_attention_heads=14,
-        num_key_value_heads=None,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=10000,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        rope_parameters={
-            "rope_theta": 20000,
-        },
-        attention_bias=False,
-        max_window_layers=28,
-        attention_dropout=0.0,
-        sliding_window=None,
-        use_sliding_window=False,
-        layer_types=None,
-        tie_word_embeddings=False,
-        vocab_size=None,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
-                {**self._default_vision_config_kwargs, **vision_config}
-            )
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
-
-        self.vision_config = vision_config
-
-        super().__init__(
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            head_dim=head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            max_window_layers=max_window_layers,
-            attention_dropout=attention_dropout,
-            vocab_size=vocab_size,
-            layer_types=layer_types,
-            tie_word_embeddings=tie_word_embeddings,
-            use_sliding_window=use_sliding_window,
-            sliding_window=sliding_window,
-            **kwargs,
-        )
-
-
-class PeVideoConfig(PretrainedConfig):
-    model_type = "pe_video"
-    sub_configs = {"text_config": AutoConfig, "video_config": PeVideoEncoderConfig}
-
-    def __init__(
-        self,
-        text_config=None,
-        video_config=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "modernbert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"]()
-            # TODO: add log
-
-        if isinstance(video_config, dict):
-            video_config = PeVideoEncoderConfig(**video_config)
-        elif video_config is None:
-            video_config = PeVideoEncoderConfig()
-            # TODO: add log
-
-        self.text_config = text_config
-        self.video_config = video_config
 
 
 # TODO: not sure about the typing for text_model_output
@@ -160,90 +71,23 @@ class PeVideoOutput(ModelOutput):
         )
 
 
-class PeVideoContrastiveHead(PeAudioContrastiveHead): ...
+class PeVideoContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 
-
-class PeVideoEncoderEmbeddings(PeAudioEncoderEmbeddings): ...
-
-
-class PeVideoAttention(PeAudioAttention): ...
+class PeVideoEncoderPatchEmbedder(PeAudioVideoEncoderPatchEmbedder): ...
 
 
-class PeVideoEncoderLayer(Qwen3DecoderLayer):
-    def __init__(self, config, layer_idx):
-        super().__init__(config, layer_idx)
-        del self.attention_type
-
-
-class PeVideoRMSNorm(Qwen3RMSNorm): ...
-
-
-class PeVideoRotaryEmbedding(Qwen3RotaryEmbedding): ...
-
-
-@auto_docstring
-class PeVideoPreTrainedModel(PreTrainedModel):
-    config: PeVideoConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PeVideoEncoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": PeVideoEncoderLayer,
-        "attentions": PeVideoAttention,
-    }
-    _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.video_encoder": "video_encoder",
-    }
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
-        if isinstance(module, PeVideoEncoderEmbeddings):
-            embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
-
-
-@auto_docstring(
-    custom_intro="""
-    The PeVideo Encoder model.
-    """
-)
-class PeVideoEncoder(PeVideoPreTrainedModel):
-    config: PeVideoEncoderConfig
-    base_model_prefix = "video_encoder"
-
+class PeVideoEncoderEmbedder(nn.Module):
     def __init__(self, config: PeVideoEncoderConfig):
-        super().__init__(config)
+        super().__init__()
         self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
         self.proj = nn.Linear(config.vision_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
-        # TODO: should it be named patch_embedding?
-        self.embeddings = PeVideoEncoderEmbeddings(config)
-        self.layers = nn.ModuleList(
-            [PeVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = PeVideoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = PeVideoRotaryEmbedding(config=config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-
-    def get_video_features(
+    def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = pixel_values_videos.shape
 
@@ -256,7 +100,27 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         vision_features = self.proj(logits)
         inputs_embeds = self.data_proj(vision_features)
 
-        return inputs_embeds, padding_mask_videos
+        return inputs_embeds, padding_mask
+
+
+class PeVideoPreTrainedModel(PeAudioVideoPretrainedModel):
+    _checkpoint_conversion_mapping = {
+        r"^audio_video_encoder\.video_encoder": "video_encoder",
+    }
+
+
+@auto_docstring(
+    custom_intro="""
+    The PeVideo Encoder model.
+    """
+)
+class PeVideoEncoder(PeAudioVideoEncoder):
+    base_model_prefix = "video_encoder"
+
+    def __init__(self, config: PeVideoEncoderConfig):
+        super().__init__(config)
+        # Override the embedder with video-specific one
+        self.embedder = PeVideoEncoderEmbedder(config)
 
     @can_return_tuple
     @check_model_inputs
@@ -266,11 +130,8 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         padding_mask_videos: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        inputs_embeds, attention_mask = self.get_video_features(
-            pixel_values_videos,
-            padding_mask_videos=padding_mask_videos,
-        )
-        inputs_embeds, attention_mask = self.embeddings(inputs_embeds, padding_mask=attention_mask)
+        inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
+        inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
             attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)

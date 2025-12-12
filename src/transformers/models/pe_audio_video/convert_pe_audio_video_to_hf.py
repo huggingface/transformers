@@ -16,7 +16,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"audio_video_model\.audio_model\.transformer\.layers": "audio_video_encoder.audio_encoder.layers",
     r"audio_video_model\.audio_model\.transformer\.norm": "audio_video_encoder.audio_encoder.norm",
     r"audio_video_model\.audio_model\.transformer\.output": "audio_video_encoder.audio_encoder.output",
-
     r"audio_video_model\.video_model\.clip_vision_model": "audio_video_encoder.video_encoder.vision_model",
     r"audio_video_model\.video_model\.proj": "audio_video_encoder.video_encoder.proj",
     r"audio_video_model\.video_model\.data_proj": "audio_video_encoder.video_encoder.data_proj",
@@ -25,18 +24,15 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"audio_video_model\.video_model\.transformer\.layers": "audio_video_encoder.video_encoder.layers",
     r"audio_video_model\.video_model\.transformer\.norm": "audio_video_encoder.video_encoder.norm",
     r"audio_video_model\.video_model\.transformer\.output": "audio_video_encoder.video_encoder.output",
-
     r"audio_video_model\.transformer\.embeddings\.resnet_block": "audio_video_encoder.embeddings.resnet_block",
     r"audio_video_model\.transformer\.embeddings\.cls_token": "audio_video_encoder.embeddings.class_embedding",
     r"audio_video_model\.transformer\.layers": "audio_video_encoder.layers",
     r"audio_video_model\.transformer\.norm": "audio_video_encoder.norm",
     r"audio_video_model\.transformer\.output": "audio_video_encoder.output",
-
     r"audio_video_model\.transformer\.modality_aligner.conv": "audio_video_encoder.video_proj",
     r"audio_video_model\.transformer\.modality_aligner.layer_norm": "audio_video_encoder.video_norm",
     r"audio_video_model\.transformer\.concat_modality_proj": "audio_video_encoder.concat_modality_proj",
     r"audio_video_model\.transformer\.data_proj": "audio_video_encoder.data_proj",
-
     r"audio_video_text_head": "text_head_audio_video",
     r"audio_text_head": "text_head_audio",
     r"video_text_head": "text_head_video",
@@ -48,10 +44,12 @@ state_dict = safetensors.torch.load_file(path)
 config = PeAudioVideoConfig()
 model = PeAudioVideoModel(config)
 
+
 def convert_key(key, mapping):
     for pattern, replacement in mapping.items():
         key = re.sub(pattern, replacement, key)
     return key
+
 
 def permute(w, n_heads, dim1, dim2):
     """
@@ -60,6 +58,7 @@ def permute(w, n_heads, dim1, dim2):
     """
     # return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
     return w
+
 
 converted_state_dict = {}
 for original_key, tensor in state_dict.items():
@@ -92,7 +91,9 @@ for original_key, tensor in state_dict.items():
     if ".self_attn.q_proj.weight" in converted_key:
         converted_state_dict[converted_key] = permute(tensor, n_heads=n_heads, dim1=dim, dim2=hidden_size)
     elif ".self_attn.k_proj.weight" in converted_key:
-        converted_state_dict[converted_key] = permute(tensor, n_heads=num_key_value_heads, dim1=key_value_dim, dim2=hidden_size)
+        converted_state_dict[converted_key] = permute(
+            tensor, n_heads=num_key_value_heads, dim1=key_value_dim, dim2=hidden_size
+        )
     else:
         converted_state_dict[converted_key] = tensor
 
