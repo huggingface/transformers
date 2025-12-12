@@ -845,9 +845,7 @@ class AwqConfig(GPTQConfig):
             self.backend = AwqBackend.AUTO
 
         if self.format not in AwqFormat.__members__.values():
-            raise ValueError(
-                f"Invalid format '{self.format}'. Must be one of: {[b.value for b in AwqFormat]}"
-            )
+            raise ValueError(f"Invalid format '{self.format}'. Must be one of: {[b.value for b in AwqFormat]}")
 
         if self.backend not in AwqBackend.__members__.values():
             raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")
