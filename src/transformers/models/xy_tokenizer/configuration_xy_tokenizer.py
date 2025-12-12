@@ -43,12 +43,16 @@ class XYTokenizerConfig(PretrainedConfig):
             The standard deviation for weight initialization.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-
-        Semantic Encoder parameters:
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel-spectrogram bins for audio feature extraction.
         hop_length (`int`, *optional*, defaults to 160):
             Hop length for STFT operations.
+        max_audio_seconds (`int`, *optional*, defaults to 30):
+            Maximum audio duration in seconds.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            Activation function used throughout the model.
+        code_dim (`int`, *optional*, defaults to 1280):
+            The base code dimension used across various modules.
         semantic_encoder_stride_size (`int`, *optional*, defaults to 2):
             Stride size for the semantic encoder convolution layers.
         semantic_encoder_kernel_size (`int`, *optional*, defaults to 3):
@@ -57,20 +61,14 @@ class XYTokenizerConfig(PretrainedConfig):
             Hidden size for the semantic encoder.
         semantic_encoder_scale_embedding (`bool`, *optional*, defaults to `True`):
             Whether to scale embeddings in the semantic encoder.
-        max_audio_seconds (`int`, *optional*, defaults to 30):
-            Maximum audio duration in seconds.
         semantic_encoder_layers (`int`, *optional*, defaults to 32):
             Number of transformer layers in the semantic encoder.
         semantic_encoder_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads in the semantic encoder.
         semantic_encoder_ffn_dim (`int`, *optional*, defaults to 5120):
             FFN dimension in the semantic encoder.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            Activation function used throughout the model.
         semantic_encoder_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the semantic encoder.
-
-        Semantic Encoder Adapter parameters:
         semantic_adapter_input_dim (`int`, *optional*):
             Input dimension for the semantic encoder adapter. If None, uses semantic_encoder_d_model.
         semantic_adapter_d_model (`int`, *optional*):
@@ -87,8 +85,6 @@ class XYTokenizerConfig(PretrainedConfig):
             FFN dimension in the semantic encoder adapter.
         semantic_adapter_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the semantic encoder adapter.
-
-        Acoustic Encoder parameters:
         acoustic_encoder_d_model (`int`, *optional*, defaults to 1280):
             Hidden size for the acoustic encoder.
         acoustic_encoder_stride_size (`int`, *optional*, defaults to 2):
@@ -105,8 +101,6 @@ class XYTokenizerConfig(PretrainedConfig):
             FFN dimension in the acoustic encoder.
         acoustic_encoder_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the acoustic encoder.
-
-        Pre-RVQ Adapter parameters:
         pre_rvq_adapter_input_dim (`int`, *optional*):
             Input dimension for the pre-RVQ adapter. If None, computed as semantic_encoder_d_model + acoustic_encoder_d_model.
         pre_rvq_adapter_d_model (`int`, *optional*):
@@ -123,14 +117,10 @@ class XYTokenizerConfig(PretrainedConfig):
             FFN dimension in the pre-RVQ adapter.
         pre_rvq_adapter_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the pre-RVQ adapter.
-
-        Downsample parameters:
         downsample_d_model (`int`, *optional*):
             Hidden size for downsampling. If None, uses code_dim.
         downsample_avg_pooler (`int`, *optional*, defaults to 4):
             Average pooling factor for downsampling.
-
-        Quantizer parameters:
         num_quantizers (`int`, *optional*, defaults to 32):
             Number of quantizers in the residual VQ.
         quantizer_input_dim (`int`, *optional*):
@@ -159,8 +149,6 @@ class XYTokenizerConfig(PretrainedConfig):
             Whether to use K-means initialization for codebooks.
         vq_kmeans_iters (`int`, *optional*, defaults to 10):
             Number of K-means iterations for initialization.
-
-        Post-RVQ Adapter parameters:
         post_rvq_adapter_input_dim (`int`, *optional*):
             Input dimension for the post-RVQ adapter. If None, uses code_dim.
         post_rvq_adapter_d_model (`int`, *optional*):
@@ -177,14 +165,10 @@ class XYTokenizerConfig(PretrainedConfig):
             FFN dimension in the post-RVQ adapter.
         post_rvq_adapter_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the post-RVQ adapter.
-
-        Upsample parameters:
         upsample_d_model (`int`, *optional*):
             Hidden size for upsampling. If None, uses code_dim.
         upsample_stride (`int`, *optional*, defaults to 4):
             Upsampling stride factor.
-
-        Acoustic Decoder parameters:
         acoustic_decoder_d_model (`int`, *optional*):
             Hidden size for the acoustic decoder. If None, uses code_dim.
         acoustic_decoder_stride_size (`int`, *optional*, defaults to 2):
@@ -201,8 +185,6 @@ class XYTokenizerConfig(PretrainedConfig):
             FFN dimension in the acoustic decoder.
         acoustic_decoder_attn_type (`str`, *optional*, defaults to `"varlen"`):
             Attention type for the acoustic decoder.
-
-        Vocos parameters:
         vocos_input_channels (`int`, *optional*):
             Number of input channels for Vocos. If None, uses num_mel_bins.
         vocos_dim (`int`, *optional*, defaults to 512):
@@ -217,18 +199,12 @@ class XYTokenizerConfig(PretrainedConfig):
             Hop size for Vocos ISTFT.
         vocos_padding (`str`, *optional*, defaults to `"same"`):
             Padding mode for Vocos ISTFT.
-
-        Feature Extractor parameters:
         feature_extractor_feature_size (`int`, *optional*, defaults to 80):
             Feature size for the feature extractor.
         feature_extractor_n_fft (`int`, *optional*, defaults to 400):
             FFT size for the feature extractor.
         feature_extractor_chunk_length (`int`, *optional*, defaults to 30):
             Chunk length in seconds for processing long audio.
-
-        Code dimension:
-        code_dim (`int`, *optional*, defaults to 1280):
-            The base code dimension used across various modules.
     """
 
     model_type = "xy_tokenizer"
@@ -258,9 +234,9 @@ class XYTokenizerConfig(PretrainedConfig):
         semantic_encoder_ffn_dim: int = 5120,
         semantic_encoder_attn_type: str = "varlen",
         # Semantic Encoder Adapter
-        semantic_adapter_input_dim: int = None,
-        semantic_adapter_d_model: int = None,
-        semantic_adapter_output_dim: int = None,
+        semantic_adapter_input_dim: int | None = None,
+        semantic_adapter_d_model: int | None = None,
+        semantic_adapter_output_dim: int | None = None,
         semantic_adapter_max_source_positions: int = 1500,
         semantic_adapter_layers: int = 32,
         semantic_adapter_attention_heads: int = 20,
@@ -276,22 +252,22 @@ class XYTokenizerConfig(PretrainedConfig):
         acoustic_encoder_ffn_dim: int = 5120,
         acoustic_encoder_attn_type: str = "varlen",
         # Pre-RVQ Adapter
-        pre_rvq_adapter_input_dim: int = None,
-        pre_rvq_adapter_d_model: int = None,
-        pre_rvq_adapter_output_dim: int = None,
+        pre_rvq_adapter_input_dim: int | None = None,
+        pre_rvq_adapter_d_model: int | None = None,
+        pre_rvq_adapter_output_dim: int | None = None,
         pre_rvq_adapter_max_source_positions: int = 1500,
         pre_rvq_adapter_layers: int = 32,
         pre_rvq_adapter_attention_heads: int = 20,
         pre_rvq_adapter_ffn_dim: int = 5120,
         pre_rvq_adapter_attn_type: str = "varlen",
         # Downsample
-        downsample_d_model: int = None,
+        downsample_d_model: int | None = None,
         downsample_avg_pooler: int = 4,
         # Quantizer
         num_quantizers: int = 32,
-        quantizer_input_dim: int = None,
-        quantizer_rvq_dim: int = None,
-        quantizer_output_dim: int = None,
+        quantizer_input_dim: int | None = None,
+        quantizer_rvq_dim: int | None = None,
+        quantizer_output_dim: int | None = None,
         codebook_size: int = 1024,
         codebook_dim: int = 8,
         quantizer_dropout: float = 0.5,
@@ -303,19 +279,19 @@ class XYTokenizerConfig(PretrainedConfig):
         vq_kmeans_init: bool = True,
         vq_kmeans_iters: int = 10,
         # Post-RVQ Adapter
-        post_rvq_adapter_input_dim: int = None,
-        post_rvq_adapter_d_model: int = None,
-        post_rvq_adapter_output_dim: int = None,
+        post_rvq_adapter_input_dim: int | None = None,
+        post_rvq_adapter_d_model: int | None = None,
+        post_rvq_adapter_output_dim: int | None = None,
         post_rvq_adapter_max_source_positions: int = 1500,
         post_rvq_adapter_layers: int = 32,
         post_rvq_adapter_attention_heads: int = 20,
         post_rvq_adapter_ffn_dim: int = 5120,
         post_rvq_adapter_attn_type: str = "varlen",
         # Upsample
-        upsample_d_model: int = None,
+        upsample_d_model: int | None = None,
         upsample_stride: int = 4,
         # Acoustic Decoder
-        acoustic_decoder_d_model: int = None,
+        acoustic_decoder_d_model: int | None = None,
         acoustic_decoder_stride_size: int = 2,
         acoustic_decoder_kernel_size: int = 3,
         acoustic_decoder_scale_embedding: bool = True,
@@ -324,7 +300,7 @@ class XYTokenizerConfig(PretrainedConfig):
         acoustic_decoder_ffn_dim: int = 5120,
         acoustic_decoder_attn_type: str = "varlen",
         # Vocos
-        vocos_input_channels: int = None,
+        vocos_input_channels: int | None = None,
         vocos_dim: int = 512,
         vocos_intermediate_dim: int = 4096,
         vocos_num_layers: int = 30,
