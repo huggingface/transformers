@@ -2056,6 +2056,7 @@ class GenerationTesterMixin:
                     padfree_inputs_dict = {
                         k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()
                     }
+                    padfree_inputs_dict.pop("labels", None)  # can lead to silent upcasts on logits
                 else:
                     # create packed position_ids
                     position_ids = (
