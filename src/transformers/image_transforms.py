@@ -15,7 +15,7 @@
 from collections import defaultdict
 from collections.abc import Collection, Iterable
 from math import ceil
-from typing import Optional, Union
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -547,7 +547,13 @@ def _center_to_corners_format_numpy(bboxes_center: np.ndarray) -> np.ndarray:
 
 
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def center_to_corners_format(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+@overload
+def center_to_corners_format(bboxes_center: "torch.Tensor") -> "torch.Tensor": ...
+
+@overload
+def center_to_corners_format(bboxes_center: np.ndarray) -> np.ndarray: ...
+
+def center_to_corners_format(bboxes_center: "torch.Tensor | np.ndarray") -> Any:
     """
     Converts bounding boxes from center format to corners format.
 
@@ -590,7 +596,13 @@ def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
     return bboxes_center
 
 
-def corners_to_center_format(bboxes_corners: "torch.Tensor") -> "torch.Tensor":
+@overload
+def corners_to_center_format(bboxes_corners: "torch.Tensor") -> "torch.Tensor": ...
+
+@overload
+def corners_to_center_format(bboxes_corners: np.ndarray) -> np.ndarray: ...
+
+def corners_to_center_format(bboxes_corners: "torch.Tensor | np.ndarray") -> Any:
     """
     Converts bounding boxes from corners format to center format.
 
