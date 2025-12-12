@@ -113,15 +113,9 @@
     title: Chat with models
   - sections:
     - local: serving
-      title: Serving LLMs, VLMs, and other chat-based models
-    - local: jan
-      title: Jan
-    - local: cursor
-      title: Cursor
-    - local: tiny_agents
-      title: Tiny-Agents CLI and MCP tools
-    - local: open_webui
-      title: Open WebUI
+      title: Serve CLI
+    - local: serve-cli-integrations
+      title: Serve CLI integrations
     title: Serving
   - local: agents
     title: Agents
