@@ -117,7 +117,7 @@ Transformers reduces some of these memory-related challenges with fast initializ
 Parameters load in parallel and peak memory only depends on model size. Set `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to control the threshold.
 
 > [!NOTE]
-> Memory usage for models requiring dynamic weight conversion depends on the model size and the size of the largest parameters in a single conversion. This typically applies to mixture-of-experts (MoE) models where the memory usage is the model size plus the number of experts on one layer.
+> Memory usage for models requiring dynamic weight conversion depends on the model size and the size of the largest parameters in a single conversion. This typically applies to mixture-of-experts (MoE) models where the memory usage is the model size plus the number of experts on one layer. Refer to the [dynamic weight loader](./weightconverter#fast-model-loading) guide to learn more about how models are loaded.
 
 [`~PreTrainedModel.save_pretrained`] also creates an index file mapping parameter names to their shard files. The index contains two keys, `metadata` and `weight_map`.
 
