@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for VibeVoice."""
 
-from typing import List, Optional, Union
-
 from ...utils import logging
 from ..qwen2.tokenization_qwen2 import Qwen2Tokenizer
 from ..qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast

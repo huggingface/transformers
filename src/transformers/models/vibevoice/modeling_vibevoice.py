@@ -16,7 +16,7 @@
 
 import math
 import copy
-from typing import Optional, Tuple, Union, List, Dict, Any
+from typing import Optional, Any
 
 
 import torch.nn as nn
@@ -27,10 +27,7 @@ import torch.utils.checkpoint
 from ...modeling_utils import PreTrainedModel
 from ...activations import ACT2FN
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from ...models.auto import AutoModel
 
@@ -347,7 +344,7 @@ class ConvRMSNorm(RMSNorm):
         return output
 
 
-def pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value: float = 0.0):
+def pad1d(x: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
     length = x.shape[-1]
     padding_left, padding_right = paddings
     if mode == "reflect":
@@ -363,7 +360,7 @@ def pad1d(x: torch.Tensor, paddings: Tuple[int, int], mode: str = "zero", value:
         return F.pad(x, paddings, mode, value)
 
 
-def unpad1d(x: torch.Tensor, paddings: Tuple[int, int]):
+def unpad1d(x: torch.Tensor, paddings: tuple[int, int]):
     padding_left, padding_right = paddings
     end = x.shape[-1] - padding_right
     return x[..., padding_left:end]
@@ -378,8 +375,11 @@ def apply_parametrization_norm(module: nn.Module, norm: str = "none") -> nn.Modu
 
 
 class NormConv1d(nn.Module):
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
+    def __init__(
+        self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Optional[dict[str, Any]] = None, **kwargs
+    ):
         super().__init__()
+        norm_kwargs = norm_kwargs or {}
         self.conv = apply_parametrization_norm(nn.Conv1d(*args, **kwargs), norm)
         self.norm = nn.Identity()  # Simplified for portability, ignoring get_norm_module complexity
         if norm == "layer_norm":
@@ -392,8 +392,11 @@ class NormConv1d(nn.Module):
 
 
 class NormConvTranspose1d(nn.Module):
-    def __init__(self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Dict[str, Any] = {}, **kwargs):
+    def __init__(
+        self, *args, causal: bool = False, norm: str = "none", norm_kwargs: Optional[dict[str, Any]] = None, **kwargs
+    ):
         super().__init__()
+        norm_kwargs = norm_kwargs or {}
         self.convtr = apply_parametrization_norm(nn.ConvTranspose1d(*args, **kwargs), norm)
         self.norm = nn.Identity()
 
@@ -415,7 +418,7 @@ class SConv1d(nn.Module):
         bias=True,
         causal=False,
         norm="none",
-        norm_kwargs={},
+        norm_kwargs=None,
         pad_mode="reflect",
     ):
         super().__init__()
@@ -474,7 +477,7 @@ class SConvTranspose1d(nn.Module):
         causal=False,
         norm="none",
         trim_right_ratio=1.0,
-        norm_kwargs={},
+        norm_kwargs=None,
         bias=True,
     ):
         super().__init__()
