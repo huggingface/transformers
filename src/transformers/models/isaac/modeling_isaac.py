@@ -315,7 +315,6 @@ class IsaacVisionAttention(nn.Module):
         past_key_value: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         is_causal: bool = False,
-        attn_implementation: Optional[str] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         **kwargs,
@@ -354,7 +353,9 @@ class IsaacVisionAttention(nn.Module):
         k = self.k_proj(x).view(L, H, D)
         v = self.v_proj(x).view(L, H, D)
 
-        attn_impl = attn_implementation or getattr(self.config, "_attn_implementation", "flash_attention_3")
+        resolved_key = "isaac_sdpa"
+        if self.config._attn_implementation != "sdpa":
+            resolved_key = self.ATTENTION_KEY_MAP.get(self.config._attn_implementation, resolved_key)
 
         attn_mask = ensure_document_attention_mask(
             attention_mask,
@@ -364,8 +365,6 @@ class IsaacVisionAttention(nn.Module):
             q.device,
             return_mask_function=True,
         )
-
-        resolved_key = self.ATTENTION_KEY_MAP.get(attn_impl, attn_impl)
 
         attn_weights = None
         if resolved_key in self._FLASH_IMPLS:
@@ -397,7 +396,7 @@ class IsaacVisionAttention(nn.Module):
         else:
             attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key)
             if attention_fn is None:
-                raise ValueError(f"Attention implementation {attn_impl} not found.")
+                raise ValueError(f"Attention implementation {resolved_key} not found.")
 
             query_states = q.transpose(0, 1).unsqueeze(0)
             key_states = k.transpose(0, 1).unsqueeze(0)
@@ -879,6 +878,26 @@ class IsaacVisionTransformer(nn.Module):
         return hidden_states
 
 
+class IsaacVisionEmbedding(nn.Module):
+    """Vision embedding wrapper exposing tower and projector."""
+
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        vision_cfg = config.vision_config
+        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
+
+        self.vision_tower = IsaacVisionTransformer(vision_cfg)
+        self.multimodal_projector = nn.Sequential(
+            nn.Linear(hidden_dim, 4 * hidden_dim, bias=False),
+            nn.SiLU(),
+            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
+        )
+
+    def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        hidden_states = self.vision_tower(vision_tokens)
+        return self.multimodal_projector(hidden_states)
+
+
 class IsaacRotaryEmbedding(nn.Module):
     EXTRA_ROPE_KEYS = {"mrope_section", "mrope_interleaved"}
 
@@ -886,29 +905,17 @@ class IsaacRotaryEmbedding(nn.Module):
         super().__init__()
 
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
-        rope_params = (
-            getattr(rope_source_cfg, "rope_parameters", None) or getattr(rope_source_cfg, "rope_scaling", None) or {}
-        )
-        legacy_rope_theta = getattr(rope_source_cfg, "rope_theta", None)
-        if legacy_rope_theta is not None and isinstance(rope_params, dict) and "rope_theta" not in rope_params:
-            rope_params = {**rope_params, "rope_theta": legacy_rope_theta}
+        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
 
-        sanitized_params = {k: v for k, v in rope_params.items() if k not in self.EXTRA_ROPE_KEYS}
+        sanitized_scaling = {k: v for k, v in rope_scaling.items() if k not in self.EXTRA_ROPE_KEYS}
         config_for_rope = copy.copy(rope_source_cfg)
-        config_for_rope.rope_parameters = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_scaling"):
-            config_for_rope.rope_scaling = sanitized_params if sanitized_params else None
-        if hasattr(config_for_rope, "rope_theta"):
-            try:
-                delattr(config_for_rope, "rope_theta")
-            except Exception:
-                config_for_rope.rope_theta = None
+        config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
         self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
 
         rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
-        self.mrope_section = self._resolve_mrope_section(rope_params.get("mrope_section"), rotary_half_dim)
+        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
@@ -1238,9 +1245,8 @@ class IsaacModel(PreTrainedModel):
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
 
-        text_cfg_source = getattr(config, "get_text_config", lambda: config)()
+        text_cfg_source = config.text_config
         text_cfg = copy.deepcopy(text_cfg_source)
-        text_cfg._attn_implementation = config._attn_implementation
         self.text_model = AutoModel.from_config(text_cfg)
         # Ensure downstream callers observe the composed config
         self.text_model.config = config
@@ -1250,17 +1256,7 @@ class IsaacModel(PreTrainedModel):
         if config.vision_config is None:
             raise ValueError("IsaacConfig should always have vision_config")
 
-        hidden_dim = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
-        self.vision_embedding = nn.Sequential(
-            IsaacVisionTransformer(config.vision_config),
-            nn.Linear(
-                hidden_dim,
-                4 * hidden_dim,
-                bias=False,
-            ),
-            nn.SiLU(),
-            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
-        )
+        self.vision_embedding = IsaacVisionEmbedding(config)
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
@@ -1359,15 +1355,20 @@ class IsaacModel(PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        tensor_stream (`TensorStream`, *optional*):
-            Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
-            `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
-            if they are not supplied.
-        modality_tensor (`torch.LongTensor`, *optional*):
-            Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
-            values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
-            omitted.
+        """
+        Forward pass with MRoPE position embeddings.
+
+        Computes position embeddings once and passes them through all layers.
+
+        Args:
+            tensor_stream (`TensorStream`, *optional*):
+                Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+                `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+                if they are not supplied.
+            modality_tensor (`torch.LongTensor`, *optional*):
+                Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
+                values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
+                omitted.
         """
 
         # Get inputs
@@ -1421,7 +1422,8 @@ class IsaacModel(PreTrainedModel):
         cos = cos.to(inputs_embeds.dtype)
         sin = sin.to(inputs_embeds.dtype)
 
-        # Prepare attention mask(s)
+        # Prepare attention mask
+
         if not isinstance(attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -1440,7 +1442,6 @@ class IsaacModel(PreTrainedModel):
             layer_attention_mask = (
                 attention_mask[decoder_layer.attention_type] if isinstance(attention_mask, dict) else attention_mask
             )
-
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_attention_mask,
@@ -1521,6 +1522,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of

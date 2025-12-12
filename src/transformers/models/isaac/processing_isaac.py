@@ -26,7 +26,6 @@ from typing import Optional, Union
 from ...feature_extraction_utils import BatchFeature
 from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType
 from ...utils.import_utils import is_perceptron_available, is_torch_available, is_vision_available
 from .configuration_isaac import IsaacConfig
@@ -211,26 +210,8 @@ class IsaacProcessor(ProcessorMixin):
         Returns:
             BatchFeature with input_ids and tensor_stream
         """
-        # Normalize inputs to lists and support BatchEncoding (v5 apply_chat_template default)
-        encoding_input = None
-        if isinstance(text, BatchEncoding):
-            encoding_input = text
-        elif isinstance(text, dict) and "input_ids" in text:
-            encoding_input = BatchEncoding(text)
-
-        if encoding_input is not None:
-            input_ids_field = encoding_input["input_ids"]
-            if isinstance(input_ids_field, torch.Tensor):
-                ids = input_ids_field
-            else:
-                ids = torch.tensor(input_ids_field)
-            if ids.ndim == 1:
-                ids = ids.unsqueeze(0)
-            if ids.size(0) != 1:
-                raise ValueError("IsaacProcessor currently supports batch_size=1 for chat templates.")
-            decoded_text = self.tokenizer.decode(ids[0].tolist(), skip_special_tokens=False)
-            texts = [decoded_text]
-        elif isinstance(text, str):
+        # Normalize inputs to lists
+        if isinstance(text, str):
             texts = [text]
         else:
             texts = text
