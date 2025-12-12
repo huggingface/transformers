@@ -3517,6 +3517,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if dtype is not None:
                         module.compute_dtype = dtype
                     module.cuda(device)
+            # Clear cached dtype if dtype conversion occurred
+            if dtype_present_in_args and hasattr(self, "_dtype"):
+                self._dtype = None
             return self
 
         if dtype_present_in_args and getattr(self, "quantization_method", None) == QuantizationMethod.QUARK:
@@ -3540,7 +3543,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
                     " `dtype` by passing the correct `dtype` argument."
                 )
-        return super().to(*args, **kwargs)
+        result = super().to(*args, **kwargs)
+        # Clear cached dtype if dtype conversion occurred, so the dtype property
+        # will check actual parameters instead of returning stale cached value
+        if dtype_present_in_args and hasattr(self, "_dtype"):
+            self._dtype = None
+        return result
 
     def half(self, *args):
         # Checks if the model is quantized
