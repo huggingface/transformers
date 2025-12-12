@@ -1600,22 +1600,42 @@ def update_inline_torch_tensor(filepath: str, task: UpdateTask, info: PatternInf
     if start_idx >= len(lines) or end_idx >= len(lines):
         return False
 
-    # Single-line case
+    # Single-line case - use CST position info
     if start_idx == end_idx:
         line = lines[start_idx]
-        # Use column info to find exact position
-        # Find the data argument and replace it
-        # For torch.tensor([-4.18, -3.4948, -3.4481]), replace the list part
-        old_val = task.expectations_var.split('(', 1)[1].rsplit(')', 1)[0]
+        # info.base_indent is the column where the data starts
+        # We need to find where it ends - look for the closing ) of torch.tensor()
+
+        # Simple approach: find torch.tensor( and replace what's inside
+        tensor_start = line.find('torch.tensor(')
+        if tensor_start == -1:
+            return False
+
+        # Find the matching closing paren
+        paren_count = 0
+        data_start = tensor_start + len('torch.tensor(')
+        data_end = -1
+
+        for i in range(data_start, len(line)):
+            if line[i] == '(':
+                paren_count += 1
+            elif line[i] == ')':
+                if paren_count == 0:
+                    data_end = i
+                    break
+                paren_count -= 1
+
+        if data_end == -1:
+            return False
+
+        # Replace the data portion
         new_val = task.new_value_str.strip()
+        new_line = line[:data_start] + new_val + line[data_end:]
+        lines[start_idx] = new_line
 
-        if old_val in line:
-            new_line = line.replace(old_val, new_val, 1)
-            lines[start_idx] = new_line
-
-            with open(filepath, 'w') as f:
-                f.writelines(lines)
-            return True
+        with open(filepath, 'w') as f:
+            f.writelines(lines)
+        return True
 
     return False
 
