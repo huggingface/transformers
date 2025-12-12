@@ -4541,15 +4541,12 @@ def get_total_byte_count(
     )
 
     modules_sizes, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
-    tested = set(modules_sizes.keys())
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
             continue
 
         param_byte_count = modules_sizes[param_name]
-
-        tested.remove(param_name)
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
