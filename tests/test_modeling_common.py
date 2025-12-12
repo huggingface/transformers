@@ -2342,6 +2342,7 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
+            torch.cuda.synchronize()  # otherwise the transfer might not be complete
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
