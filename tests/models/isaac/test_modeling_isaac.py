@@ -940,14 +940,17 @@ def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_re
     isaac_reference_model.to("cpu")
 
 
-def test_hf_generate_something():
+@require_torch
+@require_vision
+@slow
+@require_tensorstream
+def test_hf_generate_from_image(isaac_reference_checkpoint):
     # Configuration
     MAX_NEW_TOKENS = 25
     DTYPE = torch.bfloat16
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    genesis_hf_checkpoint = Path(LOCAL_CHECKPOINT)
 
-    hf_config = IsaacConfig.from_pretrained(genesis_hf_checkpoint)
+    hf_config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
     # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
     messages = [{"role": "user", "content": "Describe this image:"}, {"role": "user", "content": "<image>"}]
     images = []
@@ -955,7 +958,7 @@ def test_hf_generate_something():
     pil_image = Image.open(io.BytesIO(image_bytes))
     images.append(pil_image)
 
-    tokenizer = AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
+    tokenizer = AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
     genesis_processor = create_isaac_processor(tokenizer, hf_config)
     # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
     # Added strip because our generation events don't add new line
@@ -966,7 +969,60 @@ def test_hf_generate_something():
     # Process document to TensorStream
     hf_config.vision_config._attn_implementation = "flash_attention_2"
     hf_config.vision_config.attn_implementation = "flash_attention_2"
-    hf_model = IsaacForConditionalGeneration.from_pretrained(genesis_hf_checkpoint, config=hf_config)
+    hf_model = IsaacForConditionalGeneration.from_pretrained(isaac_reference_checkpoint, config=hf_config)
+    hf_model = hf_model.to(device=device, dtype=DTYPE)
+    hf_model.eval()
+
+    # Load HF tokenizer
+
+    # Validate that weights are identical between models
+
+    with torch.no_grad():
+        print("\n1️⃣ Running HuggingFace model.generate()...")
+        # Generate with HF model using the training tensor stream converted to Open variant
+        hf_output = hf_model.generate(
+            tensor_stream=tensor_stream,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=False,  # Deterministic generation
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+        hf_generated_ids = hf_output.sequences
+        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
+        print(f"   HF Generated: '{hf_generated_text}'")
+        assert "is" in hf_generated_text
+
+
+@require_torch
+@require_vision
+@slow
+@require_tensorstream
+def test_hf_generate_from_text(isaac_reference_checkpoint):
+    # Configuration
+    MAX_NEW_TOKENS = 25
+    DTYPE = torch.bfloat16
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    hf_config = IsaacConfig.from_pretrained(isaac_reference_checkpoint)
+    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
+    messages = [{"role": "user", "content": "Explain the pythagorean theorem"}]
+    images = []
+
+    tokenizer = AutoTokenizer.from_pretrained(isaac_reference_checkpoint, trust_remote_code=True, use_fast=False)
+    genesis_processor = create_isaac_processor(tokenizer, hf_config)
+    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
+    # Added strip because our generation events don't add new line
+    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
+    tensor_stream = processor_output["tensor_stream"].to(device)
+
+    # Process document to TensorStream
+    hf_config.vision_config._attn_implementation = "flash_attention_2"
+    hf_config.vision_config.attn_implementation = "flash_attention_2"
+    hf_model = IsaacForConditionalGeneration.from_pretrained(isaac_reference_checkpoint, config=hf_config)
     hf_model = hf_model.to(device=device, dtype=DTYPE)
     hf_model.eval()
 
