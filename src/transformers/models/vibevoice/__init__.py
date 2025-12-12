@@ -22,13 +22,13 @@ from ...utils import (
 
 _import_structure = {
     "configuration_vibevoice": [
-        "VibeVoiceConfig",
         "VibeVoiceAcousticTokenizerConfig",
-        "VibeVoiceSemanticTokenizerConfig",
+        "VibeVoiceConfig",
         "VibeVoiceDiffusionHeadConfig",
+        "VibeVoiceSemanticTokenizerConfig",
     ],
-    "tokenization_vibevoice": ["VibeVoiceTokenizer", "VibeVoiceTokenizerFast"],
     "processing_vibevoice": ["VibeVoiceProcessor"],
+    "tokenization_vibevoice": ["VibeVoiceTokenizer", "VibeVoiceTokenizerFast"],
 }
 
 try:
@@ -38,15 +38,16 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vibevoice"] = [
+        "VibeVoiceAcousticTokenizerModel",
+        "VibeVoiceForConditionalGeneration",
         "VibeVoiceModel",
         "VibeVoicePreTrainedModel",
-        "VibeVoiceForConditionalGeneration",
-        "VibeVoiceAcousticTokenizerModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_vibevoice import (
+        VibeVoiceAcousticTokenizerConfig,
         VibeVoiceConfig,
         VibeVoiceDiffusionHeadConfig,
         VibeVoiceSemanticTokenizerConfig,
