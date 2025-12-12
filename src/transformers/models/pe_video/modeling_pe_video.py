@@ -478,7 +478,7 @@ class PEVideoPreTrainedModel(PreTrainedModel):
     The PEVideo Encoder model.
     """
 )
-class PEVideoEncoder(PEAudioEncoder):
+class PEVideoEncoder(PEVideoPreTrainedModel):
     config: PEVideoEncoderConfig
     base_model_prefix = "video_encoder"
 

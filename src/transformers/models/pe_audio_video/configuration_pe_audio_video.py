@@ -113,7 +113,7 @@ class PEAudioVideoEncoderConfig(PreTrainedConfig):
         intermediate_size=4800,
         num_hidden_layers=6,
         num_attention_heads=14,
-        num_key_value_heads=14,
+        num_key_value_heads=None,
         head_dim=128,
         hidden_act="silu",
         max_position_embeddings=10000,
