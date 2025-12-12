@@ -274,18 +274,8 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
     def decode(self, latents, padding_cache=None, use_cache=False):
         raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
-    @can_return_tuple
-    @auto_docstring
     def forward(self, audio, padding_cache=None, use_cache=None, **kwargs: Unpack[TransformersKwargs]):
-        r"""
-        audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input audio waveform to be encoded into latent representations.
-        padding_cache (`VibeVoiceConv1dCache`, *optional*):
-            Cache object for streaming mode to maintain convolution states across layers.
-        use_cache (`bool`, *optional*):
-            Whether to use caching for convolution states.
-        """
-        return self.encode(audio, padding_cache=padding_cache, use_cache=use_cache)
+        raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
 
 @auto_docstring(
