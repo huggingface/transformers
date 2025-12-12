@@ -403,6 +403,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatModel"),
         ("univnet", "UnivNetModel"),
         ("vaultgemma", "VaultGemmaModel"),
+        ("vibevoice", "VibeVoiceModel"),
         ("video_llama_3", "VideoLlama3Model"),
         ("video_llama_3_vision", "VideoLlama3VisionModel"),
         ("video_llava", "VideoLlavaModel"),
@@ -1644,6 +1645,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
+        ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
     ]
 )
