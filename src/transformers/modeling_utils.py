@@ -757,12 +757,6 @@ def _get_dtype(
     else:
         main_dtype = dtype
 
-    # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
-    if not main_dtype.is_floating_point:
-        raise ValueError(
-            f"The model cannot be instantiated under `dtype={main_dtype}` as it's not a floating-point dtype"
-        )
-
     # Set it on the config and subconfigs
     config.dtype = main_dtype
     for sub_config_key in config.sub_configs:
@@ -1413,9 +1407,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype (`torch.dtype`, *optional*):
                 Override the default `dtype` and load the model under this dtype.
         """
-        # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
-        # a warning is raised that dtype should be fp16. Since we never pass dtype from within
-        # modeling code, we can try to infer it here same way as done in `from_pretrained`
         # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
@@ -1424,6 +1415,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype = dtype if dtype != config.dtype else torch_dtype
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
+
+        # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
+        if dtype is not None and not dtype.is_floating_point:
+            raise ValueError(
+                f"{cls.__name__} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
+            )
 
         # override default dtype if needed
         dtype_orig = None
@@ -3936,6 +3933,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
+        # Just a helping error before we set `torch.set_default_dtype` later on which would crash in this case
+        if not dtype.is_floating_point:
+            raise ValueError(
+                f"{cls.__name__} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
+            )
         # Save current default for later, and set asked dtype
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
