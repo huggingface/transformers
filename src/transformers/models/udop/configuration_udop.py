@@ -149,6 +149,7 @@ class UdopConfig(PreTrainedConfig):
                 "'gated-gelu' or 'relu'"
             )
 
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

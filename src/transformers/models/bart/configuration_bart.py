@@ -147,6 +147,7 @@ class BartConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             num_labels=num_labels,
@@ -157,7 +158,6 @@ class BartConfig(PreTrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["BartConfig"]
