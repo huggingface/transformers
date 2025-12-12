@@ -158,7 +158,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -180,10 +179,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-
-        self.use_bidirectional_attention = use_bidirectional_attention
-        if use_bidirectional_attention:
-            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -452,7 +447,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -474,10 +468,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-
-        self.use_bidirectional_attention = use_bidirectional_attention
-        if use_bidirectional_attention:
-            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
