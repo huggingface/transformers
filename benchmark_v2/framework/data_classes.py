@@ -9,12 +9,12 @@ from .hardware_metrics import GPURawMetrics, HardwareInfo
 
 def compute_basic_statistics(measurements: list[float]) -> dict[str, float]:
     return {
-        "avg": np.mean(measurements),
-        "std": np.std(measurements),
-        "min": np.min(measurements),
-        "med": np.median(measurements),
-        "max": np.max(measurements),
-        "p95": np.percentile(measurements, 95),
+        "avg": np.mean(measurements) if measurements else 0,
+        "std": np.std(measurements) if measurements else 0,
+        "min": np.min(measurements) if measurements else 0,
+        "med": np.median(measurements) if measurements else 0,
+        "max": np.max(measurements) if measurements else 0,
+        "p95": np.percentile(measurements, 95) if measurements else 0,
     }
 
 
@@ -64,14 +64,18 @@ class BenchmarkMetadata:
     commit_id: str
     commit_message: str
     hardware_info: HardwareInfo
+    success: bool
 
-    def __init__(self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "") -> None:
+    def __init__(
+        self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
+    ) -> None:
         self.model_id = model_id
         self.timestamp = datetime.now(timezone.utc).isoformat()
         self.branch_name = branch_name
         self.commit_id = commit_id
         self.commit_message = commit_message
         self.hardware_info = HardwareInfo()
+        self.success = success
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +85,7 @@ class BenchmarkMetadata:
             "commit_id": self.commit_id,
             "commit_message": self.commit_message,
             "hardware_info": self.hardware_info.to_dict(),
+            "success": self.success,
         }
 
 

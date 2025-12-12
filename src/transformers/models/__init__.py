@@ -126,6 +126,7 @@ if TYPE_CHECKING:
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
+    from .fast_vlm import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
@@ -185,6 +186,7 @@ if TYPE_CHECKING:
     from .jetmoe import *
     from .kosmos2 import *
     from .kyutai_speech_to_text import *
+    from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
@@ -263,6 +265,7 @@ if TYPE_CHECKING:
     from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
+    from .paddleocr_vl import *
     from .paligemma import *
     from .parakeet import *
     from .patchtsmixer import *

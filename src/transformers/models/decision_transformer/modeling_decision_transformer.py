@@ -34,6 +34,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
@@ -141,7 +142,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with torch.autocast(query.device.type, enabled=False):
+        with maybe_autocast(query.device.type, enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
@@ -431,6 +432,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -656,6 +658,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DecisionTransformerOutput]:
         r"""
         states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):

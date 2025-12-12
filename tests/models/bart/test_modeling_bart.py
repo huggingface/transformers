@@ -962,7 +962,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " state."
             "</s>"
         )
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             max_length=1024,
             padding="max_length",
@@ -1188,7 +1188,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",

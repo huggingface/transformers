@@ -35,7 +35,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -50,7 +50,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs, maybe_autocast
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,
@@ -738,6 +738,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
@@ -1323,7 +1324,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -1475,6 +1476,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1500,7 +1502,6 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         self.q_norm = Qwen3OmniMoeThinkerTextRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # unlike olmo, only on the head dim!
@@ -2214,11 +2215,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             audio_feature_lengths = None
 
         if attention_mask is not None and position_ids is None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -2233,7 +2231,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -2372,6 +2370,7 @@ class Qwen3OmniMoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -2398,7 +2397,6 @@ class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         self.q_norm = Qwen3OmniMoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3OmniMoeRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
@@ -2567,7 +2565,7 @@ class Qwen3OmniMoeRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -3152,12 +3150,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_step = -1
             residual_codes = None
-        if attention_mask is not None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+        if position_ids is None:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     talker_input_ids,
@@ -3172,7 +3167,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
                 self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -3273,7 +3268,10 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         inputs = super().prepare_inputs_for_generation(
             input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
         )
-        # Decode stage
+
+        # Qwen3-Omni will prepare position ids in forward with deltas
+        inputs["position_ids"] = None
+
         # TODO(raushan, gante): Refactor this part to a utility function
         if cache_position[0] != 0:
             input_ids = input_ids[:, -1:]
@@ -3401,6 +3399,7 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
         return hidden_states
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -3427,7 +3426,6 @@ class Qwen3OmniMoeCode2WavAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         self.q_norm = nn.Identity()
         self.k_norm = nn.Identity()
         self.sliding_window = config.sliding_window
@@ -3767,7 +3765,7 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
         self.block = nn.ModuleList(block)
 
-    def forward(self, hidden):
+    def forward(self, hidden, **kwargs):
         for block in self.block:
             hidden = block(hidden)
         return hidden
@@ -3809,7 +3807,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
-    def forward(self, codes):
+    def forward(self, codes, **kwargs):
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.code_embedding(codes + self.code_offset).mean(1)

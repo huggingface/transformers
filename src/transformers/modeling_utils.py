@@ -36,7 +36,7 @@ from typing import Optional, TypeVar, Union, get_type_hints
 from zipfile import is_zipfile
 
 import torch
-from huggingface_hub import create_repo, split_torch_state_dict_into_shards
+from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
@@ -85,7 +85,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention
+from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -93,7 +93,6 @@ from .quantizers.quantizers_utils import get_module_from_name
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
-    ADAPTER_WEIGHTS_NAME,
     DUMMY_INPUTS,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -110,7 +109,6 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_kernels_available,
-    is_offline_mode,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_torch_mlu_available,
@@ -279,7 +277,9 @@ def get_state_dict_dtype(state_dict):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
-    return next(state_dict.values()).dtype
+    if len(state_dict) == 0:
+        return torch.float32
+    return next(iter(state_dict.values())).dtype
 
 
 str_to_torch_dtype = {
@@ -552,8 +552,7 @@ def _get_resolved_checkpoint_files(
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
-                                "and thus cannot be loaded with `safetensors`. Please make sure that the model has "
-                                "been saved with `safe_serialization=True` or do not set `use_safetensors=True`."
+                                "and thus cannot be loaded with `safetensors`. Please do not set `use_safetensors=True`."
                             )
                     else:
                         # This repo has no safetensors file of any kind, we switch to PyTorch.
@@ -772,7 +771,7 @@ def _get_dtype(
         for key in config.sub_configs:
             if (sub_config := getattr(config, key)) is not None:
                 sub_config.dtype = default_dtype
-
+    dtype = dtype if isinstance(dtype, torch.dtype) else getattr(torch, dtype)
     return config, dtype, dtype_orig
 
 
@@ -799,7 +798,11 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        return next(param.dtype for param in self.parameters() if param.is_floating_point())
+        dtype = self._dtype or next(param.dtype for param in self.parameters() if param.is_floating_point())
+        if isinstance(dtype, str):
+            if hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+        return dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -1078,6 +1081,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _keep_in_fp32_modules_strict = None
 
     dtype_plan: Optional[dict[str, torch.dtype]] = None
+    _dtype: Optional[Union[str, torch.dtype]] = torch.get_default_dtype()
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1222,6 +1226,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
+        default_dtype = torch.get_default_dtype()
+        self._dtype = default_dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1460,6 +1466,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
         `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
         """
+        if isinstance(dtype, str):
+            if hasattr(torch, dtype):
+                dtype = getattr(torch, dtype)
+            else:
+                raise ValueError(f"Received an invalid string dtype: {dtype}")
         if not dtype.is_floating_point:
             raise ValueError(
                 f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
@@ -1468,6 +1479,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
         dtype_orig = torch.get_default_dtype()
         torch.set_default_dtype(dtype)
+        cls._dtype = dtype
         return dtype_orig
 
     @property
@@ -1764,9 +1776,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         applicable_attn_implementation = attn_implementation
 
+        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
+
         # If FA not installed, do not fail but use kernels instead
         requested_original_flash_attn = attn_implementation is not None and (
-            attn_implementation == "flash_attention_2" or attn_implementation == "flash_attention_3"
+            attn_implementation.removeprefix("paged|") == "flash_attention_2"
+            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
         )
         if (
             requested_original_flash_attn
@@ -1784,10 +1799,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
 
+            if is_paged:
+                applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
+
         if is_kernel(applicable_attn_implementation):
             try:
                 # preload flash attention here to allow compile with fullgraph
-                lazy_import_flash_attention(applicable_attn_implementation)
+                if is_paged:
+                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                else:
+                    lazy_import_flash_attention(applicable_attn_implementation)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -2104,7 +2125,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         possible_module_names = ["language_model", "text_model", "decoder"]
         for name in possible_module_names:
             if hasattr(self, name):
-                print(name)
                 setattr(self, name, decoder)
                 return
 
@@ -3002,10 +3022,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         save_directory: Union[str, os.PathLike],
         is_main_process: bool = True,
         state_dict: Optional[dict] = None,
-        save_function: Callable = torch.save,
         push_to_hub: bool = False,
-        max_shard_size: Union[int, str] = "5GB",
-        safe_serialization: bool = True,
+        max_shard_size: Union[int, str] = "50GB",
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
         save_peft_format: bool = True,
@@ -3027,18 +3045,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The state dictionary of the model to save. Will default to `self.state_dict()`, but can be used to only
                 save parts of the model or if special precautions need to be taken when recovering the state dictionary
                 of a model (like when using model parallelism).
-            save_function (`Callable`):
-                The function to use to save the state dictionary. Useful on distributed training like TPUs when one
-                need to replace `torch.save` by another method.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
-                We default it to 5GB in order for models to be able to run easily on free-tier google colab instances
-                without CPU OOM issues.
 
                 <Tip warning={true}>
 
@@ -3047,10 +3060,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 </Tip>
 
-            safe_serialization (`bool`, *optional*, defaults to `True`):
-                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             variant (`str`, *optional*):
-                If specified, weights are saved in the format pytorch_model.<variant>.bin.
+                If specified, weights are saved in the format model.<variant>.safetensors.
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `hf auth login` (stored in `~/.huggingface`).
@@ -3072,9 +3083,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            hf_quantizer is not None
-            and isinstance(hf_quantizer, HfQuantizer)
-            and hf_quantizer.is_serializable(safe_serialization=safe_serialization)
+            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable()
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
@@ -3110,7 +3119,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         metadata = {}
         if hf_quantizer is not None:
-            state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self, safe_serialization)
+            state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self)
         metadata["format"] = "pt"
 
         # Only save the model itself if we are using distributed training
@@ -3202,75 +3211,72 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self._tp_size is not None:
             state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
-        if safe_serialization:
-            # TODO: fix safe_serialization for tied weights
-            # Safetensors does not allow tensor aliasing.
-            # We're going to remove aliases before saving
-            ptrs = collections.defaultdict(list)
-            for name, tensor in state_dict.items():
-                if not isinstance(tensor, torch.Tensor):
-                    # Sometimes in the state_dict we have non-tensor objects.
-                    # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                    # In the non-tensor case, fall back to the pointer of the object itself
-                    ptrs[id(tensor)].append(name)
+        # Safetensors does not allow tensor aliasing - we're going to remove aliases before saving
+        ptrs = collections.defaultdict(list)
+        for name, tensor in state_dict.items():
+            if not isinstance(tensor, torch.Tensor):
+                # Sometimes in the state_dict we have non-tensor objects.
+                # e.g. in bitsandbytes we have some `str` objects in the state_dict
+                # In the non-tensor case, fall back to the pointer of the object itself
+                ptrs[id(tensor)].append(name)
 
-                elif tensor.device.type == "meta":
-                    # In offloaded cases, there may be meta tensors in the state_dict.
-                    # For these cases, key by the pointer of the original tensor object
-                    # (state_dict tensors are detached and therefore no longer shared)
-                    tensor = self.get_parameter(name)
-                    ptrs[id(tensor)].append(name)
+            elif tensor.device.type == "meta":
+                # In offloaded cases, there may be meta tensors in the state_dict.
+                # For these cases, key by the pointer of the original tensor object
+                # (state_dict tensors are detached and therefore no longer shared)
+                tensor = self.get_parameter(name)
+                ptrs[id(tensor)].append(name)
 
-                else:
-                    ptrs[id_tensor_storage(tensor)].append(name)
+            else:
+                ptrs[id_tensor_storage(tensor)].append(name)
 
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+        shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
 
-            # Recursively descend to find tied weight keys
-            _tied_weights_keys = set(_get_tied_weight_keys(self))
-            error_names = []
-            to_delete_names = set()
-            for names in shared_ptrs.values():
-                # Removing the keys which are declared as known duplicates on
-                # load. This allows to make sure the name which is kept is consistent.
-                if _tied_weights_keys is not None:
-                    found = 0
-                    for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
-                        if matches_pattern and name in state_dict:
-                            found += 1
-                            if found < len(names):
-                                to_delete_names.add(name)
-            # We are entering a place where the weights and the transformers configuration do NOT match.
-            shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
-            # Those are actually tensor sharing but disjoint from each other, we can safely clone them
-            # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
-            for name in disjoint_names:
-                state_dict[name] = state_dict[name].clone()
+        # Recursively descend to find tied weight keys
+        _tied_weights_keys = set(_get_tied_weight_keys(self))
+        error_names = []
+        to_delete_names = set()
+        for names in shared_ptrs.values():
+            # Removing the keys which are declared as known duplicates on
+            # load. This allows to make sure the name which is kept is consistent.
+            if _tied_weights_keys is not None:
+                found = 0
+                for name in sorted(names):
+                    matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
+                    if matches_pattern and name in state_dict:
+                        found += 1
+                        if found < len(names):
+                            to_delete_names.add(name)
+        # We are entering a place where the weights and the transformers configuration do NOT match.
+        shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
+        # Those are actually tensor sharing but disjoint from each other, we can safely clone them
+        # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
+        for name in disjoint_names:
+            state_dict[name] = state_dict[name].clone()
 
-            # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-            # If the link between tensors was done at runtime then `from_pretrained` will not get
-            # the key back leading to random tensor. A proper warning will be shown
-            # during reload (if applicable), but since the file is not necessarily compatible with
-            # the config, better show a proper warning.
-            shared_names, identical_names = _find_identical(shared_names, state_dict)
-            # delete tensors that have identical storage
-            for inames in identical_names:
-                known = inames.intersection(to_delete_names)
-                for name in known:
-                    del state_dict[name]
-                unknown = inames.difference(to_delete_names)
-                if len(unknown) > 1:
-                    error_names.append(unknown)
+        # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+        # If the link between tensors was done at runtime then `from_pretrained` will not get
+        # the key back leading to random tensor. A proper warning will be shown
+        # during reload (if applicable), but since the file is not necessarily compatible with
+        # the config, better show a proper warning.
+        shared_names, identical_names = _find_identical(shared_names, state_dict)
+        # delete tensors that have identical storage
+        for inames in identical_names:
+            known = inames.intersection(to_delete_names)
+            for name in known:
+                del state_dict[name]
+            unknown = inames.difference(to_delete_names)
+            if len(unknown) > 1:
+                error_names.append(unknown)
 
-            if shared_names:
-                error_names.extend(shared_names)
+        if shared_names:
+            error_names.extend(shared_names)
 
-            if len(error_names) > 0:
-                raise RuntimeError(
-                    f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
-                    "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
-                )
+        if len(error_names) > 0:
+            raise RuntimeError(
+                f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
+                "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
+            )
 
         # Revert all renaming and/or weight operations
         if save_original_format:
@@ -3278,10 +3284,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
-            weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+            weights_name = SAFE_WEIGHTS_NAME
             weights_name = _add_variant(weights_name, variant)
         else:
-            weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
+            weights_name = ADAPTER_SAFE_WEIGHTS_NAME
 
         filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
         state_dict_split = split_torch_state_dict_into_shards(
@@ -3350,13 +3356,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 del shard_state_dict
                 gc.collect()
 
-            if safe_serialization:
-                # At some point we will need to deal better with save_function (used for TPU and other distributed
-                # joyfulness), but for now this enough. # TODO: we should def parallelize this we are otherwise just waiting
-                # too much before scheduling the next write when its in a different file
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
-            else:
-                save_function(shard, os.path.join(save_directory, shard_file))
+            # TODO: we should def parallelize this we are otherwise just waiting
+            # too much before scheduling the next write when its in a different file
+            safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
 
         del state_dict
 
@@ -3364,7 +3366,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             path_to_weights = os.path.join(save_directory, weights_name)
             logger.info(f"Model weights saved in {path_to_weights}")
         else:
-            save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME
             save_index_file = os.path.join(save_directory, _add_variant(save_index_file, variant))
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
@@ -3835,6 +3837,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+        if dtype is None:
+            dtype = "auto"
 
         if is_offline_mode() and not local_files_only:
             local_files_only = True
@@ -4039,7 +4043,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = weight_conversions  # TODO: Dynamic weight loader for adapters
+            adapter_kwargs["key_mapping"] = key_mapping
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
@@ -4090,10 +4094,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
             disk_offload_index = accelerate_disk_offload(
+                model,
                 disk_offload_folder,
                 checkpoint_files,
                 device_map,
-                expected_keys,
                 sharded_metadata,
                 dtype,
                 weight_mapping,
@@ -4115,7 +4119,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 state_dict = merged_state_dict
             error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            missing_keys, unexpected_keys, mismatched_keys, misc = set(), set(), set(), set()
+            missing_keys, unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set(), set()
         else:
             all_pointer = set()
             # Checkpoints are safetensors
@@ -4137,7 +4141,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
-            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, misc = (
+            missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, conversion_errors = (
                 convert_and_load_state_dict_in_model(
                     model,
                     merged_state_dict,
@@ -4180,7 +4184,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tp_device = list(device_map.values())[0]
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avaoid this buffer could be added to the ckpt
+            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
@@ -4211,7 +4215,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             missing_keys=missing_keys,
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
-            misc=misc,
+            conversion_errors=conversion_errors,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
 

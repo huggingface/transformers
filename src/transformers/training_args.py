@@ -340,9 +340,17 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
-        save_safetensors (`bool`, *optional*, defaults to `True`):
-            Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
-            default `torch.load` and `torch.save`.
+        enable_jit_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. When enabled, training will
+            checkpoint upon receiving SIGTERM, allowing for graceful termination without losing
+            progress. This is particularly useful for shared clusters with preemptible workloads (e.g., Kueue).
+            **Important**: You must configure your orchestrator's graceful shutdown period to allow sufficient time
+            for checkpoint completion. For Kubernetes, set `terminationGracePeriodSeconds` in your job definition
+            (method varies by cloud-native trainer: Kubeflow, Ray, etc.). Note: the default is only 30 seconds,
+            which is typically insufficient. For Slurm, use `--signal=USR1@<seconds>` in your sbatch script to send
+            SIGTERM with adequate time before the job time limit. Calculate the required grace period as: longest
+            possible iteration time + checkpoint saving time. For example, if an iteration takes 2 minutes and
+            checkpoint saving takes 2 minutes, set at least 4 minutes (240 seconds) of grace time.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
             When doing multi-node distributed training, whether to save models and checkpoints on each node, or only on
             the main one.
@@ -585,9 +593,9 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
-            `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
-            installed, `"none"` for no integrations.
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"swanlab"`,
+            `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
+            for no integrations.
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
         trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
@@ -852,7 +860,7 @@ class TrainingArguments:
     warmup_ratio: float | None = field(
         default=None,
         metadata={
-            "help": "This argument is deprecated and will be removed in v5. Use `warmup_steps` instead as it also works with float values."
+            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
         },
     )
 
@@ -929,14 +937,24 @@ class TrainingArguments:
                 " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
-                " Default is unlimited checkpoints"
+                " Default is unlimited checkpoints."
             )
         },
     )
-    save_safetensors: bool = field(
-        default=True,
+    enable_jit_checkpoint: bool = field(
+        default=False,
         metadata={
-            "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
+            "help": (
+                "Whether to enable Just-In-Time (JIT) checkpointing on SIGTERM signal. "
+                "When enabled, training will checkpoint upon receiving SIGTERM, "
+                "allowing for graceful termination without losing progress. "
+                "This is particularly useful for shared clusters with preemptible workloads (Kueue). "
+                "IMPORTANT: You must configure your orchestrator's graceful shutdown period. "
+                "Kubernetes: set terminationGracePeriodSeconds (default 30s is insufficient!) in your job definition. "
+                "Slurm: use --signal=USR1@<seconds> in sbatch to send SIGTERM before time limit. "
+                "Calculate required grace period as: iteration time + checkpoint saving time. "
+                "Example: 2min iteration + 2min checkpoint = 240 seconds minimum."
+            )
         },
     )
     save_on_each_node: bool = field(
@@ -1503,14 +1521,6 @@ class TrainingArguments:
                         "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
                         f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
                     )
-
-        if not self.save_safetensors:
-            logger.info(
-                f"Found safetensors installation, but --save_safetensors={self.save_safetensors}. "
-                f"Safetensors should be a preferred weights saving format due to security and performance reasons. "
-                f"If your model cannot be saved by safetensors please feel free to open an issue at "
-                f"https://github.com/huggingface/safetensors!"
-            )
 
         if (
             self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
@@ -2359,8 +2369,8 @@ class TrainingArguments:
             report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
                 `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
-                `"neptune"`, `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all
-                integrations installed, `"none"` for no integrations.
+                `"swanlab"`, `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations
+                installed, `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
@@ -2565,7 +2575,7 @@ class TrainingArguments:
         ```
         """
         if warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5. Use `warmup_steps` instead.")
+            logger.warning("warmup_ratio is deprecated and will be removed in v5.2 . Use `warmup_steps` instead.")
             warmup_steps = warmup_ratio
 
         self.lr_scheduler_type = SchedulerType(name)
@@ -2742,10 +2752,24 @@ class TrainingArguments:
                         fsdp_plugin_args["transformer_cls_names_to_wrap"] = ",".join(
                             self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
-            fsdp_plugin_args["fsdp_version"] = self.fsdp_config.get("fsdp_version", 1)
+            fsdp_version = int(self.fsdp_config.get("version", 1))
+            fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
-            fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
-            fsdp_plugin_args["forward_prefetch"] = str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+            if fsdp_version == 2:
+                fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
+                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                )
+            else:
+                fsdp_plugin_args["forward_prefetch"] = str_to_bool(
+                    str(self.fsdp_config.get("forward_prefetch", "false")).lower()
+                )
+                fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                fsdp_plugin_args["reshard_after_forward"] = str(
+                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                ).lower()
+                fsdp_plugin_args["use_orig_params"] = str_to_bool(
+                    str(self.fsdp_config.get("use_orig_params", "true")).lower()
+                )
 
             sync_module_states = str(self.fsdp_config.get("sync_module_states", "true")).lower()
             cpu_ram_efficient_loading = str(self.fsdp_config.get("cpu_ram_efficient_loading", "false")).lower()
@@ -2755,11 +2779,10 @@ class TrainingArguments:
                 raise ValueError('`sync_module_states` must be `"True"` if `cpu_ram_efficient_loading` is `"True"`')
 
             # we need to set the env here as otherwise we get a warning in accelerate + we need to set it for transformers
-            fsdp_plugin_args["cpu_ram_efficient_loading"] = cpu_ram_efficient_loading
+            fsdp_plugin_args["cpu_ram_efficient_loading"] = str_to_bool(cpu_ram_efficient_loading)
             os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-            fsdp_plugin_args["sync_module_states"] = sync_module_states
-            fsdp_plugin_args["use_orig_params"] = str(self.fsdp_config.get("use_orig_params", "true")).lower()
+            fsdp_plugin_args["sync_module_states"] = str_to_bool(sync_module_states)
 
         return fsdp_plugin_args
 
@@ -2771,3 +2794,18 @@ class ParallelMode(Enum):
     SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
     SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"
+
+
+def str_to_bool(value, to_bool: bool = True) -> int | bool:
+    """
+    Converts a string representation of truth to `True` (1) or `False` (0).
+
+    True values are `y`, `yes`, `t`, `true`, `on`, and `1`; False value are `n`, `no`, `f`, `false`, `off`, and `0`;
+    """
+    value = value.lower()
+    if value in ("y", "yes", "t", "true", "on", "1"):
+        return 1 if not to_bool else True
+    elif value in ("n", "no", "f", "false", "off", "0"):
+        return 0 if not to_bool else False
+    else:
+        raise ValueError(f"invalid truth value {value}")

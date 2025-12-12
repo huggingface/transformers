@@ -234,6 +234,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

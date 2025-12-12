@@ -60,6 +60,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         self,
         input_features: torch.Tensor,
         input_features_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:

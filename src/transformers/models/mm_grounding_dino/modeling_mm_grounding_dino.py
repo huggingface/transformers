@@ -1180,6 +1180,7 @@ class MMGroundingDinoEncoder(MMGroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1476,6 +1477,7 @@ class MMGroundingDinoDecoder(MMGroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1951,6 +1953,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
@@ -2431,6 +2434,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[list[dict[str, Union[torch.LongTensor, torch.FloatTensor]]]] = None,
+        **kwargs,
     ):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):

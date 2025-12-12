@@ -1894,6 +1894,13 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if not all(
+                getattr(submodel, "_supports_flash_attn")
+                for submodel in model.modules()
+                if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(f"At least some parts of {model_class.__name__} don't support flash attention")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
@@ -1994,6 +2001,14 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if attn_implementation != "eager":
+                if not all(
+                    getattr(submodel, support_flag[attn_implementation])
+                    for submodel in model.modules()
+                    if isinstance(submodel, PreTrainedModel)
+                ):
+                    self.skipTest(f"At least some parts of {model_class.__name__} don't support {attn_implementation}")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
