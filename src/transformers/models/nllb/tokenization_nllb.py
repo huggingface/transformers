@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -83,13 +83,15 @@ class NllbTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     prefix_tokens: list[int] = []
     suffix_tokens: list[int] = []
 
     def __init__(
         self,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -101,15 +103,10 @@ class NllbTokenizer(TokenizersBackend):
         tgt_lang=None,
         additional_special_tokens=None,
         legacy_behaviour=False,
-        vocab=None,
-        merges=None,
-        vocab_file=None,
         **kwargs,
     ):
         if additional_special_tokens is None:
             additional_special_tokens = kwargs.get("extra_special_tokens", FAIRSEQ_LANGUAGE_CODES)
-
-        self.vocab_file = vocab_file
 
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -118,23 +115,15 @@ class NllbTokenizer(TokenizersBackend):
         )
         self.legacy_behaviour = legacy_behaviour
 
-        if vocab is not None:
-            if isinstance(vocab, list):
-                self._vocab = {token: idx for idx, (token, _score) in enumerate(vocab)}
-            else:
-                self._vocab = vocab
-        else:
-            self._vocab = {
+        if vocab is None:
+            vocab = {
                 str(bos_token): 0,
                 str(pad_token): 1,
                 str(eos_token): 2,
                 str(unk_token): 3,
             }
-
-        if merges is None:
-            self._merges = []
-        else:
-            self._merges = merges
+        self._vocab = vocab
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -158,13 +147,10 @@ class NllbTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
-        tokenizer_object = self._tokenizer
-
         # Remove extra_special_tokens from kwargs if present to avoid conflict
         kwargs.pop("extra_special_tokens", None)
 
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
