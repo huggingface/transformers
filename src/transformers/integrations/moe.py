@@ -56,16 +56,13 @@ def batched_mm_moe_forward(
     down_proj: torch.Tensor,
     act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
-    final_hidden_states = torch.zeros_like(hidden_states)
-
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = gate_up_proj.size(0)
+    final_hidden_states = torch.zeros_like(hidden_states)
 
-    # Flatten selected (token, top-k position) pairs into a single list of samples S
-    # expert_ids: (S,)  - expert id for each selected sample
-    # token_idx:  (S,)  - original token index for each selected sample
+    # Flatten top_k_index to get expert_ids per selected sample
     expert_ids = top_k_index.reshape(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
@@ -81,54 +78,32 @@ def batched_mm_moe_forward(
             f"or ({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
         )
 
-    # Gather the hidden states for each selected sample: current_state ~ (S, hidden_dim)
-    current_states = hidden_states[token_idx]
+    # Get current hidden states for selected samples
+    current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
+
+    # Select projection matrices for selected experts
+    selected_gate_up = gate_up_proj[expert_ids]  # (S, hidden_dim, 2 * intermediate_dim)
+    selected_down = down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
 
     # --- Up projection per expert (batched) ---
-    # gate_up_proj has shape (num_experts, 2*intermediate_dim, hidden_dim)
-    # select the expert-specific up projections for each sample: (S, 2*intermediate_dim, hidden_dim)
-    selected_gate_up = gate_up_proj[expert_ids]
+    gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
 
-    # Perform the linear: (S, 2*intermediate_dim) = bmm((S, 2*intermediate_dim, hidden_dim), (S, hidden_dim, 1))
-    gate_up_out = torch.bmm(selected_gate_up, current_states.unsqueeze(-1)).squeeze(-1)
-
-    # Split into gate and up components to match eager implementation
+    # Split into gate and up components
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
-    # Apply activation to gate and combine with up projection
+    # Apply activation
     hidden_after_activation = act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
-    # down_proj has shape (num_experts, hidden_dim, intermediate_dim)
-    selected_down = down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
-    out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)  # (S, hidden_dim)
+    out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
 
-    # Apply routing weights and cast to output dtype
-    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1).to(out_per_sample.dtype)  # (S, hidden_dim)
+    # Apply routing weights
+    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results back to the final_hidden_states using original token indices
     final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
 
     return final_hidden_states
-
-
-def _make_stride_multiple_of_16(t: torch.Tensor, dim: int):
-    stride = t.stride(dim)
-    if stride % 16 == 0:
-        return t
-    elem_size = t.element_size()
-    align_elems = max(1, 16 // elem_size)
-    k = t.shape[dim]
-    pad = (-k) % align_elems
-    if pad == 0:
-        return t
-    new_shape = list(t.shape)
-    new_shape[dim] += pad
-    padded = t.new_zeros(*new_shape)
-    idx = [slice(None)] * t.dim()
-    idx[dim] = slice(0, t.shape[dim])
-    padded[tuple(idx)] = t
-    return padded
 
 
 def grouped_mm_moe_forward(
@@ -139,18 +114,19 @@ def grouped_mm_moe_forward(
     down_proj: torch.Tensor,
     act_fn: Callable[..., torch.Tensor],
 ) -> torch.Tensor:
-    final_hidden_states = torch.zeros_like(hidden_states)
-
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = gate_up_proj.size(0)
+    final_hidden_states = torch.zeros_like(hidden_states)
 
-    # Flatten selected (token, top-k position) pairs into a single list of samples S
-    # expert_ids: (S,)  - expert id for each selected sample
-    # token_idx:  (S,)  - original token index for each selected sample
+    # Flatten top_k_index to get expert_ids per selected sample
     expert_ids = top_k_index.reshape(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
+
+    # Get permutation to group by expert
+    perm = torch.argsort(expert_ids, stable=True)
+    inv_perm = torch.argsort(perm, stable=True)
 
     # Resolve routing weights per selected sample:
     # allow top_k_weights to be either (num_tokens, num_top_k) or (num_tokens, num_experts)
@@ -164,52 +140,37 @@ def grouped_mm_moe_forward(
             f"or ({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
         )
 
-    # Gather the hidden states for each selected sample: current_state ~ (S, hidden_dim)
-    current_states = hidden_states[token_idx]
+    # Get current hidden states for selected samples
+    current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
 
-    # --- Up projection per expert (grouped_mm) ---
-    # Group by expert (stable sort to keep deterministic behavior)
-    perm = torch.argsort(expert_ids, stable=True)
-    inv_perm = torch.argsort(perm, stable=True)
-
+    # Group by expert for grouped_mm
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    current_states_g = current_states[perm].contiguous()
+    current_states_g = current_hidden_states[perm]
 
-    # tokens per expert -> offsets for grouped_mm (int32)
+    # Compute offsets for grouped_mm
     num_tokens_per_expert = torch.bincount(expert_ids_g, minlength=num_experts)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    mat_a_up = current_states_g
-    mat_b_up = gate_up_proj.transpose(-2, -1)
+    gate_up_out = torch._grouped_mm(current_states_g, gate_up_proj.transpose(-2, -1), offs=offsets)
 
-    # https://github.com/pytorch/pytorch/blob/23761d4f8149aaa16649c5494e57d53f192cf0f2/aten/src/ATen/native/GroupedMMUtils.h#L19
-    if mat_a_up.stride(1) % (16 // mat_a_up.element_size()) != 0:
-        mat_a_up = _make_stride_multiple_of_16(mat_a_up, 1)
-    if mat_b_up.stride(1) % (16 // mat_b_up.element_size()) != 0:
-        mat_b_up = _make_stride_multiple_of_16(mat_b_up, 1)
+    # Split into gate and up components
+    gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
-    gate_up_out = torch._grouped_mm(mat_a_up, mat_b_up, offs=offsets).to(current_states_g.dtype)
-
-    gate, up = gate_up_out.chunk(2, dim=-1)
+    # Apply activation
     hidden_after_activation = act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    mat_a_down = hidden_after_activation
-    mat_b_down = down_proj.transpose(-2, -1)
+    out_per_sample_g = torch._grouped_mm(hidden_after_activation, down_proj.transpose(-2, -1), offs=offsets)
 
-    # https://github.com/pytorch/pytorch/blob/23761d4f8149aaa16649c5494e57d53f192cf0f2/aten/src/ATen/native/GroupedMMUtils.h#L19
-    if mat_a_down.stride(1) % (16 // mat_a_down.element_size()) != 0:
-        mat_a_down = _make_stride_multiple_of_16(mat_a_down, 1)
-    if mat_b_down.stride(1) % (16 // mat_b_down.element_size()) != 0:
-        mat_b_down = _make_stride_multiple_of_16(mat_b_down, 1)
+    # Apply routing weights
+    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
 
-    out_per_sample_g = torch._grouped_mm(mat_a_down, mat_b_down, offs=offsets).to(current_states_g.dtype)
-
-    # apply weights and restore order
-    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1).to(out_per_sample_g.dtype)
+    # Restore original order
     out_per_sample = out_per_sample_g[inv_perm]
 
+    # Accumulate results back to the final_hidden_states using original token indices
     final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
+
     return final_hidden_states
