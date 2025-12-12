@@ -378,7 +378,9 @@ class T5Attention(nn.Module):
                 if mask.dtype == torch.bool:
                     min_dtype = torch.finfo(query_states.dtype).min
                     # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-                    mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=query_states.dtype), min_dtype)
+                    mask = torch.where(
+                        mask, torch.tensor(0.0, device=mask.device, dtype=query_states.dtype), min_dtype
+                    )
 
                 mask = mask[:, :, :, : key_states.shape[-2]]
                 position_bias = position_bias + mask
@@ -409,7 +411,10 @@ class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx, is_causal=config.is_decoder
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            layer_idx=layer_idx,
+            is_causal=config.is_decoder,
         )
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -518,7 +523,7 @@ class T5Block(GradientCheckpointingLayer):
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         cross_attention_position_bias = None
         if do_cross_attention:
-            cross_attention_output, cross_attention_position_bias, _= self.layer[1](
+            cross_attention_output, cross_attention_position_bias, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -717,56 +722,29 @@ class T5Stack(T5PreTrainedModel):
         else:
             use_cache = False
 
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            if self.embed_tokens is None:
-                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
-        batch_size, seq_length = input_shape
-
-        if use_cache is True:
-            if not self.is_decoder:
-                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
-
-        if self.is_decoder:
-            if use_cache and past_key_values is None:
-                if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(
-                        DynamicCache(config=self.config), DynamicCache(config=self.config)
-                    )
-                else:
-                    past_key_values = DynamicCache(config=self.config)
+        if use_cache and past_key_values is None:
+            past_key_values = (
+                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                if self.config.is_encoder_decoder
+                else DynamicCache(config=self.config)
+            )
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
 
+        device = inputs_embeds.device
+        seq_length = inputs_embeds.shape[1]
+
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
+            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
