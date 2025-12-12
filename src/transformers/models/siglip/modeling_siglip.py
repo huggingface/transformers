@@ -502,9 +502,18 @@ class SiglipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class SiglipTextTransformer(nn.Module):
+@auto_docstring(
+    custom_intro="""
+    The text model from SigLIP without any head or projection on top.
+    """
+)
+class SiglipTextModel(SiglipPreTrainedModel):
+    config: SiglipTextConfig
+    input_modalities = ("text",)
+    base_model_prefix = "text_model"
+
     def __init__(self, config: SiglipTextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = SiglipTextEmbeddings(config)
@@ -512,8 +521,9 @@ class SiglipTextTransformer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, config.projection_size)
+        self.post_init()
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -522,6 +532,22 @@ class SiglipTextTransformer(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, SiglipTextModel
+
+        >>> model = SiglipTextModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
+
+        >>> # important: make sure to set padding="max_length" as that's how the model was trained
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -560,64 +586,14 @@ class SiglipTextTransformer(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The text model from SigLIP without any head or projection on top.
+    The vision model from SigLIP without any head or projection on top.
     """
 )
-class SiglipTextModel(SiglipPreTrainedModel):
-    config: SiglipTextConfig
-    input_modalities = ("text",)
-
-    def __init__(self, config: SiglipTextConfig):
-        super().__init__(config)
-        self.text_model = SiglipTextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, SiglipTextModel
-
-        >>> model = SiglipTextModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
-
-        >>> # important: make sure to set padding="max_length" as that's how the model was trained
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            **kwargs,
-        )
-
-
-class SiglipVisionTransformer(SiglipPreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": SiglipEncoderLayer,
-        "attentions": SiglipAttention,
-    }
+class SiglipVisionModel(SiglipPreTrainedModel):
+    config: SiglipVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    base_model_prefix = "vision_model"
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -630,6 +606,7 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
+        self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -639,6 +616,26 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, SiglipVisionModel
+
+        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -681,63 +678,6 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         return hidden_state[:, 0]
 
 
-@auto_docstring(
-    custom_intro="""
-    The vision model from SigLIP without any head or projection on top.
-    """
-)
-class SiglipVisionModel(SiglipPreTrainedModel):
-    config: SiglipVisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    def __init__(self, config: SiglipVisionConfig):
-        super().__init__(config)
-
-        self.vision_model = SiglipVisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, SiglipVisionModel
-
-        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled features
-        ```"""
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
-        )
-
-
 @auto_docstring
 class SiglipModel(SiglipPreTrainedModel):
     config: SiglipConfig
@@ -761,12 +701,8 @@ class SiglipModel(SiglipPreTrainedModel):
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = SiglipTextModel._from_config(text_config)
-        vision_model = SiglipVisionModel._from_config(vision_config)
-
-        # Second, get the text and vision submodules (for backward compatibility)
-        self.text_model = text_model.text_model
-        self.vision_model = vision_model.vision_model
+        self.text_model = SiglipTextModel._from_config(text_config)
+        self.vision_model = SiglipVisionModel._from_config(vision_config)
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
