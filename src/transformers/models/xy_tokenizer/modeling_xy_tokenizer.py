@@ -1199,31 +1199,170 @@ class XYTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
 class XYTokenizer(XYTokenizerPreTrainedModel):
     def __init__(self, config: XYTokenizerConfig):
         super().__init__(config)
-        # Reconstruct the nested parameter dictionaries from the flat config
-        # This is a bit of a boilerplate but necessary to reuse the original module code.
-        # A more integrated approach would refactor the sub-modules to accept the flat config directly.
         self.config = config
 
-        params = config.params
-        self.semantic_encoder = XYTokenizerEncoder(**params["semantic_encoder_kwargs"])
-        self.semantic_encoder_adapter = XYTokenizerTransformer(**params["semantic_encoder_adapter_kwargs"])
-        self.acoustic_encoder = XYTokenizerEncoder(**params["acoustic_encoder_kwargs"])
-        self.pre_rvq_adapter = XYTokenizerTransformer(**params["pre_rvq_adapter_kwargs"])
-        self.downsample = ResidualDownConv(**params["downsample_kwargs"])
-        self.quantizer = ResidualVQ(**params["quantizer_kwargs"])
-        self.post_rvq_adapter = XYTokenizerTransformer(**params["post_rvq_adapter_kwargs"])
-        self.upsample = UpConv(**params["upsample_kwargs"])
-        self.acoustic_decoder = XYTokenizerDecoder(**params["acoustic_decoder_kwargs"])
-        self.enhanced_vocos = Vocos(**params["vocos_kwargs"])
-        self.feature_extractor = XYTokenizerFeatureExtractor(**params["feature_extractor_kwargs"])
+        # Build semantic encoder kwargs from config
+        semantic_encoder_kwargs = {
+            "num_mel_bins": config.num_mel_bins,
+            "sampling_rate": config.input_sampling_rate,
+            "hop_length": config.hop_length,
+            "stride_size": config.semantic_encoder_stride_size,
+            "kernel_size": config.semantic_encoder_kernel_size,
+            "d_model": config.semantic_encoder_d_model,
+            "scale_embedding": config.semantic_encoder_scale_embedding,
+            "max_audio_seconds": config.max_audio_seconds,
+            "encoder_layers": config.semantic_encoder_layers,
+            "encoder_attention_heads": config.semantic_encoder_attention_heads,
+            "encoder_ffn_dim": config.semantic_encoder_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.semantic_encoder_attn_type,
+        }
+
+        # Build semantic encoder adapter kwargs from config
+        semantic_encoder_adapter_kwargs = {
+            "input_dim": config.semantic_adapter_input_dim,
+            "d_model": config.semantic_adapter_d_model,
+            "output_dim": config.semantic_adapter_output_dim,
+            "max_source_positions": config.semantic_adapter_max_source_positions,
+            "encoder_layers": config.semantic_adapter_layers,
+            "encoder_attention_heads": config.semantic_adapter_attention_heads,
+            "encoder_ffn_dim": config.semantic_adapter_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.semantic_adapter_attn_type,
+        }
+
+        # Build acoustic encoder kwargs from config
+        acoustic_encoder_kwargs = {
+            "num_mel_bins": config.num_mel_bins,
+            "sampling_rate": config.input_sampling_rate,
+            "hop_length": config.hop_length,
+            "stride_size": config.acoustic_encoder_stride_size,
+            "kernel_size": config.acoustic_encoder_kernel_size,
+            "d_model": config.acoustic_encoder_d_model,
+            "scale_embedding": config.acoustic_encoder_scale_embedding,
+            "max_audio_seconds": config.max_audio_seconds,
+            "encoder_layers": config.acoustic_encoder_layers,
+            "encoder_attention_heads": config.acoustic_encoder_attention_heads,
+            "encoder_ffn_dim": config.acoustic_encoder_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.acoustic_encoder_attn_type,
+        }
+
+        # Build pre-RVQ adapter kwargs from config
+        pre_rvq_adapter_kwargs = {
+            "input_dim": config.pre_rvq_adapter_input_dim,
+            "d_model": config.pre_rvq_adapter_d_model,
+            "output_dim": config.pre_rvq_adapter_output_dim,
+            "max_source_positions": config.pre_rvq_adapter_max_source_positions,
+            "encoder_layers": config.pre_rvq_adapter_layers,
+            "encoder_attention_heads": config.pre_rvq_adapter_attention_heads,
+            "encoder_ffn_dim": config.pre_rvq_adapter_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.pre_rvq_adapter_attn_type,
+        }
+
+        # Build downsample kwargs from config
+        downsample_kwargs = {
+            "d_model": config.downsample_d_model,
+            "avg_pooler": config.downsample_avg_pooler,
+        }
+
+        # Build quantizer kwargs from config
+        quantizer_kwargs = {
+            "input_dim": config.quantizer_input_dim,
+            "rvq_dim": config.quantizer_rvq_dim,
+            "output_dim": config.quantizer_output_dim,
+            "num_quantizers": config.num_quantizers,
+            "codebook_size": config.codebook_size,
+            "codebook_dim": config.codebook_dim,
+            "quantizer_dropout": config.quantizer_dropout,
+            "skip_rvq_ratio": config.skip_rvq_ratio,
+            "vq_config": VectorQuantizerConfig(
+                commitment=config.vq_commitment,
+                decay=config.vq_decay,
+                epsilon=config.vq_epsilon,
+                threshold_ema_dead=config.vq_threshold_ema_dead,
+                kmeans_init=config.vq_kmeans_init,
+                kmeans_iters=config.vq_kmeans_iters,
+            ),
+        }
+
+        # Build post-RVQ adapter kwargs from config
+        post_rvq_adapter_kwargs = {
+            "input_dim": config.post_rvq_adapter_input_dim,
+            "d_model": config.post_rvq_adapter_d_model,
+            "output_dim": config.post_rvq_adapter_output_dim,
+            "max_source_positions": config.post_rvq_adapter_max_source_positions,
+            "encoder_layers": config.post_rvq_adapter_layers,
+            "encoder_attention_heads": config.post_rvq_adapter_attention_heads,
+            "encoder_ffn_dim": config.post_rvq_adapter_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.post_rvq_adapter_attn_type,
+        }
+
+        # Build upsample kwargs from config
+        upsample_kwargs = {
+            "d_model": config.upsample_d_model,
+            "stride": config.upsample_stride,
+        }
+
+        # Build acoustic decoder kwargs from config
+        acoustic_decoder_kwargs = {
+            "num_mel_bins": config.num_mel_bins,
+            "sampling_rate": config.input_sampling_rate,
+            "hop_length": config.hop_length,
+            "stride_size": config.acoustic_decoder_stride_size,
+            "kernel_size": config.acoustic_decoder_kernel_size,
+            "d_model": config.acoustic_decoder_d_model,
+            "scale_embedding": config.acoustic_decoder_scale_embedding,
+            "max_audio_seconds": config.max_audio_seconds,
+            "decoder_layers": config.acoustic_decoder_layers,
+            "decoder_attention_heads": config.acoustic_decoder_attention_heads,
+            "decoder_ffn_dim": config.acoustic_decoder_ffn_dim,
+            "activation_function": config.activation_function,
+            "attn_type": config.acoustic_decoder_attn_type,
+        }
+
+        # Build vocos kwargs from config
+        vocos_kwargs = {
+            "input_channels": config.vocos_input_channels,
+            "dim": config.vocos_dim,
+            "intermediate_dim": config.vocos_intermediate_dim,
+            "num_layers": config.vocos_num_layers,
+            "n_fft": config.vocos_n_fft,
+            "hop_size": config.vocos_hop_size,
+            "padding": config.vocos_padding,
+        }
+
+        # Build feature extractor kwargs from config
+        feature_extractor_kwargs = {
+            "feature_size": config.feature_extractor_feature_size,
+            "sampling_rate": config.input_sampling_rate,
+            "hop_length": config.hop_length,
+            "chunk_length": config.feature_extractor_chunk_length,
+            "n_fft": config.feature_extractor_n_fft,
+        }
+
+        # Initialize all modules with explicit kwargs
+        self.semantic_encoder = XYTokenizerEncoder(**semantic_encoder_kwargs)
+        self.semantic_encoder_adapter = XYTokenizerTransformer(**semantic_encoder_adapter_kwargs)
+        self.acoustic_encoder = XYTokenizerEncoder(**acoustic_encoder_kwargs)
+        self.pre_rvq_adapter = XYTokenizerTransformer(**pre_rvq_adapter_kwargs)
+        self.downsample = ResidualDownConv(**downsample_kwargs)
+        self.quantizer = ResidualVQ(**quantizer_kwargs)
+        self.post_rvq_adapter = XYTokenizerTransformer(**post_rvq_adapter_kwargs)
+        self.upsample = UpConv(**upsample_kwargs)
+        self.acoustic_decoder = XYTokenizerDecoder(**acoustic_decoder_kwargs)
+        self.enhanced_vocos = Vocos(**vocos_kwargs)
+        self.feature_extractor = XYTokenizerFeatureExtractor(**feature_extractor_kwargs)
+
         # Store some config values for easier access
         self.encoder_downsample_rate = config.encoder_downsample_rate
-        self.nq = params["quantizer_kwargs"]["num_quantizers"]
-        # Prefer new canonical names but expose deprecated ones for compatibility
-        self.input_sampling_rate = getattr(config, "input_sampling_rate", getattr(config, "input_sample_rate", 16000))
-        self.sampling_rate = getattr(config, "sampling_rate", getattr(config, "output_sample_rate", 16000))
-        self.input_sample_rate = self.input_sampling_rate
-        self.output_sample_rate = self.sampling_rate
+        self.nq = config.num_quantizers
+        self.input_sampling_rate = config.input_sampling_rate
+        self.sampling_rate = config.sampling_rate
+        self.input_sample_rate = config.input_sampling_rate
+        self.output_sample_rate = config.sampling_rate
 
         # Initialize weights and apply final processing
         self.post_init()

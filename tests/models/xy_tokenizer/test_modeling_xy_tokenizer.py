@@ -84,106 +84,107 @@ class XYTokenizerModelTester:
         return config, input_values
 
     def get_config(self):
-        # Create config with nested kwargs structure that XY-Tokenizer expects
-        params = {
-            "semantic_encoder_kwargs": {
-                "num_mel_bins": 128,
-                "sampling_rate": self.sample_rate,
-                "hop_length": 160,
-                "stride_size": 2,
-                "kernel_size": 3,
-                "d_model": self.semantic_encoder_d_model,
-                "encoder_layers": 2,  # Small for testing
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 256,
-            },
-            "semantic_encoder_adapter_kwargs": {
-                "input_dim": self.semantic_encoder_d_model,  # Input dimension from semantic encoder
-                "d_model": self.semantic_encoder_d_model,
-                "encoder_layers": 2,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 256,
-                "output_dim": self.semantic_encoder_d_model,
-            },
-            "acoustic_encoder_kwargs": {
-                "num_mel_bins": 128,
-                "sampling_rate": self.sample_rate,
-                "hop_length": 160,
-                "stride_size": 2,
-                "kernel_size": 3,
-                "d_model": self.acoustic_encoder_d_model,
-                "encoder_layers": 2,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 256,
-            },
-            "pre_rvq_adapter_kwargs": {
-                "input_dim": self.semantic_encoder_d_model + self.acoustic_encoder_d_model,  # Concatenated dimension
-                "d_model": self.code_dim,
-                "encoder_layers": 2,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 256,
-                "output_dim": self.code_dim,
-            },
-            "downsample_kwargs": {
-                "d_model": self.code_dim,  # Should match pre_rvq_adapter output
-                "avg_pooler": 2,
-            },
-            "quantizer_kwargs": {
-                "num_quantizers": self.num_quantizers,
-                "input_dim": self.code_dim * 2,  # downsample outputs intermediate_dim = d_model * avg_pooler
-                "rvq_dim": self.code_dim,
-                "output_dim": self.code_dim,  # Output back to code_dim for post_rvq_adapter
-                "codebook_size": self.codebook_size,
-                "codebook_dim": self.code_dim,
-            },
-            "post_rvq_adapter_kwargs": {
-                "input_dim": self.code_dim,  # Input from quantizer
-                "d_model": self.code_dim,
-                "encoder_layers": 2,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 256,
-                "output_dim": self.code_dim * 4,  # Output stride * d_model for upsample
-            },
-            "upsample_kwargs": {
-                "d_model": self.code_dim,
-                "stride": 4,
-            },
-            "acoustic_decoder_kwargs": {
-                "num_mel_bins": 128,
-                "sampling_rate": self.sample_rate,
-                "hop_length": 160,
-                "stride_size": 2,
-                "kernel_size": 3,
-                "d_model": self.code_dim,
-                "decoder_layers": 2,
-                "decoder_attention_heads": 4,
-                "decoder_ffn_dim": 256,
-            },
-            "vocos_kwargs": {
-                "input_channels": self.code_dim,
-                "dim": 512,
-                "intermediate_dim": 2048,
-                "num_layers": 4,
-                "n_fft": 640,
-                "hop_size": 160,
-            },
-            "feature_extractor_kwargs": {
-                "feature_size": 80,
-                "sampling_rate": self.sample_rate,
-                "hop_length": 160,
-                "chunk_length": 30,
-                "n_fft": 400,
-            },
-        }
+        # Create config with flat parameters structure
+        downsample_avg_pooler = 2
+        upsample_stride = 4
 
         return XYTokenizerConfig(
-            num_quantizers=self.num_quantizers,
-            codebook_size=self.codebook_size,
-            code_dim=self.code_dim,
+            # Basic parameters
+            input_sampling_rate=self.sample_rate,
             sampling_rate=self.sample_rate,
+            # Shared parameters
+            num_mel_bins=128,
+            hop_length=160,
+            max_audio_seconds=30,
+            activation_function="gelu",
+            code_dim=self.code_dim,
+            # Semantic Encoder
+            semantic_encoder_stride_size=2,
+            semantic_encoder_kernel_size=3,
             semantic_encoder_d_model=self.semantic_encoder_d_model,
+            semantic_encoder_scale_embedding=True,
+            semantic_encoder_layers=2,  # Small for testing
+            semantic_encoder_attention_heads=4,
+            semantic_encoder_ffn_dim=256,
+            semantic_encoder_attn_type="varlen",
+            # Semantic Encoder Adapter
+            semantic_adapter_input_dim=self.semantic_encoder_d_model,
+            semantic_adapter_d_model=self.semantic_encoder_d_model,
+            semantic_adapter_output_dim=self.semantic_encoder_d_model,
+            semantic_adapter_max_source_positions=1500,
+            semantic_adapter_layers=2,
+            semantic_adapter_attention_heads=4,
+            semantic_adapter_ffn_dim=256,
+            semantic_adapter_attn_type="varlen",
+            # Acoustic Encoder
             acoustic_encoder_d_model=self.acoustic_encoder_d_model,
-            params=params,
+            acoustic_encoder_stride_size=2,
+            acoustic_encoder_kernel_size=3,
+            acoustic_encoder_scale_embedding=True,
+            acoustic_encoder_layers=2,
+            acoustic_encoder_attention_heads=4,
+            acoustic_encoder_ffn_dim=256,
+            acoustic_encoder_attn_type="varlen",
+            # Pre-RVQ Adapter
+            pre_rvq_adapter_input_dim=self.semantic_encoder_d_model + self.acoustic_encoder_d_model,
+            pre_rvq_adapter_d_model=self.code_dim,
+            pre_rvq_adapter_output_dim=self.code_dim,
+            pre_rvq_adapter_max_source_positions=1500,
+            pre_rvq_adapter_layers=2,
+            pre_rvq_adapter_attention_heads=4,
+            pre_rvq_adapter_ffn_dim=256,
+            pre_rvq_adapter_attn_type="varlen",
+            # Downsample
+            downsample_d_model=self.code_dim,
+            downsample_avg_pooler=downsample_avg_pooler,
+            # Quantizer
+            num_quantizers=self.num_quantizers,
+            quantizer_input_dim=self.code_dim * downsample_avg_pooler,
+            quantizer_rvq_dim=self.code_dim,
+            quantizer_output_dim=self.code_dim,
+            codebook_size=self.codebook_size,
+            codebook_dim=self.code_dim,
+            quantizer_dropout=0.0,  # No dropout for testing
+            skip_rvq_ratio=0.0,
+            vq_commitment=1.0,
+            vq_decay=0.99,
+            vq_epsilon=1e-5,
+            vq_threshold_ema_dead=2,
+            vq_kmeans_init=True,
+            vq_kmeans_iters=10,
+            # Post-RVQ Adapter
+            post_rvq_adapter_input_dim=self.code_dim,
+            post_rvq_adapter_d_model=self.code_dim,
+            post_rvq_adapter_output_dim=self.code_dim * upsample_stride,
+            post_rvq_adapter_max_source_positions=1500,
+            post_rvq_adapter_layers=2,
+            post_rvq_adapter_attention_heads=4,
+            post_rvq_adapter_ffn_dim=256,
+            post_rvq_adapter_attn_type="varlen",
+            # Upsample
+            upsample_d_model=self.code_dim,
+            upsample_stride=upsample_stride,
+            # Acoustic Decoder
+            acoustic_decoder_d_model=self.code_dim,
+            acoustic_decoder_stride_size=2,
+            acoustic_decoder_kernel_size=3,
+            acoustic_decoder_scale_embedding=True,
+            acoustic_decoder_layers=2,
+            acoustic_decoder_attention_heads=4,
+            acoustic_decoder_ffn_dim=256,
+            acoustic_decoder_attn_type="varlen",
+            # Vocos
+            vocos_input_channels=self.code_dim,
+            vocos_dim=512,
+            vocos_intermediate_dim=2048,
+            vocos_num_layers=4,
+            vocos_n_fft=640,
+            vocos_hop_size=160,
+            vocos_padding="same",
+            # Feature Extractor
+            feature_extractor_feature_size=80,
+            feature_extractor_n_fft=400,
+            feature_extractor_chunk_length=30,
         )
 
     def create_and_check_model_forward(self, config, input_values):
