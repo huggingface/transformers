@@ -69,6 +69,7 @@ class AwqFormat(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
     GEMV_FAST = "gemv_fast"
+    LLM_AWQ = "llm-awq"
 
 
 class AwqBackend(str, Enum):
@@ -838,14 +839,13 @@ class AwqConfig(GPTQConfig):
         r"""
         Safety checker that arguments are correct
         """
-        if self.format not in [
-            AwqFormat.GEMM,
-            AwqFormat.GEMV,
-            AwqFormat.GEMV_FAST,
-        ]:
-            raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.GEMV_FAST] - not recognized version {self.format}"
-            )
+
+        if self.backend == "llm-awq":
+            self.format = AwqFormat.LLM_AWQ
+            self.backend = AwqBackend.AUTO
+
+        if self.format not in AwqFormat.__members__.values():
+            raise ValueError(f"Invalid format '{self.format}'. Must be one of: {[b.value for b in AwqFormat]}")
 
         if self.backend not in AwqBackend.__members__.values():
             raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")
