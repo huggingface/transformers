@@ -8,7 +8,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput, Base
 from ...modeling_utils import PreTrainedModel
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ..auto import AutoModel
-from ..pe_audio.modeling_pe_audio import PeAudioResnetBlock1d, PeAudioEncoderEmbeddings
+from ..pe_audio.modeling_pe_audio import PeAudioEncoderEmbeddings, PeAudioAttention
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
@@ -104,11 +104,7 @@ class SamAudioJudgeConfig(Qwen3Config):
 class SamAudioJudgeEmbeddings(PeAudioEncoderEmbeddings): ...
 
 
-class SamAudioJudgeAttention(Qwen3Attention):
-    def __init__(self, config, layer_idx):
-        super().__init__(config, layer_idx)
-        self.is_causal = False
-        self.sliding_window = None
+class SamAudioJudgeAttention(PeAudioAttention): ...
 
 
 class SamAudioJudgeEncoderLayer(Qwen3DecoderLayer):
