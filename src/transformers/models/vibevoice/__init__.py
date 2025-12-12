@@ -13,63 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
-
-
-_import_structure = {
-    "configuration_vibevoice": [
-        "VibeVoiceAcousticTokenizerConfig",
-        "VibeVoiceConfig",
-        "VibeVoiceDiffusionHeadConfig",
-        "VibeVoiceSemanticTokenizerConfig",
-    ],
-    "processing_vibevoice": ["VibeVoiceProcessor"],
-    "tokenization_vibevoice": ["VibeVoiceTokenizer", "VibeVoiceTokenizerFast"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_vibevoice"] = [
-        "VibeVoiceAcousticTokenizerModel",
-        "VibeVoiceForConditionalGeneration",
-        "VibeVoiceModel",
-        "VibeVoicePreTrainedModel",
-    ]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vibevoice import (
-        VibeVoiceAcousticTokenizerConfig,
-        VibeVoiceConfig,
-        VibeVoiceDiffusionHeadConfig,
-        VibeVoiceSemanticTokenizerConfig,
-    )
-    from .processing_vibevoice import VibeVoiceProcessor
-    from .tokenization_vibevoice import VibeVoiceTokenizer, VibeVoiceTokenizerFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_vibevoice import (
-            VibeVoiceAcousticTokenizerModel,
-            VibeVoiceForConditionalGeneration,
-            VibeVoiceModel,
-            VibeVoicePreTrainedModel,
-        )
-
-
+    from .configuration_vibevoice import *
+    from .modeling_vibevoice import *
+    from .processing_vibevoice import *
+    from .tokenization_vibevoice import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
