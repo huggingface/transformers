@@ -46,6 +46,29 @@ def is_multiline(value_str: str) -> bool:
     return '\n' in value_str
 
 
+def select_target_argument(arg_expressions: List[str]) -> str:
+    """
+    Select which argument to update from assertion arguments.
+
+    Strategy:
+    1. Prefer argument starting with "EXPECT" (case-insensitive)
+    2. Otherwise, use the second argument (index 1)
+
+    Args:
+        arg_expressions: List of argument expressions from assertion
+
+    Returns:
+        The selected argument name to update
+    """
+    # First, check if any argument starts with "EXPECT" (case-insensitive)
+    for arg in arg_expressions:
+        if arg.upper().startswith("EXPECT"):
+            return arg
+
+    # Default: return second argument
+    return arg_expressions[1]
+
+
 def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
     """
     Parse captured_info.txt file to extract update tasks.
@@ -113,35 +136,59 @@ def parse_captured_info(filepath: str) -> tuple[List[UpdateTask], dict]:
             stats["skipped"] += 1
             continue
 
-        variable_name = arg_expressions[1]
+        variable_name = select_target_argument(arg_expressions)
 
-        # Extract new value (first "argument value:")
-        # Find the line with "argument value:", then collect lines until "----"
+        # Extract all argument values - each "argument expression:" is followed by "argument value:"
+        # We need to match expressions to their values
+        arg_values = {}
+        current_expr = None
         value_lines = []
         in_value_section = False
         skip_blank = False
 
         for i, line in enumerate(lines):
-            if line.startswith('argument value:'):
+            if line.startswith('argument expression: `'):
+                # Extract expression
+                start = line.find('`') + 1
+                end = line.find('`', start)
+                if end != -1:
+                    current_expr = line[start:end].strip()
+
+            elif line.startswith('argument value:'):
                 in_value_section = True
-                skip_blank = True  # Skip the blank line right after "argument value:"
+                skip_blank = True
+                value_lines = []
                 continue
 
-            if in_value_section:
+            elif in_value_section:
                 if skip_blank and not line.strip():
                     skip_blank = False
                     continue
 
                 if line.startswith('-' * 80):
-                    break
+                    # End of this value section
+                    if current_expr and value_lines:
+                        arg_values[current_expr] = '\n'.join(value_lines).strip()
+                    in_value_section = False
+                    current_expr = None
+                    value_lines = []
+                else:
+                    value_lines.append(line)
 
-                value_lines.append(line)
+        # Handle last value if file ends without separator
+        if current_expr and value_lines and in_value_section:
+            arg_values[current_expr] = '\n'.join(value_lines).strip()
 
-        if not value_lines:
+        # Now select the value: use the value from the OTHER argument (not the target)
+        new_value_str = None
+        for expr, value in arg_values.items():
+            if expr != variable_name:
+                new_value_str = value
+                break
+
+        if not new_value_str:
             stats["skipped"] += 1
             continue
-
-        new_value_str = '\n'.join(value_lines).strip()
 
         # Find the actual assignment in the test file
         expectations_var, expectations_lineno = find_assignment(test_file, variable_name, assertion_line)
@@ -194,8 +241,17 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
         return None, None
 
     # First pass: look for exact variable name (skip self-referential and derived)
-    for i in range(from_line - 1, max(0, from_line - 50), -1):
+    start = min(from_line - 1, len(lines) - 1)
+    stop = max(0, start - 50)
+    for i in range(start, stop, -1):
+        if i >= len(lines):
+            continue
         line = lines[i]
+
+        # Stop at method/function boundaries (def at start of line or after whitespace only)
+        stripped = line.lstrip()
+        if stripped.startswith('def '):
+            break
 
         if f'{var_name} =' in line:
             # Skip self-referential like: VAR = VAR[1:-1]
@@ -210,8 +266,18 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
             return var_name, i + 1
 
     # Second pass: look for Expectations pattern (if exact variable not found)
-    for i in range(from_line - 1, max(0, from_line - 50), -1):
+    start = min(from_line - 1, len(lines) - 1)
+    stop = max(0, start - 50)
+    for i in range(start, stop, -1):
+        if i >= len(lines):
+            continue
         line = lines[i]
+
+        # Stop at method/function boundaries
+        stripped = line.lstrip()
+        if stripped.startswith('def '):
+            break
+
         if 'Expectations(' in line and '=' in line:
             # Extract variable name before '='
             eq_pos = line.find('=')
@@ -224,8 +290,17 @@ def find_assignment(test_file: str, var_name: str, from_line: int) -> Tuple[Opti
                 return parts[-1], i + 1
 
     # Third pass: look for torch.tensor patterns
-    for i in range(from_line - 1, max(0, from_line - 50), -1):
+    start = min(from_line - 1, len(lines) - 1)
+    stop = max(0, start - 50)
+    for i in range(start, stop, -1):
+        if i >= len(lines):
+            continue
         line = lines[i]
+
+        # Stop at method/function boundaries
+        stripped = line.lstrip()
+        if stripped.startswith('def '):
+            break
 
         if 'torch.tensor(' in line and '=' in line:
             if '.get_expectation()' in line:
