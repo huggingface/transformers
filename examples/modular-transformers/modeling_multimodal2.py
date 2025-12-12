@@ -386,54 +386,6 @@ class Multimodal2VisionTransformer(nn.Module):
         )
 
 
-class Multimodal2MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class Multimodal2EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Union[Multimodal2VisionConfig, Multimodal2TextConfig]):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = Multimodal2Attention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = Multimodal2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
 @auto_docstring
 class Multimodal2VisionPreTrainedModel(PreTrainedModel):
     config: Multimodal2Config
@@ -444,10 +396,7 @@ class Multimodal2VisionPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": Multimodal2EncoderLayer,
-        "attentions": Multimodal2Attention,
-    }
+    _can_record_outputs = {}
 
     @torch.no_grad()
     def _init_weights(self, module):

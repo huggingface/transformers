@@ -51,6 +51,8 @@ class Multimodal2VisionTransformer(CLIPVisionTransformer):
 
 
 class Multimodal2VisionPreTrainedModel(CLIPPreTrainedModel):
+    _can_record_outputs = {}
+
     def _init_weights(self, module):
         if isinstance(module, Multimodal2VisionMLP):
             pass
