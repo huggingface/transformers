@@ -201,7 +201,6 @@ class PEAudioConfig(PretrainedConfig):
         self,
         text_config=None,
         audio_config=None,
-        projection_dim=1024,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -222,8 +221,6 @@ class PEAudioConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.audio_config = audio_config
-
-        self.projection_dim = projection_dim
 
 
 __all__ = ["PEAudioEncoderConfig", "PEAudioConfig"]

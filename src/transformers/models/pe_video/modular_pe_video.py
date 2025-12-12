@@ -101,8 +101,6 @@ class PEVideoConfig(PretrainedConfig):
         self,
         text_config=None,
         video_config=None,
-        projection_dim=1024,
-        nth_text_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,9 +120,6 @@ class PEVideoConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.video_config = video_config
-
-        self.projection_dim = projection_dim
-        self.nth_text_layer = nth_text_layer
 
 
 # TODO: not sure about the typing for text_model_output
@@ -307,8 +302,8 @@ class PEVideoModel(PEVideoPreTrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.video_encoder = PEVideoEncoder(config.video_config)
 
-        self.text_video_head = PEVideoContrastiveHead(config.text_config.hidden_size, config.projection_dim)
-        self.video_head = PEVideoContrastiveHead(config.video_config.hidden_size, config.projection_dim)
+        self.text_video_head = PEVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.video_head = PEVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
 
         self.video_logit_scale = nn.Parameter(torch.zeros(1))
         self.video_logit_bias = nn.Parameter(torch.zeros(1))

@@ -406,41 +406,39 @@ class PEAudioVideoModel(PEAudioVideoPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_video_encoder = PEAudioVideoEncoder(config.audio_video_config)
 
+        text_hidden_size = config.text_config.hidden_size
+        audio_hidden_size = config.audio_video_config.audio_config.hidden_size
+        video_hidden_size = config.audio_video_config.video_config.hidden_size
+
         # audio
-        self.audio_head = PEAudioVideoContrastiveHead(
-            config.audio_video_config.audio_config.hidden_size, config.projection_dim
-        )
-        self.text_audio_head = PEAudioVideoContrastiveHead(
-            config.text_config.hidden_size, config.projection_dim
-        )
+        self.audio_head = PEAudioVideoContrastiveHead(audio_hidden_size, text_hidden_size)
+        self.text_audio_head = PEAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
         self.audio_logit_scale = nn.Parameter(torch.zeros((1)))
         self.audio_logit_bias = nn.Parameter(torch.zeros((1)))
         self.text_audio_logit_scale = nn.Parameter(torch.zeros((1)))
         self.text_audio_logit_bias = nn.Parameter(torch.zeros((1)))
 
         # video
-        self.video_head = PEAudioVideoContrastiveHead(
-            config.audio_video_config.video_config.hidden_size, config.projection_dim
-        ) 
-        self.text_video_head = PEAudioVideoContrastiveHead(
-            config.text_config.hidden_size, config.projection_dim
-        )
+        self.video_head = PEAudioVideoContrastiveHead(video_hidden_size, text_hidden_size) 
+        self.text_video_head = PEAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
         self.video_logit_scale = nn.Parameter(torch.zeros((1)))
         self.video_logit_bias = nn.Parameter(torch.zeros((1)))
         self.text_video_logit_scale = nn.Parameter(torch.zeros((1)))
         self.text_video_logit_bias = nn.Parameter(torch.zeros((1)))
 
         # audio-video
-        self.audio_video_head = PEAudioVideoContrastiveHead(
-            config.audio_video_config.hidden_size, config.projection_dim
-        )
-        self.text_audio_video_head = PEAudioVideoContrastiveHead(
-            config.text_config.hidden_size, config.projection_dim
-        )
+        self.audio_video_head = PEAudioVideoContrastiveHead(config.audio_video_config.hidden_size, text_hidden_size)
+        self.text_audio_video_head = PEAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
         self.audio_video_logit_scale = nn.Parameter(torch.zeros((1)))
         self.audio_video_logit_bias = nn.Parameter(torch.zeros((1)))
         self.text_audio_video_logit_scale = nn.Parameter(torch.zeros((1)))
         self.text_audio_video_logit_bias = nn.Parameter(torch.zeros((1)))
+
+        # text-audio
+        self.audio_plus_text_head = PEAudioVideoContrastiveHead(audio_hidden_size + text_hidden_size, text_hidden_size)
+
+        # text-video
+        self.video_plus_text_head = PEAudioVideoContrastiveHead(video_hidden_size + text_hidden_size, text_hidden_size)
 
         self.post_init()
 

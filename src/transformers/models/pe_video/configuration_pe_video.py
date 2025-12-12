@@ -199,8 +199,6 @@ class PEVideoConfig(PretrainedConfig):
         self,
         text_config=None,
         video_config=None,
-        projection_dim=1024,
-        nth_text_layer=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -220,9 +218,6 @@ class PEVideoConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.video_config = video_config
-
-        self.projection_dim = projection_dim
-        self.nth_text_layer = nth_text_layer
 
 
 __all__ = ["PEVideoEncoderConfig", "PEVideoConfig"]

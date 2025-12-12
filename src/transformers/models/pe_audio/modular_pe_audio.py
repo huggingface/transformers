@@ -113,7 +113,6 @@ class PEAudioConfig(PretrainedConfig):
         self,
         text_config=None,
         audio_config=None,
-        projection_dim=1024,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -136,8 +135,6 @@ class PEAudioConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.audio_config = audio_config
-
-        self.projection_dim = projection_dim
 
 
 # TODO: not sure about the typing for text_model_output
@@ -501,8 +498,8 @@ class PEAudioModel(PEAudioPretrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = PEAudioEncoder(config.audio_config)
 
-        self.text_audio_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.projection_dim)
-        self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.projection_dim)
+        self.text_audio_head = PEAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.audio_head = PEAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
         self.audio_logit_scale = nn.Parameter(torch.zeros(1))
         self.audio_logit_bias = nn.Parameter(torch.zeros(1))
