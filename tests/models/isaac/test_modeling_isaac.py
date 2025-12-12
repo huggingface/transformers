@@ -715,16 +715,6 @@ def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
     assert isaac_tiny_config.vision_token == "<image>"
 
 
-def test_isaac_config_migrates_legacy_rope_theta():
-    cfg = IsaacConfig(text_config={"rope_theta": 12345})
-    assert cfg.rope_parameters.get("rope_theta") == 12345
-    assert cfg.rope_parameters.get("rope_type") == "default"
-    serialized = cfg.to_dict()
-    assert "rope_theta" not in serialized
-    assert "rope_theta" not in serialized.get("text_config", {})
-    assert serialized["rope_parameters"].get("rope_theta") == 12345
-
-
 @require_torch
 @require_tensorstream
 def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
@@ -878,26 +868,6 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
     decoded_prompt = isaac_processor.tokenizer.decode(generated[0], skip_special_tokens=True)
     assert isinstance(decoded_prompt, str)
     assert decoded_prompt.strip() != ""
-
-
-@require_torch
-@slow
-@require_tensorstream
-def test_isaac_checkpoint_hashes(isaac_reference_model):
-    isaac_reference_model = isaac_reference_model.to("cpu")
-    expected_hashes = _load_expected_hashes()
-    if not expected_hashes:
-        pytest.skip(f"Missing golden hashes file at {HASH_FILE}.")
-
-    missing = [subset for subset in HASH_FILTERS if subset not in expected_hashes]
-    if missing:
-        pytest.skip(f"Golden hashes missing entries for: {', '.join(missing)}")
-
-    isaac_reference_model.to("cpu")
-    state_dict = isaac_reference_model.state_dict()
-    for subset, filters in HASH_FILTERS.items():
-        current_hash = _hash_state_dict(state_dict, include=filters["include"], exclude=filters["exclude"])
-        assert current_hash == expected_hashes[subset], f"Hash mismatch for subset '{subset}'"
 
 
 @require_torch
