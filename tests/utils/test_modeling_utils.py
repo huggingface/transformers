@@ -114,22 +114,22 @@ if is_torch_available():
         BertModel,
         CLIPTextModel,
         GenerationMixin,
+        MixtralConfig,
+        MixtralModel,
         MusicgenConfig,
         MusicgenForConditionalGeneration,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
     )
+    from transformers.conversion_mapping import MergeModulelist, WeightConverter, get_model_conversion_mapping
     from transformers.modeling_attn_mask_utils import (
         AttentionMaskConverter,
         _create_4d_causal_attention_mask,
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import (
-        _find_disjoint,
-        _find_identical,
-    )
+    from transformers.modeling_utils import _find_disjoint, _find_identical
     from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
@@ -2220,6 +2220,28 @@ class ModelUtilsTest(TestCasePlus):
 
         # Reverse monkey patch
         threading.Thread.__init__ = original_init
+
+    def test_error_in_weight_conversion_is_raised(self):
+        """Test that errors in `ConversionOps` are correctly re-raised after loading."""
+        small_config = MixtralConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, num_attention_heads=8)
+        model = MixtralModel(small_config)
+        weight_conversions = get_model_conversion_mapping(model)
+        converters = [conversion for conversion in weight_conversions if isinstance(conversion, WeightConverter)]
+        # Just a safeguard
+        self.assertTrue(
+            any(isinstance(ops, MergeModulelist) for converter in converters for ops in converter.operations),
+            "The test is useless without conversions on the model",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            # Now try to reload while mocking the WeightConversion to raise
+            with patch.object(MergeModulelist, "convert", side_effect=Exception("failed")):
+                # It should raise the proper error
+                with self.assertRaisesRegex(
+                    RuntimeError, "We encountered some issues during automatic conversion of the weights."
+                ):
+                    _ = MixtralModel.from_pretrained(tmpdirname)
 
 
 @slow

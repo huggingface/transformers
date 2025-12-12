@@ -860,7 +860,7 @@ class TrainingArguments:
     warmup_ratio: float | None = field(
         default=None,
         metadata={
-            "help": "This argument is deprecated and will be removed in v5. Use `warmup_steps` instead as it also works with float values."
+            "help": "This argument is deprecated and will be removed in v5.2. Use `warmup_steps` instead as it also works with float values."
         },
     )
 
@@ -2575,7 +2575,7 @@ class TrainingArguments:
         ```
         """
         if warmup_ratio is not None:
-            logger.warning("warmup_ratio is deprecated and will be removed in v5. Use `warmup_steps` instead.")
+            logger.warning("warmup_ratio is deprecated and will be removed in v5.2 . Use `warmup_steps` instead.")
             warmup_steps = warmup_ratio
 
         self.lr_scheduler_type = SchedulerType(name)
