@@ -181,7 +181,7 @@ class PeAudioVideoConfig(PretrainedConfig):
         "model_type": "modernbert",
         "hidden_size": 1024,
         "intermediate_size": 2624,
-        "num_hidden_layers": 28,
+        "num_hidden_layers": 22,
         "num_attention_heads": 16,
     }
 
