@@ -31,8 +31,10 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 
 class Jais2Config(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Jais2Model`].
-    It inherits from [`PreTrainedConfig`] and can be used to control the model outputs.
+    This is the configuration class to store the configuration of a [`Jais2Model`]. It is used to instantiate a Jais2
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Jais2
+    [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -85,15 +87,6 @@ class Jais2Config(LlamaConfig):
     """
 
     model_type = "jais2"
-
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
 
     def __init__(
         self,
@@ -152,12 +145,7 @@ class Jais2Config(LlamaConfig):
             rope_parameters=rope_parameters,
             **kwargs,
         )
-        del self.rms_norm_eps
         self.layer_norm_eps = self.rms_norm_eps
-
-
-
-__all__ = ["Jais2Config"]
 
 
 class Jais2MLP(NemotronMLP):
