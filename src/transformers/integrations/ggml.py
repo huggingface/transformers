@@ -466,7 +466,7 @@ class GGUFLlamaConverter(LlamaConverter):
         sequence = [
             decoders.ByteFallback(),
             decoders.Fuse(),
-            decoders.Replace("▁", " "),
+            decoders.Replace(" ", " "),
         ]
 
         if self.is_llama_3_tokenizer:
@@ -485,7 +485,7 @@ class GGUFLlamaConverter(LlamaConverter):
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
-        replacement = "▁"
+        replacement = " "
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
@@ -597,7 +597,7 @@ class GGUFPhi3Converter(LlamaConverter):
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
-        replacement = "▁"
+        replacement = " "
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
@@ -636,8 +636,8 @@ class GGUFT5Converter(T5Converter):
         if getattr(self.original_tokenizer, "legacy", True):
             sequence = []
             if getattr(self.original_tokenizer, "add_prefix_space", True):
-                sequence += [normalizers.Prepend(prepend="▁")]
-            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+                sequence += [normalizers.Prepend(prepend=" ")]
+            sequence += [normalizers.Replace(pattern=" ", content=" ")]
             return normalizers.Sequence(sequence)
         return None  # non-legacy, no normalizer
 
@@ -665,7 +665,7 @@ class GGUFT5Converter(T5Converter):
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
-        replacement = "▁"
+        replacement = " "
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
@@ -699,7 +699,7 @@ class GGUFGemmaConverter(GemmaConverter):
             if token == "<0x09>":
                 updated_vocab.append(("\t", score))
             elif " " in token and len(token.strip()) == 0:
-                underscores = "▁" * len(token)
+                underscores = " " * len(token)
                 updated_vocab.append((underscores, score))
             else:
                 updated_vocab.append((token, score))
@@ -707,11 +707,11 @@ class GGUFGemmaConverter(GemmaConverter):
         return updated_vocab
 
     def normalizer(self, proto):
-        return normalizers.Replace(" ", "▁")
+        return normalizers.Replace(" ", " ")
 
     def decoder(self, replacement, add_prefix_space):
         sequence = [
-            decoders.Replace("▁", " "),
+            decoders.Replace(" ", " "),
             decoders.ByteFallback(),
             decoders.Fuse(),
         ]
@@ -722,19 +722,37 @@ class GGUFGemmaConverter(GemmaConverter):
 
     def converted(self) -> Tokenizer:
         vocab_scores = self.vocab(self.proto)
-        tokenizer = Tokenizer(
-            Unigram(
+
+        # Safely determine the tokenizer model type from the GGUF metadata
+        tokenizer_model_type = getattr(self.proto, "model", "unigram")
+
+        if tokenizer_model_type == "bpe":
+            # Instantiate a BPE model for the Gemma 2 tokenizer
+            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            model = BPE(
+                bpe_vocab,
+                self.proto.merges,
+                unk_token=self.proto.tokens[self.proto.unk_token_id],
+                fuse_unk=True,
+                byte_fallback=self.handle_byte_fallback,
+            )
+        else:
+            # Fallback to the original Unigram model for Gemma 1
+            model = Unigram(
                 vocab_scores,
                 unk_id=self.proto.unk_token_id,
                 byte_fallback=self.handle_byte_fallback,
             )
-        )
 
+        # Instantiate the main Tokenizer with the chosen model
+        tokenizer = Tokenizer(model)
+
+        # --- The rest of the setup is now common and runs only once ---
         normalizer = self.normalizer(self.proto)
         if normalizer is not None:
             tokenizer.normalizer = normalizer
 
-        replacement = "▁"
+        replacement = " "
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
