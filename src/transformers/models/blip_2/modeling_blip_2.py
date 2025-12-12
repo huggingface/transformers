@@ -1136,8 +1136,12 @@ class Blip2Model(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             vision_outputs (`torch.FloatTensor`):
                 The vision model's last layer pooled logits.
@@ -1163,8 +1167,15 @@ class Blip2Model(Blip2PreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        image_features = vision_outputs.pooler_output
 
-        return vision_outputs.pooler_output
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     @filter_out_non_signature_kwargs()
     @auto_docstring

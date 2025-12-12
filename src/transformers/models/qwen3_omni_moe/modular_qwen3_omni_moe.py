@@ -46,7 +46,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
@@ -95,6 +95,28 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class BaseModelOutputWithDeepstackFeatures(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        deepstack_features (`List[torch.FloatTensor]`, *optional*):
+            List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -1403,6 +1425,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         input_features: torch.FloatTensor,
         feature_attention_mask: Optional[torch.LongTensor] = None,
         audio_feature_lengths: Optional[torch.LongTensor] = None,
+        return_dict: bool = False,
     ):
         """
         Encodes audios into continuous embeddings that can be forwarded to the language model.
@@ -1414,6 +1437,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
             audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
                 The length of feature shape of each audio in LLM.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
@@ -1427,6 +1452,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             feature_lens=feature_lens,
         )
         audio_features = audio_outputs.last_hidden_state
+
+        if return_dict:
+            return audio_outputs
 
         return audio_features
 

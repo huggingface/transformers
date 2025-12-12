@@ -1006,8 +1006,12 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the final [CLS] hidden state of Text-Transformer.
@@ -1026,7 +1030,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1036,6 +1040,12 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         pooled_output = text_outputs[0][:, 0, :]
         text_features = self.text_projection(pooled_output)
 
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=text_outputs.last_hidden_state,
+                pooler_output=text_features,
+            )
+
         return text_features
 
     @filter_out_non_signature_kwargs()
@@ -1044,8 +1054,12 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the final [CLS] hidden state of Vision-Transformer.
@@ -1073,9 +1087,14 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
-
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
 
         return image_features
 

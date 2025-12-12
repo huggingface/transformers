@@ -27,7 +27,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -269,11 +269,20 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values, high_res_pixel_values):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, high_res_pixel_values: torch.FloatTensor, return_dict: bool = False
+    ):
         vision_encodings = self.get_low_res_image_features(pixel_values)
         high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
-        images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
-        return images_embeds
+        image_features = self.aligner(vision_encodings, high_res_vision_encodings)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=vision_encodings,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

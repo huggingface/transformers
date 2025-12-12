@@ -35,7 +35,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -1900,30 +1900,41 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values, do_pooling=False, return_dict=True
-        ).last_hidden_state
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True)
+        last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
         # height == width and height * width == Gemma3nConfig.vision_soft_tokens_per_image.
-        vision_outputs = vision_outputs.reshape(
-            vision_outputs.shape[0],
+        vision_outputs = last_hidden_state.reshape(
+            last_hidden_state.shape[0],
             self.config.vision_config.hidden_size,
             self.config.vision_soft_tokens_per_image,
         ).permute(0, 2, 1)
         # Normalize and embed the soft tokens into language model space.
         vision_outputs *= self.config.vision_config.hidden_size**0.5
-        return self.embed_vision(inputs_embeds=vision_outputs)
+        image_features = self.embed_vision(inputs_embeds=vision_outputs)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=last_hidden_state,
+                pooler_output=image_features,
+            )
+
+        return image_features
 
     def get_placeholder_mask(
         self,
@@ -2110,7 +2121,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         )
 
     def get_audio_features(
-        self, input_features: torch.Tensor, input_features_mask: torch.Tensor
+        self, input_features: torch.Tensor, input_features_mask: torch.Tensor, return_dict: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Projects the last hidden state from the audio encoder into language model space.
@@ -2125,7 +2136,15 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             audio_features (`torch.Tensor`): Audio feature tensor of shape `(num_images, audio_length, embed_dim)`).
         """
         audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
-        return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=audio_outputs.last_hidden_state,
+                pooler_output=audio_embeds,
+            )
+
+        return audio_embeds, audio_mask
 
 
 @auto_docstring(
@@ -2150,8 +2169,8 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
+        return self.model.get_image_features(pixel_values, return_dict=return_dict)
 
     @can_return_tuple
     @auto_docstring

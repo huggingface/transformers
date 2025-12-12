@@ -27,7 +27,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -167,7 +167,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -182,6 +182,13 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         selected_image_feature = image_features.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=selected_image_feature,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     def get_placeholder_mask(
@@ -279,8 +286,8 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
+        return self.model.get_image_features(pixel_values=pixel_values, return_dict=return_dict)
 
     @check_model_inputs
     @auto_docstring

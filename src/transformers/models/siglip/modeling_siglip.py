@@ -781,8 +781,12 @@ class SiglipModel(SiglipPreTrainedModel):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        return_dict: bool = False,
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`SiglipTextModel`].
@@ -808,6 +812,9 @@ class SiglipModel(SiglipPreTrainedModel):
         )
         pooled_output = text_outputs.pooler_output
 
+        if return_dict:
+            return text_outputs
+
         return pooled_output
 
     @filter_out_non_signature_kwargs()
@@ -816,9 +823,13 @@ class SiglipModel(SiglipPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
+        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
+        return_dict (`bool`, *optional*, default to `False`):
+            Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`SiglipVisionModel`].
@@ -847,6 +858,9 @@ class SiglipModel(SiglipPreTrainedModel):
             **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
+
+        if return_dict:
+            return vision_outputs
 
         return pooled_output
 

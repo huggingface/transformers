@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -218,6 +218,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        return_dict: bool = False,
         **kwargs,
     ):
         """
@@ -232,6 +233,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
                 vision features.
             image_sizes (`torch.Tensor`, *optional*):
                 Tensor containing the image sizes as returned by the processor.
+            return_dict (`bool`, *optional*, default to `False`):
+                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -254,6 +258,13 @@ class Mistral3Model(Mistral3PreTrainedModel):
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
         image_features = torch.split(image_features.squeeze(0), split_sizes)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=image_outputs.last_hidden_state,
+                pooler_output=image_features,
+            )
+
         return image_features
 
     def get_placeholder_mask(

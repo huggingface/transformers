@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_peft_available, logging
 from ..auto import AutoModel, AutoModelForCausalLM
@@ -334,10 +334,17 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    def get_audio_features(self, input_features: torch.Tensor) -> torch.Tensor:
+    def get_audio_features(self, input_features: torch.Tensor, return_dict: bool = False) -> torch.Tensor:
         """Get the audio features to merged into the multimodal embeddings."""
         encoder_embeds = self.encoder(input_features)
         projected_embeds = self.projector(encoder_embeds)
+
+        if return_dict:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=encoder_embeds,
+                pooler_output=projected_embeds,
+            )
+
         return projected_embeds
 
     @auto_docstring
