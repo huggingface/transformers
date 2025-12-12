@@ -63,27 +63,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
 
-        if not hasattr(tokenizer, "speech_start_token"):
-            self.speech_start_token = "<|vision_start|>"
-            self.speech_start_id = tokenizer.convert_tokens_to_ids(self.speech_start_token)
-        else:
-            self.speech_start_token = tokenizer.speech_start_token
-            self.speech_start_id = tokenizer.speech_start_id
-
-        if not hasattr(tokenizer, "speech_end_token"):
-            self.speech_end_token = "<|vision_end|>"
-            self.speech_end_id = tokenizer.convert_tokens_to_ids(self.speech_end_token)
-        else:
-            self.speech_end_token = tokenizer.speech_end_token
-            self.speech_end_id = tokenizer.speech_end_id
-
-        if not hasattr(tokenizer, "speech_diffusion_token"):
-            self.speech_diffusion_token = "<|vision_pad|>"
-            self.speech_diffusion_id = tokenizer.convert_tokens_to_ids(self.speech_diffusion_token)
-        else:
-            self.speech_diffusion_token = tokenizer.speech_diffusion_token
-            self.speech_diffusion_id = tokenizer.speech_diffusion_id
-
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
@@ -105,8 +84,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
             `BatchFeature`: A BatchFeature with the following fields:
                 - **input_ids** -- Token ID sequences ready for the model
                 - **attention_mask** -- Attention masks for the sequences
-                - **input_features** -- Processed audio tensors (if preset provided)
-                - **input_features_mask** -- Masks for valid speech tokens (if preset provided)
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceRealTimeProcessorKwargs,
@@ -123,21 +100,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
-        n_audio_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
-
-        n_audio = 0
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            n_audio = len(audio)
-
-        if sum(n_audio_in_text) > 0 and n_audio != sum(n_audio_in_text):
-            if audio is None:
-                raise ValueError("No audio were provided, but there are audio tokens in the prompt")
-            else:
-                raise ValueError(
-                    f"The number of audio tokens in each text ({n_audio_in_text}) should be the same as the "
-                    f"number of provided audios ({n_audio})."
-                )
 
         data = {}
         encoding = self.tokenizer(text, **text_kwargs)
