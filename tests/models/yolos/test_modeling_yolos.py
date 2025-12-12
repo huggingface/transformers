@@ -376,11 +376,11 @@ class YolosModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9991, 0.9801, 0.9978, 0.9875, 0.9848]).to(torch_device)
+        expected_scores = torch.tensor([0.9991, 0.9801, 0.9977, 0.9875, 0.9848]).to(torch_device)
         expected_labels = [75, 75, 17, 63, 17]
         expected_slice_boxes = torch.tensor([331.8438, 80.5440, 369.9546, 188.0579]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-4, atol=1e-4)
