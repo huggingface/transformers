@@ -300,7 +300,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "eustlb/lasr"
+        cls.checkpoint_name = "google/medasr"
         cls.dtype = torch.bfloat16
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
@@ -323,7 +323,6 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    @unittest.skip(reason="TODO when checkpoint")
     def test_model_integration(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -351,7 +350,6 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    @unittest.skip(reason="TODO when checkpoint")
     def test_model_integration_batched(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -391,7 +389,6 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
-    @unittest.skip(reason="TODO when checkpoint")
     def test_model_integration_pipe_with_chunk(self):
         EXPECTED_TRANSCRIPTIONS = [
             {"text": ". is the apsle of the middle classes and we are glad to welcome his goible.</s>"}
