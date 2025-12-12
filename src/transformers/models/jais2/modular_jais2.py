@@ -34,7 +34,8 @@ class Jais2Config(LlamaConfig):
     This is the configuration class to store the configuration of a [`Jais2Model`].
     It inherits from [`PreTrainedConfig`] and can be used to control the model outputs.
 
-    Read more from the [inceptionai/Jais-2-8B-Chat](https://huggingface.co/inceptionai/Jais-2-8B-Chat).
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 150272):
