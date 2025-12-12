@@ -106,8 +106,8 @@ class DbrxFFNConfig(PreTrainedConfig):
 
         for k in [
             "model_type",
-            "moe_implementation",
             "attn_implementation",
+            "experts_implementation",
             "transformers_version",
             "_commit_hash",
             "torch_dtype",
