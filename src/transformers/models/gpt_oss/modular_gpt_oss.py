@@ -393,7 +393,7 @@ class GptOssModel(MixtralModel):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "
                 f"flash attention implementation: {config._attn_implementation}. "
-                f"Only '{vllm_fa3_kernel}' is supported."
+                f"Only 'kernels-community/vllm-flash-attn3' is supported."
             )
 
 
@@ -414,13 +414,13 @@ class GptOssModel(MixtralModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         
         if (
-            "flash" in config._attn_implementation 
-            and config._attn_implementation != "kernels-community/vllm-flash-attn3"
+            "flash" in self.config._attn_implementation 
+            and self.config._attn_implementation != "kernels-community/vllm-flash-attn3"
         ):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "
-                f"flash attention implementation: {config._attn_implementation}. "
-                f"Only '{vllm_fa3_kernel}' is supported."
+                f"flash attention implementation: {self.config._attn_implementation}. "
+                f"Only 'kernels-community/vllm-flash-attn3' is supported."
             )
 
 
