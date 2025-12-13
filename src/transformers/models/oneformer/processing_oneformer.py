@@ -129,6 +129,21 @@ class OneFormerProcessor(ProcessorMixin):
 
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
+        # Ensure all tensor inputs are on the same device as pixel_values
+        if "pixel_values" in encoded_inputs:
+            pixel_values = encoded_inputs["pixel_values"]
+            device = None
+            if isinstance(pixel_values, torch.Tensor):
+                device = pixel_values.device
+            elif isinstance(pixel_values, (list, tuple)) and len(pixel_values) > 0 and isinstance(pixel_values[0], torch.Tensor):
+                device = pixel_values[0].device
+            
+            if device is not None:
+                if "task_inputs" in encoded_inputs and isinstance(encoded_inputs["task_inputs"], torch.Tensor):
+                    encoded_inputs["task_inputs"] = encoded_inputs["task_inputs"].to(device)
+                if "text_inputs" in encoded_inputs and isinstance(encoded_inputs["text_inputs"], torch.Tensor):
+                    encoded_inputs["text_inputs"] = encoded_inputs["text_inputs"].to(device)
+
         return encoded_inputs
 
     def encode_inputs(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
@@ -169,6 +184,21 @@ class OneFormerProcessor(ProcessorMixin):
 
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
+        # Ensure all tensor inputs are on the same device as pixel_values
+        if "pixel_values" in encoded_inputs:
+            pixel_values = encoded_inputs["pixel_values"]
+            device = None
+            if isinstance(pixel_values, torch.Tensor):
+                device = pixel_values.device
+            elif isinstance(pixel_values, (list, tuple)) and len(pixel_values) > 0 and isinstance(pixel_values[0], torch.Tensor):
+                device = pixel_values[0].device
+            
+            if device is not None:
+                if "task_inputs" in encoded_inputs and isinstance(encoded_inputs["task_inputs"], torch.Tensor):
+                    encoded_inputs["task_inputs"] = encoded_inputs["task_inputs"].to(device)
+                if "text_inputs" in encoded_inputs and isinstance(encoded_inputs["text_inputs"], torch.Tensor):
+                    encoded_inputs["text_inputs"] = encoded_inputs["text_inputs"].to(device)
+
         return encoded_inputs
 
     def post_process_semantic_segmentation(self, *args, **kwargs):
@@ -194,3 +224,4 @@ class OneFormerProcessor(ProcessorMixin):
 
 
 __all__ = ["OneFormerProcessor"]
+
