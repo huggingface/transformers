@@ -650,10 +650,12 @@ class AutoTokenizer:
             tokenizer_class_name = TOKENIZER_MAPPING_NAMES.get(tokenizer_type, None)
 
             if tokenizer_class_name is None:
-                raise ValueError(
-                    f"Passed `tokenizer_type` {tokenizer_type} does not exist. `tokenizer_type` should be one of "
-                    f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES)}."
-                )
+    raise ValueError(
+        f"Passed `tokenizer_type` '{tokenizer_type}' does not exist. "
+        "Please check the tokenizer type name or select one of the supported tokenizer types: "
+        f"{', '.join(c for c in TOKENIZER_MAPPING_NAMES)}."
+    )
+
 
             tokenizer_class = tokenizer_class_from_name(tokenizer_class_name)
 
