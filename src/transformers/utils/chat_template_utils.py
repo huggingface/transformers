@@ -583,4 +583,15 @@ class Chat:
         for message in messages:
             if not is_valid_message(message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+
+            # Convert OpenAI fields to Transformers fields
+            for content in message["content"]:
+                if isinstance(content, dict):
+                    content_type = content.get("type")
+                    # (27 Nov 2025) Image/vision fields: https://platform.openai.com/docs/guides/images-vision
+                    if content_type == "input_image":
+                        content["type"] = "image"
+                        content["image"] = content.pop("image_url")
+                    if content_type == "input_text":
+                        content["type"] = "text"
         self.messages = messages
