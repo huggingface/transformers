@@ -258,7 +258,6 @@ class StaticLayer(CacheLayerMixin):
     Args:
         max_cache_len (`int`):
             Maximum number of tokens that can be stored, used for tensor preallocation.
-    Args:
         max_batch_size(`int`, *optional*):
             Maximum batch size that can be stored
     """
@@ -270,6 +269,24 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
+
+    def init_full_cache(self, key_states: torch.Tensor):
+        """Init the full batch with max_batch_size ahead of time."""
+        if self.max_batch_size is None:
+            self.max_batch_size = key_states.shape[0]
+        _, self.num_heads, _, self.head_dim = key_states.shape
+        self.dtype, self.device = key_states.dtype, key_states.device
+
+        self.keys_full = torch.zeros(
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            dtype=self.dtype,
+            device=self.device,
+        )
+        self.values_full = torch.zeros(
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            dtype=self.dtype,
+            device=self.device,
+        )
 
     def lazy_initialization(self, key_states: torch.Tensor):
         """
@@ -286,34 +303,20 @@ class StaticLayer(CacheLayerMixin):
         not be compiled anyway for performances!
         """
 
-        if self.max_batch_size is None:
-            self.max_batch_size = key_states.shape[0]
-        _, self.num_heads, _, self.head_dim = key_states.shape
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.max_batch_size, self.num_heads = key_states.shape[:2]
-        self.v_head_dim = value_states.shape[-1]
-        self.k_head_dim = key_states.shape[-1]
+        self.init_full_cache(key_states)
 
-        self.keys_full = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
-            dtype=self.dtype,
-            device=self.device,
-        )
-        self.values_full = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
-            dtype=self.dtype,
-            device=self.device,
-        )
-        self.keys = self.keys_full
-        self.values = self.values_full
-        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
-        # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
-        # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
-        # prefill explicitly, but this should be avoided!)
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.keys_full)
-            torch._dynamo.mark_static_address(self.values_full)
-
+        self.keys_map = [None] * (self.max_batch_size + 1)
+        self.values_map = [None] * (self.max_batch_size + 1)
+        for batch_size in range(1, self.max_batch_size + 1):
+            self.keys_map[batch_size] = self.keys_full[:batch_size]
+            self.values_map[batch_size] = self.values_full[:batch_size]
+            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
+            # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
+            # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
+            # prefill explicitly, but this should be avoided!)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.keys_map[batch_size])
+                torch._dynamo.mark_static_address(self.values_map[batch_size])
         self.is_initialized = True
 
     def update(
@@ -347,24 +350,18 @@ class StaticLayer(CacheLayerMixin):
         batch_size = key_states.shape[0]
 
         # Slice to current batch size
-        self.keys = self.keys_full[:batch_size]
-        self.values = self.values_full[:batch_size]
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
+        self._current_batch_size = batch_size
 
-        # Use slice assignment instead of index_copy_ for better compatibility
-        # with variable batch sizes
-        if cache_position.numel() == self.max_cache_len:
-            # Full cache update (e.g., cross-attention initialization)
-            self.keys.copy_(key_states)
-            self.values.copy_(value_states)
-        else:
-            try:
-                # Try index_copy_ first (faster when it works)
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except (NotImplementedError, RuntimeError):
-                # Fallback for devices like MPS where index_copy_ might not be supported.
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
+        try:
+            # Try index_copy_ first (faster when it works)
+            self.keys.index_copy_(2, cache_position, key_states)
+            self.values.index_copy_(2, cache_position, value_states)
+        except (NotImplementedError, RuntimeError):
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.keys[:, :, cache_position] = key_states
+            self.values[:, :, cache_position] = value_states
 
         return self.keys, self.values
 
@@ -372,6 +369,7 @@ class StaticLayer(CacheLayerMixin):
         if self.is_initialized:
             self.keys_full.zero_()
             self.values_full.zero_()
+            self._current_batch_size = None
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -388,19 +386,20 @@ class StaticLayer(CacheLayerMixin):
         return self.max_cache_len
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
-        if not self.is_initialized:
-            return
-
+        """Reorders this layer's cache for beam search."""
         if beam_idx.device != self.device:
             beam_idx = beam_idx.to(self.device)
 
         current_batch_size = beam_idx.shape[0]
+        # Use the map to get the view for the current batch size
+        current_keys = self.keys_map[current_batch_size]
+        current_values = self.values_map[current_batch_size]
 
-        new_keys = self.keys_full[:current_batch_size].index_select(0, beam_idx)
-        new_values = self.values_full[:current_batch_size].index_select(0, beam_idx)
+        new_keys = current_keys.index_select(0, beam_idx)
+        new_values = current_values.index_select(0, beam_idx)
 
-        self.keys_full[:current_batch_size].copy_(new_keys)
-        self.values_full[:current_batch_size].copy_(new_values)
+        current_keys.copy_(new_keys)
+        current_values.copy_(new_values)
 
 
 class StaticSlidingWindowLayer(StaticLayer):
@@ -454,8 +453,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         )
 
         batch_size = key_states.shape[0]
-        self.keys = self.keys_full[:batch_size]
-        self.values = self.values_full[:batch_size]
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
 
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
