@@ -796,3 +796,80 @@ class OneFormerProcessingTest(unittest.TestCase):
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(el["segmentation"].shape, (self.processing_tester.height, self.processing_tester.width))
+
+    @require_torch
+    def test_device_consistency_cuda(self):
+        """Test that OneFormerProcessor ensures all output tensors are on the same device when using CUDA."""
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA is not available")
+
+        # Initialize processor
+        processor = self.processing_class(**self.processor_dict)
+        
+        # Create test image and move to CUDA
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_cuda = image_inputs[0].to("cuda")
+        
+        # Test __call__ method
+        inputs = processor(image_cuda, ["semantic"], return_tensors="pt")
+        
+        # Check that all tensors are on the same device
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("task_inputs", inputs)
+        
+        pixel_device = inputs["pixel_values"].device
+        task_device = inputs["task_inputs"].device
+        
+        self.assertEqual(pixel_device, task_device,
+                        f"Device mismatch: pixel_values on {pixel_device}, task_inputs on {task_device}")
+        self.assertEqual(pixel_device.type, "cuda", "Expected tensors to be on CUDA device")
+        
+        # Test encode_inputs method
+        encoded_inputs = processor.encode_inputs(image_cuda, ["instance"], return_tensors="pt")
+        
+        self.assertIn("pixel_values", encoded_inputs)
+        self.assertIn("task_inputs", encoded_inputs)
+        
+        pixel_device_2 = encoded_inputs["pixel_values"].device
+        task_device_2 = encoded_inputs["task_inputs"].device
+        
+        self.assertEqual(pixel_device_2, task_device_2,
+                        f"Device mismatch in encode_inputs: pixel_values on {pixel_device_2}, task_inputs on {task_device_2}")
+        self.assertEqual(pixel_device_2.type, "cuda", "Expected encoded tensors to be on CUDA device")
+
+    def test_device_consistency_cpu(self):
+        """Test that OneFormerProcessor works correctly with CPU tensors."""
+        # Initialize processor
+        processor = self.processing_class(**self.processor_dict)
+        
+        # Create test image on CPU
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_cpu = image_inputs[0].to("cpu")
+        
+        # Test __call__ method
+        inputs = processor(image_cpu, ["semantic"], return_tensors="pt")
+        
+        # Check that all tensors are on CPU
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("task_inputs", inputs)
+        
+        pixel_device = inputs["pixel_values"].device
+        task_device = inputs["task_inputs"].device
+        
+        self.assertEqual(pixel_device, task_device,
+                        f"Device mismatch: pixel_values on {pixel_device}, task_inputs on {task_device}")
+        self.assertEqual(pixel_device.type, "cpu", "Expected tensors to be on CPU device")
+        
+        # Test encode_inputs method
+        encoded_inputs = processor.encode_inputs(image_cpu, ["panoptic"], return_tensors="pt")
+        
+        self.assertIn("pixel_values", encoded_inputs)
+        self.assertIn("task_inputs", encoded_inputs)
+        
+        pixel_device_2 = encoded_inputs["pixel_values"].device
+        task_device_2 = encoded_inputs["task_inputs"].device
+        
+        self.assertEqual(pixel_device_2, task_device_2,
+                        f"Device mismatch in encode_inputs: pixel_values on {pixel_device_2}, task_inputs on {task_device_2}")
+        self.assertEqual(pixel_device_2.type, "cpu", "Expected encoded tensors to be on CPU device")
+
