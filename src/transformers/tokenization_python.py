@@ -1398,3 +1398,4 @@ class PythonBackend(PreTrainedTokenizerBase):
 
 # Backward compatibility alias
 PreTrainedTokenizer = PythonBackend
+Fixed bug in transformer pipeline
