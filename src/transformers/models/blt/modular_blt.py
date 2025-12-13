@@ -363,12 +363,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     def _init_weights(self, module):
         raise AttributeError("No need to inherit it!")
 
-    def _update_causal_mask(self, module):
-        raise AttributeError("No need to inherit it!")
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(self, module):
-        raise AttributeError("No need to inherit it!")
-
 
 class BltLocalEncoder(BltPreTrainedModel):
     config: BltLocalEncoderConfig
