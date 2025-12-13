@@ -416,28 +416,10 @@ class BltConfig(PreTrainedConfig):
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-class BltTextConfig(PreTrainedConfig):
-    """
-    Configuration class for the Blt Text component.
-    """
-
-    pass
-
-
-class BltVisionConfig(PreTrainedConfig):
-    """
-    Configuration class for the Blt Vision component.
-    """
-
-    pass
-
-
 __all__ = [
     "BltConfig",
     "BltPatcherConfig",
     "BltLocalEncoderConfig",
     "BltLocalDecoderConfig",
     "BltGlobalTransformerConfig",
-    "BltTextConfig",
-    "BltVisionConfig",
 ]

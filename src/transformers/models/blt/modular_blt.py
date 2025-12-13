@@ -515,8 +515,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 nn.init.zeros_(module.bias)
             return
 
-        # Fallback to parent default initialization.
-        super()._init_weights(module)
+        return
 
     def _update_causal_mask(self, module):
         raise AttributeError("No need to inherit it!")
@@ -1142,19 +1141,9 @@ class BltForCausalLM(MllamaForCausalLM):
         )
 
 
-class BltVisionModel(BltPreTrainedModel):
-    pass
-
-
-class BltTextModel(BltPreTrainedModel):
-    pass
-
-
 __all__ = [
     "BltPreTrainedModel",
     "BltModel",
     "BltPatcher",
     "BltForCausalLM",
-    "BltVisionModel",
-    "BltTextModel",
 ]

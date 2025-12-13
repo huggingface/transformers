@@ -363,8 +363,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "IdeficsPerceiverConfig": True,
         # TODO: @Arthur/Joao (`hidden_act` unused)
         "GptOssConfig": True,
-        "BltTextConfig": True,
-        "BltVisionConfig": True,
     }
 )
 
