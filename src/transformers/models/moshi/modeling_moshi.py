@@ -27,13 +27,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin
-from ...masking_utls import create_causal_mask
+from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput, Seq2SeqLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
@@ -41,9 +41,6 @@ from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
 if is_flash_attn_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -1913,21 +1910,17 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = inputs_embeds.shape
-                device = inputs_embeds.device
             else:
                 batch_size, sequence_length = input_ids.shape
-                device = input_ids.device
 
-            attention_mask = self.decoder.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.decoder.lm_head.weight.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
+            attention_mask = create_masks_for_generate(
                 config=self.config,
+                # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+                input_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                attention_mask=attention_mask,
+                cache_position=cache_position,
                 past_key_values=past_key_values,
+                position_ids=position_ids,
             )
 
         model_inputs.update(

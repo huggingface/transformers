@@ -527,6 +527,12 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             # fuse encoder_hidden_states and inputs_embeds
             inputs_embeds = torch.cat([encoder_hidden_states, inputs_embeds], dim=1)
 
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            )
+
         attention_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
