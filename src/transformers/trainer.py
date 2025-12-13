@@ -403,6 +403,15 @@ class Trainer:
             output_dir = "tmp_trainer"
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
+
+        # Fixes issues 28530 + 40217: Data collator automatic label detection sets label_names to ['label'] but changes ['label'] to ['labels'] if provided
+        if args.label_names == ["label"]:
+            logger.warning(
+                "Setting label_names=['label'] is redundant and may cause issues. "
+                "Removing it to use automatic label detection."
+            )
+            self.args.label_names = None
+
         if args.batch_eval_metrics and compute_metrics is not None:
             if "compute_result" not in inspect.signature(compute_metrics).parameters:
                 raise ValueError(
