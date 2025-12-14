@@ -152,7 +152,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.NEAREST`.
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
