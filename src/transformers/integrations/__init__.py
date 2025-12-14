@@ -115,6 +115,11 @@ _import_structure = {
         "run_hp_search_ray",
         "run_hp_search_wandb",
     ],
+    "moe": [
+        "batched_mm_experts_forward",
+        "grouped_mm_experts_forward",
+        "use_experts_implementation",
+    ],
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
@@ -255,6 +260,11 @@ if TYPE_CHECKING:
         run_hp_search_optuna,
         run_hp_search_ray,
         run_hp_search_wandb,
+    )
+    from .moe import (
+        batched_mm_experts_forward,
+        grouped_mm_experts_forward,
+        use_experts_implementation,
     )
     from .mxfp4 import (
         Mxfp4GptOssExperts,
