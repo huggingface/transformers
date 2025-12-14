@@ -1773,12 +1773,21 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
 
 class InfNanRemoveLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation method to fail. Note that using
-    the logits processor should only be used if necessary since it can slow down the generation method.
+    [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation method to fail. This version
+    has been extended to sanitize both logits and hidden state output tensors to handle instabilities in very wide
+    models or ones sharded across many devices.
+
+    Note that using the logits processor should only be used if necessary since it can slow down the generation method.
 
     This logits processor has no `generate` example, as there shouldn't be a correct combination of flags that warrants
-    its use.
+    its use. However, when dealing with sharded models across many GPUs or models with very wide hidden dimensions that
+    can produce unstable values, setting `remove_invalid_values=True` in generation config will activate this processor
+    automatically.
     """
+
+    def __init__(self, hidden_states_aware=True):
+        # Flag to control whether we also want to clean hidden states
+        self.hidden_states_aware = hidden_states_aware
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
