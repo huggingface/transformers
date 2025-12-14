@@ -113,7 +113,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, list[float]]] = None,
         include_top: bool = True,
         **kwargs,
-    ) -> None:
+    ):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 346, "width": 346}
         size = get_size_dict(size)
