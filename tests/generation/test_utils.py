@@ -2978,6 +2978,88 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.all(is_close))
 
     @slow
+    def test_PLess_example_integration(self):
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+        model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        # model.config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+        prompts = [
+            "A sequence: 1, 10",
+            "A sequence: 1, 10",
+        ]
+        input_ids = tokenizer(
+            prompts,
+            padding=True,
+            return_tensors="pt",
+        )
+
+        torch.manual_seed(17)
+
+        outputs = model.generate(
+            **input_ids,
+            num_beams=1,
+            do_sample=True,
+            temperature=1.0,
+            top_k=0,
+            top_p=None,
+            p_less=True,
+            max_new_tokens=64,
+            num_return_sequences=1,
+        )
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        print(outputs)
+        self.assertListEqual(
+            outputs,
+            [
+                "A sequence: 1, 10, 11, 100, 101, 110, 111, 1000, 1001, 1010, 1011, 1100, 1101, 11",
+                "A sequence: 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 100000",
+            ],
+        )
+
+    @slow
+    def test_PLessNorm_example_integration(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B")
+        model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-3B")
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        # model.config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+        prompts = [
+            "Math and life are similar because",
+        ]
+        input_ids = tokenizer(
+            prompts,
+            return_tensors="pt",
+        )
+
+        torch.manual_seed(42)
+
+        outputs = model.generate(
+            **input_ids,
+            num_beams=1,
+            do_sample=True,
+            temperature=1.0,
+            top_k=0,
+            top_p=None,
+            p_less_norm=True,
+            max_new_tokens=64,
+            num_return_sequences=1,
+        )
+        outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        print(outputs)
+        self.assertListEqual(
+            outputs,
+            [
+                "Math and life are similar because both of them are about numbers. In math, we use \
+numbers to solve problems. In life, we use numbers to make decisions. For example, if you want to buy \
+a house, you will need to calculate how much money you have and how much the house costs. You will \
+also need to consider other factors,",
+            ],
+        )
+
+    @slow
     def test_TopH_example_integration(self):
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B")
         model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B")

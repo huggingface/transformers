@@ -431,6 +431,26 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         min_k_logits_wrap = MinPLogitsWarper(min_p=new_config.min_p)
         self.assertEqual(min_k_logits_wrap.min_p, min_p)
 
+    def test_serialize_generation_p_less(self):
+        """Tests that GenerationConfig is serialized with `p_less` as `True`"""
+        p_less = True
+
+        generation_config = GenerationConfig(p_less=p_less, do_sample=True)
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertEqual(new_config.p_less, p_less)
+
+    def test_serialize_generation_p_less_norm(self):
+        """Tests that GenerationConfig is serialized with `p_less_norm` as `True`"""
+        p_less_norm = True
+
+        generation_config = GenerationConfig(p_less_norm=p_less_norm, do_sample=True)
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertEqual(new_config.p_less_norm, p_less_norm)
+
     def test_serialize_generation_typical_p(self):
         """Tests that GenerationConfig is serialized and TypicalLogitsWarper is initialized with mass"""
         mass = 0.8

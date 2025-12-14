@@ -89,6 +89,8 @@ from .logits_process import (
     MinPLogitsWarper,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
+    PLessLogitsWarper,
+    PLessNormLogitsWarper,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
     SequenceBiasLogitsProcessor,
@@ -1329,6 +1331,10 @@ class GenerationMixin(ContinuousMixin):
                 processors.append(
                     MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
                 )
+            if generation_config.p_less is not None:
+                processors.append(PLessLogitsWarper(generation_config.p_less))
+            if generation_config.p_less_norm is not None:
+                processors.append(PLessNormLogitsWarper(generation_config.p_less_norm))
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
                 processors.append(
                     TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)

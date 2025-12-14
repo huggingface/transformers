@@ -162,6 +162,22 @@ class GenerationConfig(PushToHubMixin):
         top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 1.0
+        p_less (`bool`, *optional*):
+            Set to `True` to use p-less, a hyperparameter-free decoding method that adaptively determines the minimum
+            threshold probability for admitting tokens into the sampling set, based on the information from the full
+            token distribution. The p-less method balances the adaptive threshold probability with the entropy of the
+            token distribution, i.e. a higher entropy results in a lower threshold and vice versa, which is a befitting
+            relationship. The p-less threshold is also bounded and valid, i.e. guaranteed to be at least the uniform
+            token probability and at most the modal probability. For details, see *p-less Sampling: A Robust
+            Hyperparameter-free Approach for LLM Decoding* at https://arxiv.org/abs/2509.23234.
+        p_less_norm (`bool`, *optional*):
+            Set to `True` to use p-less-norm, a hyperparameter-free decoding method that adaptively determines the
+            minimum threshold probability for admitting tokens into the sampling set, based on the information from the
+            full token distribution. The p-less-norm method balances the adaptive threshold probability with the
+            entropy of the token distribution, i.e. a higher entropy results in a lower threshold and vice versa, which
+            is a befitting relationship. The p-less-norm threshold is also bounded and valid, i.e. guaranteed to be at
+            least zero and at most the modal probability. For details, see *p-less Sampling: A Robust
+            Hyperparameter-free Approach for LLM Decoding* at https://arxiv.org/abs/2509.23234.
         min_p (`float`, *optional*):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
@@ -360,6 +376,8 @@ class GenerationConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.p_less = kwargs.pop("p_less", None)
+        self.p_less_norm = kwargs.pop("p_less_norm", None)
         self.min_p = kwargs.pop("min_p", None)
         self.top_h = kwargs.pop("top_h", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
@@ -594,6 +612,12 @@ class GenerationConfig(PushToHubMixin):
                 )
             if self.top_p is not None and self.top_p != 1.0:
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
+            if self.p_less is not None:
+                minor_issues["p_less"] = greedy_wrong_parameter_msg.format(flag_name="p_less", flag_value=self.p_less)
+            if self.p_less_norm is not None:
+                minor_issues["p_less_norm"] = greedy_wrong_parameter_msg.format(
+                    flag_name="p_less_norm", flag_value=self.p_less_norm
+                )
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
             if self.top_h is not None:
