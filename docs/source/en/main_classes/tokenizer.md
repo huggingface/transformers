@@ -67,6 +67,8 @@ vision_tokenizer = AutoTokenizer.from_pretrained(
 print(vision_tokenizer.image_token, vision_tokenizer.image_token_id)
 ("<image>", 32000)
 ```
+> **Note:** The `image_token` is automatically added to the tokenizer vocabulary when passed via `extra_special_tokens`.
+> The corresponding `image_token_id` is assigned dynamically based on the current vocabulary size.
 
 ## PreTrainedTokenizer
 
