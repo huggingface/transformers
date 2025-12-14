@@ -66,7 +66,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling` filter, *optional*, defaults to `PIL.Image.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
