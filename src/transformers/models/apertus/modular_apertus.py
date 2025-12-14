@@ -192,9 +192,13 @@ class ApertusConfig(PreTrainedConfig):
 
 class ApertusMLP(NemotronMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if config.hidden_act == "xielu":
+            from ...activations import ACT2CLS
+
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
 
 class ApertusRMSNorm(LlamaRMSNorm):

@@ -49,6 +49,10 @@ class ApertusMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        if config.hidden_act == "xielu":
+            from ...activations import ACT2CLS
+
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.up_proj(x)))
