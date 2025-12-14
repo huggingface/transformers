@@ -300,7 +300,6 @@ def convert_sam3_checkpoint(
     config: Optional[Sam3Config] = None,
     push_to_hub: bool = False,
     repo_id: Optional[str] = None,
-    safe_serialization: bool = True,
 ):
     """
     Convert SAM3 checkpoint from original format to HuggingFace format.
@@ -311,7 +310,6 @@ def convert_sam3_checkpoint(
         config: Optional Sam3Config to use (otherwise creates default)
         push_to_hub: Whether to push the model to the Hub
         repo_id: Repository ID for pushing to Hub
-        safe_serialization: Whether to save using safetensors
     """
     # Create output directory
     os.makedirs(output_path, exist_ok=True)
@@ -382,7 +380,6 @@ def convert_sam3_checkpoint(
     print(f"Saving converted model to {output_path}")
     model.save_pretrained(
         output_path,
-        safe_serialization=safe_serialization,
     )
 
     # Save processor
@@ -453,12 +450,6 @@ def main():
         default=None,
         help="Repository ID for pushing to Hub (e.g., 'facebook/sam3-large')",
     )
-    parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        default=True,
-        help="Whether to save using safetensors format",
-    )
 
     args = parser.parse_args()
 
@@ -467,7 +458,6 @@ def main():
         output_path=args.output_path,
         push_to_hub=args.push_to_hub,
         repo_id=args.repo_id,
-        safe_serialization=args.safe_serialization,
     )
 
 
