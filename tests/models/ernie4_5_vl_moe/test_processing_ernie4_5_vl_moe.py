@@ -129,7 +129,14 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids", "pixel_values", "image_grid_thw"],
+            [
+                "input_ids",
+                "attention_mask",
+                "mm_token_type_ids",
+                "moe_mm_token_type_ids",
+                "pixel_values",
+                "image_grid_thw",
+            ],
         )
 
         # test if it raises when no input is passed
@@ -204,7 +211,12 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             return_tensors=return_tensors,
         )
-        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"]))
+        self.assertTrue(
+            all(
+                key in out_dict_text
+                for key in ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"]
+            )
+        )
         self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
         self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
         self.assertEqual(len(out_dict_text["mm_token_type_ids"]), batch_size)
@@ -276,7 +288,9 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"])
+        self.assertListEqual(
+            list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"]
+        )
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {

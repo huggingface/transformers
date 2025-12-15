@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -266,8 +265,7 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 
 
 @slow
-# @require_torch_multi_accelerator
-# @require_torch_large_accelerator
+@require_torch_large_accelerator(memory=80)  # TODO: check actual memory usage
 @require_torch
 class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
@@ -348,7 +346,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and"
         self.assertEqual(
-            self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -372,8 +370,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -409,7 +407,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = 'A black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi'  # fmt: skip
 
         self.assertEqual(
-            self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -431,8 +429,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -465,8 +463,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -496,8 +494,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
             ],
             EXPECTED_DECODED_TEXT,
         )

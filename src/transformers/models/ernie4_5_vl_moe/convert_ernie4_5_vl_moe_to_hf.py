@@ -321,7 +321,9 @@ if __name__ == "__main__":
         default="baidu/ERNIE-4.5-VL-28B-A3B-PT",
         help="Path to the downloaded checkpoint",
     )
-    parser.add_argument("--output_folder", default="ErnieTest/ErnieVL", type=str, help="Path to your output directory.")
+    parser.add_argument(
+        "--output_folder", default="ErnieTest/ErnieVL", type=str, help="Path to your output directory."
+    )
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,
