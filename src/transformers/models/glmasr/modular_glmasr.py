@@ -251,7 +251,7 @@ class GlmasrRotaryEmbedding(Glm4RotaryEmbedding):
 
 
 class GlmasrEncoderLayer(VoxtralEncoderLayer):
-    def __init__(self, config: GlmasrConfig):
+    def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
 
     def forward(
