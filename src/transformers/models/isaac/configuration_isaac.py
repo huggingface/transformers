@@ -19,8 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import copy
 from typing import Any, Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
@@ -96,24 +94,11 @@ class IsaacConfig(PretrainedConfig):
         **kwargs,
     ):
         self._rope_parameters: Optional[dict[str, Any]] = None
-        resolved_text_config = kwargs.pop("text_config", text_config)
-        if isinstance(resolved_text_config, Qwen3Config):
-            text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
-        elif isinstance(resolved_text_config, dict):
-            text_config_kwargs = copy.deepcopy(resolved_text_config)
-        elif resolved_text_config is None:
-            text_config_kwargs = {}
-        else:
-            raise TypeError("`text_config` must be a mapping or `Qwen3Config` instance when provided.")
 
-        text_config_kwargs.update(kwargs)
-
-        self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-        if not hasattr(self.text_config, "rope_theta"):
-            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
-            if rope_theta_override is None:
-                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
-            self.text_config.rope_theta = rope_theta_override
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
 
         super().__init__(**kwargs)
 
@@ -133,7 +118,7 @@ class IsaacConfig(PretrainedConfig):
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_theta
+        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
 
         # Validate rotary parameters now that they have been mirrored locally.
         rope_config_validation(self)

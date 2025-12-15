@@ -1127,24 +1127,11 @@ class IsaacConfig(PretrainedConfig):
         **kwargs,
     ):
         self._rope_parameters: Optional[dict[str, Any]] = None
-        resolved_text_config = kwargs.pop("text_config", text_config)
-        if isinstance(resolved_text_config, Qwen3Config):
-            text_config_kwargs = copy.deepcopy(resolved_text_config.to_dict())
-        elif isinstance(resolved_text_config, dict):
-            text_config_kwargs = copy.deepcopy(resolved_text_config)
-        elif resolved_text_config is None:
-            text_config_kwargs = {}
-        else:
-            raise TypeError("`text_config` must be a mapping or `Qwen3Config` instance when provided.")
 
-        text_config_kwargs.update(kwargs)
-
-        self.text_config = self.sub_configs["text_config"](**text_config_kwargs)
-        if not hasattr(self.text_config, "rope_theta"):
-            rope_theta_override = text_config_kwargs.get("rope_theta", kwargs.get("rope_theta"))
-            if rope_theta_override is None:
-                rope_theta_override = getattr(Qwen3Config(), "rope_theta", 10000.0)
-            self.text_config.rope_theta = rope_theta_override
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            self.text_config = self.sub_configs["text_config"]()
 
         super().__init__(**kwargs)
 
@@ -1164,7 +1151,7 @@ class IsaacConfig(PretrainedConfig):
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_theta
+        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
 
         # Validate rotary parameters now that they have been mirrored locally.
         rope_config_validation(self)
@@ -1725,6 +1712,11 @@ class IsaacModel(Qwen3PreTrainedModel):
         cos = cos.to(inputs_embeds.dtype)
         sin = sin.to(inputs_embeds.dtype)
 
+        # Flash attention expects 1D position_ids; keep 3D only for rotary phases
+        decoder_position_ids = position_ids
+        if position_ids is not None and position_ids.ndim == 3:
+            decoder_position_ids = position_ids[..., 0]
+
         # Prepare attention mask
 
         if not isinstance(attention_mask, dict):
@@ -1734,7 +1726,7 @@ class IsaacModel(Qwen3PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "position_ids": position_ids,
+                "position_ids": decoder_position_ids,
             }
             attention_mask = create_masks_for_generate(**mask_kwargs)
 
@@ -1748,7 +1740,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_attention_mask,
-                position_ids=position_ids,
+                position_ids=decoder_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
