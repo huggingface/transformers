@@ -29,6 +29,7 @@ from huggingface_hub import is_offline_mode
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
+from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
@@ -118,7 +119,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # Preserve original tokenizer for ByteLevel decoder restoration. Some models (e.g., Mistral/Ministral)
             # use ByteLevel encoding in tokenizer.json but are loaded via tokenizer classes (e.g., LlamaTokenizer)
             # that have custom __init__ methods that overwrite the ByteLevel decoder with Metaspace decoder.
-            if "ByteLevel" in str(tokenizer_object.decoder):
+            if 'ByteLevel' in str(tokenizer_object.decoder):
                 local_kwargs["_original_tokenizer_object"] = tokenizer_object
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
@@ -140,7 +141,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
-
+            
             if processor is not None:
                 local_kwargs["post_processor"] = processor
             return local_kwargs
@@ -470,22 +471,22 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if token_value is None:
                 continue
             if isinstance(token_value, AddedToken):
-                tokens_to_add.append(token_value)
+                    tokens_to_add.append(token_value)
             elif isinstance(token_value, str):
-                tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
+                    tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
 
         # V5: Check extra special tokens
         for token in self._extra_special_tokens:
             if isinstance(token, AddedToken):
-                tokens_to_add.append(token)
+                    tokens_to_add.append(token)
             elif isinstance(token, str):
-                tokens_to_add.append(AddedToken(token, special=True, normalized=False))
+                    tokens_to_add.append(AddedToken(token, special=True, normalized=False))
 
         if tokens_to_add:
             # Ensure special tokens are added as such to the backend
             self.add_tokens(tokens_to_add, special_tokens=True)
 
-        if hasattr(self, "_add_bos_token") or hasattr(self, "_add_eos_token"):
+        if getattr(self, "_should_update_post_processor", True) or self._tokenizer.post_processor is None:
             self.update_post_processor()
 
     @property
