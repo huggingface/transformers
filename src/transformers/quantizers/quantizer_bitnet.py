@@ -81,7 +81,6 @@ class BitNetHfQuantizer(HfQuantizer):
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
         )
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:

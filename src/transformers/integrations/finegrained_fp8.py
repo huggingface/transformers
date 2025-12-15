@@ -466,9 +466,11 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+
                 else:
                     raise NotImplementedError("Not supported")
+
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
@@ -483,7 +485,8 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
-            output = torch.nan_to_num(output, nan=0.0)
+
+            #            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 

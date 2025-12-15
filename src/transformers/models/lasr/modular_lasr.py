@@ -291,6 +291,10 @@ class LasrCTCConfig(ParakeetCTCConfig):
             **kwargs,
         )
 
+    @property
+    def inputs_to_logits_ratio(self):
+        return self.encoder_config.subsampling_conv_stride**2
+
 
 class LasrEncoderSubsampling(nn.Module):
     def __init__(self, config: LasrEncoderConfig):
