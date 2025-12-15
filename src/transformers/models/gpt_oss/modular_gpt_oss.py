@@ -412,7 +412,7 @@ class GptOssModel(MixtralModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        
+
         if (
             "flash" in self.config._attn_implementation 
             and self.config._attn_implementation != "kernels-community/vllm-flash-attn3"
