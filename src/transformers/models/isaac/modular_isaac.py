@@ -1533,6 +1533,7 @@ class IsaacRotaryEmbedding(nn.Module):
 class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
+    _supports_flex_attn = False
     # Expose tied-weights mapping even if empty for base model tests.
     all_tied_weights_keys: dict[str, str] = {}
 
