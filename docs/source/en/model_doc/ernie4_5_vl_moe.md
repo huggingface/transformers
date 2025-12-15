@@ -164,58 +164,58 @@ print(output_text)
 ```
 
 
-## Ernie4_5_VLConfig
+## Ernie4_5_VL_MoeConfig
 
-[[autodoc]] Ernie4_5_VLConfig
+[[autodoc]] Ernie4_5_VL_MoeConfig
 
-## Ernie4_5_VLTextConfig
+## Ernie4_5_VL_MoeTextConfig
 
-[[autodoc]] Ernie4_5_VLTextConfig
+[[autodoc]] Ernie4_5_VL_MoeTextConfig
 
-## Ernie4_5_VLVisionConfig
+## Ernie4_5_VL_MoeVisionConfig
 
-[[autodoc]] Ernie4_5_VLVisionConfig
+[[autodoc]] Ernie4_5_VL_MoeVisionConfig
 
-## Ernie4_5_VLImageProcessor
+## Ernie4_5_VL_MoeImageProcessor
 
-[[autodoc]] Ernie4_5_VLImageProcessor
+[[autodoc]] Ernie4_5_VL_MoeImageProcessor
     - preprocess
 
-## Ernie4_5_VLImageProcessorFast
+## Ernie4_5_VL_MoeImageProcessorFast
 
-[[autodoc]] Ernie4_5_VLImageProcessorFast
+[[autodoc]] Ernie4_5_VL_MoeImageProcessorFast
     - preprocess
 
-## Ernie4_5_VLVideoProcessor
+## Ernie4_5_VL_MoeVideoProcessor
 
-[[autodoc]] Ernie4_5_VLVideoProcessor
+[[autodoc]] Ernie4_5_VL_MoeVideoProcessor
     - preprocess
 
-## Ernie4_5_VLProcessor
+## Ernie4_5_VL_MoeProcessor
 
-[[autodoc]] Ernie4_5_VLProcessor
+[[autodoc]] Ernie4_5_VL_MoeProcessor
 
-## Ernie4_5_VLTextModel
+## Ernie4_5_VL_MoeTextModel
 
-[[autodoc]] Ernie4_5_VLTextModel
+[[autodoc]] Ernie4_5_VL_MoeTextModel
     - forward
 
-## Ernie4_5_VLVisionTransformerPretrainedModel
+## Ernie4_5_VL_MoeVisionTransformerPretrainedModel
 
-[[autodoc]] Ernie4_5_VLVisionTransformerPretrainedModel
+[[autodoc]] Ernie4_5_VL_MoeVisionTransformerPretrainedModel
     - forward
 
-## Ernie4_5_VLVariableResolutionResamplerModel
+## Ernie4_5_VL_MoeVariableResolutionResamplerModel
 
-[[autodoc]] Ernie4_5_VLVariableResolutionResamplerModel
+[[autodoc]] Ernie4_5_VL_MoeVariableResolutionResamplerModel
     - forward
 
-## Ernie4_5_VLModel
+## Ernie4_5_VL_MoeModel
 
-[[autodoc]] Ernie4_5_VLModel
+[[autodoc]] Ernie4_5_VL_MoeModel
     - forward
 
-## Ernie4_5_VLForConditionalGeneration
+## Ernie4_5_VL_MoeForConditionalGeneration
 
-[[autodoc]] Ernie4_5_VLForConditionalGeneration
+[[autodoc]] Ernie4_5_VL_MoeForConditionalGeneration
     - forward
