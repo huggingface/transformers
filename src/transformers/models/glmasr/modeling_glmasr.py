@@ -365,7 +365,7 @@ class GlmasrPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Glmasr encoder, which is a Whisper encoder.
+    The glmasr encoder, which is a Whisper encoder.
     """
 )
 class GlmasrEncoder(GlmasrPreTrainedModel):
@@ -548,7 +548,7 @@ class GlmasrMultiModalProjector(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The Glmasr model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
+    The glmasr model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
     """
 )
 class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
@@ -633,7 +633,7 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         >>> import torch
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> repo_id = "mistralai/Glmasr-Mini-3B-2507"
+        >>> repo_id = "mistralai/glmasr-Mini-3B-2507"
 
         >>> processor = AutoProcessor.from_pretrained(repo_id)
         >>> model = GlmasrForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
