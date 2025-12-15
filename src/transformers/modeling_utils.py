@@ -16,7 +16,6 @@
 import collections
 import copy
 import functools
-import gc
 import importlib.metadata
 import inspect
 import json
@@ -64,6 +63,7 @@ from .integrations.accelerate import (
     check_and_set_device_map,
     expand_device_map,
     init_empty_weights,
+    load_offloaded_parameter,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
@@ -130,7 +130,6 @@ from .utils.quantization_config import QuantizationMethod
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import extract_model_from_parallel
-    from accelerate.utils.modeling import get_state_dict_from_offload
 
 
 _torch_distributed_available = torch.distributed.is_available()
@@ -233,23 +232,28 @@ def set_zero3_state():
         _is_ds_init_called = False
 
 
-def restore_default_dtype(func):
+@contextmanager
+def local_torch_dtype(dtype: torch.dtype, model_class_name: str | None = None):
     """
-    Decorator to restore the default torch dtype
-    at the end of the function. Serves
-    as a backup in case calling the function raises
-    an error after the function has changed the default dtype but before it could restore it.
+    Locally change the torch default dtype to `dtype`, and restore the old one upon exiting the context.
+    If `model_class_name` is provided, it's used to provide a more helpful error message if `dtype` is not valid.
     """
+    # Just a more helping error before we set `torch.set_default_dtype` later on which would crash in this case
+    if not dtype.is_floating_point:
+        if model_class_name is not None:
+            error_message = (
+                f"{model_class_name} cannot be instantiated under `dtype={dtype}` as it's not a floating-point dtype"
+            )
+        else:
+            error_message = f"Cannot set `{dtype}` as torch's default as it's not a floating-point dtype"
+        raise ValueError(error_message)
 
-    @wraps(func)
-    def _wrapper(*args, **kwargs):
-        old_dtype = torch.get_default_dtype()
-        try:
-            return func(*args, **kwargs)
-        finally:
-            torch.set_default_dtype(old_dtype)
-
-    return _wrapper
+    original_dtype = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(dtype)
+        yield
+    finally:
+        torch.set_default_dtype(original_dtype)
 
 
 def get_torch_context_manager_or_global_device():
@@ -403,6 +407,86 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
         else:
             shared_tensors.append(shared)
     return shared_tensors, identical
+
+
+def remove_tied_weights_from_state_dict(
+    state_dict: dict[str, torch.Tensor], model: "PreTrainedModel"
+) -> dict[str, torch.Tensor]:
+    """
+    Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
+    will expect when reloading (even if we know tie weights symmetrically, it's better to keep the intended one).
+    This is because `safetensors` does not allow tensor aliasing - so we're going to remove aliases before saving.
+    """
+    # To avoid any potential mistakes and mismatches between config and actual tied weights, here we check the pointers
+    # of the Tensors themselves -> we are guaranteed to find all the actual tied weights
+    ptrs = collections.defaultdict(list)
+    for name, tensor in state_dict.items():
+        if not isinstance(tensor, torch.Tensor):
+            # Sometimes in the state_dict we have non-tensor objects.
+            # e.g. in bitsandbytes we have some `str` objects in the state_dict
+            # In the non-tensor case, fall back to the pointer of the object itself
+            ptrs[id(tensor)].append(name)
+
+        elif tensor.device.type == "meta":
+            # In offloaded cases, there may be meta tensors in the state_dict.
+            # For these cases, key by the pointer of the original tensor object
+            # (state_dict tensors are detached and therefore no longer shared)
+            tensor = model.get_parameter(name)
+            ptrs[id(tensor)].append(name)
+
+        else:
+            ptrs[id_tensor_storage(tensor)].append(name)
+
+    shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+
+    # Recursively descend to find tied weight keys
+    all_potential_tied_weights_keys = set(_get_tied_weight_keys(model))
+    error_names = []
+    to_delete_names = set()
+    # Removing the keys which are declared as known duplicates on load. This allows to make sure the name which is
+    # kept is consistent
+    if all_potential_tied_weights_keys is not None:
+        for names in shared_ptrs.values():
+            found = 0
+            for name in sorted(names):
+                matches_pattern = any(re.search(pat, name) for pat in all_potential_tied_weights_keys)
+                if matches_pattern and name in state_dict:
+                    found += 1
+                    if found < len(names):
+                        to_delete_names.add(name)
+    # We are entering a place where the weights and the transformers configuration do NOT match.
+    shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
+    # Those are actually tensor sharing but disjoint from each other, we can safely clone them
+    # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
+    for name in disjoint_names:
+        state_dict[name] = state_dict[name].clone()
+
+    # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+    # If the link between tensors was done at runtime then `from_pretrained` will not get
+    # the key back leading to random tensor. A proper warning will be shown
+    # during reload (if applicable), but since the file is not necessarily compatible with
+    # the config, better show a proper warning.
+    shared_names, identical_names = _find_identical(shared_names, state_dict)
+    # delete tensors that have identical storage
+    for inames in identical_names:
+        known = inames.intersection(to_delete_names)
+        for name in known:
+            del state_dict[name]
+        unknown = inames.difference(to_delete_names)
+        if len(unknown) > 1:
+            error_names.append(unknown)
+
+    if shared_names:
+        error_names.extend(shared_names)
+
+    if len(error_names) > 0:
+        raise RuntimeError(
+            f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. "
+            f"We found all the potential target tied weights keys to be: {all_potential_tied_weights_keys}.\n"
+            "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
+        )
+
+    return state_dict
 
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
@@ -696,23 +780,21 @@ def _get_resolved_checkpoint_files(
 
 
 def _get_dtype(
-    cls,
     dtype: Optional[Union[str, torch.dtype, dict]],
     checkpoint_files: Optional[list[str]],
     config: PreTrainedConfig,
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
-) -> tuple[PreTrainedConfig, Optional[torch.dtype], Optional[torch.dtype]]:
+) -> tuple[PreTrainedConfig, torch.dtype]:
     """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
-    1. If dtype is not None, we use that dtype
-    2. If dtype is "auto", we auto-detect dtype from the loaded state_dict, by checking its first
-        weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
-    we also may have config.dtype available, but we won't rely on it till v5
+    1. If dtype is "auto", we try to read the config, else auto-detect dtype from the loaded state_dict, by checking
+    its first weights entry that is of a floating type - we assume all floating dtype weights are of the same dtype
+    2. Else, use the dtype provided as a dict or str
     """
-    dtype_orig = None
     is_sharded = sharded_metadata is not None
+    asked_dtype = dtype
 
     if dtype is not None:
         if isinstance(dtype, str):
@@ -736,43 +818,46 @@ def _get_dtype(
                     )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
-                config.dtype = dtype
-                for sub_config_key in config.sub_configs:
-                    if (sub_config := getattr(config, sub_config_key)) is not None:
-                        sub_config.dtype = dtype
-        elif isinstance(dtype, torch.dtype):
-            config.dtype = dtype
-            for sub_config_key in config.sub_configs:
-                if (sub_config := getattr(config, sub_config_key)) is not None:
-                    sub_config.dtype = dtype
-        elif isinstance(dtype, dict):
-            for key, curr_dtype in dtype.items():
-                if hasattr(config, key):
-                    value = getattr(config, key)
-                    curr_dtype = curr_dtype if not isinstance(curr_dtype, str) else getattr(torch, curr_dtype)
-                    value.dtype = curr_dtype
-            # main torch dtype for modules that aren't part of any sub-config
-            dtype = dtype.get("")
-            dtype = dtype if not isinstance(dtype, str) else getattr(torch, dtype)
-            config.dtype = dtype
-            if dtype is None:
-                dtype = torch.float32
-        else:
+            else:
+                raise ValueError(
+                    "`dtype` provided as a `str` can only be `'auto'`, or a string representation of a valid `torch.dtype`"
+                )
+
+            # cast it to a proper `torch.dtype` object
+            dtype = getattr(torch, dtype) if isinstance(dtype, str) else dtype
+        elif not isinstance(dtype, (dict, torch.dtype)):
             raise ValueError(
                 f"`dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `dtype` "
                 f"for each sub-config in composite configs, but received {dtype}"
             )
-
-        dtype_orig = cls._set_default_dtype(dtype)
     else:
-        # set fp32 as the default dtype for BC
-        default_dtype = torch.get_default_dtype()
-        config.dtype = default_dtype
-        for key in config.sub_configs:
-            if (sub_config := getattr(config, key)) is not None:
-                sub_config.dtype = default_dtype
-    dtype = dtype if isinstance(dtype, torch.dtype) else getattr(torch, dtype)
-    return config, dtype, dtype_orig
+        # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
+        dtype = torch.get_default_dtype()
+
+    # Get the main dtype
+    if isinstance(dtype, dict):
+        main_dtype = dtype.get("", torch.get_default_dtype())
+        main_dtype = getattr(torch, main_dtype) if isinstance(main_dtype, str) else main_dtype
+    else:
+        main_dtype = dtype
+
+    # Set it on the config and subconfigs
+    config.dtype = main_dtype
+    for sub_config_key in config.sub_configs:
+        if (sub_config := getattr(config, sub_config_key)) is not None:
+            # The dtype was "auto" -> try to read the subconfig dtype value if any
+            if asked_dtype == "auto":
+                sub_dtype = getattr(sub_config, "dtype", main_dtype)
+                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
+            # The dtype was provided as a dict, try to see if we match the subconfig name
+            elif isinstance(dtype, dict):
+                sub_dtype = dtype.get(sub_config_key, main_dtype)
+                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
+            else:
+                sub_dtype = main_dtype
+            sub_config.dtype = sub_dtype
+
+    return config, main_dtype
 
 
 class PipelineParallel(Enum):
@@ -798,11 +883,7 @@ class ModuleUtilsMixin:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        dtype = self._dtype or next(param.dtype for param in self.parameters() if param.is_floating_point())
-        if isinstance(dtype, str):
-            if hasattr(torch, dtype):
-                dtype = getattr(torch, dtype)
-        return dtype
+        return next(param.dtype for param in self.parameters() if param.is_floating_point())
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -1081,7 +1162,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     _keep_in_fp32_modules_strict = None
 
     dtype_plan: Optional[dict[str, torch.dtype]] = None
-    _dtype: Optional[Union[str, torch.dtype]] = torch.get_default_dtype()
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1226,8 +1306,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.config = config
-        default_dtype = torch.get_default_dtype()
-        self._dtype = default_dtype
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1400,7 +1478,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self.model_tags.append(tag)
 
     @classmethod
-    @restore_default_dtype
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
@@ -1409,9 +1486,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype (`torch.dtype`, *optional*):
                 Override the default `dtype` and load the model under this dtype.
         """
-        # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
-        # a warning is raised that dtype should be fp16. Since we never pass dtype from within
-        # modeling code, we can try to infer it here same way as done in `from_pretrained`
         # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
@@ -1421,66 +1495,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
-        # override default dtype if needed
-        dtype_orig = None
-        if dtype is not None:
-            dtype_orig = cls._set_default_dtype(dtype)
-
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        init_contexts = []
+        if dtype is not None:
+            init_contexts.append(local_torch_dtype(dtype, cls.__name__))
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
             import deepspeed
 
-            init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
-            with ContextManagers(init_contexts):
-                model = cls(config, **kwargs)
+            init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
 
-        else:
+        # Instantiate the model
+        with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
 
-        # restore default dtype if it was modified
-        if dtype_orig is not None:
-            torch.set_default_dtype(dtype_orig)
-
         return model
-
-    @classmethod
-    def _set_default_dtype(cls, dtype: torch.dtype) -> torch.dtype:
-        """
-        Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
-        under specific dtype.
-
-        Args:
-            dtype (`torch.dtype`):
-                a floating dtype to set to.
-
-        Returns:
-            `torch.dtype`: the original `dtype` that can be used to restore `torch.set_default_dtype(dtype)` if it was
-            modified. If it wasn't, returns `None`.
-
-        Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
-        `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
-        """
-        if isinstance(dtype, str):
-            if hasattr(torch, dtype):
-                dtype = getattr(torch, dtype)
-            else:
-                raise ValueError(f"Received an invalid string dtype: {dtype}")
-        if not dtype.is_floating_point:
-            raise ValueError(
-                f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
-            )
-
-        logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
-        dtype_orig = torch.get_default_dtype()
-        torch.set_default_dtype(dtype)
-        cls._dtype = dtype
-        return dtype_orig
 
     @property
     def base_model(self) -> nn.Module:
@@ -3172,28 +3206,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
-        # for offloaded modules
-        module_map = {}
-
-        # Save the model
+        # Get the model state_dict
         if state_dict is None:
-            # if any model parameters are offloaded, make module map
-            if (
-                hasattr(self, "hf_device_map")
-                and len(set(self.hf_device_map.values())) > 1
-                and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
-            ):
-                warnings.warn(
-                    "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory exceeds the `shard_size` (5GB default)"
-                )
-                for name, module in model_to_save.named_modules():
-                    if name == "":
-                        continue
-                    module_state_dict = module.state_dict()
-
-                    for key in module_state_dict:
-                        module_map[name + f".{key}"] = module
             state_dict = model_to_save.state_dict()
+
+        # if any model parameters are offloaded, we need to know it for later
+        is_offloaded = False
+        if (
+            hasattr(self, "hf_device_map")
+            and len(set(self.hf_device_map.values())) > 1
+            and ("cpu" in self.hf_device_map.values() or "disk" in self.hf_device_map.values())
+        ):
+            is_offloaded = True
+            warnings.warn(
+                "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
+                "exceeds the `shard_size` (50GB default)"
+            )
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -3211,76 +3239,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self._tp_size is not None:
             state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
-        # Safetensors does not allow tensor aliasing - we're going to remove aliases before saving
-        ptrs = collections.defaultdict(list)
-        for name, tensor in state_dict.items():
-            if not isinstance(tensor, torch.Tensor):
-                # Sometimes in the state_dict we have non-tensor objects.
-                # e.g. in bitsandbytes we have some `str` objects in the state_dict
-                # In the non-tensor case, fall back to the pointer of the object itself
-                ptrs[id(tensor)].append(name)
-
-            elif tensor.device.type == "meta":
-                # In offloaded cases, there may be meta tensors in the state_dict.
-                # For these cases, key by the pointer of the original tensor object
-                # (state_dict tensors are detached and therefore no longer shared)
-                tensor = self.get_parameter(name)
-                ptrs[id(tensor)].append(name)
-
-            else:
-                ptrs[id_tensor_storage(tensor)].append(name)
-
-        shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-
-        # Recursively descend to find tied weight keys
-        _tied_weights_keys = set(_get_tied_weight_keys(self))
-        error_names = []
-        to_delete_names = set()
-        for names in shared_ptrs.values():
-            # Removing the keys which are declared as known duplicates on
-            # load. This allows to make sure the name which is kept is consistent.
-            if _tied_weights_keys is not None:
-                found = 0
-                for name in sorted(names):
-                    matches_pattern = any(re.search(pat, name) for pat in _tied_weights_keys)
-                    if matches_pattern and name in state_dict:
-                        found += 1
-                        if found < len(names):
-                            to_delete_names.add(name)
-        # We are entering a place where the weights and the transformers configuration do NOT match.
-        shared_names, disjoint_names = _find_disjoint(shared_ptrs.values(), state_dict)
-        # Those are actually tensor sharing but disjoint from each other, we can safely clone them
-        # Reloaded won't have the same property, but it shouldn't matter in any meaningful way.
-        for name in disjoint_names:
-            state_dict[name] = state_dict[name].clone()
-
-        # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-        # If the link between tensors was done at runtime then `from_pretrained` will not get
-        # the key back leading to random tensor. A proper warning will be shown
-        # during reload (if applicable), but since the file is not necessarily compatible with
-        # the config, better show a proper warning.
-        shared_names, identical_names = _find_identical(shared_names, state_dict)
-        # delete tensors that have identical storage
-        for inames in identical_names:
-            known = inames.intersection(to_delete_names)
-            for name in known:
-                del state_dict[name]
-            unknown = inames.difference(to_delete_names)
-            if len(unknown) > 1:
-                error_names.append(unknown)
-
-        if shared_names:
-            error_names.extend(shared_names)
-
-        if len(error_names) > 0:
-            raise RuntimeError(
-                f"The weights trying to be saved contained shared tensors {error_names} which are not properly defined. We found `_tied_weights_keys` to be: {_tied_weights_keys}.\n"
-                "This can also just mean that the module's tied weight keys are wrong vs the actual tied weights in the model.",
-            )
+        # Remove tied weights as safetensors do not handle them
+        state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
 
         # Revert all renaming and/or weight operations
         if save_original_format:
-            state_dict = revert_weight_conversion(self, state_dict)
+            state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -3320,47 +3284,39 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
+
         # Save the model
-        filename_to_tensors = state_dict_split.filename_to_tensors.items()
-        if module_map:
-            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
-        for shard_file, tensors in filename_to_tensors:
-            shard = {}
-            for tensor in tensors:
-                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
-                    full_tensor = state_dict[tensor].full_tensor()
+        for shard_file, tensor_names in logging.tqdm(
+            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+        ):
+            filename = os.path.join(save_directory, shard_file)
+            shard_state_dict = {}
+            for tensor_name in tensor_names:
+                # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                tensor = state_dict.pop(tensor_name)
+
+                # In case of TP, get the full parameter back
+                if _is_dtensor_available and isinstance(tensor, DTensor):
+                    tensor = tensor.full_tensor()
                     # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
-                        full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
-                    shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
-                else:
-                    shard[tensor] = state_dict[tensor].contiguous()
-                # delete reference, see https://github.com/huggingface/transformers/pull/34890
-                del state_dict[tensor]
+                    if _get_parameter_tp_plan(tensor_name, self._tp_plan) == "local_packed_rowwise":
+                        tensor = repack_weights(tensor, -1, self._tp_size, 2)
 
-            # remake shard with onloaded parameters if necessary
-            if module_map:
-                # init state_dict for this shard
-                shard_state_dict = dict.fromkeys(shard, "")
-                for module_name in shard:
-                    # note that get_state_dict_from_offload can update with meta tensors
-                    # if both a parent module and its descendant are offloaded
-                    tensor = shard_state_dict[module_name]
-                    if tensor == "" or (isinstance(tensor, torch.Tensor) and tensor.device.type == "meta"):
-                        # update state dict with onloaded parameters
-                        module = module_map[module_name]
-                        shard_state_dict = get_state_dict_from_offload(module, module_name, shard_state_dict)
+                # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
+                # but it would otherwise not be contained in the saved shard if we were to simply move the file
+                # or something
+                if is_offloaded and tensor.device.type == "meta":
+                    tensor = load_offloaded_parameter(model_to_save, tensor_name)
 
-                # assign shard to be the completed state dict
-                shard = shard_state_dict
-                del shard_state_dict
-                gc.collect()
+                # only do contiguous after it's permuted correctly in case of TP
+                shard_state_dict[tensor_name] = tensor.contiguous()
 
-            # TODO: we should def parallelize this we are otherwise just waiting
-            # too much before scheduling the next write when its in a different file
-            safe_save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
-
-        del state_dict
+            # TODO: it would be very nice to do the writing concurrently, but safetensors never releases the GIL,
+            # so it's not possible for now....
+            # Write the shard to disk
+            safe_save_file(shard_state_dict, filename, metadata=metadata)
+            # Cleanup the data before next loop (important with offloading, so we don't blowup cpu RAM)
+            del shard_state_dict
 
         if index is None:
             path_to_weights = os.path.join(save_directory, weights_name)
@@ -3537,11 +3493,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls, is_quantized: bool, _is_ds_init_called: bool):
+    def get_init_context(cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool):
+        # Need to instantiate with correct dtype
+        init_contexts = [local_torch_dtype(dtype, cls.__name__)]
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            init_contexts = [no_init_weights()]
+            init_contexts.append(no_init_weights())
             # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -3549,7 +3507,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([init_empty_weights(), set_quantized_state()])
         else:
-            init_contexts = [no_init_weights(), init_empty_weights()]
+            init_contexts.extend([no_init_weights(), init_empty_weights()])
 
         return init_contexts
 
@@ -3583,7 +3541,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.use_kernels = False
 
     @classmethod
-    @restore_default_dtype
     def from_pretrained(
         cls: type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -3963,12 +3920,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ]
 
         # Find the correct dtype based on current state
-        config, dtype, dtype_orig = _get_dtype(
-            cls, dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only
-        )
+        config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
 
         config.name_or_path = pretrained_model_name_or_path
-        model_init_context = cls.get_init_context(is_quantized, _is_ds_init_called)
+        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
@@ -3996,10 +3951,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-
-        # restore default dtype
-        if dtype_orig is not None:
-            torch.set_default_dtype(dtype_orig)
 
         # Finalize model weight initialization
         model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
