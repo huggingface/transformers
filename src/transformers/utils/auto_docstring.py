@@ -1287,8 +1287,6 @@ def _process_parameter_type(param):
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
-        param_name (`str`): The name of the parameter
-        func (`function`): The function the parameter belongs to
     """
     optional = False
     if param.annotation == inspect.Parameter.empty:
