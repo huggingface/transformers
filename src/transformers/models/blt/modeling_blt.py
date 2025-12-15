@@ -1470,11 +1470,5 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
 
-    # full forward each step
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        kwargs["input_ids"] = input_ids
-        kwargs["use_cache"] = False
-        return kwargs
-
 
 __all__ = ["BltPreTrainedModel", "BltModel", "BltPatcher", "BltForCausalLM"]

@@ -1094,11 +1094,11 @@ class BltForCausalLM(MllamaForCausalLM):
         self.lm_head = nn.Linear(config.decoder_config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
-    # full forward each step
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        kwargs["input_ids"] = input_ids
-        kwargs["use_cache"] = False
-        return kwargs
+    # # full forward each step
+    # def prepare_inputs_for_generation(self, input_ids, **kwargs):
+    #     kwargs["input_ids"] = input_ids
+    #     kwargs["use_cache"] = False
+    #     return kwargs
 
     def forward(
         self,
