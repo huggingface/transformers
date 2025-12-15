@@ -69,7 +69,7 @@ class ModernVBertModelTester:
         batch_size=2,
         num_images=2,
         text_config={
-            "vocab_size": 99,
+            "vocab_size": 98,
             "pad_token_id": 0,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -98,6 +98,8 @@ class ModernVBertModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
+        image_token_id: int = 98,
+        vocab_size: int = 99,
         pixel_shuffle_factor=2,
         num_labels=3,
         num_choices=4,
@@ -109,7 +111,7 @@ class ModernVBertModelTester:
         self.text_config = text_config
         self.vision_config = vision_config
         self.num_images = num_images
-        self.image_token_id = self.text_config["vocab_size"] - 1
+        self.image_token_id = image_token_id
         self.image_size = vision_config["image_size"]
         self.pixel_shuffle_factor = pixel_shuffle_factor
         self.seq_length = (
@@ -117,7 +119,7 @@ class ModernVBertModelTester:
             * self.num_images
         )
 
-        self.vocab_size = self.text_config["vocab_size"]
+        self.vocab_size = vocab_size
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
@@ -133,6 +135,7 @@ class ModernVBertModelTester:
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
             pixel_shuffle_factor=self.pixel_shuffle_factor,
+            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
