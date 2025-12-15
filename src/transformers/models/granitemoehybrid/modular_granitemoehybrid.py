@@ -209,7 +209,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.embedding_multiplier = config.embedding_multiplier
-        self.position_embedding_type = config.position_embedding_type
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if config.position_embedding_type == "rope" else None
 
     @auto_docstring
     @check_model_inputs
@@ -253,7 +253,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         # embed positions
         hidden_states = inputs_embeds
         position_embeddings = None
-        if self.position_embedding_type == "rope":
+        if self.rotary_emb is not None:
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
