@@ -1566,6 +1566,10 @@ class IsaacModel(Qwen3PreTrainedModel):
         # Initialize weights and parallel plans (including tp_plan from the text model)
         self.post_init()
 
+        # Respect config-specified gradient checkpointing
+        if getattr(config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
