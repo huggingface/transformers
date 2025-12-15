@@ -21,6 +21,8 @@ import ast
 import sys
 from pathlib import Path
 
+from rich import print
+
 
 MODELS_ROOT = Path("src/transformers/models")
 MODELING_PATTERNS = ("modeling_*.py", "modular_*.py")
@@ -29,6 +31,10 @@ MODELING_PATTERNS = ("modeling_*.py", "modular_*.py")
 def iter_modeling_files():
     for pattern in MODELING_PATTERNS:
         yield from MODELS_ROOT.rglob(pattern)
+
+
+def colored_error_message(file_path: str, line_number: int, message: str) -> str:
+    return f"[bold red]{file_path}[/bold red]:[bold yellow]L{line_number}[/bold yellow]: {message}"
 
 
 def full_name(node: ast.AST):
@@ -61,11 +67,11 @@ def check_init_weights(node: ast.AST, violations: list[str], file_path: str) -> 
                     sub_node.func.value, (ast.Name, ast.Attribute)
                 ) and "module." in full_name(sub_node.func.value)
                 if is_inplace_ops and is_on_module_weight:
-                    violations.append(
-                        f"{file_path}:{sub_node.lineno}: `_init_weights(self, module)` uses an in-place operation on a "
-                        "module's weight. Please use the `init` functions primitives instead, usually imported as "
-                        "`from ... import initialization as init`."
+                    error_msg = (
+                        "`_init_weights(self, module)` uses an in-place operation on a module's weight. Please use the "
+                        "`init` functions primitives instead, usually imported as `from ... import initialization as init`"
                     )
+                    violations.append(colored_error_message(file_path, sub_node.lineno, error_msg))
 
     return violations
 
@@ -112,9 +118,8 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
                         break
                 # If we did not break, `post_init` was never called
                 else:
-                    violations.append(
-                        f"{file_path}:{sub_node.lineno}: `__init__` of {node.name} does not call `self.post_init`."
-                    )
+                    error_msg = f"`__init__` of {node.name} does not call `self.post_init`"
+                    violations.append(colored_error_message(file_path, sub_node.lineno, error_msg))
                 break
 
     return violations
@@ -135,9 +140,10 @@ def main():
             violations = check_init_weights(node, violations, file_path)
             violations = check_post_init(node, violations, file_path)
 
-    if violations:
+    if len(violations) > 0:
+        violations = sorted(violations)
         print("\n".join(violations), file=sys.stderr)
-        raise ValueError("Found some errors. Check the offensive files above.")
+        raise ValueError("Some errors in modelings. Check the above message")
 
 
 if __name__ == "__main__":
