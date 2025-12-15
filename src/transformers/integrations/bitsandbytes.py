@@ -280,11 +280,7 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def dequantize_and_replace(
-    model,
-    quantization_config=None,
-    dtype=None
-):
+def dequantize_and_replace(model, quantization_config=None, dtype=None):
     """
     Converts a quantized model into its dequantized original version. The newly converted model will have
     some performance drop compared to the original model before quantization - use it only for specific usecases
@@ -308,9 +304,7 @@ def dequantize_and_replace(
                     f"The modules are dequantized in {weight.dtype}. If you want to change the dtype, please specify `dtype` in `dequantize`. "
                 )
             else:
-                logger.warning_once(
-                    f"The modules are dequantized in {weight.dtype} and casted to {dtype}."
-                )
+                logger.warning_once(f"The modules are dequantized in {weight.dtype} and casted to {dtype}.")
                 weight = weight.to(dtype)
             new_module.weight = torch.nn.Parameter(weight)
             if bias is not None:

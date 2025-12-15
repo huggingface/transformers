@@ -241,7 +241,7 @@ class HfQuantizer(ABC):
         Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
-        if dtype is None: 
+        if dtype is None:
             # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
             # or we need to upcast everything to the same dtype
             dtype = model.config.dtype
