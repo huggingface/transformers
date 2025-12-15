@@ -12,10 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import TYPE_CHECKING
+
+from collections import defaultdict
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel
 
 
 if is_torch_available():
@@ -63,13 +69,20 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
+        from compressed_tensors.transform import apply_transform_config
 
         ct_quantization_config = self.compressor.quantization_config
+        ct_transform_config = self.quantization_config.transform_config
 
-        # Always initialize compressed wrappers to match the checkpoint
+        # apply configs
+        if ct_transform_config is not None:
+            apply_transform_config(model, ct_transform_config)
+            self._update_transforms_tied_weights(model)
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+
+        # compress meta model to patch compressed checkpoint
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
@@ -82,7 +95,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            self.compressor.decompress_model(model=model)
+            self.dequantize(model)
+
+    def dequantize(self, model: "PreTrainedModel"):
+        self.compressor.decompress_model(model=model)
 
     def update_tp_plan(self, config):
         additional_plan = {
@@ -109,3 +125,26 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def _update_transforms_tied_weights(self, model: "PreTrainedModel"):
+        from compressed_tensors.transform import TransformBase
+        
+        # create mapping: tied_ptr -> key
+        weight_to_keys = defaultdict(list)
+        for name, module in model.named_modules():
+            if isinstance(module, TransformBase):
+                for param_name, param in module.named_parameters(recurse=False):
+                    param_fqn = f"{name}.{param_name}" if name else param_name
+                    weight_to_keys[id(param)].append(param_fqn)
+
+        # create tied weights: key -> tied_keys[0]
+        # PreTrainedModel.tie_weights will tie keys with the same value (tied_keys[0])
+        transform_tied_weights_keys = {}
+        for keys in weight_to_keys.values():
+            keys = list(keys)
+            for key in keys[1:]:
+                transform_tied_weights_keys[key] = keys[0]
+
+        # update tied weights attributes
+        model._tied_weights_keys.update(transform_tied_weights_keys)
+        model.all_tied_weights_keys = model._tied_weights_keys
