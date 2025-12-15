@@ -15,6 +15,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
+from functools import cached_property
 
 import torch
 import torch.nn as nn
@@ -443,6 +444,7 @@ class PeAudioVideoOutput(ModelOutput):
     logits_video_plus_text_audio: Optional[torch.FloatTensor] = None
 
     loss: Optional[torch.FloatTensor] = None
+    audio_video_loss: Optional[torch.FloatTensor] = None
     audio_text_loss: Optional[torch.FloatTensor] = None
     video_text_loss: Optional[torch.FloatTensor] = None
     audio_video_text_loss: Optional[torch.FloatTensor] = None
@@ -502,7 +504,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
 
         self.post_init()
 
-    @property
+    @cached_property
     def audio_model(self):
         audio_config_cls = CONFIG_MAPPING["pe_audio"]
         audio_config = audio_config_cls(
@@ -523,7 +525,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
 
         return model
 
-    @property
+    @cached_property
     def video_model(self):
         video_config_cls = CONFIG_MAPPING["pe_video"]
         video_config = video_config_cls(
@@ -685,11 +687,11 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         if input_ids is None:
             return PeAudioVideoOutput(
                 logits_audio_video=logits_audio_video,
-                audio_video_loss=audio_video_loss,
                 audio_embeds=audio_embeds,
                 video_embeds=video_embeds,
                 audio_video_embeds=audio_video_embeds,
                 loss=audio_video_loss if return_loss else None,
+                audio_video_loss=audio_video_loss if return_loss else None,
             )
 
         text_outputs = self.text_model(
@@ -700,11 +702,11 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         )
 
         text_embeds = text_outputs.hidden_states[-1][:, 0]
-        audio_plus_text_embeds = torch.cat([text_embeds, audio_embeds], dim=-1)
-        video_plus_text_embeds = torch.cat([text_embeds, video_embeds], dim=-1)
-
+        audio_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.audio_model_output.pooler_output], dim=-1)
+        video_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.video_model_output.pooler_output], dim=-1)
         text_audio_embeds = self.text_audio_head(text_embeds)
         text_video_embeds = self.text_video_head(text_embeds)
+
         text_audio_video_embeds = self.text_audio_video_head(text_embeds)
         audio_plus_text_embeds = self.audio_plus_text_head(audio_plus_text_embeds)
         video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
