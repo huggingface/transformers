@@ -29,6 +29,7 @@ from huggingface_hub import is_offline_mode
 from tokenizers import AddedToken, processors
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
+from tokenizers import normalizers as tokenizers_normalizers
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
@@ -114,6 +115,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
             processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            tokenizer_object = TokenizerFast.from_file(fast_tokenizer_file)
+            # Preserve original tokenizer for ByteLevel decoder restoration. Some models (e.g., Mistral/Ministral)
+            # use ByteLevel encoding in tokenizer.json but are loaded via tokenizer classes (e.g., LlamaTokenizer)
+            # that have custom __init__ methods that overwrite the ByteLevel decoder with Metaspace decoder.
+            if 'ByteLevel' in str(tokenizer_object.decoder):
+                local_kwargs["_original_tokenizer_object"] = tokenizer_object
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -134,7 +141,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
-
+            
             if processor is not None:
                 local_kwargs["post_processor"] = processor
             return local_kwargs
@@ -449,22 +456,30 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         Child classes should call super()._post_init() if they override this method.
         """
+        # Restore ByteLevel decoder/pre_tokenizer if preserved in convert_to_native_format.
+        # This fixes decoding issues for models that use ByteLevel encoding but are loaded via
+        # tokenizer classes with custom __init__ methods that create a new tokenizer.
+        original_tokenizer_object = self.init_kwargs.pop("_original_tokenizer_object", None)
+        if original_tokenizer_object is not None:
+            self._tokenizer.decoder = original_tokenizer_object.decoder
+            self._tokenizer.pre_tokenizer = original_tokenizer_object.pre_tokenizer
+        
         tokens_to_add = []
         # V5: Check named special tokens
         for token_value in self._special_tokens_map.values():
             if token_value is None:
                 continue
             if isinstance(token_value, AddedToken):
-                tokens_to_add.append(token_value)
+                    tokens_to_add.append(token_value)
             elif isinstance(token_value, str):
-                tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
+                    tokens_to_add.append(AddedToken(token_value, special=True, normalized=False))
 
         # V5: Check extra special tokens
         for token in self._extra_special_tokens:
             if isinstance(token, AddedToken):
-                tokens_to_add.append(token)
+                    tokens_to_add.append(token)
             elif isinstance(token, str):
-                tokens_to_add.append(AddedToken(token, special=True, normalized=False))
+                    tokens_to_add.append(AddedToken(token, special=True, normalized=False))
 
         if tokens_to_add:
             # Ensure special tokens are added as such to the backend
