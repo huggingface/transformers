@@ -31,7 +31,7 @@ from ...file_utils import (
     ModelOutput,
 )
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
