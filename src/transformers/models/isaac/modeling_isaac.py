@@ -1300,8 +1300,8 @@ class IsaacPreTrainedModel(PreTrainedModel):
 class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     """Isaac multimodal model for conditional generation."""
 
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
@@ -1416,7 +1416,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
                 self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
             # Retie lm_head to embeddings when applicable
             if hasattr(self.model, "embed_tokens"):
-                self.lm_head.weight = self.model.embed_tokens.weight
+                self.lm_head.weight = self.model.text_model.embed_tokens.weight
 
     def get_rope_index(
         self,

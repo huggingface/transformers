@@ -1775,8 +1775,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     config_class = IsaacConfig
     _can_compile_fullgraph = False
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.model.set_input_embeddings(value)
@@ -1789,7 +1789,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             if self.lm_head.weight.shape[0] != vocab_size:
                 self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
             if hasattr(self.model, "embed_tokens"):
-                self.lm_head.weight = self.model.embed_tokens.weight
+                self.lm_head.weight = self.model.text_model.embed_tokens.weight
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
