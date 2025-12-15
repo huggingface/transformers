@@ -173,6 +173,9 @@ class PixoModelTester:
             list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
         )
 
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        self.parent.skipTest(reason="Pixo currently exposes only the base model and backbone.")
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -300,7 +303,7 @@ class PixoModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         # valid the first three patch tokens
-        torch.testing.assert_close(outputs.last_hidden_state[0, 8:11, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 8:11, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_torch

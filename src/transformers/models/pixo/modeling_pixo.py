@@ -39,7 +39,11 @@ from .configuration_pixo import PixoConfig
 
 
 class PixoPatchEmbeddings(nn.Module):
-    """Pixo patch embeddings accept arbitrary image sizes as long as they are divisible by the patch size."""
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
 
     def __init__(self, config: PixoConfig):
         super().__init__()
@@ -56,21 +60,19 @@ class PixoPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels, height, width = pixel_values.shape[1:]
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        if height % self.patch_size[0] != 0:
-            raise ValueError(
-                f"Make sure that the height dimension {height} of the pixel values is divisible by patch size {self.patch_size[0]}."
-            )
-        if width % self.patch_size[1] != 0:
-            raise ValueError(
-                f"Make sure that the width dimension {width} of the pixel values is divisible by patch size {self.patch_size[1]}."
-            )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -82,6 +84,7 @@ class PixoEmbeddings(nn.Module):
         super().__init__()
         self.patch_embeddings = PixoPatchEmbeddings(config)
         self.cls_token = nn.Parameter(torch.randn(1, config.n_cls_tokens, config.hidden_size))
+        self.mask_token = None
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + config.n_cls_tokens, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -342,17 +345,19 @@ class PixoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PixoLayer"]
+    _no_split_modules = ["PixoEmbeddings", "PixoLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": PixoLayer,
         "attentions": PixoSelfAttention,
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -363,6 +368,8 @@ class PixoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, PixoEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
 
 
 @auto_docstring
@@ -425,6 +432,7 @@ class PixoBackbone(PixoPreTrainedModel, BackboneMixin):
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> PixoPatchEmbeddings:
