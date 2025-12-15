@@ -146,3 +146,6 @@ class PixoConfig(BackboneConfigMixin, PreTrainedConfig):
         self.reshape_hidden_states = reshape_hidden_states
 
         self.n_cls_tokens = n_cls_tokens
+
+
+__all__ = ["PixoConfig"]

@@ -15,9 +15,6 @@
 """PyTorch Pixo model."""
 
 from typing import Optional
-import collections.abc
-from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -26,27 +23,22 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import auto_docstring, logging, torch_int
 from ...utils.generic import check_model_inputs
-from ..dinov2.modeling_dinov2 import Dinov2Backbone, Dinov2DropPath, Dinov2MLP
-from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
-from .configuration_pixo import PixoConfig
-from ... import initialization as init
-from ...activations import ACT2FN
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
-from ..dinov2.modeling_dinov2 import Dinov2PatchEmbeddings, Dinov2SelfAttention, Dinov2Attention, Dinov2SelfOutput, Dinov2DropPath, Dinov2MLP, Dinov2PreTrainedModel, Dinov2Backbone, Dinov2Model
+from ..dinov2.modeling_dinov2 import (
+    Dinov2Backbone,
+    Dinov2DropPath,
+    Dinov2MLP,
+)
+from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
 logger = logging.get_logger(__name__)
 
 
-
 class PixoConfig(Dinov2Config):
     r"""
     This is the configuration class to store the configuration of a [`PixoModel`]. It is used to instantiate a
-    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ViT
     [facebook/pixo-huge](https://huggingface.co/facebook/pixo-huge) architecture.
 
@@ -160,9 +152,9 @@ class PixoConfig(Dinov2Config):
             apply_layernorm=apply_layernorm,
             reshape_hidden_states=reshape_hidden_states,
         )
-        
+
         self.n_cls_tokens = n_cls_tokens
-        
+
         del self.layerscale_value
         del self.use_swiglu_ffn
         del self.use_mask_token
@@ -171,14 +163,15 @@ class PixoConfig(Dinov2Config):
 class PixoPatchEmbeddings(ViTPatchEmbeddings):
     pass
 
+
 class PixoEmbeddings(nn.Module):
     """
     Construct the CLS tokens, position and patch embeddings.
     """
-    
+
     def __init__(self, config: PixoConfig) -> None:
         super().__init__()
-        
+
         self.cls_token = nn.Parameter(torch.randn(1, config.n_cls_tokens, config.hidden_size))
         self.mask_token = None
         self.patch_embeddings = PixoPatchEmbeddings(config)
@@ -408,4 +401,4 @@ class PixoBackbone(Dinov2Backbone):
         )
 
 
-__all__ = ["PixoModel", "PixoPreTrainedModel", "PixoBackbone"]
+__all__ = ["PixoConfig", "PixoModel", "PixoPreTrainedModel", "PixoBackbone"]
