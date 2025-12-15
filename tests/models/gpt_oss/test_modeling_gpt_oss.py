@@ -28,6 +28,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     is_torch_available,
+    GptOssConfig,
 )
 from transformers.testing_utils import (
     cleanup,
