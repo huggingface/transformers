@@ -49,6 +49,7 @@ class QuantoQuantize(ConversionOps):
 
         # need to discard some missing keys we already updated the module in freeze.
         module_name = full_layer_name.rsplit(".", 1)[0]
+        missing_keys.discard(f"{module_name}.weight")
         missing_keys.discard(f"{module_name}.input_scale")
         missing_keys.discard(f"{module_name}.output_scale")
         return {}
@@ -57,7 +58,7 @@ class QuantoQuantize(ConversionOps):
 def replace_with_quanto_layers(
     model,
     quantization_config=None,
-    modules_to_not_convert=None,
+    modules_to_not_convert: list[str] | None = None,
 ):
     """
     Public method that recursively replaces the Linear layers of the given model with Quanto quantized layers.

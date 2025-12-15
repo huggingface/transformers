@@ -107,6 +107,7 @@ class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.num_local_experts
+        self.intermediate_dim = config.moe_intermediate_size
 
 
 class DeepseekV3MoE(nn.Module):
@@ -304,6 +305,7 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
