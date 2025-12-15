@@ -73,6 +73,7 @@ ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
 ]
 
 TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
+TOKENIZER_FILE = "tokenizer.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 DEFAULT_CHAT_TEMPLATE = """
 {%- set image_count = namespace(value=0) -%}
@@ -161,7 +162,7 @@ def load_json(save_dir, filename):
 
 def write_json(json_object, save_dir, filename):
     with open(os.path.join(save_dir, filename), "w") as f:
-        json.dump(json_object, f)
+        json.dump(json_object, f, indent=2, sort_keys=True, ensure_ascii=False)
 
 
 def convert_vision_config_to_hf(vision_config, original_config, original_vision_config):
@@ -285,6 +286,12 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
         "video_start_token": "<|VIDEO_START|>",
     }
     write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
+
+    # Originally added as "added" tokens which will always be interpreted as special tokens
+    # BUT we want to treat them as non-special tokens during decode, i.e. this is a workaround
+    tokenizer_file = load_json(TMP_TOKENIZER_DIR, TOKENIZER_FILE)
+    del tokenizer_file["added_tokens"][3:13]
+    write_json(tokenizer_file, TMP_TOKENIZER_DIR, TOKENIZER_FILE)
 
     # Reload and save to get correct formatting
     tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR)

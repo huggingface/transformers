@@ -45,7 +45,7 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
         # TODO: update path
         processor = Ernie4_5_VL_MoeProcessor.from_pretrained(
-            "/raid/anton/code/forks/transformers/ErnieTest/ErnieVL",
+            "/raid/anton/code/forks/transformers/AntonV/ErnieVL",
             patch_size=4,
             size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
         )
