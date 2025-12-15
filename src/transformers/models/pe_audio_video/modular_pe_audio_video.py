@@ -427,6 +427,8 @@ class PeAudioVideoOutput(ModelOutput):
     text_audio_embeds: Optional[torch.FloatTensor] = None
     text_video_embeds: Optional[torch.FloatTensor] = None
     text_audio_video_embeds: Optional[torch.FloatTensor] = None
+    audio_plus_text_embeds: Optional[torch.FloatTensor] = None
+    video_plus_text_embeds: Optional[torch.FloatTensor] = None
 
     # model outputs
     # TODO: update types to the correct ones
@@ -438,12 +440,16 @@ class PeAudioVideoOutput(ModelOutput):
     logits_video_text: Optional[torch.FloatTensor] = None
     logits_audio_video_text: Optional[torch.FloatTensor] = None
     logits_audio_video: Optional[torch.FloatTensor] = None
+    logits_audio_plus_text: Optional[torch.FloatTensor] = None
+    logits_video_plus_text: Optional[torch.FloatTensor] = None
 
     loss: Optional[torch.FloatTensor] = None
     audio_video_loss: Optional[torch.FloatTensor] = None
     text_audio_loss: Optional[torch.FloatTensor] = None
     text_video_loss: Optional[torch.FloatTensor] = None
     text_audio_video_loss: Optional[torch.FloatTensor] = None
+    audio_plus_text_loss: Optional[torch.FloatTensor] = None
+    video_plus_text_loss: Optional[torch.FloatTensor] = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
@@ -484,12 +490,29 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         self.text_audio_video_logit_bias = nn.Parameter(torch.zeros(1))
 
         # text-audio
-        self.audio_plus_text_head = PeAudioVideoContrastiveHead(audio_hidden_size + text_hidden_size, text_hidden_size)
+        self.audio_plus_text_head = PeAudioVideoContrastiveHead(text_hidden_size + audio_hidden_size, text_hidden_size)
 
         # text-video
-        self.video_plus_text_head = PeAudioVideoContrastiveHead(video_hidden_size + text_hidden_size, text_hidden_size)
+        self.video_plus_text_head = PeAudioVideoContrastiveHead(text_hidden_size + video_hidden_size, text_hidden_size)
 
         self.post_init()
+
+    # TODO: find the best naming for this function
+    def compute_contrastive(
+        self,
+        embeds1: torch.Tensor,
+        embeds2: torch.Tensor,
+        scale: nn.Parameter,
+        bias: nn.Parameter,
+        return_loss: bool = False,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        logits = (embeds1 @ embeds2.T) * scale + bias
+        loss = None
+        if return_loss:
+            batch_size = embeds1.shape[0]
+            labels = torch.eye(batch_size, device=embeds1.device)
+            loss = -F.logsigmoid(labels * logits).sum() / batch_size
+        return logits, loss
 
     @can_return_tuple
     def forward(
@@ -519,56 +542,77 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         )
 
         audio_video_embeds = audio_video_outputs.pooler_output
-        audio_video_embeds = self.audio_video_head(audio_video_embeds)
-
         audio_embeds = audio_video_outputs.audio_model_output.pooler_output
-        audio_embeds = self.audio_head(audio_embeds)
-
         video_embeds = audio_video_outputs.video_model_output.pooler_output
-        video_embeds = self.video_head(video_embeds)
 
         text_embeds = text_outputs.hidden_states[-1][:, 0]
+        audio_plus_text_embeds = torch.cat([text_embeds, audio_embeds], dim=-1)
+        video_plus_text_embeds = torch.cat([text_embeds, video_embeds], dim=-1)
+
+        audio_video_embeds = self.audio_video_head(audio_video_embeds)
+        audio_embeds = self.audio_head(audio_embeds)
+        video_embeds = self.video_head(video_embeds)
+
         text_audio_embeds = self.text_audio_head(text_embeds)
         text_video_embeds = self.text_video_head(text_embeds)
         text_audio_video_embeds = self.text_audio_video_head(text_embeds)
+        audio_plus_text_embeds = self.audio_plus_text_head(audio_plus_text_embeds)
+        video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
 
-        logits_audio_video = audio_video_embeds @ text_embeds.T
-        logits_audio_video = logits_audio_video * self.audio_video_logit_scale + self.audio_video_logit_bias
-
-        logits_audio_text = audio_embeds @ text_audio_embeds.T
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
-
-        logits_video_text = video_embeds @ text_video_embeds.T
-        logits_video_text = logits_video_text * self.text_video_logit_scale + self.text_video_logit_bias
-
-        logits_audio_video_text = audio_video_embeds @ text_audio_video_embeds.T
-        logits_audio_video_text = (
-            logits_audio_video_text * self.text_audio_video_logit_scale + self.text_audio_video_logit_bias
+        logits_audio_video, audio_video_loss = self.compute_contrastive(
+            audio_video_embeds, text_embeds, self.audio_video_logit_scale, self.audio_video_logit_bias, return_loss
         )
 
-        loss, audio_video_loss, audio_text_loss, video_text_loss, audio_video_text_loss = None, None, None, None, None
+        logits_audio_text, audio_text_loss = self.compute_contrastive(
+            audio_embeds, text_audio_embeds, self.text_audio_logit_scale, self.text_audio_logit_bias, return_loss
+        )
+
+        logits_video_text, video_text_loss = self.compute_contrastive(
+            video_embeds, text_video_embeds, self.text_video_logit_scale, self.text_video_logit_bias, return_loss
+        )
+
+        logits_audio_video_text, audio_video_text_loss = self.compute_contrastive(
+            audio_video_embeds,
+            text_audio_video_embeds,
+            self.text_audio_video_logit_scale,
+            self.text_audio_video_logit_bias,
+            return_loss,
+        )
+
+        logits_audio_plus_text, audio_plus_text_loss = self.compute_contrastive(
+            audio_plus_text_embeds,
+            text_embeds,
+            self.audio_plus_text_logit_scale,
+            self.audio_plus_text_logit_bias,
+            return_loss,
+        )
+
+        logits_video_plus_text, video_plus_text_loss = self.compute_contrastive(
+            video_plus_text_embeds,
+            text_embeds,
+            self.video_plus_text_logit_scale,
+            self.video_plus_text_logit_bias,
+            return_loss,
+        )
+
+        loss = None
         if return_loss:
-            audio_video_labels = torch.eye(audio_video_embeds.shape[0], device=audio_video_embeds.device)
-            audio_text_labels = torch.eye(audio_embeds.shape[0], device=audio_embeds.device)
-            video_text_labels = torch.eye(video_embeds.shape[0], device=video_embeds.device)
-            audio_video_text_labels = torch.eye(audio_video_embeds.shape[0], device=audio_video_embeds.device)
-
-            audio_video_loss = (
-                -F.logsigmoid(audio_video_labels * logits_audio_video).sum() / audio_video_embeds.shape[0]
+            loss = (
+                audio_video_loss
+                + audio_text_loss
+                + video_text_loss
+                + audio_video_text_loss
+                + audio_plus_text_loss
+                + video_plus_text_loss
             )
-            audio_text_loss = -F.logsigmoid(audio_text_labels * logits_audio_text).sum() / audio_embeds.shape[0]
-            video_text_loss = -F.logsigmoid(video_text_labels * logits_video_text).sum() / video_embeds.shape[0]
-            audio_video_text_loss = (
-                -F.logsigmoid(audio_video_text_labels * logits_audio_video_text).sum() / audio_video_embeds.shape[0]
-            )
-
-            loss = audio_video_loss + audio_text_loss + video_text_loss + audio_video_text_loss
 
         return PeAudioVideoOutput(
             logits_audio_video=logits_audio_video,
             logits_audio_text=logits_audio_text,
             logits_video_text=logits_video_text,
             logits_audio_video_text=logits_audio_video_text,
+            logits_audio_plus_text=logits_audio_plus_text,
+            logits_video_plus_text=logits_video_plus_text,
             audio_embeds=audio_embeds,
             video_embeds=video_embeds,
             text_audio_embeds=text_audio_embeds,
@@ -581,6 +625,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             text_audio_loss=audio_text_loss,
             text_video_loss=video_text_loss,
             text_audio_video_loss=audio_video_text_loss,
+            audio_plus_text_loss=audio_plus_text_loss,
+            video_plus_text_loss=video_plus_text_loss,
         )
 
     def forward_text_audio(
@@ -697,6 +743,100 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             audio_embeds=audio_embeds,
             video_embeds=video_embeds,
             audio_model_output=audio_outputs,
+            video_model_output=video_outputs,
+            loss=loss,
+        )
+
+    def forward_audio_plus_text(
+        self,
+        input_ids: torch.Tensor,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        return_loss: bool = False,
+        **kwargs,
+    ) -> PeAudioVideoOutput:
+        audio_outputs = self.audio_video_encoder.embedder.audio_encoder(input_values, padding_mask=padding_mask)
+        audio_embeds = audio_outputs.pooler_output
+        audio_embeds = self.audio_head(audio_embeds)
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_audio_head(text_embeds)
+
+        audio_plus_text_embeds = torch.cat([text_embeds, audio_embeds], dim=-1)
+        audio_plus_text_embeds = self.audio_plus_text_head(audio_plus_text_embeds)
+
+        logits_audio_plus_text = audio_plus_text_embeds @ text_embeds.T
+        logits_audio_plus_text = (
+            logits_audio_plus_text * self.audio_plus_text_logit_scale + self.audio_plus_text_logit_bias
+        )
+
+        loss = None
+        if return_loss:
+            labels = torch.eye(audio_plus_text_embeds.shape[0], device=audio_plus_text_embeds.device)
+            loss = -F.logsigmoid(labels * logits_audio_plus_text).sum() / audio_plus_text_embeds.shape[0]
+
+        return PeAudioVideoOutput(
+            logits_per_text=logits_audio_plus_text.t(),
+            logits_per_audio_plus_text=logits_audio_plus_text,
+            text_embeds=text_embeds,
+            audio_embeds=audio_embeds,
+            audio_plus_text_embeds=audio_plus_text_embeds,
+            text_model_output=text_outputs,
+            audio_model_output=audio_outputs,
+            loss=loss,
+        )
+
+    def forward_video_plus_text(
+        self,
+        input_ids: torch.Tensor,
+        pixel_values_videos: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask_videos: Optional[torch.Tensor] = None,
+        return_loss: bool = False,
+        **kwargs,
+    ) -> PeAudioVideoOutput:
+        video_outputs = self.audio_video_encoder.embedder.video_encoder(
+            pixel_values_videos, padding_mask_videos=padding_mask_videos
+        )
+        video_embeds = video_outputs.pooler_output
+        video_embeds = self.video_head(video_embeds)
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            **{**kwargs, "return_dict": True},
+            output_hidden_states=True,
+        )
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_embeds = self.text_video_head(text_embeds)
+
+        video_plus_text_embeds = torch.cat([text_embeds, video_embeds], dim=-1)
+        video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
+
+        logits_video_plus_text = video_plus_text_embeds @ text_embeds.T
+        logits_video_plus_text = (
+            logits_video_plus_text * self.video_plus_text_logit_scale + self.video_plus_text_logit_bias
+        )
+
+        loss = None
+        if return_loss:
+            labels = torch.eye(video_plus_text_embeds.shape[0], device=video_plus_text_embeds.device)
+            loss = -F.logsigmoid(labels * logits_video_plus_text).sum() / video_plus_text_embeds.shape[0]
+
+        return PeAudioVideoOutput(
+            logits_per_text=logits_video_plus_text.t(),
+            logits_per_video_plus_text=logits_video_plus_text,
+            text_embeds=text_embeds,
+            video_embeds=video_embeds,
+            video_plus_text_embeds=video_plus_text_embeds,
+            text_model_output=text_outputs,
             video_model_output=video_outputs,
             loss=loss,
         )
