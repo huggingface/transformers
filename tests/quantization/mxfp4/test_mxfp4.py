@@ -474,7 +474,6 @@ class Mxfp4ModelTest(unittest.TestCase):
         r"""
         Test if we compute the right module sizes needed to generate the device map.
         Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
-        Note that `compute_module_sizes` is being used in `get_total_byte_count`
         """
         from transformers import AutoConfig, AutoModelForCausalLM
         from transformers.integrations import Mxfp4GptOssExperts
