@@ -716,45 +716,48 @@ class Serve:
         """
         if tray:
             if not transformers_app_available:
-                raise ValueError("The --tray option cannot be specified if transformers-app is not installed.")
-            from transformers_app import tray
+                print("The --tray option cannot be specified if transformers-app is not installed.")
+            else:
+                from transformers_app import tray
 
-            tray(["--host", host, "--port", str(port)])
+                tray(["--host", host, "--port", str(port)])
             return True
 
         if daemon:
             if not transformers_app_available:
-                raise ValueError("The --daemon option cannot be specified if transformers-app is not installed.")
-            from transformers_app import install_and_start
+                print("The --daemon option cannot be specified if transformers-app is not installed.")
+            else:
+                from transformers_app import install_and_start
 
-            install_and_start(host=host, port=port)
+                install_and_start(host=host, port=port)
             return True
 
         if stop_daemon:
             if not transformers_app_available:
-                raise ValueError("The --stop_daemon option cannot be specified if transformers-app is not installed.")
-            from transformers_app import stop
+                print("The --stop_daemon option cannot be specified if transformers-app is not installed.")
+            else:
+                from transformers_app import stop
 
-            stop()
+                stop()
             return True
 
         if uninstall_daemon:
             if not transformers_app_available:
-                raise ValueError(
-                    "The --uninstall_daemon option cannot be specified if transformers-app is not installed."
-                )
-            from transformers_app import uninstall
+                print("The --uninstall_daemon option cannot be specified if transformers-app is not installed.")
+            else:
+                from transformers_app import uninstall
 
-            uninstall()
+                uninstall()
             return True
 
         if daemon_status:
             if not transformers_app_available:
-                raise ValueError("The --damon_status option cannot be specified if transformers-app is not installed.")
-            from transformers_app import status
+                print("The --damon_status option cannot be specified if transformers-app is not installed.")
+            else:
+                from transformers_app import status
 
-            loaded = status("org.huggingface.transformers.serve")["loaded"]
-            print("Daemon: loaded" if loaded else "Daemon: not loaded")
+                loaded = status("org.huggingface.transformers.serve")["loaded"]
+                print("Daemon: loaded" if loaded else "Daemon: not loaded")
             return True
 
         return False
