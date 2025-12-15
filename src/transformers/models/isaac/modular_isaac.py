@@ -1946,7 +1946,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             model_inputs["tensor_stream"] = None
         return model_inputs
 
-    def can_generate(self) -> bool:
+    @classmethod
+    def can_generate(cls) -> bool:
         return True
 
 
