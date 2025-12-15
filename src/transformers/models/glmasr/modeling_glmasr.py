@@ -333,7 +333,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         "hidden_states": GlmasrEncoderLayer,
     }
 
-    def __init__(self, config: GlmasrConfig):
+    def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop

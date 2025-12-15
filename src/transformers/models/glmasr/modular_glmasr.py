@@ -311,7 +311,7 @@ class GlmasrPreTrainedModel(VoxtralPreTrainedModel):
 
 
 class GlmasrEncoder(VoxtralEncoder):
-    def __init__(self, config: GlmasrConfig):
+    def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
         self.rotary_emb = GlmasrRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
