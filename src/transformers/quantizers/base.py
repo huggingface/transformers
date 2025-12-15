@@ -176,7 +176,7 @@ class HfQuantizer(ABC):
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
 
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
+    def preprocess_model(self, model: "PreTrainedModel", dtype=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
         the model should be initialized on the meta device so you can freely manipulate the skeleton
@@ -198,9 +198,8 @@ class HfQuantizer(ABC):
         # once the weights have been quantized
         # Note that once you have loaded a quantized model, you can't change its dtype so this will
         # remain a single source of truth
-        original_dtype = dtype if dtype is not None else torch.get_default_dtype()
-        config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(model, original_dtype)
+        model.config._pre_quantization_dtype = dtype
+        _assign_original_dtype(model, dtype)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model

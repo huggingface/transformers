@@ -282,6 +282,7 @@ def get_state_dict_dtype(state_dict):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
+    print(state_dict)
     for t in state_dict.values():
         if t.is_floating_point():
             return t.dtype
@@ -322,12 +323,15 @@ def load_state_dict(
     """
     # Use safetensors if possible
     if checkpoint_file.endswith(".safetensors"):
+        print(checkpoint_file)
         with safe_open(checkpoint_file, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
                 if map_location == "meta":
                     _slice = f.get_slice(k)
                     k_dtype = _slice.get_dtype()
+                    print("getting dtype")
+                    print(k_dtype)
                     if k_dtype in str_to_torch_dtype:
                         dtype = str_to_torch_dtype[k_dtype]
                     else:
@@ -792,6 +796,7 @@ def _get_dtype(
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> tuple[PreTrainedConfig, torch.dtype]:
     """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
@@ -839,6 +844,9 @@ def _get_dtype(
     else:
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
+
+    if hf_quantizer is not None:
+        hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
@@ -3880,8 +3888,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        hf_quantizer, config, dtype, device_map = get_hf_quantizer(
-            config, quantization_config, dtype, device_map, weights_only, user_agent
+        hf_quantizer, config, device_map = get_hf_quantizer(
+            config, quantization_config, device_map, weights_only, user_agent
         )
 
         if gguf_file:
@@ -3928,7 +3936,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ]
 
         # Find the correct dtype based on current state
-        config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
+        config, dtype = _get_dtype(
+            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+        )
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
@@ -3940,15 +3950,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        # make sure we use the model's config since the __init__ call might have copied it
-        config = model.config
-
         if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
             hf_quantizer.preprocess_model(
                 model=model,
+                dtype=dtype,
                 device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
-                config=config,
                 checkpoint_files=checkpoint_files,
                 use_kernels=use_kernels,
             )
@@ -3999,7 +4005,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
+            hf_quantizer.postprocess_model(model)  # usually a no-op but sometimes needed
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
