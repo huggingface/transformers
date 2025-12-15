@@ -44,12 +44,9 @@ causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
 
 mamba_ssm = lazy_load_kernel("mamba-ssm")
 mamba_ssm_triton = getattr(getattr(mamba_ssm, "ops", None), "triton", None)
-selective_state_update = getattr(
-    getattr(mamba_ssm_triton, "selective_state_update", None), "selective_state_update", None
-)
-ssd_combined = getattr(mamba_ssm_triton, "ssd_combined", None)
-mamba_chunk_scan_combined = getattr(ssd_combined, "mamba_chunk_scan_combined", None)
-mamba_split_conv1d_scan_combined = getattr(ssd_combined, "mamba_split_conv1d_scan_combined", None)
+selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
+mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
 
 is_fast_path_available = all(
     (
