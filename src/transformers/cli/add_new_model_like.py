@@ -716,12 +716,12 @@ def get_user_input():
     add_video_processor = False
     add_feature_extractor = False
     add_processor = False
-    # if old_model_infos.tokenizer_class is not None:
-    #     add_tokenizer = get_user_field(
-    #         f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
-    #         convert_to=convert_to_bool,
-    #         fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-    #     )
+    if old_model_infos.tokenizer_class is not None:
+        add_tokenizer = get_user_field(
+            f"Do you want to create a new tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
+            convert_to=convert_to_bool,
+            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
+        )
     if old_model_infos.fast_tokenizer_class is not None:
         add_fast_tokenizer = get_user_field(
             f"Do you want to create a new fast tokenizer? If `no`, it will use the same as {old_model_type} (y/n)?",
