@@ -41,7 +41,7 @@ def _assign_original_dtype(module, original_dtype):
         _assign_original_dtype(child, original_dtype)
 
 
-def get_keys_to_not_convert(model):
+def get_keys_to_not_convert(model) -> list:
     r"""
     Function to automatically detect keys to not convert for usage like quantization. For example for CausalLM modules
     we may want to keep the lm_head in full precision for numerical stability reasons.
@@ -62,6 +62,8 @@ def get_keys_to_not_convert(model):
         if output_emb_module is not None and id(module) == id(output_emb_module)
     }
     modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
+
+    modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
 
     return list(modules_to_not_convert)
 
@@ -299,12 +301,12 @@ class HfQuantizer(ABC):
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
-    def get_state_dict_and_metadata(self, model, safe_serialization=False):
+    def get_state_dict_and_metadata(self, model):
         """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
         return None, {}
 
     @abstractmethod
-    def is_serializable(self, safe_serialization=None): ...
+    def is_serializable(self): ...
 
     @property
     @abstractmethod

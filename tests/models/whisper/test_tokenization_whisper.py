@@ -237,6 +237,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "Hatee hatee hatee ho"
 
         tokenizer = self.get_tokenizer()
+        tokenizer.set_prefix_tokens(task=None, predict_timestamps=False)
 
         # encode prompt and input text using tokenizer
         prompt_ids = tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
