@@ -209,6 +209,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.embedding_multiplier = config.embedding_multiplier
+        if config.position_embedding_type != "rope":
+            self.rotary_emb = None
 
     @auto_docstring
     @check_model_inputs

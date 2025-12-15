@@ -554,9 +554,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             [GraniteMoeSharedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
-
+        self.rotary_emb = GraniteMoeSharedRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_multiplier = config.embedding_multiplier
 

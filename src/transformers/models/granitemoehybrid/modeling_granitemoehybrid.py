@@ -1270,10 +1270,11 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.position_embedding_type = config.position_embedding_type
-        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if self.position_embedding_type == "rope" else None
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_multiplier = config.embedding_multiplier
+        if config.position_embedding_type != "rope":
+            self.rotary_emb = None
 
         # Initialize weights and apply final processing
         self.post_init()
