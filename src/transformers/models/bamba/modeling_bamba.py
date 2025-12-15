@@ -489,18 +489,6 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-causal_conv1d = lazy_load_kernel("causal-conv1d")
-causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
-
-mamba_ssm = lazy_load_kernel("mamba-ssm")
-selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
-mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
-
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
-
-
 # Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
 class BambaMixer(nn.Module):
     """
@@ -571,6 +559,20 @@ class BambaMixer(nn.Module):
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
+
+        global causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+        mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
+        mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
+
+        global is_fast_path_available
+        is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
 
         if not is_fast_path_available:
             logger.warning_once(

@@ -294,21 +294,6 @@ class JambaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-causal_conv1d = lazy_load_kernel("causal-conv1d")
-causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
-causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
-
-mamba_ssm = lazy_load_kernel("mamba-ssm")
-selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
-mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
-selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
-
-
-is_fast_path_available = all(
-    (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
-)
-
-
 class JambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
@@ -361,6 +346,22 @@ class JambaMambaMixer(nn.Module):
         self.dt_layernorm = JambaRMSNorm(self.time_step_rank, eps=config.rms_norm_eps)
         self.b_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
         self.c_layernorm = JambaRMSNorm(self.ssm_state_size, eps=config.rms_norm_eps)
+
+        global causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global selective_state_update, mamba_inner_fn, selective_scan_fn
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+        mamba_inner_fn = getattr(mamba_ssm, "mamba_inner_fn", None)
+        selective_scan_fn = getattr(mamba_ssm, "selective_scan_fn", None)
+
+        global is_fast_path_available
+        is_fast_path_available = all(
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
