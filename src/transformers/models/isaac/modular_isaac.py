@@ -1563,6 +1563,9 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
 
+        # Initialize weights and parallel plans (including tp_plan from the text model)
+        self.post_init()
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
