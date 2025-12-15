@@ -179,6 +179,16 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
+    @property
+    def image_size(self):
+        """Image size for the vision encoder."""
+        return self.backbone_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to backbone."""
+        self.backbone_config.image_size = value
+
 
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
     r"""
@@ -505,6 +515,16 @@ class Sam3Config(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+    @property
+    def image_size(self):
+        """Image size for the SAM3 model."""
+        return self.vision_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to vision config."""
+        self.vision_config.image_size = value
 
 
 __all__ = [
