@@ -94,7 +94,7 @@ These two methods handle different scenarios for loading weights. Understanding 
 Use this when loading a **non-quantized checkpoint** (e.g., float16/bfloat16 weights) and quantizing during load.
 
 ```
-Checkpoint: model.safetensors (float16 weights)
+Checkpoint: model.safetensors (float16 weights for example)
      ↓
 get_quantize_ops → YourQuantize.convert()
      ↓
