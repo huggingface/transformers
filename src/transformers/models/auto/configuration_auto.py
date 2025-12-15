@@ -625,7 +625,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4v_text", "GLM4V"),
         ("glm4v_vision", "Glm4vVisionModel"),
         ("glmasr", "Glmasr"),
-        ("glmasr_encoder", "GlmasrEncoder"),
+        ("glmasr_encoder", "Glmasr Encoder"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),

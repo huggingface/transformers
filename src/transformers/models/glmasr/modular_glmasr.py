@@ -46,6 +46,7 @@ class GlmasrRotaryEmbedding(nn.Module):
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
+
 class GlmasrEncoderConfig(VoxtralEncoderConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmasrEncoder`]. It is used to instantiate a
@@ -414,9 +415,7 @@ class GlmasrEncoder(VoxtralEncoder):
 class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(
-            config.audio_config.d_model * 4, config.text_config.hidden_size * 2, bias=True
-        )
+        self.linear_1 = nn.Linear(config.audio_config.d_model * 4, config.text_config.hidden_size * 2, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=True)
 
