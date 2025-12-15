@@ -4036,8 +4036,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        # We need parameters + buffers here, as state_dict does not count non-persistent buffers which are taking space
-        expected_keys = [name for name, _ in model.named_parameters()] + [name for name, _ in model.named_buffers()]
+        expected_keys = list(model.state_dict().keys())
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
@@ -4540,13 +4539,19 @@ def get_total_byte_count(
         else None
     )
 
-    modules_sizes, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
             continue
+        
+        param = model.get_parameter_or_buffer(param_name)
 
-        param_byte_count = modules_sizes[param_name]
+        if hf_quantizer is not None:
+            dtype_size = hf_quantizer.param_element_size(model, name, param)
+        else:
+            dtype_size = param.element_size()
+
+        param_byte_count = param.numel() * dtype_size
 
         if tp_plan_regex is not None:
             generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
