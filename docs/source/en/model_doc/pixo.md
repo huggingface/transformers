@@ -126,3 +126,8 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
 
 [[autodoc]] PixoModel
     - forward
+
+## PixoBackbone
+
+[[autodoc]] PixoBackbone
+    - forward
