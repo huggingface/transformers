@@ -563,7 +563,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        audio_embeds = self.audio_video_encoder.embedder.audio_encoder(
+        audio_embeds = self.audio_model.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
             return_dict=True,
@@ -585,7 +585,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        video_embeds = self.audio_video_encoder.embedder.video_encoder(
+        video_embeds = self.video_model.video_encoder(
             pixel_values_videos=pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
             return_dict=True,
