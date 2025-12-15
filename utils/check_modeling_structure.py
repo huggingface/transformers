@@ -99,11 +99,7 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
     very important as we need to do some processing there.
     """
     # Check if it's a PreTrainedModel class definition
-    if (
-        isinstance(node, ast.ClassDef)
-        and not node.name.endswith("PreTrainedModel")
-        and any(full_name(parent).endswith("PreTrainedModel") for parent in node.bases)
-    ):
+    if isinstance(node, ast.ClassDef) and any(full_name(parent).endswith("PreTrainedModel") for parent in node.bases):
         for sub_node in node.body:
             # Check that we are in __init__
             if isinstance(sub_node, ast.FunctionDef) and sub_node.name == "__init__":
@@ -117,8 +113,7 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
                 # If we did not break, `post_init` was never called
                 else:
                     violations.append(
-                        f"{file_path}:{sub_node.lineno}: `__init__` of {node.name} does not call `self.post_init`. "
-                        "Please add it at the end of the `__init__` method."
+                        f"{file_path}:{sub_node.lineno}: `__init__` of {node.name} does not call `self.post_init`."
                     )
                 break
 
