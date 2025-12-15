@@ -99,6 +99,7 @@ class GlmasrEncoderConfig(VoxtralEncoderConfig):
     model_type = "glmasr_encoder"
 
     attribute_map = {
+        "hidden_size": "d_model",
         "encoder_layers": "num_hidden_layers",
         "encoder_attention_heads": "num_attention_heads",
         "encoder_ffn_dim": "intermediate_size",
@@ -108,8 +109,7 @@ class GlmasrEncoderConfig(VoxtralEncoderConfig):
     def __init__(
         self,
         vocab_size=51866,
-        hidden_size=2048,
-        d_model=1280,
+        hidden_size=1280,
         intermediate_size=6144,
         num_hidden_layers=32,
         num_attention_heads=16,
@@ -126,7 +126,6 @@ class GlmasrEncoderConfig(VoxtralEncoderConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.d_model = d_model
         self.num_hidden_layers = num_hidden_layers
 
         self.num_attention_heads = num_attention_heads

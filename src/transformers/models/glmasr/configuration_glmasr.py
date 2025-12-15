@@ -76,6 +76,7 @@ class GlmasrEncoderConfig(PreTrainedConfig):
     model_type = "glmasr_encoder"
 
     attribute_map = {
+        "hidden_size": "d_model",
         "encoder_layers": "num_hidden_layers",
         "encoder_attention_heads": "num_attention_heads",
         "encoder_ffn_dim": "intermediate_size",
@@ -85,8 +86,7 @@ class GlmasrEncoderConfig(PreTrainedConfig):
     def __init__(
         self,
         vocab_size=51866,
-        hidden_size=2048,
-        d_model=1280,
+        hidden_size=1280,
         intermediate_size=6144,
         num_hidden_layers=32,
         num_attention_heads=16,
@@ -120,7 +120,6 @@ class GlmasrEncoderConfig(PreTrainedConfig):
         self.activation_dropout = 0.0
 
         self.attention_dropout = attention_dropout
-        self.d_model = d_model
 
 
 class GlmasrConfig(PreTrainedConfig):
