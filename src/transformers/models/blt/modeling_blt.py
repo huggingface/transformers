@@ -753,6 +753,8 @@ class BltPatcher(BltPreTrainedModel):
             bias=False,
         )
 
+        self.post_init()
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -952,7 +954,7 @@ def compute_hash_embeddings(
             hash_ids = byte_group_hash_function(local_encoder_tokens, group_size, prime, encoder_hash_byte_group_vocab)
             # Apply offset to get the correct slice of the fused embedding
             offset_hash_ids = hash_ids + embedding_idx * encoder_hash_byte_group_vocab
-            embeddings += encoder_hash_tok_embedding(offset_hash_ids)
+            embeddings += encoder_hash_tok_embedding(offset_hash_ids).to(embeddings.device)
             embedding_idx += 1
 
     return embeddings

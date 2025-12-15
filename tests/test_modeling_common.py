@@ -52,7 +52,7 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_utils import _get_tied_weight_keys
+from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -2342,6 +2342,7 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
+            torch.cuda.synchronize()  # otherwise the transfer might not be complete
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -2748,12 +2749,6 @@ class ModelTesterMixin:
             # forcing the prefill size to go over sliding window size to check for SWA correctness
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
-
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
 
             model = model_class(config)
             if not all(
@@ -3248,6 +3243,20 @@ class ModelTesterMixin:
             self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
         dtype = torch.bfloat16
+
+        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
+            # Allow kernels fallbacks for flash attention tests.
+            requested = attention_implementation
+            base = requested.removeprefix("paged|")
+            prefix = "paged|" if requested.startswith("paged|") else ""
+
+            expected = {requested}
+            if base in FLASH_ATTN_KERNEL_FALLBACK:
+                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
+            return expected
+
+        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3280,7 +3289,7 @@ class ModelTesterMixin:
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
-                            self.assertTrue(sub_config._attn_implementation == attn_implementation)
+                            self.assertIn(sub_config._attn_implementation, expected_attn_implementations)
 
                     has_fa = False
                     for name, submodule in model_fa.named_modules():
@@ -3288,7 +3297,7 @@ class ModelTesterMixin:
                         if (
                             "Attention" in class_name
                             and getattr(submodule, "config", None)
-                            and submodule.config._attn_implementation == attn_implementation
+                            and submodule.config._attn_implementation in expected_attn_implementations
                         ):
                             has_fa = True
                             break
@@ -3385,6 +3394,9 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16

@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import torch
 
 from transformers import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
@@ -39,6 +40,38 @@ from .test_pipelines_common import ANY
 class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
+
+    @require_torch
+    def test_small_speecht5_pt(self):
+        audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
+        num_channels = 1  # model generates mono audio
+        forward_params = {
+            "do_sample": True,
+            "semantic_max_new_tokens": 5,
+            "speaker_embeddings": torch.rand(1, 512) * 0.2 - 0.1,
+        }
+
+        outputs = audio_generator("This is a test", forward_params=forward_params)
+        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 16000}, outputs)
+        self.assertEqual(len(outputs["audio"].shape), num_channels)
+
+        # test two examples side-by-side
+        outputs = audio_generator(["This is a test", "This is a second test"], forward_params=forward_params)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+        # test batching, this time with parameterization in the forward pass
+        audio_generator = pipeline(task="text-to-audio", model="microsoft/speecht5_tts")
+        forward_params = {
+            "do_sample": False,
+            "max_new_tokens": 5,
+            "speaker_embeddings": torch.rand(1, 512) * 0.2 - 0.1,
+        }
+        outputs = audio_generator(
+            ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
+        )
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
     @require_torch
     def test_small_musicgen_pt(self):
