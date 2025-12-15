@@ -1053,8 +1053,8 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
     [
         *list(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.items()),
-        ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("glmasr", "GlmasrForConditionalGeneration"),
+        ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
         ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
         ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
