@@ -210,5 +210,19 @@ class PeAudioVideoConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+    @property
+    def audio_config(self):
+        return CONFIG_MAPPING["pe_audio"](
+            text_config=self.text_config,
+            audio_config=self.audio_video_config.audio_config,
+        )
+
+    @property
+    def video_config(self):
+        return CONFIG_MAPPING["pe_video"](
+            text_config=self.text_config,
+            video_config=self.audio_video_config.video_config,
+        )
+
 
 __all__ = ["PeAudioVideoEncoderConfig", "PeAudioVideoConfig"]

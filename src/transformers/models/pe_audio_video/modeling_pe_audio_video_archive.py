@@ -674,6 +674,8 @@ class AudioVideoEmbeddings(ModelOutput):
     audio_video_embeds: Optional[torch.FloatTensor] = None
 
 
+
+
 class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     _tied_weights_keys = {
         # tie text backbone used directly with the text backbones inside audio and video models
@@ -885,21 +887,15 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         logits_video_text = video_embeds @ text_video_embeds.T
         logits_audio_video_text = audio_video_embeds @ text_audio_video_embeds.T
         logits_audio_video = audio_embeds @ video_embeds.T
-        logits_audio_plus_text_video = audio_plus_text_embeds @ video_embeds.T  # TODO: check this
-        logits_video_plus_text_audio = video_plus_text_embeds @ audio_embeds.T  # TODO: check this
+        logits_audio_plus_text_video = audio_plus_text_embeds @ video_embeds.T # TODO: check this
+        logits_video_plus_text_audio = video_plus_text_embeds @ audio_embeds.T # TODO: check this
 
         logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
         logits_video_text = logits_video_text * self.text_video_logit_scale + self.text_video_logit_bias
-        logits_audio_video_text = (
-            logits_audio_video_text * self.text_audio_video_logit_scale + self.text_audio_video_logit_bias
-        )
+        logits_audio_video_text = logits_audio_video_text * self.text_audio_video_logit_scale + self.text_audio_video_logit_bias
         logits_audio_video = logits_audio_video * self.audio_video_logit_scale + self.audio_video_logit_bias
-        logits_audio_plus_text_video = (
-            logits_audio_plus_text_video * self.audio_plus_text_logit_scale + self.audio_plus_text_logit_bias
-        )
-        logits_video_plus_text_audio = (
-            logits_video_plus_text_audio * self.video_plus_text_logit_scale + self.video_plus_text_logit_bias
-        )
+        logits_audio_plus_text_video = logits_audio_plus_text_video * self.audio_plus_text_logit_scale + self.audio_plus_text_logit_bias
+        logits_video_plus_text_audio = logits_video_plus_text_audio * self.video_plus_text_logit_scale + self.video_plus_text_logit_bias
 
         if return_loss:
             audio_text_loss = self._contrastive_loss(logits_audio_text)
@@ -908,14 +904,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             audio_video_loss = self._contrastive_loss(logits_audio_video)
             audio_plus_text_video_loss = self._contrastive_loss(logits_audio_plus_text_video)
             video_plus_text_audio_loss = self._contrastive_loss(logits_video_plus_text_audio)
-            loss = (
-                audio_video_text_loss
-                + audio_text_loss
-                + video_text_loss
-                + audio_video_loss
-                + audio_plus_text_video_loss
-                + video_plus_text_audio_loss
-            )
+            loss = audio_video_text_loss + audio_text_loss + video_text_loss + audio_video_loss + audio_plus_text_video_loss + video_plus_text_audio_loss
 
         return PeAudioVideoOutput(
             logits_audio_text=logits_audio_text,

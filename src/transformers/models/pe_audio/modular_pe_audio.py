@@ -193,8 +193,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
-        text_embeds = self.text_audio_head(text_embeds)
-        return text_embeds
+        return self.text_audio_head(text_embeds)
 
     def get_audio_embeds(self, input_values, padding_mask=None):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
@@ -203,8 +202,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             return_dict=True,
         )
         audio_embeds = audio_outputs.pooler_output
-        audio_embeds = self.audio_head(audio_embeds)
-        return audio_embeds
+        return self.audio_head(audio_embeds)
 
     @can_return_tuple
     def forward(

@@ -708,6 +708,7 @@ class PeAudioOutput(ModelOutput):
 
 
 class PeAudioModel(PeAudioPreTrainedModel):
+
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
