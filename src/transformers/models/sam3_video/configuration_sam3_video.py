@@ -97,7 +97,7 @@ class Sam3VideoConfig(PreTrainedConfig):
     >>> configuration = Sam3VideoConfig()
 
     >>> # Changing image size for custom resolution inference (automatically propagates to all nested configs)
-    >>> configuration.set_image_size(560)
+    >>> configuration.image_size = 560
 
     >>> # Initializing a model from the configuration
     >>> model = Sam3VideoModel(configuration)
