@@ -114,7 +114,7 @@ Transformers reduces some of these memory-related challenges with fast initializ
 
 [`~PreTrainedModel.save_pretrained`] automatically shards checkpoints larger than 50GB. This keeps shard counts low for large models and simplifies file management.
 
-Parameters load in parallel and peak memory only depends on model size. Set `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to control the threshold.
+Parameters load in parallel and peak memory only depends on model size. Use `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to set the maximum checkpoint size before sharding.
 
 > [!NOTE]
 > Memory usage for models requiring dynamic weight conversion depends on the model size and the size of the largest parameters in a single conversion. This typically applies to mixture-of-experts (MoE) models where the memory usage is the model size plus the number of experts on one layer. Refer to the [dynamic weight loader](./weightconverter#fast-model-loading) guide to learn more about how models are loaded.
