@@ -40,11 +40,11 @@ class GlmasrEncoderConfig(PreTrainedConfig):
             Vocabulary size of the model.
         hidden_size (`int`, *optional*, defaults to 1280):
             Dimensionality of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5120):
+        intermediate_size (`int`, *optional*, defaults to 6144):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 20):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by dividing by sqrt(hidden_size) if True.
