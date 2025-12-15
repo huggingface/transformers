@@ -687,15 +687,17 @@ class FlaubertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        if isinstance(module, FlaubertModel) and self.config.sinusoidal_embeddings:
-            init.copy_(
-                module.position_embeddings.weight,
-                create_sinusoidal_embeddings(
-                    self.config.max_position_embeddings,
-                    self.config.emb_dim,
-                    out=torch.empty_like(module.position_embeddings.weight),
-                ),
-            )
+        if isinstance(module, FlaubertModel):
+            if self.config.sinusoidal_embeddings:
+                init.copy_(
+                    module.position_embeddings.weight,
+                    create_sinusoidal_embeddings(
+                        self.config.max_position_embeddings,
+                        self.config.emb_dim,
+                        out=torch.empty_like(module.position_embeddings.weight),
+                    ),
+                )
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring

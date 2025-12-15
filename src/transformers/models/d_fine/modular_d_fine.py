@@ -39,6 +39,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrPreTrainedModel,
     RTDetrRepVggBlock,
     inverse_sigmoid,
+    RTDetrFrozenBatchNorm2d,
 )
 from ..rt_detr_v2.modeling_rt_detr_v2 import multi_scale_deformable_attention_v2
 
@@ -628,6 +629,9 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -651,6 +655,12 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
+
+        if isinstance(module, DFineFrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros(module.bias)
+            module.zeros_(module.running_mean)
+            module.ones_(module.running_var)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -850,6 +860,9 @@ class DFineDecoder(RTDetrDecoder):
             cross_attentions=all_cross_attentions,
         )
 
+
+class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
+    pass
 
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):

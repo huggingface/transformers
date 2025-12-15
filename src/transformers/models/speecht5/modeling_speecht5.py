@@ -3008,6 +3008,12 @@ class SpeechT5HifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, SpeechT5HifiGan):
+            init.zeros(module.mean)
+            init.ones_(module.scale)
+
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):

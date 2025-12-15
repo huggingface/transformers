@@ -1373,6 +1373,18 @@ class Florence2VisionPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Florence2VisionPositionalEmbeddingCosine1D):
+            pos_idx_to_embed = torch.empty((module.max_seq_len, module.embed_dim))
+            sine, cosine = module.get_sinusoid_embeddings(
+                max_positions=module.max_seq_len,
+                embed_dim=module.embed_dim,
+            )
+            pos_idx_to_embed[:, 0::2] = sine
+            pos_idx_to_embed[:, 1::2] = cosine
+            init.copy_(module.pos_idx_to_embed, pos_idx_to_embed)
+
 
 @auto_docstring
 class Florence2VisionBackbone(Florence2VisionPreTrainedModel):

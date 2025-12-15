@@ -374,6 +374,12 @@ class FNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "fnet"
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FNetEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros(module.token_type_ids)
+
 
 @dataclass
 @auto_docstring(

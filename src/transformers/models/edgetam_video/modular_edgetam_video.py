@@ -378,10 +378,12 @@ class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
         dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
+        self.dim = dim
         # Ensure even dimension for proper axial splitting
         if dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
         end_x, end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
+        self.end_x, self.end_y = end_x, end_y
         freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         # Generate 2D position indices for axial rotary embedding
@@ -662,7 +664,22 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights()
+        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
+            dim = self.dim
+            freqs = 1.0 / (self.config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            # Generate 2D position indices for axial rotary embedding
+            flattened_indices = torch.arange(module.end_x * module.end_y, dtype=torch.long)
+            x_positions = flattened_indices % module.end_x
+            y_positions = torch.div(flattened_indices, module.end_x, rounding_mode="floor")
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):

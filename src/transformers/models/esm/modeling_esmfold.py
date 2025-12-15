@@ -1979,6 +1979,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     _can_record_outputs = None
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, EsmForProteinFolding):
+            init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
+
     def __init__(self, config):
         super().__init__(config)
 

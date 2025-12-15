@@ -483,6 +483,9 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -506,6 +509,12 @@ class DFinePreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
+
+        if isinstance(module, DFineFrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros(module.bias)
+            module.zeros_(module.running_mean)
+            module.ones_(module.running_var)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)

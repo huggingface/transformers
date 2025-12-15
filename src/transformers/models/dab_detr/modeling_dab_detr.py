@@ -848,6 +848,11 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.class_embed.bias, bias_value)
         elif isinstance(module, nn.PReLU):
             module.reset_parameters()
+        elif isinstance(module, DabDetrFrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros(module.bias)
+            module.zeros_(module.running_mean)
+            module.ones_(module.running_var)
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DabDetr,DETR->ConditionalDETR

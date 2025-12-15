@@ -965,6 +965,11 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, DeformableDetrFrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros(module.bias)
+            module.zeros_(module.running_mean)
+            module.ones_(module.running_var)
         if hasattr(module, "reference_points") and not self.config.two_stage:
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
             init.constant_(module.reference_points.bias, 0.0)

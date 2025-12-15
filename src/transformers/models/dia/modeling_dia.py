@@ -61,6 +61,12 @@ class DiaPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DiaMultiChannelEmbedding):
+            offsets = torch.arange(self.config.num_channels, dtype=torch.long) * self.config.vocab_size
+            init.copy_(module.offsets, offsets)
+
 
 class DiaMultiChannelEmbedding(nn.Module):
     """In order to efficiently compute the audio embedding from the 9 different channels,

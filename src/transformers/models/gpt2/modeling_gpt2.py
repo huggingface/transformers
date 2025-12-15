@@ -492,6 +492,13 @@ class GPT2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, GPT2Attention):
+            max_positions = module.config.max_position_embeddings
+            init.copy_(module.bias,
+                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                    1, 1, max_positions, max_positions
+                ),
+            )
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
