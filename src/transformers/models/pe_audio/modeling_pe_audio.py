@@ -157,11 +157,7 @@ class PeAudioEncoderEmbedder(nn.Module):
     def __init__(self, config: PeAudioEncoderConfig):
         super().__init__()
         self.dac_encoder = PeAudioDacEncoder(config.dac_config)
-        self.bottleneck = nn.Conv1d(
-            config.dac_config.hidden_size,
-            config.dac_config.codebook_dim * 2,
-            1,
-        )
+        self.bottleneck = nn.Conv1d(config.dac_config.hidden_size, config.dac_config.codebook_dim, 1)
         self.data_proj = nn.Linear(config.dac_config.codebook_dim, config.hidden_size)
         self.config = config
 
@@ -710,7 +706,11 @@ class PeAudioModel(PeAudioPreTrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.audio_encoder = PeAudioEncoder(config.audio_config)
 
-        self.text_audio_head = PeAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.text_audio_head = nn.Linear(
+            config.text_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=False,
+        )
         self.audio_head = PeAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
         self.text_audio_logit_scale = nn.Parameter(torch.zeros(1))

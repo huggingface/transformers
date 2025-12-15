@@ -160,7 +160,11 @@ class PeVideoModel(PeVideoPreTrainedModel):
         self.text_model = AutoModel.from_config(config.text_config)
         self.video_encoder = PeVideoEncoder(config.video_config)
 
-        self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.text_video_head = nn.Linear(
+            config.text_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=False,
+        )
         self.video_head = PeVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
 
         self.text_video_logit_scale = nn.Parameter(torch.zeros(1))
