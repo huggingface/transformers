@@ -501,7 +501,7 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-        self.audio_tower = GlmasrEncoder(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.multi_modal_projector = GlmasrMultiModalProjector(config)
 
