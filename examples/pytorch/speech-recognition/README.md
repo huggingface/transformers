@@ -70,7 +70,6 @@ python run_speech_recognition_ctc.py \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo" \
-	--overwrite_output_dir \
 	--num_train_epochs="15" \
 	--per_device_train_batch_size="16" \
 	--gradient_accumulation_steps="2" \
@@ -106,7 +105,6 @@ torchrun \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
 	--dataset_config_name="tr" \
 	--output_dir="./wav2vec2-common_voice-tr-demo-dist" \
-	--overwrite_output_dir \
 	--num_train_epochs="15" \
 	--per_device_train_batch_size="4" \
 	--learning_rate="3e-4" \
@@ -156,7 +154,6 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 	--train_split_name="train+validation" \
 	--eval_split_name="test" \
 	--output_dir="wav2vec2-xls-r-common_voice-tr-ft" \
-	--overwrite_output_dir \
 	--max_steps="5000" \
 	--per_device_train_batch_size="8" \
 	--gradient_accumulation_steps="2" \
@@ -390,11 +387,9 @@ python run_speech_recognition_seq2seq.py \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
 	--fp16 \
-	--overwrite_output_dir \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On a single V100, training should take approximately 8 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -431,11 +426,9 @@ torchrun \
 	--freeze_feature_encoder="False" \
 	--gradient_checkpointing \
 	--fp16 \
-	--overwrite_output_dir \
 	--do_train \
 	--do_eval \
-	--predict_with_generate \
-	--use_auth_token
+	--predict_with_generate
 ```
 On two V100s, training should take approximately 4 hours, with a final cross-entropy loss of **1e-4** and word error rate of **32.6%**.
 
@@ -539,7 +532,6 @@ python run_speech_recognition_seq2seq.py \
 	--output_dir="./" \
 	--preprocessing_num_workers="16" \
 	--length_column_name="input_length" \
-	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="8" \
 	--per_device_eval_batch_size="8" \
@@ -581,7 +573,6 @@ torchrun \
 	--output_dir="./" \
 	--preprocessing_num_workers="16" \
 	--length_column_name="input_length" \
-	--overwrite_output_dir \
 	--num_train_epochs="5" \
 	--per_device_train_batch_size="8" \
 	--per_device_eval_batch_size="8" \

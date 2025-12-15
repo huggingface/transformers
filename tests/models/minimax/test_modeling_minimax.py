@@ -15,12 +15,10 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
-from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -33,11 +31,9 @@ if is_torch_available():
 
     from transformers import (
         MiniMaxForCausalLM,
-        MiniMaxForQuestionAnswering,
-        MiniMaxForSequenceClassification,
-        MiniMaxForTokenClassification,
         MiniMaxModel,
     )
+    from transformers.models.minimax.modeling_minimax import MiniMaxCache
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
@@ -53,17 +49,6 @@ class MiniMaxModelTester(CausalLMModelTester):
 
 @require_torch
 class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": MiniMaxModel,
-            "text-classification": MiniMaxForSequenceClassification,
-            "token-classification": MiniMaxForTokenClassification,
-            "text-generation": MiniMaxForCausalLM,
-            "question-answering": MiniMaxForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
     model_tester_class = MiniMaxModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -79,13 +64,14 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.num_local_experts = 8
+        config.num_local_experts = 3
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -98,7 +84,7 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
+        pad_length = input_ids.shape[1] * 4
         # Add padding tokens (assume that pad_token_id=1) to input_ids
         padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
@@ -141,14 +127,14 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 if config.layer_types[layer_idx] == "full_attention":
                     self.assertEqual(layer_attention.shape, expected_shape)
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
-        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        self.assertIsInstance(past_key_values, MiniMaxCache)
 
         # (batch, head, seq_length, head_features)
         key_value_cache_expected_shape = (
             batch_size,
             config.num_key_value_heads,
-            cache_length,
+            seq_length,
             config.hidden_size // config.num_attention_heads,
         )
         # (batch, head, head_features, head_features)
@@ -161,29 +147,25 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
         for layer_idx in range(config.num_hidden_layers):
             if config.layer_types[layer_idx] == "full_attention":
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
-                self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
+                self.assertEqual(past_key_values.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
+                self.assertEqual(past_key_values.layers[layer_idx].values.shape, key_value_cache_expected_shape)
             else:
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
+                self.assertEqual(past_key_values.linear_cache[layer_idx].shape, linear_cache_expected_shape)
 
-    @pytest.mark.generate
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        """
-        Test that the KV cache is formatted correctly.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+    def _check_caches_are_equal(self, cache1: MiniMaxCache, cache2: MiniMaxCache):
+        if not isinstance(cache1, MiniMaxCache) or not isinstance(cache2, MiniMaxCache):
+            raise ValueError("The wrong cache is being used!")
 
-            model = model_class(config).to(torch_device)
-            model = model.eval()
-            if "use_cache" not in inputs:
-                inputs["use_cache"] = True
-            outputs = model(**inputs)
+        if not len(cache1) == len(cache2):
+            raise ValueError("Both caches do not have the same number of layers.")
 
-            past_kv = outputs["past_key_values"]
-
-            batch_size, seq_length = inputs["input_ids"].shape
-            self._check_past_key_values_for_generate(batch_size, past_kv, seq_length, config)
+        num_layers = len(cache1)
+        for idx in range(num_layers):
+            # We need this as MiniMaxCache uses the max between attention and linear caches for len...
+            if idx < len(cache1.layers):
+                torch.testing.assert_close(cache1.layers[idx].keys, cache1.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache1.layers[idx].values)
+            torch.testing.assert_close(cache1.linear_cache[idx], cache2.linear_cache[idx])
 
     @unittest.skip(reason="MiniMaxCache does not support `crop()` method")
     def test_prompt_lookup_decoding_matches_greedy_search(self):

@@ -80,6 +80,7 @@ We use both in the `transformers` library. We leverage and adapt `logging`'s `ca
 management of these warning messages by the verbosity setters above.
 
 What does that mean for developers of the library? We should respect the following heuristics:
+
 - `warnings` should be favored for developers of the library and libraries dependent on `transformers`
 - `logging` should be used for end-users of the library using it in every-day projects
 

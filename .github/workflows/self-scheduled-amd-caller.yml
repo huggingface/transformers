@@ -2,7 +2,7 @@ name: Self-hosted runner (AMD scheduled CI caller)
 
 on:
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "17 5 * * *"
 
 jobs:
   run_scheduled_amd_ci:

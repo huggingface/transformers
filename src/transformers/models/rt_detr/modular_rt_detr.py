@@ -2,8 +2,9 @@ import pathlib
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -14,7 +15,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -22,16 +22,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -98,10 +92,6 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
-    pass
-
-
 class RTDetrImageProcessorFast(DetrImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -115,9 +105,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = RTDetrFastImageProcessorKwargs
+    valid_kwargs = RTDetrImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
@@ -125,15 +115,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         BaseImageProcessorFast.__init__(self, **kwargs)
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        return BaseImageProcessorFast.preprocess(self, images, annotations, masks_path, **kwargs)
 
     def prepare_annotation(
         self,
@@ -332,21 +313,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
             )
 
         return results
-
-    def from_dict(self):
-        raise NotImplementedError("No need to override this method for RT-DETR yet.")
-
-    def post_process(self):
-        raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_segmentation(self):
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_instance(self):
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_panoptic(self):
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
 
     def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")

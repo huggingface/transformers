@@ -39,7 +39,6 @@ logger = logging.get_logger(__name__)
 class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
-        "images_kwargs": {},
     }
 
 
@@ -62,10 +61,6 @@ class Florence2Processor(ProcessorMixin):
             Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
             thresholds, or banned tokens.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
 
     def __init__(
         self,

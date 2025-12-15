@@ -41,9 +41,6 @@ if is_torch_available():
 
     from transformers import (
         Exaone4ForCausalLM,
-        Exaone4ForQuestionAnswering,
-        Exaone4ForSequenceClassification,
-        Exaone4ForTokenClassification,
         Exaone4Model,
     )
 
@@ -55,19 +52,6 @@ class Exaone4ModelTester(CausalLMModelTester):
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Exaone4Model,
-            "question-answering": Exaone4ForQuestionAnswering,
-            "text-classification": Exaone4ForSequenceClassification,
-            "text-generation": Exaone4ForCausalLM,
-            "zero-shot": Exaone4ForSequenceClassification,
-            "token-classification": Exaone4ForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
 
@@ -136,6 +120,7 @@ class Exaone4IntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, text)
 
+    @pytest.mark.flash_attn_test
     @slow
     @require_torch_accelerator
     @require_flash_attn

@@ -14,6 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was released on 2024-04-16 and added to Hugging Face Transformers on 2024-10-04.*
+
 # Zamba
 
 <div class="flex flex-wrap space-x-1">
@@ -69,9 +70,11 @@ print(tokenizer.decode(outputs[0]))
 ## Model card
 
 The model cards can be found at:
+
 * [Zamba-7B](https://huggingface.co/Zyphra/Zamba-7B-v1)
 
 ## Issues
+
 For issues with model output, or community discussion, please use the Hugging Face community [forum](https://huggingface.co/Zyphra/Zamba-7B-v1/discussions)
 
 ## License

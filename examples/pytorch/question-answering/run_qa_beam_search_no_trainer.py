@@ -933,7 +933,7 @@ def main():
             all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
             all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-    max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+    max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
     # concatenate all numpy arrays collected above
     start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
@@ -993,7 +993,7 @@ def main():
                 all_end_top_index.append(accelerator.gather_for_metrics(end_top_index).cpu().numpy())
                 all_cls_logits.append(accelerator.gather_for_metrics(cls_logits).cpu().numpy())
 
-        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+        max_len = max(x.shape[1] for x in all_end_top_log_probs)  # Get the max_length of the tensor
 
         # concatenate all numpy arrays collected above
         start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, predict_dataset, max_len)

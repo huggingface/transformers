@@ -18,23 +18,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class EdgeTamVisionConfig(PretrainedConfig):
+class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of SAM 2.1 Hiera-tiny
     [facebook/EdgeTAM](https://huggingface.co/facebook/EdgeTAM) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PretrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -84,8 +83,6 @@ class EdgeTamVisionConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
         backbone_feature_sizes = (
             [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
@@ -95,8 +92,6 @@ class EdgeTamVisionConfig(PretrainedConfig):
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif isinstance(backbone_config, AutoConfig):
-            backbone_config = backbone_config
         elif backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",
@@ -118,15 +113,16 @@ class EdgeTamVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
-class EdgeTamPromptEncoderConfig(PretrainedConfig):
+class EdgeTamPromptEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamPromptEncoder`]. The [`EdgeTamPromptEncoder`]
     module is used to encode the input 2D points and bounding boxes.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -172,13 +168,13 @@ class EdgeTamPromptEncoderConfig(PretrainedConfig):
         self.scale = scale
 
 
-class EdgeTamMaskDecoderConfig(PretrainedConfig):
+class EdgeTamMaskDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamMaskDecoder`]. It is used to instantiate a EDGETAM
     memory encoder according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -245,15 +241,15 @@ class EdgeTamMaskDecoderConfig(PretrainedConfig):
         self.attention_downsample_rate = attention_downsample_rate
 
 
-class EdgeTamConfig(PretrainedConfig):
+class EdgeTamConfig(PreTrainedConfig):
     r"""
     [`EdgeTamConfig`] is the configuration class to store the configuration of a [`EdgeTamModel`]. It is used to instantiate a
     EDGETAM model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
     configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
     [facebook/edgetam.1-hiera-tiny](https://huggingface.co/facebook/edgetam.1-hiera-tiny) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `EdgeTamVisionConfig`], *optional*):
@@ -309,7 +305,6 @@ class EdgeTamConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -327,6 +322,7 @@ class EdgeTamConfig(PretrainedConfig):
         self.mask_decoder_config = EdgeTamMaskDecoderConfig(**mask_decoder_config)
 
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 __all__ = ["EdgeTamConfig", "EdgeTamVisionConfig", "EdgeTamPromptEncoderConfig", "EdgeTamMaskDecoderConfig"]

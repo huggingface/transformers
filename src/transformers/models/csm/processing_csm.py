@@ -95,10 +95,6 @@ class CsmProcessor(ProcessorMixin):
 
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "EncodecFeatureExtractor"
-    tokenizer_class = "PreTrainedTokenizerFast"
-
     def __init__(
         self,
         feature_extractor,
@@ -246,9 +242,7 @@ class CsmProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
-        common_kwargs = output_kwargs["common_kwargs"]
-
-        return_tensors = common_kwargs.pop("return_tensors", None)
+        return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 

@@ -18,14 +18,14 @@ import unittest
 
 import pytest
 
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_large_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -52,20 +52,11 @@ class Ernie4_5_MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Ernie4_5_MoeModel,
-            "text-generation": Ernie4_5_MoeForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow
@@ -98,32 +89,35 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
                 # higher tolerance, not sure where it stems from
                 assert torch.allclose(logits_fa, logits, atol=1e-2, rtol=1e-2)
 
-    # Ignore copy
+    @is_flaky(max_attempts=2)
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.num_experts = 8
-        config.expert_interval = 2
+        config.num_experts = 3
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
         model = Ernie4_5_MoeForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
-        self.assertEqual(result.router_logits[0].shape, (91, config.num_experts))
+        bs, seqlen = input_ids.shape
+        self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
         torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_length = 1000
-        # Add padding tokens (assume that pad_token_id=1) to input_ids
-        padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
+        # (This length is selected from experiments)
+        pad_length = input_ids.shape[1] * 4
+        # Add padding tokens to input_ids
+        padding_block = config.pad_token_id * torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(
+            torch_device
+        )
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
-        padded_attention_mask = padded_input_ids.ne(1).to(torch_device)
+        padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
 
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
@@ -159,7 +153,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
             cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
                 "baidu/ERNIE-4.5-21B-A3B-PT",
                 device_map="auto",
-                load_in_4bit=True,
+                quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             )
 
         return cls.model

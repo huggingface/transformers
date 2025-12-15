@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable, TypeVar, Union, overload
+from typing import Any, TypeVar, Union, overload
 
 import torch
 import torch.nn as nn

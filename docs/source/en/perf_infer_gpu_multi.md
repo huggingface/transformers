@@ -45,12 +45,12 @@ This guide shows how to enable tensor parallelism with Transformers and differen
 
 ## Partitioning a model
 
-Transformers supports tensor parallelism if a model has a `tp_plan`. There are two plans to partition a model.
+Transformers supports tensor parallelism if a model has a `tp_plan`. There are two ways to partition a model.
 
-- The `auto` tensor parallelism plan partitions a model (see the supported models above) based on a predefined configuration.
-- You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PreTrainedModel.from_pretrained`].
+- Set `tp_plan="auto"` to automatically use a tensor parallelism plan based on a model's predefined configuration.
+- Define and pass a manual `tp_plan`.
 
-<hfoptions id="sharding">
+<hfoptions id="tp_plan">
 <hfoption id="auto plan">
 
 ```py
@@ -59,9 +59,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # better to visualize all the possible strategies
-model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # better for smaller number of GPUs
-
-model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct" , dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
@@ -81,10 +79,9 @@ torchrun --nproc-per-node 4 demo.py
 </hfoption>
 <hfoption id="manual plan">
 
-Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses a combination of column and row partitioning. Refer to the [Partitioning strategies](#partitioning-strategies) section to learn about other supported partitioning strategies.
+Define a tensor parallel plan for each layer in `tp_plan` and pass it to [`~PreTrainedModel.from_pretrained`]. The example below uses column and row partitioning. See the [Partitioning strategies](#partitioning-strategies) section for other supported strategies.
 
-> [!WARNING]
-> Manually specifying your own partitioning plan requires a good understanding of the model architecture and how the partitioning strategies interact together. If you are not sure about the partitioning strategies, the resulting model can be very slow, even failing or incorrect. Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) to learn more.
+Manual partitioning requires deep understanding of model architecture and strategy interactions. Poor partitioning choices create slow models that fail or produce incorrect results. The [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) explains partitioning strategies in detail.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -97,8 +94,8 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
-print(model._tp_plan)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", dtype="auto", tp_plan=tp_plan)
+print(model.tp_plan)
 ```
 
 </hfoption>
@@ -152,7 +149,7 @@ The example below packs `up_proj` and `gate_proj` into a single `gate_up_proj` m
 ```python
 class Llama4TextExperts(nn.Module):
     ...
-    self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+    self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
 ```
 
 Batch matrix multiplication can be used in the `forward` pass to compute the output of the `gate_up_proj` module.
@@ -309,3 +306,7 @@ The most important part of DTensor is the `placement` attribute because it tells
     ```
 
 - `Partial()` - Indicates a tensor is pending a reduction operation (not typically relevant for usage in Transformers).
+
+## Resources
+
+Read the [Tensor Parallelism (TP) in Transformers: 5 Minutes to Understand](https://huggingface.co/blog/qgallouedec/tp) blog post for a quick overview of tensor parallelism and learn how column and row parallel setups differ.

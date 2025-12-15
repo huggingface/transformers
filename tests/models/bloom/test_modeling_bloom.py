@@ -16,134 +16,30 @@
 import math
 import unittest
 
-from transformers import BloomConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         BloomForCausalLM,
-        BloomForQuestionAnswering,
-        BloomForSequenceClassification,
-        BloomForTokenClassification,
         BloomModel,
-        BloomTokenizerFast,
     )
 
 
 @require_torch
-class BloomModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_token_type_ids=False,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_dropout_prob = attention_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = None
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+class BloomModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = BloomModel
 
-    def get_large_model_config(self):
-        return BloomConfig.from_pretrained("bigscience/bloom")
-
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        sequence_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
-
-        return (config, input_ids, input_mask, sequence_labels)
-
-    def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
-        return BloomConfig(
-            vocab_size=self.vocab_size,
-            seq_length=self.seq_length,
-            hidden_size=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            hidden_dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_dropout_prob,
-            n_positions=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            initializer_range=self.initializer_range,
-            use_cache=True,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            num_labels=self.num_labels,
-            gradient_checkpointing=gradient_checkpointing,
-            slow_but_exact=slow_but_exact,
-            dtype="float32",
-        )
-
-    def create_and_check_bloom_model(self, config, input_ids, input_mask, *args):
-        model = BloomModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids)
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
-
-    def create_and_check_bloom_model_past(self, config, input_ids, input_mask, *args):
+    def create_and_check_bloom_model_past(self, config, *args):
+        input_ids, _, input_mask, _, _, _ = args
         model = BloomModel(config=config)
 
         model.to(torch_device)
@@ -176,7 +72,8 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bloom_model_attention_mask_past(self, config, input_ids, input_mask, *args):
+    def create_and_check_bloom_model_attention_mask_past(self, config, *args):
+        input_ids, _, input_mask, _, _, _ = args
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -216,7 +113,8 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_bloom_model_past_large_inputs(self, config, input_ids, input_mask, *args):
+    def create_and_check_bloom_model_past_large_inputs(self, config, *args):
+        input_ids, _, input_mask, _, _, _ = args
         model = BloomModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -248,7 +146,8 @@ class BloomModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
+    def create_and_check_lm_head_model(self, config, *args):
+        input_ids, _, input_mask, _, _, _ = args
         model = BloomForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -256,36 +155,6 @@ class BloomModelTester:
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
-        config.num_labels = self.num_labels
-        model = BloomForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
-        model = BloomForTokenClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, *args, gradient_checkpointing=False
-    ):
-        model = BloomForCausalLM(config)
-        model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        result.loss.backward()
 
     def create_and_check_bloom_weight_initialization(self, config, *args):
         model = BloomModel(config)
@@ -295,57 +164,11 @@ class BloomModelTester:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        config, input_ids, input_mask, sequence_labels = config_and_inputs
-
-        inputs_dict = {"input_ids": input_ids}
-
-        return config, inputs_dict
-
 
 @require_torch
-class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BloomModel,
-            BloomForCausalLM,
-            BloomForSequenceClassification,
-            BloomForTokenClassification,
-            BloomForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": BloomModel,
-            "question-answering": BloomForQuestionAnswering,
-            "text-classification": BloomForSequenceClassification,
-            "text-generation": BloomForCausalLM,
-            "token-classification": BloomForTokenClassification,
-            "zero-shot": BloomForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    fx_compatible = True
+class BloomModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = BloomModelTester
     test_missing_keys = False
-    test_pruning = False
-    test_torchscript = True  # torch.autograd functions seems not to be supported
-
-    def setUp(self):
-        self.model_tester = BloomModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BloomConfig, n_embd=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_bloom_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bloom_model(*config_and_inputs)
 
     def test_bloom_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -363,142 +186,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
-    def test_bloom_sequence_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
-
-    def test_bloom_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
-
-    def test_bloom_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
-
     def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "bigscience/bigscience-small-testing"
-        model = BloomModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
-
-    @slow
-    @require_torch_accelerator
-    def test_simple_generation(self):
-        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
-        # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
-        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction, the tests failed when running in half-precision with smaller models (560m)
-        # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
-        # This discrepancy is observed only when using small models and seems to be stable for larger models.
-        # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
-
-        # Here is a summary of an ablation study of our observations
-        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good person, and I am a very good person. I am a"
-        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
-        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
-        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
-
-        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
-        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
-        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
-        # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-
-        path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
-        model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
-
-        input_sentence = "I enjoy walking with my cute dog"
-        # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
-        EXPECTED_OUTPUT = (
-            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
-            "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
-        )
-
-        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-        greedy_output = model.generate(input_ids.to(torch_device), max_length=50)
-
-        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-
-    @slow
-    @require_torch_accelerator
-    def test_batch_generation(self):
-        path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
-        model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
-
-        input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
-
-        inputs = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
-        input_ids = inputs["input_ids"].to(torch_device)
-        attention_mask = inputs["attention_mask"]
-        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
-
-        self.assertEqual(
-            tokenizer.decode(greedy_output[0], skip_special_tokens=True),
-            tokenizer.decode(greedy_output[1], skip_special_tokens=True),
-        )
-
-    @slow
-    @require_torch_accelerator
-    def test_batch_generation_padding(self):
-        path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
-        model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
-
-        input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
-        input_sentence_without_pad = "Hello my name is"
-
-        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
-        input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
-
-        input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
-        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
-        greedy_output_without_pad = model.generate(
-            input_ids_without_pad.to(torch_device), max_length=50, do_sample=False
-        )
-
-        # test token values
-        self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
-
-        # test reconstructions
-        self.assertEqual(
-            tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
-            tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
-        )
-
-    @slow
-    @require_torch_accelerator
-    def test_batch_generated_text(self):
-        path_560m = "bigscience/bloom-560m"
-
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
-        model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
-
-        input_sentences = [
-            "Hello what is",
-            "Running a quick test with the",
-        ]
-        inputs = tokenizer(input_sentences, return_tensors="pt", padding=True, truncation=True)
-        generated_ids = model.generate(
-            inputs["input_ids"].to(torch_device), attention_mask=inputs["attention_mask"], max_length=20
-        )
-        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-
-        # these generations match those of the PyTorch model
-        EXPECTED_GENERATIONS = [
-            "Hello what is the best way to get the data from the server? I have tried",
-            "Running a quick test with the following command:\nsudo apt-get install python3\nsudo apt-get install python2",
-        ]
-
-        self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
 
     @unittest.skip("Bloom needs a 2D attention for alibi")
     def test_custom_4d_attention_mask(self):
@@ -506,34 +196,33 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 
 @require_torch
-class BloomEmbeddingTest(unittest.TestCase):
-    """
-    The goal here is to compare the embeddings generated by the model trained
-    using Megatron-LM with the one from the transformers library, with a small GPT2-like model
-    to ensure that the conversion from Megatron-LM to transformers has been done successfully.
-    The script compares the logits of the embedding layer and the transformer layers.
-
-    WARNING: It is expected that these logits will not have exactly the same statistics when running
-    the code on CPU or GPU. For more info, please visit:
-      - https://github.com/pytorch/pytorch/issues/76052#issuecomment-1103193548
-      - https://discuss.pytorch.org/t/reproducibility-issue-between-intel-and-amd-cpus/144779/9
-
-
-    You need to install tokenizers following this readme:
-        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
-
-    Tokenizer used during training:
-        - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
-
-    # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
-    """
-
+class BloomIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
     @require_torch
     def test_embeddings(self):
+        """
+        The goal here is to compare the embeddings generated by the model trained
+        using Megatron-LM with the one from the transformers library, with a small GPT2-like model
+        to ensure that the conversion from Megatron-LM to transformers has been done successfully.
+        The script compares the logits of the embedding layer and the transformer layers.
+
+        WARNING: It is expected that these logits will not have exactly the same statistics when running
+        the code on CPU or GPU. For more info, please visit:
+        - https://github.com/pytorch/pytorch/issues/76052#issuecomment-1103193548
+        - https://discuss.pytorch.org/t/reproducibility-issue-between-intel-and-amd-cpus/144779/9
+
+
+        You need to install tokenizers following this readme:
+            - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+
+        Tokenizer used during training:
+            - https://huggingface.co/bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
+
+        # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
+        """
         # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
         model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
         model.eval()
@@ -805,3 +494,118 @@ class BloomEmbeddingTest(unittest.TestCase):
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
         self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)
         self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
+
+    @slow
+    @require_torch_accelerator
+    def test_simple_generation(self):
+        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
+        # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
+        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction, the tests failed when running in half-precision with smaller models (560m)
+        # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
+        # This discrepancy is observed only when using small models and seems to be stable for larger models.
+        # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
+
+        # Here is a summary of an ablation study of our observations
+        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good person, and I am a very good person. I am a"
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
+
+        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
+        # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained(path_560m)
+
+        input_sentence = "I enjoy walking with my cute dog"
+        # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
+        EXPECTED_OUTPUT = (
+            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
+            "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
+        )
+
+        input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
+        greedy_output = model.generate(input_ids.to(torch_device), max_length=50)
+
+        self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch_accelerator
+    def test_batch_generation(self):
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
+
+        input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
+
+        inputs = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+        attention_mask = inputs["attention_mask"]
+        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
+
+        self.assertEqual(
+            tokenizer.decode(greedy_output[0], skip_special_tokens=True),
+            tokenizer.decode(greedy_output[1], skip_special_tokens=True),
+        )
+
+    @slow
+    @require_torch_accelerator
+    def test_batch_generation_padding(self):
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
+
+        input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
+        input_sentence_without_pad = "Hello my name is"
+
+        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
+
+        input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
+        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
+        greedy_output_without_pad = model.generate(
+            input_ids_without_pad.to(torch_device), max_length=50, do_sample=False
+        )
+
+        # test token values
+        self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
+
+        # test reconstructions
+        self.assertEqual(
+            tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
+            tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
+        )
+
+    @slow
+    @require_torch_accelerator
+    def test_batch_generated_text(self):
+        path_560m = "bigscience/bloom-560m"
+
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = model.eval()
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
+
+        input_sentences = [
+            "Hello what is",
+            "Running a quick test with the",
+        ]
+        inputs = tokenizer(input_sentences, return_tensors="pt", padding=True, truncation=True)
+        generated_ids = model.generate(
+            inputs["input_ids"].to(torch_device), attention_mask=inputs["attention_mask"], max_length=20
+        )
+        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # these generations match those of the PyTorch model
+        EXPECTED_GENERATIONS = [
+            "Hello what is the best way to get the data from the server? I have tried",
+            "Running a quick test with the following command:\nsudo apt-get install python3\nsudo apt-get install python2",
+        ]
+
+        self.assertListEqual(generated_text, EXPECTED_GENERATIONS)

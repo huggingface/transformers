@@ -37,7 +37,7 @@ if is_torch_available():
         FNetForSequenceClassification,
         FNetForTokenClassification,
         FNetModel,
-        FNetTokenizerFast,
+        FNetTokenizer,
     )
 
 
@@ -254,8 +254,6 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     # Skip Tests
-    test_pruning = False
-    test_head_masking = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -461,7 +459,7 @@ class FNetModelIntegrationTest(unittest.TestCase):
     @slow
     @require_tokenizers
     def test_inference_long_sentence(self):
-        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
+        tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
             "the man worked as a [MASK].",

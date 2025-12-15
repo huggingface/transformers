@@ -13,13 +13,13 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, InternVLProcessor
+from parameterized import parameterized
+
+from transformers import InternVLProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -28,32 +28,30 @@ if is_torch_available():
     import torch
 
 
-if is_vision_available():
-    from transformers import GotOcr2ImageProcessor, InternVLVideoProcessor
-
-
 @require_vision
 class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = InternVLProcessor
     videos_input_name = "pixel_values"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = GotOcr2ImageProcessor(
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             do_resize=True,
             size={"height": 20, "width": 20},
             max_patches=2,
             do_rescale=True,
             rescale_factor=1 / 255,
             do_normalize=True,
-            do_center_crop=True,
             image_mean=[0.485, 0.456, 0.406],
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        video_processor = InternVLVideoProcessor(
+
+    @classmethod
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        return video_processor_class(
             do_resize=True,
             size={"height": 20, "width": 20},
             do_rescale=True,
@@ -63,37 +61,24 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_std=[0.229, 0.224, 0.225],
             do_convert_rgb=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = InternVLProcessor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            **processor_kwargs,
-        )
-        processor.save_pretrained(cls.tmpdirname)
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("OpenGVLab/InternVL3-1B-hf", padding_side="left")
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+
+    @unittest.skip("InternVL requires text")
+    def test_video_processor_defaults(self):
+        pass
 
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_length": 2}
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
@@ -290,7 +275,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
@@ -345,13 +330,14 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for idx, url in enumerate(input_data[:batch_size]):
             batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
 
+        num_frames = 2  # by default no more than 2 frames, otherwise too slow
         out_dict = processor.apply_chat_template(
             batch_messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
+            num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
@@ -359,11 +345,15 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # InternVL internally collects frames from all the videos in a batch and flattens the batch dimension (B T C H W) -> (B*T C H W) then patches and removes the frames
         # hence output length does not equal batch size
-        # removed hardcoded video length check video_len = 2 if batch_size == 1 else 3
-        # from experiment video_len looks like batch_size + 1
-        # TODO: update expected video_len calculation based on the internal processing logic of InternVLProcessor
-        output_len = batch_size + 1 if modality == "video" else batch_size
-        self.assertEqual(len(out_dict[self.videos_input_name]), output_len)
+        num_pixel_planes = 0  # i.e. images + video frames
+        for message_thread in batch_messages:
+            for message in message_thread:
+                for content in message.get("content", []):
+                    if (content_type := content.get("type")) == "image":
+                        num_pixel_planes += 1
+                    elif content_type == "video":
+                        num_pixel_planes += num_frames
+        self.assertEqual(len(out_dict[self.videos_input_name]), num_pixel_planes)
         for k in out_dict:
             self.assertIsInstance(out_dict[k], torch.Tensor)
 
@@ -377,3 +367,25 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    @parameterized.expand([(1,), (2,)])
+    @require_torch
+    def test_frames_binding(self, batch_size: int):
+        texts = [
+            "<video>\nAre there any cyan objects that enter the scene?\nno",
+            "<video>\nAre there any red spheres that enter the scene?\nno",
+        ]
+        frames = torch.ones((4, 448, 448, 3), dtype=torch.float32)
+        videos = [frames, frames]
+
+        processor = self.get_processor()
+        inputs = processor(
+            text=texts[:batch_size],
+            return_tensors="pt",
+            videos=videos[:batch_size],
+            videos_kwargs={"size": (448, 448)},
+        )
+
+        actual_num_frames = inputs.pixel_values.shape[0]
+        expected_num_frames = sum(x.shape[0] for x in videos[:batch_size])
+        assert actual_num_frames == expected_num_frames

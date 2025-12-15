@@ -33,7 +33,7 @@ This guide will show you how [`Trainer`] works and how to customize it for your 
 3. update the weights based on the gradients
 4. repeat until the predetermined number of epochs is reached
 
-Manually coding this training loop everytime can be inconvenient or a barrier if you're just getting started with machine learning. [`Trainer`] abstracts this process, allowing you to focus on the model, dataset, and training design choices.
+Manually coding this training loop every time can be inconvenient or a barrier if you're just getting started with machine learning. [`Trainer`] abstracts this process, allowing you to focus on the model, dataset, and training design choices.
 
 Configure your training with hyperparameters and options from [`TrainingArguments`] which supports many features such as distributed training, torch.compile, mixed precision training, and saving the model to the Hub.
 
@@ -187,7 +187,7 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False num_items_in_batch: Optional[torch.Tensor] = None):
+    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False, num_items_in_batch: Optional[torch.Tensor] = None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
@@ -361,8 +361,7 @@ accelerate launch \
     --per_device_train_batch_size 16 \
     --learning_rate 5e-5 \
     --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-    --overwrite_output_dir
+    --output_dir /tmp/$TASK_NAME/
 ```
 
 > [!TIP]

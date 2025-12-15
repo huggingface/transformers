@@ -17,16 +17,15 @@
 import importlib
 import inspect
 import json
-import warnings
 from collections import OrderedDict
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import TOKENIZER_CONFIG_FILE
+from ...tokenization_python import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -49,6 +48,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
         ("aria", "AriaProcessor"),
+        ("audioflamingo3", "AudioFlamingo3Processor"),
         ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
@@ -75,6 +75,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("gemma3", "Gemma3Processor"),
         ("gemma3n", "Gemma3nProcessor"),
         ("git", "GitProcessor"),
+        ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("glm4v_moe", "Glm4vProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
@@ -94,6 +95,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
+        ("layoutxlm", "LayoutXLMProcessor"),
         ("lfm2_vl", "Lfm2VlProcessor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
@@ -101,17 +103,18 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("llava_next_video", "LlavaNextVideoProcessor"),
         ("llava_onevision", "LlavaOnevisionProcessor"),
         ("markuplm", "MarkupLMProcessor"),
-        ("mctct", "MCTCTProcessor"),
         ("metaclip_2", "CLIPProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("mistral3", "PixtralProcessor"),
         ("mllama", "MllamaProcessor"),
         ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
+        ("omdet-turbo", "OmDetTurboProcessor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
+        ("paddleocr_vl", "PaddleOCRVLProcessor"),
         ("paligemma", "PaliGemmaProcessor"),
         ("perception_lm", "PerceptionLMProcessor"),
         ("phi4_multimodal", "Phi4MultimodalProcessor"),
@@ -127,6 +130,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen3_vl_moe", "Qwen3VLProcessor"),
         ("sam", "SamProcessor"),
         ("sam2", "Sam2Processor"),
+        ("sam3", "Sam3Processor"),
         ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
@@ -136,10 +140,9 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("siglip2", "Siglip2Processor"),
         ("smolvlm", "SmolVLMProcessor"),
         ("speech_to_text", "Speech2TextProcessor"),
-        ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),
+        ("t5gemma2", "Gemma3Processor"),
         ("trocr", "TrOCRProcessor"),
-        ("tvlt", "TvltProcessor"),
         ("tvp", "TvpProcessor"),
         ("udop", "UdopProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
@@ -176,7 +179,7 @@ def processor_class_from_name(class_name: str):
         if getattr(processor, "__name__", None) == class_name:
             return processor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -224,9 +227,6 @@ class AutoProcessor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -268,18 +268,6 @@ class AutoProcessor:
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -303,7 +291,7 @@ class AutoProcessor:
         processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-            processor_class = config_dict.get("processor_class", None)
+            processor_class = config_dict.get("processor_class")
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
@@ -330,7 +318,6 @@ class AutoProcessor:
                     processor_class = config_dict.get("processor_class", None)
                     if "AutoProcessor" in config_dict.get("auto_map", {}):
                         processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
-
             # Saved as feature extractor
             if preprocessor_config_file is None:
                 preprocessor_config_file = cached_file(
@@ -358,16 +345,24 @@ class AutoProcessor:
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
-            # Otherwise, load config, if it can be loaded.
-            if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
+            # Last resort: try loading the model config to get processor_class.
+            # This handles cases where processor info is only in config.json (not in any
+            # preprocessor/tokenizer config files). AutoConfig.from_pretrained may raise
+            # ValueError if the model_type is unrecognized or the config is invalid -
+            # we catch and ignore this to allow fallback to AutoTokenizer/AutoImageProcessor.
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
 
-            # And check if the config contains the processor class.
-            processor_class = getattr(config, "processor_class", None)
-            if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
-                processor_auto_map = config.auto_map["AutoProcessor"]
+                processor_class = getattr(config, "processor_class", None)
+                if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
+                    processor_auto_map = config.auto_map["AutoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)
@@ -433,7 +428,7 @@ class AutoProcessor:
         Register a new processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             processor_class ([`ProcessorMixin`]): The processor to register.
         """

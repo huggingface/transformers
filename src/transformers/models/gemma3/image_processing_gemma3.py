@@ -40,6 +40,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -48,6 +49,24 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
+
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
 
 
 class Gemma3ImageProcessor(BaseImageProcessor):
@@ -91,6 +110,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "num_crops"]
+    valid_kwargs = Gemma3ImageProcessorKwargs
 
     def __init__(
         self,

@@ -14,9 +14,9 @@
 # limitations under the License.
 
 import copy
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -28,7 +28,7 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -47,7 +47,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -86,8 +86,8 @@ class JanusVisionConfig(SiglipVisionConfig):
     This is the configuration class to store the configuration of a [`JanusVisionModel`]. It is used to instantiate a
     `JanusVisionModel` according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
@@ -182,8 +182,8 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusVQVAEModel`]. It is used to instantiate a
     `JanusVQVAEModel` according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a
     configuration with the defaults will yield a similar configuration to the VQModel of the
     [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B).
 
@@ -268,7 +268,7 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
         del self.attn_type
 
 
-class JanusConfig(PretrainedConfig):
+class JanusConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
     Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -277,8 +277,8 @@ class JanusConfig(PretrainedConfig):
     e.g. [deepseek-community/Janus-Pro-1B](https://huggingface.co/deepseek-community/Janus-Pro-1B) or
     [deepseek-community/Janus-Pro-7B](https://huggingface.co/deepseek-community/Janus-Pro-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
@@ -336,7 +336,7 @@ class JanusConfig(PretrainedConfig):
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["llama"]()
-        elif isinstance(text_config, PretrainedConfig):
+        elif isinstance(text_config, PreTrainedConfig):
             self.text_config = text_config
         else:
             raise ValueError(
@@ -382,6 +382,7 @@ class JanusConfig(PretrainedConfig):
 class JanusPreTrainedModel(PreTrainedModel):
     config: JanusConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -389,7 +390,6 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
 
 
 @dataclass
@@ -823,6 +823,7 @@ class JanusVQVAE(ChameleonVQVAE):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        **kwargs,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
         quant, embedding_loss, indices = self.encode(pixel_values)
@@ -979,7 +980,8 @@ class JanusModel(JanusPreTrainedModel):
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    output_modalities = ("image", "text")
     _can_compile_fullgraph = True
 
     def __init__(self, config: JanusConfig):
@@ -1097,7 +1099,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoded_image = decoded_image.permute(0, 2, 3, 1)
         return decoded_image
 
-    @torch.no_grad
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1233,8 +1235,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
             )
-
-            model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
+            if "attention_mask" in model_inputs:
+                model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
             model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
@@ -1289,6 +1291,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             return generated_tokens
 
 
+class JanusImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
+
+
 class JanusImageProcessor(BlipImageProcessor):
     r"""
     Constructs a JANUS image processor.
@@ -1328,6 +1340,8 @@ class JanusImageProcessor(BlipImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to square or not.
     """
+
+    valid_kwargs = JanusImageProcessorKwargs
 
     def __init__(
         self,

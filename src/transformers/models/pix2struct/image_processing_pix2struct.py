@@ -32,6 +32,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -46,6 +47,25 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
+
+
+class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_patches (`int`, *optional*):
+        Maximum number of patches to extract.
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+    is_vqa (`bool`, *optional*, defaults to `False`):
+        Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
+        rendered onto the input images.
+    header_text (`Union[list[str], str]`, *optional*):
+        Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
+    """
+
+    max_patches: int
+    patch_size: dict[str, int]
+    is_vqa: bool
+    header_text: Optional[Union[list[str], str]]
 
 
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
@@ -208,6 +228,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["flattened_patches", "attention_mask"]
+    valid_kwargs = Pix2StructImageProcessorKwargs
 
     def __init__(
         self,

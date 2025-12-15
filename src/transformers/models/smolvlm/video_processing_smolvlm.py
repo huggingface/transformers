@@ -17,19 +17,14 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_v2_available, logging
+from ...utils import TensorType, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -95,9 +90,8 @@ def get_resize_output_image_size(
     return height, width
 
 
-class SmolVLMVideoProcessorInitKwargs(VideosKwargs):
-    max_image_size: Optional[dict[str, int]]
-    do_pad: Optional[bool]
+class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
+    max_image_size: dict[str, int]
 
 
 class SmolVLMVideoProcessor(BaseVideoProcessor):
@@ -337,7 +331,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
             pixel_attention_mask = reorder_videos(processed_padded_mask_grouped, grouped_videos_index)
 
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
         data = {"pixel_values": processed_videos}
 
         if do_pad:

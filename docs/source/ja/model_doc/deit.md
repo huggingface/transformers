@@ -88,11 +88,6 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 [[autodoc]] DeiTConfig
 
-## DeiTFeatureExtractor
-
-[[autodoc]] DeiTFeatureExtractor
-    - __call__
-
 ## DeiTImageProcessor
 
 [[autodoc]] DeiTImageProcessor
@@ -123,4 +118,3 @@ DeiT を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
-

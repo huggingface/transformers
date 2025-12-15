@@ -47,6 +47,7 @@ Therefore, this model has to be fine-tuned before it is usable on a downstream t
 fine-tuning. If you are doing multi-task fine-tuning, you should use a prefix.
 
 ## Differences with mT5?
+
 `UmT5` is based on mT5, with a non-shared relative positional bias that is computed for each layer. This means that the model set `has_relative_bias` for each layer.
 The conversion script is also different because the model was saved in t5x's latest checkpointing format.
 

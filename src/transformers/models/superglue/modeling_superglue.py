@@ -23,7 +23,7 @@ from torch import nn
 from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ... import initialization as init
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -149,14 +149,14 @@ def arange_like(x, dim: int) -> torch.Tensor:
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
+    Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
     images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
     used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
     information.
     """
 )
-class KeypointMatchingOutput(ModelOutput):
+class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Loss computed during training.
@@ -234,7 +234,7 @@ class SuperGlueKeypointEncoder(nn.Module):
 
 
 class SuperGlueSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -251,12 +251,6 @@ class SuperGlueSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
@@ -264,7 +258,6 @@ class SuperGlueSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
@@ -296,23 +289,6 @@ class SuperGlueSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in SuperGlueModel forward() function)
@@ -324,10 +300,6 @@ class SuperGlueSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -358,38 +330,15 @@ SUPERGLUE_SELF_ATTENTION_CLASSES = {
 
 
 class SuperGlueAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config):
         super().__init__()
-        self.self = SUPERGLUE_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config,
-            position_embedding_type=position_embedding_type,
-        )
+        self.self = SUPERGLUE_SELF_ATTENTION_CLASSES[config._attn_implementation](config)
         self.output = SuperGlueSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -397,7 +346,6 @@ class SuperGlueAttention(nn.Module):
         self_outputs = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
@@ -520,19 +468,14 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm1d):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
+        super()._init_weights(module)
         if hasattr(module, "bin_score"):
-            module.bin_score.data.fill_(1.0)
+            init.ones_(module.bin_score)
 
 
 @auto_docstring(
@@ -727,7 +670,8 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, KeypointMatchingOutput]:
+        **kwargs,
+    ) -> Union[tuple, SuperGlueKeypointMatchingOutput]:
         r"""
         Examples:
 
@@ -795,7 +739,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 if v is not None
             )
 
-        return KeypointMatchingOutput(
+        return SuperGlueKeypointMatchingOutput(
             loss=loss,
             matches=matches,
             matching_scores=matching_scores,

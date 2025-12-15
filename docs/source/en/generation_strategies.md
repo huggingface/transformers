@@ -32,9 +32,10 @@ Greedy search works well for tasks with relatively short outputs where creativit
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -54,9 +55,10 @@ Enable multinomial sampling with `do_sample=True` and `num_beams=1`.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -79,9 +81,10 @@ Enable beam search with the `num_beams` parameter (should be greater than 1 othe
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(device)
@@ -166,9 +169,10 @@ Enable prompt lookup decoding with the `prompt_lookup_num_tokens` parameter.
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, infer_device
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 
-device = infer_device()
+device = Accelerator().device
 
 tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
 model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype=torch.float16).to(device)
@@ -229,6 +233,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ## Custom generation methods
 
 Custom generation methods enable specialized behavior such as:
+
 - have the model continue thinking if it is uncertain;
 - roll back generation if the model gets stuck;
 - handle special tokens with custom logic;
@@ -301,6 +306,7 @@ Updating your Python requirements accordingly will remove this error message.
 ### Creating a custom generation method
 
 To create a new generation method, you need to create a new [**Model**](https://huggingface.co/new) repository and push a few files into it.
+
 1. The model you've designed your generation method with.
 2. `custom_generate/generate.py`, which contains all the logic for your custom generation method.
 3. `custom_generate/requirements.txt`, used to optionally add new Python requirements and/or lock specific versions to correctly use your method.
@@ -377,6 +383,7 @@ def generate(model, input_ids, generation_config=None, left_padding=None, **kwar
 ```
 
 Follow the recommended practices below to ensure your custom generation method works as expected.
+
 - Feel free to reuse the logic for validation and input preparation in the original [`~GenerationMixin.generate`].
 - Pin the `transformers` version in the requirements if you use any private method/attribute in `model`.
 - Consider adding model validation, input validation, or even a separate test file to help users sanity-check your code in their environment.
@@ -410,6 +417,7 @@ tags:
 ```
 
 Recommended practices:
+
 - Document input and output differences in [`~GenerationMixin.generate`].
 - Add self-contained examples to enable quick experimentation.
 - Describe soft-requirements such as if the method only works well with a certain family of models.
@@ -442,6 +450,7 @@ output = model.generate(
 ### Finding custom generation methods
 
 You can find all custom generation methods by [searching for their custom tag.](https://huggingface.co/models?other=custom_generate), `custom_generate`. In addition to the tag, we curate two collections of `custom_generate` methods:
+
 - [Custom generation methods - Community](https://huggingface.co/collections/transformers-community/custom-generation-methods-community-6888fb1da0efbc592d3a8ab6) -- a collection of powerful methods contributed by the community;
 - [Custom generation methods - Tutorials](https://huggingface.co/collections/transformers-community/custom-generation-methods-tutorials-6823589657a94940ea02cfec) -- a collection of reference implementations for methods that previously were part of `transformers`, as well as tutorials for `custom_generate`.
 

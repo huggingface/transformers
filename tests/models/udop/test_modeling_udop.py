@@ -177,8 +177,6 @@ class UdopModelTester:
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
@@ -275,10 +273,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     test_resize_embeddings = True
     is_encoder_decoder = True
     test_cpu_offload = False
@@ -335,6 +330,10 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Udop has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -348,15 +347,13 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 "attention_mask",
                 "bbox",
                 "cache_position",
-                "cross_attn_head_mask",
                 "decoder_attention_mask",
-                "decoder_head_mask",
                 "decoder_input_ids",
                 "decoder_inputs_embeds",
                 "encoder_outputs",
-                "head_mask",
                 "input_ids",
                 "inputs_embeds",
+                "kwargs",
             ]
             if model_class in self.all_generative_model_classes:
                 expected_arg_names.append(
@@ -551,9 +548,7 @@ class UdopEncoderOnlyModelTester:
 
 class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UdopEncoderModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     test_resize_embeddings = False
 
     def setUp(self):

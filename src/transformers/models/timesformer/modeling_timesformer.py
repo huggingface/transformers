@@ -22,6 +22,7 @@ import torch.nn.functional
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -451,21 +452,22 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     config: TimesformerConfig
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
         elif isinstance(module, TimesformerEmbeddings):
-            nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
-            module.patch_embeddings.apply(self._init_weights)
+            init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
+            init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -485,14 +487,6 @@ class TimesformerModel(TimesformerPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -500,6 +494,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         Examples:
@@ -630,6 +625,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

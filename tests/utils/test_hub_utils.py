@@ -18,22 +18,15 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
+from huggingface_hub import constants, hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError, LocalEntryNotFoundError, OfflineModeIsEnabled
 
-from transformers.utils import (
-    CONFIG_NAME,
-    TRANSFORMERS_CACHE,
-    WEIGHTS_NAME,
-    cached_file,
-    has_file,
-    list_repo_templates,
-)
+from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, has_file, list_repo_templates
 
 
 RANDOM_BERT = "hf-internal-testing/tiny-random-bert"
 TINY_BERT_PT_ONLY = "hf-internal-testing/tiny-bert-pt-only"
-CACHE_DIR = os.path.join(TRANSFORMERS_CACHE, "models--hf-internal-testing--tiny-random-bert")
+CACHE_DIR = os.path.join(constants.HF_HUB_CACHE, "models--hf-internal-testing--tiny-random-bert")
 FULL_COMMIT_HASH = "9b8c223d42b2188cb49d29af482996f9d0f3e5a6"
 
 GATED_REPO = "hf-internal-testing/dummy-gated-model"

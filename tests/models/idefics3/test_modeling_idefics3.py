@@ -42,6 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        BitsAndBytesConfig,
         Idefics3Config,
         Idefics3ForConditionalGeneration,
         Idefics3Model,
@@ -166,11 +167,8 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
@@ -334,11 +332,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = True
-    test_head_masking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
@@ -535,7 +530,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             device_map="auto",
         )
 

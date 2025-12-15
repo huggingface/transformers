@@ -21,7 +21,6 @@ import numpy as np
 
 from transformers import VJEPA2Config
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_vision,
     slow,
@@ -156,21 +155,13 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (VJEPA2Model, VJEPA2ForVideoClassification) if is_torch_available() else ()
 
-    fx_compatible = False
-
     pipeline_model_mapping = {}
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37)
-
-    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
-    def test_initialization(self):
-        super().test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()

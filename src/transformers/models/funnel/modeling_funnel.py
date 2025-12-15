@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -672,6 +673,7 @@ class FunnelPreTrainedModel(PreTrainedModel):
     config: FunnelConfig
     base_model_prefix = "funnel"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         classname = module.__class__.__name__
         if classname.find("Linear") != -1:
@@ -681,20 +683,20 @@ class FunnelPreTrainedModel(PreTrainedModel):
                     std = np.sqrt(1.0 / float(fan_in + fan_out))
                 else:
                     std = self.config.initializer_std
-                nn.init.normal_(module.weight, std=std)
+                init.normal_(module.weight, std=std)
             if getattr(module, "bias", None) is not None:
-                nn.init.constant_(module.bias, 0.0)
+                init.constant_(module.bias, 0.0)
         elif classname == "FunnelRelMultiheadAttention":
-            nn.init.uniform_(module.r_w_bias, b=self.config.initializer_range)
-            nn.init.uniform_(module.r_r_bias, b=self.config.initializer_range)
-            nn.init.uniform_(module.r_kernel, b=self.config.initializer_range)
-            nn.init.uniform_(module.r_s_bias, b=self.config.initializer_range)
-            nn.init.uniform_(module.seg_embed, b=self.config.initializer_range)
+            init.uniform_(module.r_w_bias, b=self.config.initializer_range)
+            init.uniform_(module.r_r_bias, b=self.config.initializer_range)
+            init.uniform_(module.r_kernel, b=self.config.initializer_range)
+            init.uniform_(module.r_s_bias, b=self.config.initializer_range)
+            init.uniform_(module.seg_embed, b=self.config.initializer_range)
         elif classname == "FunnelEmbeddings":
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
-            nn.init.normal_(module.word_embeddings.weight, std=std)
+            init.normal_(module.word_embeddings.weight, std=std)
             if module.word_embeddings.padding_idx is not None:
-                module.word_embeddings.weight.data[module.word_embeddings.padding_idx].zero_()
+                init.zeros_(module.word_embeddings.weight[module.word_embeddings.padding_idx])
 
 
 class FunnelClassificationHead(nn.Module):
@@ -760,11 +762,11 @@ class FunnelBaseModel(FunnelPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -789,7 +791,6 @@ class FunnelBaseModel(FunnelPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # TODO: deal with head_mask
         inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
@@ -832,6 +833,7 @@ class FunnelModel(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -856,7 +858,6 @@ class FunnelModel(FunnelPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # TODO: deal with head_mask
         inputs_embeds = self.embeddings(input_ids, inputs_embeds=inputs_embeds)
 
         encoder_outputs = self.encoder(
@@ -924,6 +925,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FunnelForPreTrainingOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -985,7 +987,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
 @auto_docstring
 class FunnelForMaskedLM(FunnelPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "funnel.embeddings.word_embeddings.weight"}
 
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)
@@ -1013,6 +1015,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1080,6 +1083,7 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1159,6 +1163,7 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1234,6 +1239,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1296,6 +1302,7 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

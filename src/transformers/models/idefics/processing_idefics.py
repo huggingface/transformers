@@ -16,13 +16,12 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
@@ -30,7 +29,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_available():
@@ -40,13 +38,6 @@ if is_torch_available():
 IMAGE_TOKEN = "<image>"
 
 
-class IdeficsImagesKwargs(ImagesKwargs, total=False):
-    transform: Optional[Callable]
-    image_size: Optional[dict[str, int]]
-    image_mean: Optional[Union[float, list[float]]]
-    image_std: Optional[Union[float, list[float]]]
-
-
 class IdeficsTextKwargs(TextKwargs, total=False):
     add_eos_token: Optional[bool]
     add_end_of_utterance_token: Optional[bool]
@@ -54,14 +45,12 @@ class IdeficsTextKwargs(TextKwargs, total=False):
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
     text_kwargs: IdeficsTextKwargs
-    images_kwargs: IdeficsImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": False,
             "padding": "longest",
             "add_eos_token": False,
         },
-        "images_kwargs": {},
         "common_kwargs": {"return_tensors": "pt"},
     }
 
@@ -163,13 +152,8 @@ class IdeficsProcessor(ProcessorMixin):
             The string representation of token representing end of utterance
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "IdeficsImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
-
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
         self.image_token_id = (
             tokenizer.image_token_id
             if hasattr(tokenizer, "image_token")
@@ -186,7 +170,6 @@ class IdeficsProcessor(ProcessorMixin):
             "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
-    @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
         images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
@@ -198,8 +181,6 @@ class IdeficsProcessor(ProcessorMixin):
             list[list[TextInput]],
             list[list[PreTokenizedInput]],
         ] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that

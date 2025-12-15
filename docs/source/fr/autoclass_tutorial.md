@@ -71,7 +71,7 @@ Pour les tâches de vision, un processeur d'image traite l'image pour la formate
     <figcaption class="mt-2 text-center text-sm text-gray-500">Un backbone Swin avec plusieurs étapes pour produire une carte de caractéristiques.</figcaption>
 </div>
 
-[`AutoBackbone`] vous permet d'utiliser des modèles pré-entraînés comme backbones pour obtenir des cartes de caractéristiques à partir de différentes étapes du backbone. Vous devez spécifier l'un des paramètres suivants dans [`~PretrainedConfig.from_pretrained`] :
+[`AutoBackbone`] vous permet d'utiliser des modèles pré-entraînés comme backbones pour obtenir des cartes de caractéristiques à partir de différentes étapes du backbone. Vous devez spécifier l'un des paramètres suivants dans [`~PreTrainedConfig.from_pretrained`] :
 
 * `out_indices` est l'index de la couche dont vous souhaitez obtenir la carte de caractéristiques
 * `out_features` est le nom de la couche dont vous souhaitez obtenir la carte de caractéristiques

@@ -126,8 +126,6 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "rescale_factor"))
             self.assertTrue(hasattr(image_processing, "do_pad"))
             self.assertTrue(hasattr(image_processing, "size_divisor"))
-            # Check size_divisibility for BC, the image proccessor has to have an atribute
-            self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
     def test_call_numpy(self):
         # create random numpy tensors
@@ -220,8 +218,8 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 images=image,
                 trimaps=trimap,
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=(0.0, 0.0, 0.0, 0.0),
+                image_std=(1.0, 1.0, 1.0, 1.0),
                 return_tensors="pt",
             ).pixel_values
 
@@ -255,18 +253,24 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # vitmatte require additional trimap input for image_processor
         # that is why we override original common test
 
-        for image_processing_class in self.image_processor_list:
+        for i, image_processing_class in enumerate(self.image_processor_list):
             image_processor = image_processing_class(**self.image_processor_dict)
             image = self.image_processor_tester.prepare_image_inputs()[0]
             trimap = np.random.randint(0, 3, size=image.size[::-1])
 
-            with warnings.catch_warnings(record=True) as raised_warnings:
-                warnings.simplefilter("always")
-                image_processor(image, trimaps=trimap, extra_argument=True)
+            # Type validation will fail for fast processors only (for now)
+            if image_processing_class.__name__.endswith("Fast"):
+                with self.assertRaises(TypeError):
+                    image_processor(image, trimaps=trimap, extra_argument=True)
+            else:
+                # Else we just consume extra kwargs and raise a warning
+                with warnings.catch_warnings(record=True) as raised_warnings:
+                    warnings.simplefilter("always")
+                    image_processor(image, trimaps=trimap, extra_argument=True)
 
-            messages = " ".join([str(w.message) for w in raised_warnings])
-            self.assertGreaterEqual(len(raised_warnings), 1)
-            self.assertIn("extra_argument", messages)
+                messages = " ".join([str(w.message) for w in raised_warnings])
+                self.assertGreaterEqual(len(raised_warnings), 1)
+                self.assertIn("extra_argument", messages)
 
     @unittest.skip(reason="Many failing cases. This test needs a more deep investigation.")
     def test_fast_is_faster_than_slow(self):

@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Byte Lantet Transformer (BLT)
+# Byte Latent Transformer (BLT)
 
 ## Overview
 
@@ -38,7 +38,7 @@ The abstract from the paper is the following:
 efficiency and robustness. BLT encodes bytes into dynamically sized patches, which serve as the primary units of computation. Patches are segmented based on the entropy of the next byte, allocating
 more compute and model capacity where increased data complexity demands it. We present the first flop controlled scaling study of byte-level models up to 8B parameters and 4T training bytes. Our results demonstrate the feasibility of scaling models trained on raw bytes without a fixed vocabulary. Both training and inference efficiency improve due to dynamically selecting long patches when data is predictable, along with qualitative improvements on reasoning and long tail generalization. Overall, for fixed inference costs, BLT shows significantly better scaling than tokenization-based models, by simultaneously growing both patch and model size.*
 
-## Usage Tips:
+## Usage Tips
 
 - **Dual Model Architecture**: BLT consists of two separate trained models:
   - **Patcher (Entropy Model)**: A smaller transformer model that predicts byte-level entropy to determine patch boundaries and segment input.

@@ -14,22 +14,22 @@
 # limitations under the License.
 """Nystromformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class NystromformerConfig(PretrainedConfig):
+class NystromformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NystromformerModel`]. It is used to instantiate
     an Nystromformer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Nystromformer
     [uw-madison/nystromformer-512](https://huggingface.co/uw-madison/nystromformer-512) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30000):

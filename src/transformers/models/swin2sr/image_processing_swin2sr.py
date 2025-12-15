@@ -30,11 +30,15 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
+
+
+class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
 
 
 class Swin2SRImageProcessor(BaseImageProcessor):
@@ -51,6 +55,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = Swin2SRImageProcessorKwargs
 
     def __init__(
         self,
@@ -67,20 +72,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         pad_size = kwargs.get("pad_size")
         self.size_divisor = size_divisor if size_divisor is not None else pad_size
-
-    @property
-    def pad_size(self):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        return self.size_divisor
-
-    @pad_size.setter
-    def pad_size(self, value):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        self.size_divisor = value
 
     def pad(
         self,
@@ -124,7 +115,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         )
 
     @filter_out_non_signature_kwargs()
-    @deprecate_kwarg("pad_size", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,

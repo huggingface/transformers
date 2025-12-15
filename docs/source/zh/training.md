@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 在您进行预训练模型微调之前，需要下载一个数据集并为训练做好准备。之前的教程向您展示了如何处理训练数据，现在您有机会将这些技能付诸实践！
 
-首先，加载[Yelp评论](https://huggingface.co/datasets/yelp_review_full)数据集：
+首先，加载[Yelp评论](https://huggingface.co/datasets/Yelp/yelp_review_full)数据集：
 
 ```py
 >>> from datasets import load_dataset
@@ -77,7 +77,7 @@ rendered properly in your Markdown viewer.
 
 🤗 Transformers 提供了一个专为训练 🤗 Transformers 模型而优化的 [`Trainer`] 类，使您无需手动编写自己的训练循环步骤而更轻松地开始训练模型。[`Trainer`] API 支持各种训练选项和功能，如日志记录、梯度累积和混合精度。
 
-首先加载您的模型并指定期望的标签数量。根据 Yelp Review [数据集卡片](https://huggingface.co/datasets/yelp_review_full#data-fields)，您知道有五个标签：
+首先加载您的模型并指定期望的标签数量。根据 Yelp Review [数据集卡片](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)，您知道有五个标签：
 
 
 ```py

@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import torch
+from torchvision.transforms.v2 import functional as F
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -24,16 +25,10 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
 )
 from transformers.utils.import_utils import requires
 
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -93,7 +88,6 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

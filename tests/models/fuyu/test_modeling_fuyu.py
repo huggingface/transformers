@@ -169,8 +169,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_cpu_offload = False
     test_disk_offload = False
 
@@ -260,6 +258,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Fuyu has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

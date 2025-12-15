@@ -18,11 +18,11 @@ Feature extraction saving/loading class for common feature extractors.
 import copy
 import json
 import os
-import warnings
 from collections import UserDict
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -31,15 +31,13 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     copy_func,
-    download_url,
     is_numpy_array,
-    is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
     logging,
     requires_backends,
+    safe_load_json_file,
 )
 from .utils.hub import cached_file
 
@@ -69,11 +67,18 @@ class BatchFeature(UserDict):
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+            List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
     """
 
-    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(
+        self,
+        data: Optional[dict[str, Any]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
+        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -112,6 +117,14 @@ class BatchFeature(UserDict):
             import torch
 
             def as_tensor(value):
+                if torch.is_tensor(value):
+                    return value
+
+                # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
+                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    return torch.stack(value)
+
+                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
                 if isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
@@ -140,7 +153,11 @@ class BatchFeature(UserDict):
             is_tensor = is_numpy_array
         return is_tensor, as_tensor
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(
+        self,
+        tensor_type: Optional[Union[str, TensorType]] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         """
         Convert the inner content to tensors.
 
@@ -148,6 +165,8 @@ class BatchFeature(UserDict):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
+            skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+                List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
         """
         if tensor_type is None:
             return self
@@ -156,18 +175,26 @@ class BatchFeature(UserDict):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
+            # Skip keys explicitly marked for no conversion
+            if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
             try:
                 if not is_tensor(value):
                     tensor = as_tensor(value)
-
                     self[key] = tensor
-            except:  # noqa E722
+            except Exception as e:
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        f"Unable to create tensor for '{key}' with overflowing values of different lengths. "
+                        f"Original error: {str(e)}"
+                    ) from e
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
+                    f"Unable to convert output '{key}' (type: {type(value).__name__}) to tensor: {str(e)}\n"
+                    f"You can try:\n"
+                    f"  1. Use padding=True to ensure all outputs have the same shape\n"
+                    f"  2. Set return_tensors=None to return Python objects instead of tensors"
+                ) from e
 
         return self
 
@@ -221,7 +248,7 @@ class BatchFeature(UserDict):
 
 class FeatureExtractionMixin(PushToHubMixin):
     """
-    This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
+    This is a feature extraction mixin used to provide saving/loading functionality for sequential and audio feature
     extractors.
     """
 
@@ -275,9 +302,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -336,18 +360,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -370,19 +382,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -391,7 +390,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -433,24 +432,11 @@ class FeatureExtractionMixin(PushToHubMixin):
         """
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
         subfolder = kwargs.pop("subfolder", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -469,36 +455,38 @@ class FeatureExtractionMixin(PushToHubMixin):
             feature_extractor_file = os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_feature_extractor_file = pretrained_model_name_or_path
+            resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            feature_extractor_file = pretrained_model_name_or_path
-            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
                 # Load from local folder or from cache or download from model Hub and cache
-                resolved_feature_extractor_files = [
-                    resolved_file
-                    for filename in [feature_extractor_file, PROCESSOR_NAME]
-                    if (
-                        resolved_file := cached_file(
-                            pretrained_model_name_or_path,
-                            filename=filename,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            resume_download=resume_download,
-                            local_files_only=local_files_only,
-                            subfolder=subfolder,
-                            token=token,
-                            user_agent=user_agent,
-                            revision=revision,
-                            _raise_exceptions_for_missing_entries=False,
-                        )
-                    )
-                    is not None
-                ]
-                resolved_feature_extractor_file = resolved_feature_extractor_files[0]
+                resolved_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=PROCESSOR_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+                resolved_feature_extractor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=feature_extractor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -512,16 +500,24 @@ class FeatureExtractionMixin(PushToHubMixin):
                     f" directory containing a {FEATURE_EXTRACTOR_NAME} file"
                 )
 
-        try:
-            # Load feature_extractor dict
-            with open(resolved_feature_extractor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            feature_extractor_dict = json.loads(text)
-            feature_extractor_dict = feature_extractor_dict.get("feature_extractor", feature_extractor_dict)
+        # Load feature_extractor dict. Priority goes as (nested config if found -> image processor config)
+        # We are downloading both configs because almost all models have a `processor_config.json` but
+        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        feature_extractor_dict = None
+        if resolved_processor_file is not None:
+            processor_dict = safe_load_json_file(resolved_processor_file)
+            if "feature_extractor" in processor_dict or "audio_processor" in processor_dict:
+                feature_extractor_dict = processor_dict.get("feature_extractor", processor_dict.get("audio_processor"))
 
-        except json.JSONDecodeError:
+        if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
+            feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
+
+        if feature_extractor_dict is None:
             raise OSError(
-                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
+                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                f" directory containing a {feature_extractor_file} file"
             )
 
         if is_local:

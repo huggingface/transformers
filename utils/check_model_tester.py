@@ -40,9 +40,9 @@ if __name__ == "__main__":
                 for k, v in config.to_dict().items():
                     if isinstance(v, int):
                         target = None
-                        if k in ["vocab_size"]:
+                        if k == "vocab_size":
                             target = 100
-                        elif k in ["max_position_embeddings"]:
+                        elif k == "max_position_embeddings":
                             target = 128
                         elif k in ["hidden_size", "d_model"]:
                             target = 40

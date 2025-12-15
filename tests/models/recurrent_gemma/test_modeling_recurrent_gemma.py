@@ -18,7 +18,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-    from transformers import RecurrentGemmaForCausalLM, RecurrentGemmaModel
+    from transformers import RecurrentGemmaModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -45,14 +45,6 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": RecurrentGemmaModel,
-            "text-generation": RecurrentGemmaForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
     has_attentions = False
     model_tester_class = RecurrentGemmaModelTester
 
@@ -89,10 +81,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.generate
     @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip(reason="TODO @arthurzucker not super important and failing.")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="RecurrentGemma is unusual and fails a lot of generation tests")
@@ -205,10 +193,21 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     @require_read_token
     def test_model_2b_8bit(self):
-        EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"]  # fmt: skip
+        # fmt: off
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", None): ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am stuck', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+                (None, None): ['Hello I am doing a project on the topic of "The impact of social media on the society" and I am looking', "Hi today I'm going to show you how to make a simple and easy to make a 3D"],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            "gg-hf/recurrent-gemma-2b-hf", device_map={"": torch_device}, load_in_8bit=True, dtype=torch.bfloat16
+            "gg-hf/recurrent-gemma-2b-hf",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            dtype=torch.bfloat16,
         )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, padding_side="left")
@@ -217,7 +216,7 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_read_token
     def test_long_context(self):

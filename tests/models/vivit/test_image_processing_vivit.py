@@ -191,14 +191,22 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test not batched input
         encoded_videos = image_processing(
-            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs[0],
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(
-            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs,
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(

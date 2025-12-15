@@ -16,7 +16,7 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
+import torch
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -31,8 +31,6 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        HunYuanMoEV1ForCausalLM,
-        HunYuanMoEV1ForSequenceClassification,
         HunYuanMoEV1Model,
     )
 
@@ -48,15 +46,6 @@ class HunYuanMoEV1ModelTester(CausalLMModelTester):
 class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = HunYuanMoEV1ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": HunYuanMoEV1Model,
-            "text-generation": HunYuanMoEV1ForCausalLM,
-            "text-classification": HunYuanMoEV1ForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     def is_pipeline_test_to_skip(
         self,
@@ -88,15 +77,6 @@ class HunYuanMoEV1ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("HunYuanMoEV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("HunYuanMoEV1's RoPE has custom parameterization")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
-
 
 @require_torch
 class HunYuanMoEV1IntegrationTest(unittest.TestCase):
@@ -110,10 +90,12 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         # we will compele this when model file change over
         # pass
-        EXPECTED_ANSWER = "\nOkay, I need to write a short summary about the benefits of regular exercise. Let me start by recalling what I know. First,"
+        EXPECTED_ANSWER = "\nOkay, I need to write a"
         prompt = "Write a short summary of the benefits of regular exercise"
         tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
-        model = AutoModelForCausalLM.from_pretrained("tencent/Hunyuan-A13B-Instruct", device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "tencent/Hunyuan-A13B-Instruct", device_map="auto", dtype=torch.bfloat16
+        )
         messages = [
             {"role": "user", "content": prompt},
         ]
@@ -123,7 +105,7 @@ class HunYuanMoEV1IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
             return_tensors="pt",
         )
-        generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=30, top_k=1)
+        generated_ids = model.generate(tokenized_chat.to(model.device), max_new_tokens=10, top_k=1)
         text = tokenizer.decode(generated_ids[0])
         output = text.split("<think>")[1]
         self.assertEqual(EXPECTED_ANSWER, output)

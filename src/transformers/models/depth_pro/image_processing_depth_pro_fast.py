@@ -30,7 +30,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
@@ -41,10 +40,7 @@ if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
 
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-else:
-    from torchvision.transforms import functional as F
+from torchvision.transforms.v2 import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -98,7 +94,6 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

@@ -39,6 +39,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -47,6 +48,21 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class TvpImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_flip_channel_order (`bool`, *optional*):
+        Whether to flip the channel order of the image from RGB to BGR.
+    constant_values (`float` or `List[float]`, *optional*):
+        Value used to fill the padding area when `pad_mode` is `'constant'`.
+    pad_mode (`str`, *optional*):
+        Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
+    """
+
+    do_flip_channel_order: bool
+    constant_values: Optional[Union[float, list[float]]]
+    pad_mode: Optional[str]
 
 
 # Copied from transformers.models.vivit.image_processing_vivit.make_batched
@@ -133,6 +149,7 @@ class TvpImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = TvpImageProcessorKwargs
 
     def __init__(
         self,
