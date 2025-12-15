@@ -69,8 +69,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         but allows the specific vllm kernel.
         """
 
-        config_dict = self.model_tester.get_config()
-        config = GptOssConfig(**config_dict)
+        config = self.model_tester.get_config()
         config._attn_implementation = "flash_attention_2"
         with self.assertRaisesRegex(ValueError, "GPT-OSS models do not support"):
             GptOssModel(config)
