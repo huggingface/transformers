@@ -62,6 +62,24 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
+    def test_initialization_raises_error_for_flash_attn(self):
+        """
+        Tests that initializing the model with unsupported Flash Attention implementations raises a ValueError,
+        but allows the specific vllm kernel.
+        """
+
+        config_dict = self.model_tester.get_config()
+        config = GptOssConfig(**config_dict)
+        config._attn_implementation = "flash_attention_2"
+        with self.assertRaisesRegex(ValueError, "GPT-OSS models do not support"):
+            GptOssModel(config)
+
+        config._attn_implementation = "kernels-community/vllm-flash-attn3"
+        try:
+            GptOssModel(config) 
+        except ValueError:
+            self.fail("GptOssModel raised ValueError unexpectedly with vllm-flash-attn3!")
+
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
