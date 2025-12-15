@@ -1,0 +1,430 @@
+# coding=utf-8
+# Copyright 2025 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
+import torch
+from ...activations import ACT2FN
+from typing import Optional, Callable
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ..auto import AutoConfig
+from torch import nn
+from ..glm4.modeling_glm4 import Glm4RotaryEmbedding, apply_rotary_pos_emb
+from ..voxtral.modeling_voxtral import (
+    eager_attention_forward,
+    VoxtralAttention,
+    VoxtralEncoder,
+    VoxtralEncoderLayer,
+    VoxtralForConditionalGeneration,
+    VoxtralMultiModalProjector,
+    VoxtralPreTrainedModel,
+)
+from ...modeling_outputs import BaseModelOutput
+
+
+class GlmasrEncoderConfig(VoxtralEncoderConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmasrEncoder`]. It is used to instantiate a
+    glmasr audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the glmasr
+    architecture.
+
+    e.g. [zai-org/GLM-ASR-Nano-2512](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 51866):
+            Vocabulary size of the model.
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Dimensionality of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 5120):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 20):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by dividing by sqrt(hidden_size) if True.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Number of mel features used per input features. Should correspond to the value used in the
+            `GlmasrProcessor` class.
+        max_source_positions (`int`, *optional*, defaults to 1500):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    ```python
+    >>> from transformers import GlmasrEncoderConfig, GlmasrEncoder
+
+    >>> # Initializing a GlmasrEncoderConfig
+    >>> configuration = GlmasrEncoderConfig()
+
+    >>> # Initializing a GlmasrEncoder (with random weights)
+    >>> model = GlmasrEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glmasr_encoder"
+
+    attribute_map = {
+        "d_model": "hidden_size",
+        "encoder_layers": "num_hidden_layers",
+        "encoder_attention_heads": "num_attention_heads",
+        "encoder_ffn_dim": "intermediate_size",
+        "encoder_layerdrop": "layerdrop",
+    }
+
+    def __init__(
+        self,
+        vocab_size=51866,
+        hidden_size=2048,
+        intermediate_size=6144,
+        num_hidden_layers=32,
+        num_attention_heads=16,
+        scale_embedding=False,
+        activation_function="gelu",
+        num_mel_bins=128,
+        max_source_positions=1500,
+        initializer_range=0.02,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+
+        self.num_attention_heads = num_attention_heads
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
+        self.activation_function = activation_function
+        self.num_mel_bins = num_mel_bins
+        self.max_source_positions = max_source_positions
+        self.initializer_range = initializer_range
+
+        # TODO: @eustlb, we do not use dropout and layerdrop, yet we need to hardcode them
+        # to be able to use Whisper with modular (here actually from Qwen2-Audio and copied from).
+        # After a future Whisper refactor, we should remove this.
+        self.dropout = 0.0
+        self.layerdrop = 0.0
+        self.activation_dropout = 0.0
+
+        self.attention_dropout = attention_dropout
+
+
+class GlmasrConfig(VoxtralConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmasrForConditionalGeneration`]. It is used to instantiate an
+    glmasr model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the glmasr-Mini-3B.
+
+    e.g. [zai-org/GLM-ASR-Nano-2512](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        audio_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the audio encoder.
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the text model.
+        audio_token_id (`int`, *optional*):
+            The image token index to encode the image prompt.
+        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The activation function (function or string) in the multi-modal projector.
+
+    ```python
+    >>> from transformers import GlmasrForConditionalGeneration, GlmasrConfig
+
+    >>> # Initializing a glmasr configuration
+    >>> configuration = GlmasrConfig(audio_token_id=24, projector_hidden_act="gelu")
+
+    >>> # Initializing a 3B model with random weights
+    >>> model = GlmasrForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glmasr"
+    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
+
+    _default_text_config_kwargs = {
+        "vocab_size": 59264,
+        "hidden_size": 2048,
+        "intermediate_size": 6144,
+        "num_hidden_layers": 28,
+        "num_key_value_heads": 16,
+        "max_position_embeddings": 8192,
+        "rms_norm_eps": 1e-05,
+        "use_cache": True,
+        "rope_theta": 10000.0,
+    }
+
+    def __init__(
+        self,
+        audio_config=None,
+        text_config=None,
+        audio_token_id=None,
+        projector_hidden_act="gelu",
+        **kwargs,
+    ):
+        super().__init__()
+
+
+class GlmasrAttention(VoxtralAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # which can lead to different results (this is dependent from model
+        # to model, e.g. whisper is one such case). We therefore keep the
+        # original order of scaling to follow the original implementation
+        # and enforce no scaling (1.0) in the attention call below.
+        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+
+        query_states, key_states = [
+            apply_rotary_pos_emb(
+                i.transpose(1, 2),
+                rotary_pos_emb,
+            ).transpose(1, 2)
+            for i in (query_states, key_states)
+        ]
+
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class GlmasrRotaryEmbedding(Glm4RotaryEmbedding):
+    def __init__(self, config: GlmasrConfig, device=None):
+        super().__init__()
+
+
+class GlmasrEncoderLayer(VoxtralEncoderLayer):
+    def __init__(self, config: GlmasrConfig):
+        super().__init__(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_attentions: bool = False,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            rotary_pos_emb=rotary_pos_emb,
+            position_ids=position_ids,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states, attn_weights
+
+
+class GlmasrPreTrainedModel(VoxtralPreTrainedModel):
+    pass
+
+
+class GlmasrEncoder(VoxtralEncoder):
+    def __init__(self, config: GlmasrConfig):
+        super().__init__(config)
+        self.rotary_embedding = GlmasrRotaryEmbedding(config=config)
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+
+    def forward(
+        self,
+        input_features,
+        attention_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_ids=None,
+        **kwargs,
+    ):
+        r"""
+        Args:
+            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+                the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            attention_mask (`torch.Tensor`)`, *optional*):
+                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
+                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
+
+        expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
+        if input_features.shape[-1] != expected_seq_length:
+            raise ValueError(
+                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+            )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
+
+        inputs_embeds = inputs_embeds.permute(0, 2, 1)
+        rotary_pos_emb = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+
+        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
+
+        hidden_states = inputs_embeds + self.embed_positions(all_positions)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        for idx, encoder_layer in enumerate(self.layers):
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
+                layer_outputs = (None, None)
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    None,
+                    output_attentions=output_attentions,
+                    rotary_pos_emb=rotary_pos_emb,
+                    position_ids=position_ids,
+                )
+
+                hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        hidden_states = self.layer_norm(hidden_states)
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
+
+
+class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
+    def __init__(self, config: GlmasrConfig):
+        super().__init__()
+        self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size * 2, bias=False)
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=False)
+
+    def forward(self, audio_features):
+        hidden_states = self.linear_1(audio_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class GlmasrForConditionalGeneration(VoxtralForConditionalGeneration):
+    pass
+
+
+__all__ = [
+    "GlmasrEncoderConfig",
+    "GlmasrConfig",
+    "GlmasrPreTrainedModel",
+    "GlmasrEncoder",
+    "GlmasrForConditionalGeneration",
+]

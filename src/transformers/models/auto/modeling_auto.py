@@ -43,6 +43,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("glmasr", "GlmasrForConditionalGeneration"),
+        ("glmasr", "GlmasrForConditionalGeneration"),
         ("afmoe", "AfmoeModel"),
         ("aimv2", "Aimv2Model"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
@@ -1063,6 +1065,14 @@ MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+        ("glmasr", "GlmasrForConditionalGeneration"),
+        ("albert", "AlbertForMaskedLM"),
+    ]
+)
+
+MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Masked LM mapping
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -1178,6 +1188,13 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+    ]
+)
+
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("glmasr", "GlmasrForConditionalGeneration"),
+        ("dia", "DiaForConditionalGeneration"),
     ]
 )
 

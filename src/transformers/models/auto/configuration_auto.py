@@ -35,6 +35,7 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
+        ("glmasr", "GlmasrConfig"),
         ("afmoe", "AfmoeConfig"),
         ("aimv2", "Aimv2Config"),
         ("aimv2_vision_model", "Aimv2VisionConfig"),
@@ -179,6 +180,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("glm4v_moe_vision", "Glm4vMoeVisionConfig"),
         ("glm4v_text", "Glm4vTextConfig"),
         ("glm4v_vision", "Glm4vVisionConfig"),
+        ("glmasr_encoder", "GlmasrEncoderConfig"),
         ("glpn", "GLPNConfig"),
         ("got_ocr2", "GotOcr2Config"),
         ("gpt-sw3", "GPT2Config"),
@@ -465,6 +467,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
+        ("glmasr", "glmasr"),
         ("afmoe", "AFMoE"),
         ("aimv2", "AIMv2"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
@@ -622,6 +625,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4v_moe_vision", "Glm4vMoeVisionModel"),
         ("glm4v_text", "GLM4V"),
         ("glm4v_vision", "Glm4vVisionModel"),
+        ("glmasr_encoder", "GLM ASR Encoder"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -987,6 +991,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
+        ("glmasr_encoder", "glmasr"),
     ]
 )
 
