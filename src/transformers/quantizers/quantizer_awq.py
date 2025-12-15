@@ -62,9 +62,7 @@ class AwqQuantizer(HfQuantizer):
             logger.warning("We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ.")
         return dtype
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(

@@ -192,9 +192,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", checkpoint_files=None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", checkpoint_files=None, **kwargs):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -206,7 +204,7 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = [
                 x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
             ]
-        if checkpoint_files is not None: 
+        if checkpoint_files is not None:
             # Torchao needs access to all metadata later
             self.set_metadata(checkpoint_files)
 
