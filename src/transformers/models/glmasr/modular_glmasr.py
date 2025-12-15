@@ -13,24 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
+from collections.abc import Callable
+from typing import Optional
+
 import torch
+from torch import nn
+
 from ...activations import ACT2FN
-from typing import Optional, Callable
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..auto import AutoConfig
-from torch import nn
 from ..glm4.modeling_glm4 import apply_rotary_pos_emb
+from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 from ..voxtral.modeling_voxtral import (
-    eager_attention_forward,
     VoxtralAttention,
     VoxtralEncoder,
     VoxtralEncoderLayer,
     VoxtralForConditionalGeneration,
     VoxtralMultiModalProjector,
     VoxtralPreTrainedModel,
+    eager_attention_forward,
 )
-from ...modeling_outputs import BaseModelOutput
 
 
 class GlmasrRotaryEmbedding(nn.Module):
