@@ -39,8 +39,8 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedModel,
     GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
-    eager_attention_forward,
     apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
