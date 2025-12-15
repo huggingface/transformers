@@ -221,7 +221,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import PreTrainedModel
+    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -620,7 +620,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn2")
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
     except Exception as _:
         kernels_available = False
 

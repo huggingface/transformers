@@ -155,6 +155,12 @@ _init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 
+# Mapping from flash attention implementations to their kernel fallback repositories
+FLASH_ATTN_KERNEL_FALLBACK = {
+    "flash_attention_2": "kernels-community/flash-attn2",
+    "flash_attention_3": "kernels-community/vllm-flash-attn3",
+}
+
 
 def is_local_dist_rank_0():
     return (
@@ -1592,7 +1598,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return True
 
             if is_torch_xpu_available():
-                logger.info("Detect using FlashAttention2 (via kernel `kernels-community/flash-attn2`) on XPU.")
+                logger.info(
+                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
+                )
                 return True
 
             if importlib.util.find_spec("flash_attn") is None:
@@ -1824,14 +1832,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            if attn_implementation.endswith("2"):
-                applicable_attn_implementation = "kernels-community/flash-attn2"
-                if is_torch_xpu_available():
-                    # On XPU, kernels library is the native implementation
-                    # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
-                    requested_original_flash_attn = False
-            else:
-                applicable_attn_implementation = "kernels-community/vllm-flash-attn3"
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]
+
+            if is_torch_xpu_available() and attn_implementation.removeprefix("paged|") == "flash_attention_2":
+                # On XPU, kernels library is the native implementation
+                # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
+                requested_original_flash_attn = False
 
             if is_paged:
                 applicable_attn_implementation = f"paged|{applicable_attn_implementation}"
