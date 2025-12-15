@@ -699,6 +699,15 @@ class IsaacModelTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=IsaacConfig,
+            has_text_modality=False,
+        )
+
+    def test_config(self):
+        self.maxDiff = None
+        self.config_tester.run_common_tests()
 
     @require_tensorstream
     def test_model_forward(self):
