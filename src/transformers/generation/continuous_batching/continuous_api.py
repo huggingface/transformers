@@ -1080,9 +1080,6 @@ class ContinuousBatchingManager:
             )
 
         self._generation_step()
-        # NOTE: this was commented out and seemingly broke nothing. Keeping there in case it does
-        # if torch.cuda.is_available():
-        #     torch.cuda.synchronize()
         batch_processor.update_batch()
 
     @traced
