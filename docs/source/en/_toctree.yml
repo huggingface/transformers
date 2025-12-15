@@ -68,6 +68,8 @@
       title: Perplexity of fixed-length models
     title: Generate API
   - sections:
+    - local: optimization_overview
+      title: Overview
     - local: attention_interface
       title: Attention backends
     - local: continuous_batching
