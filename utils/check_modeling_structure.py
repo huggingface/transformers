@@ -57,39 +57,41 @@ def check_init_weights(node: ast.AST, violations: list[str], file_path: str) -> 
             if isinstance(sub_node, ast.Call) and isinstance(sub_node.func, ast.Attribute):
                 is_inplace_ops = sub_node.func.attr.endswith("_")
                 # We allow in-place ops on tensors that are not part of the module itself (see e.g. modeling_qwen3_next.py L997)
-                is_on_module_weight = isinstance(sub_node.func.value, (ast.Name, ast.Attribute)) and "module." in full_name(
-                    sub_node.func.value
-                )
+                is_on_module_weight = isinstance(
+                    sub_node.func.value, (ast.Name, ast.Attribute)
+                ) and "module." in full_name(sub_node.func.value)
                 if is_inplace_ops and is_on_module_weight:
                     violations.append(
                         f"{file_path}:{sub_node.lineno}: `_init_weights(self, module)` uses an in-place operation on a "
                         "module's weight. Please use the `init` functions primitives instead, usually imported as "
                         "`from ... import initialization as init`."
                     )
-    
+
     return violations
 
 
 def is_self_method_call(node: ast.AST, method: str) -> bool:
     """Check if `node` is a method call on `self`, such as `self.method(...)`"""
     return (
-        isinstance(node, ast.Call) and
-        isinstance(node.func, ast.Attribute) and
-        isinstance(node.func.value, ast.Name) and
-        node.func.value.id == "self" and
-        node.func.attr == method
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "self"
+        and node.func.attr == method
     )
+
 
 def is_super_method_call(node: ast.AST, method: str) -> bool:
     """Check if `node` is a call to `super().method(...)`"""
     return (
-        isinstance(node, ast.Call) and
-        isinstance(node.func, ast.Attribute) and
-        isinstance(node.func.value, ast.Call) and
-        isinstance(node.func.value.func, ast.Name) and 
-        node.func.value.func.id == "super" and
-        node.func.attr == method
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Call)
+        and isinstance(node.func.value.func, ast.Name)
+        and node.func.value.func.id == "super"
+        and node.func.attr == method
     )
+
 
 def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> list[str]:
     """
@@ -97,7 +99,11 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
     very important as we need to do some processing there.
     """
     # Check if it's a PreTrainedModel class definition
-    if isinstance(node, ast.ClassDef) and not node.name.endswith("PreTrainedModel") and any(full_name(parent).endswith("PreTrainedModel") for parent in node.bases):
+    if (
+        isinstance(node, ast.ClassDef)
+        and not node.name.endswith("PreTrainedModel")
+        and any(full_name(parent).endswith("PreTrainedModel") for parent in node.bases)
+    ):
         for sub_node in node.body:
             # Check that we are in __init__
             if isinstance(sub_node, ast.FunctionDef) and sub_node.name == "__init__":
@@ -115,7 +121,7 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
                         "Please add it at the end of the `__init__` method."
                     )
                 break
-    
+
     return violations
 
 
