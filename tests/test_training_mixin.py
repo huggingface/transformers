@@ -349,7 +349,7 @@ class TrainingTesterMixin(ABC):
 
             model_type = getattr(config, "model_type", "")
             use_cache = model_type == "recurrent_gemma"
-            
+
             with torch.no_grad():
                 generated_ids = model.generate(
                     prompt_ids,
