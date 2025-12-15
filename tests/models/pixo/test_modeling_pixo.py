@@ -86,13 +86,10 @@ class PixoModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.attn_implementation = attn_implementation
-        self.mask_ratio = mask_ratio
 
         # in Pixo, the seq length equals the number of patches + class tokens
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + n_cls_tokens
-        self.num_masks = int(self.mask_ratio * self.seq_length)
-        self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -204,11 +201,7 @@ class PixoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-feature-extraction": PixoModel}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-feature-extraction": PixoModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
 
@@ -303,7 +296,7 @@ class PixoModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.7420, -1.4220, 0.1580], [0.3938, -1.4386, 0.2878], [0.2898, -1.4012,  0.3667]],
+            [[0.7420, -1.4220, 0.1580], [0.3938, -1.4386, 0.2878], [0.2898, -1.4012, 0.3667]],
             device=torch_device,
         )
         # valid the first three patch tokens

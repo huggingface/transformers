@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 class PixoConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PixoModel`]. It is used to instantiate a
-    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ViT
     [facebook/pixo-huge](https://huggingface.co/facebook/pixo-huge) architecture.
 

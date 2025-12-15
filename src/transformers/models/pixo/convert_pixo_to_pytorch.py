@@ -18,15 +18,11 @@ URL: https://github.com/facebookresearch/pixo/tree/main
 """
 
 import argparse
-import json
 from pathlib import Path
 
 import requests
 import torch
-import torch.nn as nn
-from huggingface_hub import hf_hub_download
 from PIL import Image
-from torchvision import transforms
 
 from transformers import BitImageProcessor, PixoConfig, PixoModel
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
@@ -139,7 +135,7 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # define default Pixo configuration
     config = get_pixo_config(model_name)
-    
+
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -152,7 +148,7 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # load image
     image = prepare_img()
-    
+
     processor = BitImageProcessor(
         size={"height": 256, "width": 256},
         do_center_crop=False,
@@ -162,19 +158,19 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         image_std=IMAGENET_DEFAULT_STD,
     )
     pixel_values = processor(image, return_tensors="pt").pixel_values
-    
+
     with torch.no_grad():
         outputs = model(pixel_values, output_hidden_states=True)
-    
-    print('last layer class embeddings w/ LayerNorm:')
-    print(outputs.last_hidden_state[:, :config.n_cls_tokens])
-    print('last layer patch embeddings w/ LayerNorm:')
-    print(outputs.last_hidden_state[:, config.n_cls_tokens:])
-    print('last layer class embeddings w/o LayerNorm:')
-    print(outputs.hidden_states[-1][:, :config.n_cls_tokens])
-    print('last layer patch embeddings w/o LayerNorm:')
-    print(outputs.hidden_states[-1][:, config.n_cls_tokens:])
-    
+
+    print("last layer class embeddings w/ LayerNorm:")
+    print(outputs.last_hidden_state[:, : config.n_cls_tokens])
+    print("last layer patch embeddings w/ LayerNorm:")
+    print(outputs.last_hidden_state[:, config.n_cls_tokens :])
+    print("last layer class embeddings w/o LayerNorm:")
+    print(outputs.hidden_states[-1][:, : config.n_cls_tokens])
+    print("last layer patch embeddings w/o LayerNorm:")
+    print(outputs.hidden_states[-1][:, config.n_cls_tokens :])
+
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
@@ -211,9 +207,9 @@ if __name__ == "__main__":
         help="Path of the checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", 
-        default=None, 
-        type=str, 
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
@@ -223,9 +219,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_pixo_checkpoint(
-        args.model_name, 
-        args.checkpoint_path, 
-        args.pytorch_dump_folder_path, 
-        args.push_to_hub
-    )
+    convert_pixo_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
