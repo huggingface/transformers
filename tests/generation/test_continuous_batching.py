@@ -229,7 +229,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
-            inputs=input_ids, generation_config=model.generation_config, allow_prefix_sharing=allow_block_sharing
+            inputs=input_ids, generation_config=model.generation_config, allow_block_sharing=allow_block_sharing
         )
 
         # Prepare non-continuous batching inputs

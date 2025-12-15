@@ -34,7 +34,7 @@ def reverse_enumerate(xs: list[T]) -> Iterator[tuple[int, T]]:
 class Block:  # TODO: rename to ShareableBlock and update the docs
     """A class to represent a block managed by the block manager. We say that a block is complete when the physical KV
     cache it points to is fully computed. A block can have a parent, which is the block that came before in the
-    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block, the 
+    sequence. Once a block is complete, it is given a hash, which takes into account the tokens ids of the block, the
     layer (group_id) it belong to and its parent's hash (if there is a parent)."""
 
     def __init__(self, id_: int, parent_id: int | None, group_id: int) -> None:
@@ -343,7 +343,9 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         after_allocation = min(already_allocated + n_blocks, self._max_blocks_per_request)
         actual_n_blocks = after_allocation - already_allocated
         # Classic allocation
-        allocated_blocks = block_manager.get_free_blocks(actual_n_blocks, None, self.uses_block_sharing, self._index)  # no block sharing w/ sliding window
+        allocated_blocks = block_manager.get_free_blocks(
+            actual_n_blocks, None, self.uses_block_sharing, self._index
+        )  # no block sharing w/ sliding window
         if allocated_blocks is None:
             return None
         self.block_table[request_id].extend(allocated_blocks)
