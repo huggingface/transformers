@@ -1317,6 +1317,8 @@ class ClapPreTrainedModel(PreTrainedModel):
         if isinstance(module, ClapTextEmbeddings):
             init.normal_(module.position_embeddings.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.token_type_embeddings.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros(module.token_type_ids)
         elif isinstance(module, ClapModel):
             init.constant_(module.logit_scale_a, math.log(self.config.logit_scale_init_value))
             init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))
@@ -1332,6 +1334,18 @@ class ClapPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, ClapAudioSelfAttention):
             init.zeros_(module.relative_position_bias_table)
+            # get pair-wise relative position index for each token inside the window
+            coords_h = torch.arange(module.window_size[0])
+            coords_w = torch.arange(module.window_size[1])
+            coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+            coords_flatten = torch.flatten(coords, 1)
+            relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+            relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+            relative_coords[:, :, 0] += module.window_size[0] - 1
+            relative_coords[:, :, 1] += module.window_size[1] - 1
+            relative_coords[:, :, 0] *= 2 * module.window_size[1] - 1
+            relative_position_index = relative_coords.sum(-1)
+            init.copy_(module.relative_position_index, relative_position_index)
 
 
 class ClapAudioModel(ClapPreTrainedModel):

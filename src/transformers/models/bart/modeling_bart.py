@@ -476,6 +476,11 @@ class BartPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
+    def _init_weights(self, module):
+        super()._init_weights(self, module)
+        if isinstance(module, BartForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
+
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id

@@ -348,6 +348,14 @@ class BarkPreTrainedModel(PreTrainedModel):
                 return torch.device(module._hf_hook.execution_device)
 
         return super().device
+    
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BarkSelfAttention):
+            if module.is_causal:
+                block_size = module.config.block_size
+                bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
+                init.copy_(module.bias, bias)
 
 
 # GPT2-like autoregressive model

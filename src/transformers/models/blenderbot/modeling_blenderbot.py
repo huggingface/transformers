@@ -437,6 +437,11 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
 
+    def _init_weights(self, module):
+        super()._init_weights(self, module)
+        if isinstance(module, BlenderbotForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
+
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id

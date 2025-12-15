@@ -844,6 +844,9 @@ class AlignPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, AlignTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros(module.token_type_ids)
 
 
 @auto_docstring(

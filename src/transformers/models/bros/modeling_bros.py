@@ -522,6 +522,9 @@ class BrosPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, BrosRelationExtractor):
             init.normal_(module.dummy_node, std=std)
+        elif isinstance(module, BrosTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros(module.token_type_ids)
 
 
 @auto_docstring
