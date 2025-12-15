@@ -34,9 +34,6 @@ import typer
 from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
-from transformers_app import Settings, install_and_start, stop, uninstall
-from transformers_app import status as _status
-from transformers_app.settings import SettingsPayload
 
 import transformers
 from transformers import BitsAndBytesConfig, GenerationConfig
@@ -45,15 +42,16 @@ from transformers.utils.import_utils import (
     is_librosa_available,
     is_openai_available,
     is_pydantic_available,
+    is_transformers_app_available,
     is_uvicorn_available,
     is_vision_available,
 )
 
-from ... import (
+from .. import (
     LogitsProcessorList,
     TextIteratorStreamer,
 )
-from ...utils import logging
+from ..utils import logging
 
 
 if TYPE_CHECKING:
@@ -63,7 +61,7 @@ if TYPE_CHECKING:
         ProcessorMixin,
     )
 
-    from ...generation.continuous_batching import ContinuousBatchingManager
+    from ..generation.continuous_batching import ContinuousBatchingManager
 
 
 if is_librosa_available():
@@ -72,14 +70,25 @@ if is_librosa_available():
 if is_vision_available():
     from PIL import Image
 
+if is_transformers_app_available():
+    transformers_app_available = True
+    from transformers_app.settings import Settings, SettingsPayload
+else:
+    transformers_app_available = False
+    Settings = None
+    SettingsPayload = dict
+
 serve_dependencies_available = (
     is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 )
 if serve_dependencies_available:
+    from importlib import resources
+
     import uvicorn
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+    from fastapi.staticfiles import StaticFiles
     from openai.types.audio.transcription import Transcription
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageParam
@@ -427,27 +436,46 @@ class Serve:
             ),
         ] = None,
         non_blocking: Annotated[
-            bool, typer.Option(hidden=True, help="Whether to run the server in a separate thread.")
+            bool,
+            typer.Option("--non-blocking", help="Whether to run the server in a separate thread."),
         ] = False,
         daemon: Annotated[
             bool,
-            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+            typer.Option(
+                "--daemon", hidden=not transformers_app_available, help="Launch transformers serve as a daemon."
+            ),
         ] = False,
         stop_daemon: Annotated[
             bool,
-            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
-        ] = False,
-        tray: Annotated[
-            bool,
-            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+            typer.Option(
+                "--stop-daemon",
+                hidden=not transformers_app_available,
+                help="Stop the currently running transformers serve daemon.",
+            ),
         ] = False,
         uninstall_daemon: Annotated[
             bool,
-            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+            typer.Option(
+                "--uninstall-daemon",
+                hidden=not transformers_app_available,
+                help="Uninstall the daemon from the system.",
+            ),
         ] = False,
         daemon_status: Annotated[
             bool,
-            typer.Option(hidden=True, help="Whether to run the server as a daemon (only supported on MacOS for now)."),
+            typer.Option(
+                "--daemon-status",
+                hidden=not transformers_app_available,
+                help="Check whether there is a currently running demon.",
+            ),
+        ] = False,
+        tray: Annotated[
+            bool,
+            typer.Option(
+                "--tray",
+                hidden=True,
+                help="Whether to run the server as a daemon (only supported on MacOS for now).",
+            ),
         ] = False,
     ) -> None:
         if not serve_dependencies_available:
@@ -473,27 +501,16 @@ class Serve:
         self.force_model = force_model
         self.non_blocking = non_blocking
 
-        if tray:
-            from transformers_app import tray
-
-            tray(["--host", host, "--port", str(port)])
-            return
-
-        if daemon:
-            install_and_start(host=host, port=port)
-            return
-
-        if stop_daemon:
-            stop()
-            return
-
-        if uninstall_daemon:
-            uninstall()
-            return
-
-        if daemon_status:
-            status = _status("org.huggingface.transformers.serve")
-            print("Daemon: loaded" if status["loaded"] else "Daemon: not loaded")
+        exit = self.handle_daemon(
+            daemon=daemon,
+            stop_daemon=stop_daemon,
+            uninstall_daemon=uninstall_daemon,
+            daemon_status=daemon_status,
+            tray=tray,
+            host=host,
+            port=port,
+        )
+        if exit:
             return
 
         # Seed
@@ -532,6 +549,12 @@ class Serve:
             self.reset_loaded_models()
 
         app = FastAPI(lifespan=lifespan)
+
+        # In case the `transformers-app` package is available, mount the html/css/js files.
+        if is_transformers_app_available():
+            static_ref = resources.files("transformers_app") / "static"
+            with resources.as_file(static_ref) as static_dir:
+                app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
         # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
         # security purposes, it's disabled by default
@@ -616,7 +639,7 @@ class Serve:
 
                 self.attn_implementation = settings.attention_method.label
                 self.continuous_batching = settings.attention_method.paged
-                self.context_length = settings.context_lengths
+                self.context_length = settings.context_length
                 self.device = settings.device
                 self.quantization = settings.quantization_method.as_string()
 
@@ -675,6 +698,66 @@ class Serve:
         for model in list(self.loaded_models.values()):
             model.delete_model()
         self.last_model = None
+
+    def handle_daemon(
+        self,
+        *,
+        daemon: bool,
+        stop_daemon: bool,
+        uninstall_daemon: bool,
+        daemon_status: bool,
+        tray: bool,
+        host: str,
+        port: int,
+    ) -> bool:
+        """
+        Propagate typer arguments to eventually handle the daemon. If daemon-related arguments are seen, then we should
+        exit the main thread; we return True. In case non of these are seen, we return False.
+        """
+        if tray:
+            if not transformers_app_available:
+                raise ValueError("The --tray option cannot be specified if transformers-app is not installed.")
+            from transformers_app import tray
+
+            tray(["--host", host, "--port", str(port)])
+            return True
+
+        if daemon:
+            if not transformers_app_available:
+                raise ValueError("The --daemon option cannot be specified if transformers-app is not installed.")
+            from transformers_app import install_and_start
+
+            install_and_start(host=host, port=port)
+            return True
+
+        if stop_daemon:
+            if not transformers_app_available:
+                raise ValueError("The --stop_daemon option cannot be specified if transformers-app is not installed.")
+            from transformers_app import stop
+
+            stop()
+            return True
+
+        if uninstall_daemon:
+            if not transformers_app_available:
+                raise ValueError(
+                    "The --uninstall_daemon option cannot be specified if transformers-app is not installed."
+                )
+            from transformers_app import uninstall
+
+            uninstall()
+            return True
+
+        if daemon_status:
+            if not transformers_app_available:
+                raise ValueError("The --damon_status option cannot be specified if transformers-app is not installed.")
+            from transformers_app import status
+
+            loaded = status("org.huggingface.transformers.serve")["loaded"]
+            print("Daemon: loaded" if loaded else "Daemon: not loaded")
+            return True
+
+        return False
 
     def _validate_request(
         self,

@@ -186,6 +186,7 @@ _deps = [
     "rich",
     "opentelemetry-api",
     "mistral-common[opencv]>=1.6.3",
+    "transformers-app"
 ]
 
 
@@ -277,6 +278,7 @@ extras["hub-kernels"] = deps_list("kernels")
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
+extras["app"] = deps_list("transformers-app") + extras["serving"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
