@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization class for model Reformer."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
@@ -60,38 +60,27 @@ class ReformerTokenizer(TokenizersBackend):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
-        merges (`list`, *optional*):
-            Custom merges list. If not provided, merges are loaded from vocab_file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `vocab_file`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = BPE
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
+        vocab: Optional[Union[str, dict[str, int]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
         additional_special_tokens: Optional[list] = None,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
-
-        if vocab is not None:
-            self._vocab = vocab
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            # Convert lists to tuples if necessary (happens when loading from JSON)
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
+        self._vocab = vocab or {}
+        self._merges = merges or []
 
         self._tokenizer = Tokenizer(
             BPE(
@@ -106,10 +95,7 @@ class ReformerTokenizer(TokenizersBackend):
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
-                normalizers.Replace("\n", " "),
-                normalizers.Replace("\r", " "),
-                normalizers.Replace("\t", " "),
-                normalizers.Replace(Regex(r" {2,}"), " "),
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
                 normalizers.NFC(),
                 normalizers.Strip(left=False, right=True),
             ]
@@ -118,10 +104,7 @@ class ReformerTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")
 
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             eos_token=eos_token,
             unk_token=unk_token,
             additional_special_tokens=additional_special_tokens or [],
