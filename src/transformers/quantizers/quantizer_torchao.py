@@ -237,7 +237,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         """
         super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
         # Torchao needs access to all metadata later
-        self.set_metadata(checkpoint_files)
+        if checkpoint_files is not None:
+            self.set_metadata(checkpoint_files)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
