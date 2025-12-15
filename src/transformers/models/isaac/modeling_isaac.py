@@ -1037,12 +1037,13 @@ class IsaacModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
+    all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
@@ -1277,12 +1278,13 @@ class IsaacPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
+    all_tied_weights_keys: dict[str, str] = {}
 
 
 @auto_docstring
@@ -1290,6 +1292,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     """Isaac multimodal model for conditional generation."""
 
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

@@ -1531,6 +1531,9 @@ class IsaacRotaryEmbedding(nn.Module):
 
 class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
+    _can_compile_fullgraph = False
+    # Expose tied-weights mapping even if empty for base model tests.
+    all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
@@ -1763,6 +1766,9 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     """Isaac multimodal model for conditional generation."""
 
     config_class = IsaacConfig
+    _can_compile_fullgraph = False
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
