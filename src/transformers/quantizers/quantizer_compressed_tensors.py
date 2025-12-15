@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
-
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
@@ -128,7 +128,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _update_transforms_tied_weights(self, model: "PreTrainedModel"):
         from compressed_tensors.transform import TransformBase
-        
+
         # create mapping: tied_ptr -> key
         weight_to_keys = defaultdict(list)
         for name, module in model.named_modules():

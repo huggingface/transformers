@@ -1028,7 +1028,8 @@ def is_qutlass_available():
 
 @lru_cache
 def is_compressed_tensors_available() -> bool:
-    return _is_package_available("compressed_tensors")
+    is_available, ct_version = _is_package_available("compressed_tensors", return_version=True)
+    return is_available and version.parse(ct_version) >= version.parse("0.11.0")
 
 
 @lru_cache
