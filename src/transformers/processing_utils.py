@@ -1474,7 +1474,7 @@ class ProcessorMixin(PushToHubMixin):
 
                 tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-                if 'ByteLevel' not in str(tokenizer._tokenizer.pre_tokenizer):
+                if "ByteLevel" not in str(tokenizer._tokenizer.pre_tokenizer):
                     tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
                         [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
                     )
