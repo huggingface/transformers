@@ -286,7 +286,6 @@ class Mamba2Mixer(nn.Module):
             )
         )
 
-
         if not is_fast_path_available:
             logger.warning_once(
                 "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
