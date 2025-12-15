@@ -43,7 +43,6 @@ from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
-    IsaacConfig,
     IsaacVisionAttention,
     document_mask_function_from_cu_seqlens,
     ensure_document_attention_mask,
@@ -640,6 +639,8 @@ class IsaacModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.is_training = False
+        self.expected_num_hidden_layers = 1
 
         self.text_config = {
             "bos_token_id": 0,
@@ -695,6 +696,19 @@ class IsaacModelTester:
         )
         labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         return config, input_ids, attention_mask, labels
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask, labels = self.prepare_config_and_inputs()
+        position_ids = torch.arange(self.seq_length, device=torch_device).view(1, -1)
+        position_ids = position_ids.expand(self.batch_size, -1).unsqueeze(2).expand(-1, -1, 3)
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+        }
+        if labels is not None:
+            inputs_dict["labels"] = labels
+        return config, inputs_dict
 
 
 @require_torch
