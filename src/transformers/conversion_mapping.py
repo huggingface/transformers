@@ -221,7 +221,7 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="qkv_proj",
                 target_patterns=["q_proj", "k_proj", "v_proj"],
-                operations=[Chunk(dim=0, chunks=3)],
+                operations=[Chunk(dim=0)],
             ),
         ]
     )
