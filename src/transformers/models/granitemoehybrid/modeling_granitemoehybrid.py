@@ -175,12 +175,12 @@ class GraniteMoeHybridAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings if position_embeddings is not None else (None, None)
         if position_embeddings is not None:
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
