@@ -20,7 +20,7 @@ from typing import Optional, Callable
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..auto import AutoConfig
 from torch import nn
-from ..glm4.modeling_glm4 import Glm4RotaryEmbedding, apply_rotary_pos_emb
+from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..voxtral.modeling_voxtral import (
     eager_attention_forward,
     VoxtralAttention,
@@ -32,6 +32,19 @@ from ..voxtral.modeling_voxtral import (
 )
 from ...modeling_outputs import BaseModelOutput
 
+
+class GlmasrRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
 
 class GlmasrEncoderConfig(VoxtralEncoderConfig):
     r"""
@@ -246,11 +259,6 @@ class GlmasrAttention(VoxtralAttention):
         return attn_output, attn_weights
 
 
-class GlmasrRotaryEmbedding(Glm4RotaryEmbedding):
-    def __init__(self, config: GlmasrConfig, device=None):
-        super().__init__()
-
-
 class GlmasrEncoderLayer(VoxtralEncoderLayer):
     def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
@@ -306,7 +314,7 @@ class GlmasrPreTrainedModel(VoxtralPreTrainedModel):
 class GlmasrEncoder(VoxtralEncoder):
     def __init__(self, config: GlmasrConfig):
         super().__init__(config)
-        self.rotary_embedding = GlmasrRotaryEmbedding(config=config)
+        self.rotary_emb = GlmasrRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
     def forward(
@@ -408,10 +416,10 @@ class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
         self.linear_1 = nn.Linear(
-            config.audio_config.d_model * 4, config.text_config.hidden_size * 2, bias=False
+            config.audio_config.d_model * 4, config.text_config.hidden_size * 2, bias=True
         )
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=False)
+        self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=True)
 
     def forward(self, audio_features):
         hidden_states = self.linear_1(audio_features)
