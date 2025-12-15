@@ -209,6 +209,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
         self.encoder = EvollaSaProtEncoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

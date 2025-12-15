@@ -753,6 +753,8 @@ class BltPatcher(BltPreTrainedModel):
             bias=False,
         )
 
+        self.post_init()
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

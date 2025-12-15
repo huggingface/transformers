@@ -422,6 +422,8 @@ class RagModel(RagPreTrainedModel):
         self.ctx_encoder = None
         self.context_encoder_training = False
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
@@ -689,6 +691,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+        self.post_init()
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -1125,6 +1129,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
 
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+        self.post_init()
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
