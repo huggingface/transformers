@@ -56,7 +56,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(
+        super(ColModernVBertProcessor, self).__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
             image_seq_len=image_seq_len,
@@ -67,6 +67,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
         )
         self.query_prefix = query_prefix or ""
+        self.query_augmentation_token = self.end_of_utterance_token
 
     def __call__(
         self,
@@ -105,7 +106,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
             - **input_ids** -- List of token ids to be fed to a model.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.vlm_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
@@ -168,15 +169,6 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             )
 
             return batch_query
-
-    @property
-    def query_augmentation_token(self) -> str:
-        """
-        Return the query augmentation token.
-
-        Query augmentation buffers are used as reasoning buffers during inference.
-        """
-        return self.end_of_utterance_token
 
     def process_images(
         self,

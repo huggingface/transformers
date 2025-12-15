@@ -7,12 +7,8 @@
 from typing import Any, Literal, Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
 from ..modernbert import ModernBertConfig
 from ..siglip import SiglipVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class ModernVBertConfig(PretrainedConfig):
@@ -68,14 +64,12 @@ class ModernVBertConfig(PretrainedConfig):
         vision_config=None,
         image_token_id: Optional[int] = 50407,
         pixel_shuffle_factor: Optional[int] = 4,
-        vocab_size: Optional[int] = None,
-        hidden_size: Optional[int] = None,
-        num_hidden_layers: Optional[int] = None,
         initializer_range: Optional[float] = 0.02,
         initializer_cutoff_factor: Optional[float] = 2.0,
         classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout: Optional[float] = 0.0,
         classifier_bias: Optional[bool] = False,
+        vocab_size: Optional[int] = None,
         **kwargs,
     ):
         if classifier_pooling not in ["cls", "mean"]:
@@ -95,11 +89,6 @@ class ModernVBertConfig(PretrainedConfig):
             vision_config = self.sub_configs["vision_config"](**vision_config)
         self.vision_config = vision_config
 
-        # Common model parameters overrides
-        self.vocab_size = self._resolve_text_config_param("vocab_size", vocab_size)
-        self.hidden_size = self._resolve_text_config_param("hidden_size", hidden_size)
-        self.num_hidden_layers = self._resolve_text_config_param("num_hidden_layers", num_hidden_layers)
-
         self.pixel_shuffle_factor = pixel_shuffle_factor
         self.initializer_range = initializer_range
         self.initializer_cutoff_factor = initializer_cutoff_factor
@@ -107,36 +96,11 @@ class ModernVBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
 
-        super().__init__(image_token_id=image_token_id, **kwargs)
-
-    def _resolve_text_config_param(self, param_name: str, param_value: Optional[int]):
-        if param_value is not None:
-            logger.warning(f"Overriding `{param_name}` of the `text_config`.")
-            setattr(self.text_config, param_name, param_value)
-            return param_value
-        return getattr(self.text_config, param_name)
-
-    @classmethod
-    def from_pretrained_models(
-        cls,
-        text_model_name: str,
-        vision_model_name: str,
-        vocab_size: Optional[int] = None,
-        **kwargs,
-    ) -> "PretrainedConfig":
-        text_model_config = cls.sub_configs["text_config"].from_pretrained(text_model_name)
-        vision_model_config = cls.sub_configs["vision_config"].from_pretrained(vision_model_name)
-
         if vocab_size is not None:
-            # Update the text model config with the new vocab size
-            text_model_config.tie_word_embeddings = False
-            text_model_config.vocab_size = vocab_size
+            self.text_config.vocab_size = vocab_size
+        self.vocab_size = self.text_config.vocab_size
 
-        return cls(
-            text_config=text_model_config,
-            vision_config=vision_model_config,
-            **kwargs,
-        )
+        super().__init__(image_token_id=image_token_id, **kwargs)
 
 
 __all__ = ["ModernVBertConfig"]

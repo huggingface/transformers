@@ -30,8 +30,6 @@ class ModernVBertProcessor(Idefics3Processor):
             in a chat into a tokenizable string.
     """
 
-    image_processor_class = "ModernVBertImageProcessor"
-
     def apply_chat_template(self, conversation, chat_template=None, **kwargs):
         if chat_template is None:
             chat_template = DEFAULT_CHAT_TEMPLATE

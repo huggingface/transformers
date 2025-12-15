@@ -8,11 +8,12 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, Unpack, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..modernvbert import ModernVBertConfig, ModernVBertModel, ModernVBertProcessor
-
+from ..colqwen2 import ColQwen2Config
+from ..colpali import ColPaliProcessor
 
 if is_torch_available():
     import torch
@@ -20,7 +21,8 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColModernVBertConfig(PreTrainedConfig):
+# class ColModernVBertConfig(PreTrainedConfig):
+class ColModernVBertConfig(ColQwen2Config):
     r"""
     Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
     of `ColModernVBertForRetrieval` according to the specified arguments, defining the model architecture following the methodology
@@ -119,7 +121,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(
+        super(ColModernVBertProcessor, self).__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
             image_seq_len=image_seq_len,
@@ -130,6 +132,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
         )
         self.query_prefix = query_prefix or ""
+        self.query_augmentation_token = self.end_of_utterance_token
 
     def __call__(
         self,
@@ -168,7 +171,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
             - **input_ids** -- List of token ids to be fed to a model.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.vlm_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
@@ -231,15 +234,6 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             )
 
             return batch_query
-
-    @property
-    def query_augmentation_token(self) -> str:
-        """
-        Return the query augmentation token.
-
-        Query augmentation buffers are used as reasoning buffers during inference.
-        """
-        return self.end_of_utterance_token
 
     def process_images(
         self,
@@ -383,7 +377,7 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
         std = self.config.vlm_config.initializer_range
         cutoff_factor = self.config.vlm_config.initializer_cutoff_factor
 
-        def init_weight(module: nn.Module, std: float):
+        if isinstance(module, (nn.Linear)):
             init.trunc_normal_(
                 module.weight,
                 mean=0.0,
@@ -392,12 +386,8 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
                 b=cutoff_factor * std,
             )
 
-            if isinstance(module, nn.Linear):
-                if module.bias is not None:
-                    init.zeros_(module.bias)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init_weight(module, std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
 
 
 @dataclass
@@ -450,16 +440,15 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
 
-        self.model = ModernVBertModel(config.vlm_config)
+        self.vlm = ModernVBertModel(config.vlm_config)
         self.embedding_proj_layer = nn.Linear(self.config.get_text_config().hidden_size, self.config.embedding_dim)
 
-        self._tied_weights_keys = {f"model.{k}": v for k, v in (self.model._tied_weights_keys or {}).items()}
+        self._tied_weights_keys = {f"model.{k}": v for k, v in (self.vlm._tied_weights_keys or {}).items()}
 
         self.post_init()
 
@@ -470,30 +459,17 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> ColModernVBertForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vlm_output = self.model(
+        vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
-            output_hidden_states=True,
-            return_dict=True,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
@@ -509,16 +485,16 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
         return ColModernVBertForRetrievalOutput(
             embeddings=embeddings,
-            hidden_states=vlm_hidden_states,
+            hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
             image_hidden_states=vlm_image_hidden_states,
         )
 
     def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
+        return self.vlm.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
+        self.vlm.set_input_embeddings(value)
 
     def resize_token_embeddings(
         self,
@@ -526,7 +502,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         pad_to_multiple_of: Optional[int] = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        model_embeds = self.model.resize_token_embeddings(
+        model_embeds = self.vlm.resize_token_embeddings(
             new_num_tokens=new_num_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             mean_resizing=mean_resizing,
@@ -534,7 +510,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
         self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vlm_config.vocab_size = model_embeds.num_embeddings
-        self.model.vocab_size = model_embeds.num_embeddings
+        self.vlm.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
 
         return model_embeds
