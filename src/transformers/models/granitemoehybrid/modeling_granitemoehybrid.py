@@ -1273,8 +1273,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_multiplier = config.embedding_multiplier
-        if config.position_embedding_type != "rope":
-            self.rotary_emb = None
+        self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1321,7 +1320,7 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
         # embed positions
         hidden_states = inputs_embeds
         position_embeddings = None
-        if self.rotary_emb is not None:
+        if self.position_embedding_type == "rope":
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
