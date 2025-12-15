@@ -75,7 +75,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
         config._attn_implementation = "kernels-community/vllm-flash-attn3"
         try:
-            GptOssModel(config) 
+            GptOssModel(config)
         except ValueError:
             self.fail("GptOssModel raised ValueError unexpectedly with vllm-flash-attn3!")
 
