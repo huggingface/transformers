@@ -43,8 +43,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("glmasr", "GlmasrForConditionalGeneration"),
-        ("glmasr", "GlmasrForConditionalGeneration"),
         ("afmoe", "AfmoeModel"),
         ("aimv2", "Aimv2Model"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
@@ -421,6 +419,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+        ("glmasr", "GlmasrForConditionalGeneration"),
         ("voxtral_encoder", "VoxtralEncoder"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
@@ -523,6 +522,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+        ("glmasr", "GlmasrForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
         ("xlm", "XLMWithLMHeadModel"),
@@ -1059,13 +1059,13 @@ MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+        ("glmasr", "GlmasrForConditionalGeneration"),
     ]
 )
 
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-        ("glmasr", "GlmasrForConditionalGeneration"),
         ("albert", "AlbertForMaskedLM"),
     ]
 )
@@ -1188,12 +1188,12 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+        ("glmasr", "GlmasrForConditionalGeneration"),
     ]
 )
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
-        ("glmasr", "GlmasrForConditionalGeneration"),
         ("dia", "DiaForConditionalGeneration"),
     ]
 )

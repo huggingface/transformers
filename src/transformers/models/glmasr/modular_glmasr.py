@@ -406,7 +406,9 @@ class GlmasrEncoder(VoxtralEncoder):
 class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size * 2, bias=False)
+        self.linear_1 = nn.Linear(
+            config.audio_config.intermediate_size, config.text_config.hidden_size * 2, bias=False
+        )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=False)
 
