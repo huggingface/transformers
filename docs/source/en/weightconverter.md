@@ -94,12 +94,26 @@ WeightConverter(
 )
 ```
 
-## Fast model loading
+## Fast and efficient model loading
 
 Loading a model is faster and uses less memory because the loader knows which tensors are required for operations and schedules their materialization lazily.
 
-The loader scans the checkpoint *once* to discover pattern matches and collect tensors. It collects them as `Future` objects and submits them to a thread pool for asynchronous loading without blocking the GIL. Loading begins as soon as a thread becomes available.
+The loader scans the checkpoint *once* to discover pattern matches and collect tensors. It stores them as `Future` objects and submits them to a thread pool for asynchronous loading without blocking the GIL. A parameter starts loading as soon as a thread becomes available to it.
 
-When converting a weight, the converter waits for required tensors to materialize if they haven't loaded yet. This happens when the largest conversion runs last. It also happens when other parameters finish loading before the most memory-demanding conversion. The theoretical memory peak is roughly the model size plus the largest parameter set needed for a single conversion.
+If your system runs other heavy processes, multiple threads may slow down loading instead of accelerating it. In this case, set the environment variable `HF_DEACTIVATE_ASYNC_LOAD=1` to load weights sequentially.
 
-Often, the tensors are already loaded. The actual memory peak tends to be lower, and in practice, stays closer to the model size.
+> [!NOTE]
+> The default is 4 threads for asynchronous parameter loading. This provides the best trade-off across loading scenarios and hardware. The work is mostly I/O bound, but depending on accelerator hardware and the `dtype` required at loading, it can become CPU/GPU-bound if the `dtype` differs from the serialized one (this requires an additional copy operation).
+
+When converting a weight, the converter waits for all required tensors to materialize if they haven't loaded yet. For example, the [`MergeModulelist`] operation requires all weights in `ModuleList` to be loaded before merging.
+
+Concatenating tensors requires a temporary copy, so operations like [`MergeModulelist`] and [`Concatenate`] need 2x the memory of the underlying tensors during conversion. Once merged, only the resulting tensor stays in memory. The theoretical worst-case memory peak is the model size plus the tensors required for the largest [`MergeModulelist`] or [`Concatenate`] operation.
+
+This worst case only occurs when all other parameters have loaded before the demanding conversion runs. Two scenarios trigger this.
+
+1. All parameters loaded asynchronously before entering the demanding conversion (the thread pool was faster than the conversion queue).
+2. The demanding conversion is the last one.
+
+For example, a MoE model using [`MergeModulelist`] for experts on each layer, the theoretical worst-case memory peak is model size plus experts on one layer.
+
+These worst-case scenarios are uncommon. The actual memory peak tends to stay close to the model size.
