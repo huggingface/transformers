@@ -147,10 +147,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         from ..integrations import dequantize_and_replace
 
-        model = dequantize_and_replace(model, quantization_config=self.quantization_config)
+        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
         return model
 
     def get_quantize_ops(self):

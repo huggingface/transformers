@@ -241,7 +241,6 @@ class Bnb4BitTest(Base4bitTest):
         Test that loading the model and unquantize it produce correct results
         """
         bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-
         model_4bit = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=bnb_config, device_map="auto"
         )

@@ -236,12 +236,16 @@ class HfQuantizer(ABC):
             del model.quantization_method
         model.is_quantized = False
 
-    def dequantize(self, model):
+    def dequantize(self, model, dtype=None):
         """
         Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
-        model = self._dequantize(model)
+        if dtype is None: 
+            # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
+            # or we need to upcast everything to the same dtype
+            dtype = model.config.dtype
+        model = self._dequantize(model, dtype=dtype)
         self.remove_quantization_config(model)
 
         return model
@@ -257,7 +261,7 @@ class HfQuantizer(ABC):
         # weight loading)
         return 4
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
