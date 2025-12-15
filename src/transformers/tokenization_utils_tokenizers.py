@@ -182,6 +182,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["vocab"], local_kwargs["merges"] = TikTokenConverter(
                     vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
                 ).extract_vocab_merges_from_model(vocab_file)
+
+            # Local conversion can lose global additional special tokens that may carry over
+            if len(kwargs.get("additional_special_tokens")) != len(local_kwargs.get("additional_special_tokens")):
+                global_additional_special_tokens = kwargs.get("additional_special_tokens")
+                local_additional_special_tokens = local_kwargs.get("additional_special_tokens")
+                if local_additional_special_tokens is not None and global_additional_special_tokens is not None:
+                    local_additional_special_tokens += global_additional_special_tokens
+                elif global_additional_special_tokens is not None:
+                    local_additional_special_tokens = global_additional_special_tokens
+
+                if local_additional_special_tokens is not None:
+                    local_kwargs["additional_special_tokens"] = local_additional_special_tokens
+
             return local_kwargs
 
         # Fallback to standard vocab/merges files if they existed!
@@ -339,7 +352,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokens.append(token)
             if tokens:
                 # These tokens are from the special tokens map
-                self.add_tokens(tokens, special_tokens=True)
+                self.add_tokens(
+                    [token for token in tokens if token.special], special_tokens=True
+                )
+                self.add_tokens(
+                    [token for token in tokens if not token.special], special_tokens=False
+                )
 
         try:
             vocab_size = self._tokenizer.get_vocab_size()

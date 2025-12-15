@@ -265,13 +265,13 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 
 
 @slow
-@require_torch_large_accelerator(memory=80)  # TODO: check actual memory usage
+@require_torch_large_accelerator(memory=70)  # TODO: check actual memory usage
 @require_torch
 class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
     model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
     # TODO: remove after uploading
-    local_path = "/raid/anton/code/forks/transformers/ErnieTest/ErnieVL"
+    local_path = "/raid/anton/code/forks/transformers/AntonV/ErnieVL"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -346,7 +346,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and"
         self.assertEqual(
-            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -370,8 +370,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -407,7 +407,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = 'A black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi'  # fmt: skip
 
         self.assertEqual(
-            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -429,8 +429,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -463,8 +463,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
             ],
             EXPECTED_DECODED_TEXT,
         )
@@ -489,13 +489,13 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
-            'there are no dogs here, there are 2 cats</s><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>',
+            'there are no dogs here, there are 2 cats',
         ]  # fmt: skip
 
         self.assertEqual(
             [
-                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=False),
-                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=False),
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
             ],
             EXPECTED_DECODED_TEXT,
         )

@@ -267,15 +267,14 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
     # Manipulate special tokens and add video token
     tokenizer_config = load_json(TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
+    # Doubled usage of extra and inherint special tokens
+    tokenizer_config["extra_special_tokens"].remove("<s>")
+    tokenizer_config["extra_special_tokens"].remove("</s>")
+    # SPM special added but we want to treat them as non-special
+    for i in range(10):
+        tokenizer_config["extra_special_tokens"].remove(f"{i}")
     # Removed from list, re-add
-    tokenizer_config["extra_special_tokens"].append("<|IMAGE_PLACEHOLDER|>")
-    tokenizer_config["extra_special_tokens"].append("<|IMAGE_START|>")
-    tokenizer_config["extra_special_tokens"].append("<|IMAGE_END|>")
     tokenizer_config["extra_special_tokens"].append("<|VIDEO_PLACEHOLDER|>")
-    tokenizer_config["extra_special_tokens"].append("<|VIDEO_START|>")
-    tokenizer_config["extra_special_tokens"].append("<|VIDEO_END|>")
-    tokenizer_config["extra_special_tokens"].append("<think>")
-    tokenizer_config["extra_special_tokens"].append("</think>")
     # To be called via `.xxx_token`
     tokenizer_config |= {
         "image_token": "<|IMAGE_PLACEHOLDER|>",
@@ -321,9 +320,7 @@ if __name__ == "__main__":
         default="baidu/ERNIE-4.5-VL-28B-A3B-PT",
         help="Path to the downloaded checkpoint",
     )
-    parser.add_argument(
-        "--output_folder", default="ErnieTest/ErnieVL", type=str, help="Path to your output directory."
-    )
+    parser.add_argument("--output_folder", default="AntonV/ErnieVL", type=str, help="Path to your output directory.")
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,

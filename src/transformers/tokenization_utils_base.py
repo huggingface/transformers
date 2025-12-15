@@ -1958,10 +1958,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # this is for legacy purpose. We don't add the tokens after init for efficiency.
             if added_tokens_file is not None:
                 special_tokens = []
-                # V5: Check both named and extra special tokens
-                for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
+                # V5: Check named, additional and extra special tokens
+                for key in cls.SPECIAL_TOKENS_ATTRIBUTES + ["additional_special_tokens"]:
                     if key in init_kwargs and init_kwargs[key] is not None:
-                        special_tokens.append(str(init_kwargs[key]))
+                        if isinstance(init_kwargs[key], list):
+                            special_tokens += [str(special_token) for special_token in init_kwargs[key]]
+                        else:
+                            special_tokens.append(str(init_kwargs[key]))
 
                 # Handle extra_special_tokens
                 if "extra_special_tokens" in init_kwargs and init_kwargs["extra_special_tokens"] is not None:
@@ -2152,9 +2155,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
 
-        # tokenizers backend don't need to save added_tokens_decoder
+        # tokenizers backend don't need to save added_tokens_decoder and additional_special_tokens
         if any(base.__name__ == "TokenizersBackend" for base in self.__class__.__mro__):
             tokenizer_config.pop("added_tokens_decoder", None)
+            tokenizer_config.pop("additional_special_tokens", None)
 
         # Remove the Fast at the end if we can save the slow tokenizer
         if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
