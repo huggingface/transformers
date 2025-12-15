@@ -157,7 +157,7 @@ _is_quantized = False
 _is_ds_init_called = False
 
 # Mapping from flash attention implementations to their kernel fallback repositories
-_FLASH_ATTN_KERNEL_FALLBACK = {
+FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_3": "kernels-community/vllm-flash-attn3",
 }
@@ -1565,7 +1565,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if is_torch_xpu_available():
                 logger.info(
-                    f"Detect using FlashAttention2 (via kernel `{_FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
+                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
                 )
                 return True
 
@@ -1798,7 +1798,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            applicable_attn_implementation = _FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]
 
             if is_torch_xpu_available() and attn_implementation.removeprefix("paged|") == "flash_attention_2":
                 # On XPU, kernels library is the native implementation

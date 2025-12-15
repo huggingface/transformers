@@ -52,7 +52,7 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_utils import _FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
+from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -3250,8 +3250,8 @@ class ModelTesterMixin:
             prefix = "paged|" if requested.startswith("paged|") else ""
 
             expected = {requested}
-            if base in _FLASH_ATTN_KERNEL_FALLBACK:
-                expected.add(f"{prefix}{_FLASH_ATTN_KERNEL_FALLBACK[base]}")
+            if base in FLASH_ATTN_KERNEL_FALLBACK:
+                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
             return expected
 
         expected_attn_implementations = _expected_attn_implementations(attn_implementation)

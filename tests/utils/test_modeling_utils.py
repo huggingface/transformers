@@ -130,7 +130,7 @@ if is_torch_available():
         _prepare_4d_causal_attention_mask,
     )
     from transformers.modeling_utils import (
-        _FLASH_ATTN_KERNEL_FALLBACK,
+        FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
     )
@@ -3041,7 +3041,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            f"You do not have `flash_attn` installed, using `{_FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}` from the `kernels` library instead!"
+            f"You do not have `flash_attn` installed, using `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -3054,7 +3054,7 @@ class TestAttentionImplementation(unittest.TestCase):
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
                 "hf-tiny-model-private/tiny-random-MCTCTModel",
-                attn_implementation=_FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"],
+                attn_implementation=FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"],
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
