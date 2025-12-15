@@ -303,7 +303,7 @@ class PeAudioVideoEncoderRotaryEmbedding(Qwen3RotaryEmbedding): ...
 
 
 @auto_docstring
-class PeAudioVideoPretrainedModel(PreTrainedModel):
+class PeAudioVideoPreTrainedModel(PreTrainedModel):
     config: PeAudioVideoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -350,7 +350,7 @@ class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
     The PeAudioVideo Encoder model.
     """
 )
-class PeAudioVideoEncoder(PeAudioVideoPretrainedModel):
+class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
     config: PeAudioVideoEncoderConfig
     main_input_name = "input_values"
     base_model_prefix = "audio_video_encoder"
@@ -449,7 +449,7 @@ class PeAudioVideoOutput(ModelOutput):
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
 
 
-class PeAudioVideoModel(PeAudioVideoPretrainedModel):
+class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     def __init__(self, config: PeAudioVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
@@ -592,12 +592,10 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
         return_loss: bool = False,
         **kwargs,
     ) -> PeAudioVideoOutput:
-        # Audio encoding
         audio_outputs = self.audio_video_encoder.embedder.audio_encoder(input_values, padding_mask=padding_mask)
         audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_head(audio_embeds)
 
-        # Text encoding
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -607,11 +605,9 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
-        # Compute logits
         logits_per_audio = audio_embeds @ text_embeds.T
-        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_audio = logits_per_audio * self.text_audio_logit_scale + self.text_audio_logit_bias
 
-        # Compute loss
         loss = None
         if return_loss:
             labels = torch.eye(audio_embeds.shape[0], device=audio_embeds.device)
@@ -636,14 +632,12 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
         return_loss: bool = False,
         **kwargs,
     ) -> PeAudioVideoOutput:
-        # Video encoding
         video_outputs = self.audio_video_encoder.embedder.video_encoder(
             pixel_values_videos, padding_mask_videos=padding_mask_videos
         )
         video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)
 
-        # Text encoding
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -653,11 +647,9 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_video_head(text_embeds)
 
-        # Compute logits
         logits_per_video = video_embeds @ text_embeds.T
-        logits_per_video = logits_per_video * self.video_logit_scale + self.video_logit_bias
+        logits_per_video = logits_per_video * self.text_video_logit_scale + self.text_video_logit_bias
 
-        # Compute loss
         loss = None
         if return_loss:
             labels = torch.eye(video_embeds.shape[0], device=video_embeds.device)
@@ -682,23 +674,19 @@ class PeAudioVideoModel(PeAudioVideoPretrainedModel):
         return_loss: bool = False,
         **kwargs,
     ) -> PeAudioVideoOutput:
-        # Audio encoding
         audio_outputs = self.audio_video_encoder.embedder.audio_encoder(input_values, padding_mask=padding_mask)
         audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_head(audio_embeds)
 
-        # Video encoding
         video_outputs = self.audio_video_encoder.embedder.video_encoder(
             pixel_values_videos, padding_mask_videos=padding_mask_videos
         )
         video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)
 
-        # Compute logits
         logits_audio_video = audio_embeds @ video_embeds.T
         logits_audio_video = logits_audio_video * self.audio_video_logit_scale + self.audio_video_logit_bias
 
-        # Compute loss
         loss = None
         if return_loss:
             labels = torch.eye(audio_embeds.shape[0], device=audio_embeds.device)

@@ -28,7 +28,7 @@ from ..dac.modeling_dac import DacEncoder
 from ..pe_audio_video.modeling_pe_audio_video import (
     PeAudioVideoContrastiveHead,
     PeAudioVideoEncoder,
-    PeAudioVideoPretrainedModel,
+    PeAudioVideoPreTrainedModel,
 )
 from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
@@ -53,7 +53,6 @@ class PeAudioEncoderEmbedder(nn.Module):
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # Pre-encoding step
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.dac_encoder(input_values)  # (batch_size, hidden_size, seq_len)
             hidden_states = self.bottleneck(hidden_states)  # (batch_size, hidden_size, seq_len)
@@ -61,12 +60,10 @@ class PeAudioEncoderEmbedder(nn.Module):
             hidden_states, _ = hidden_states.chunk(2, dim=1)
 
         codec_features = hidden_states.transpose(1, 2)
+        inputs_embeds = self.data_proj(codec_features)
 
         if padding_mask is not None:
             padding_mask = padding_mask[:, :: self.config.dac_config.hop_length]
-
-        # Project codec features
-        inputs_embeds = self.data_proj(codec_features)
 
         return inputs_embeds, padding_mask
 
@@ -74,9 +71,9 @@ class PeAudioEncoderEmbedder(nn.Module):
 class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 
-class PeAudioPretrainedModel(PeAudioVideoPretrainedModel):
+class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
     _checkpoint_conversion_mapping = {
-        r"audio_video_encoder\.audio_encoder": "audio_encoder",
+        r"^audio_video_encoder\.embedder\.audio_encoder": "audio_encoder",
     }
 
 
@@ -174,7 +171,7 @@ class PeAudioOutput(ModelOutput):
         )
 
 
-class PeAudioModel(PeAudioPretrainedModel):
+class PeAudioModel(PeAudioPreTrainedModel):
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)

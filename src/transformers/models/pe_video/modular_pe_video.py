@@ -28,7 +28,7 @@ from ..pe_audio_video.modeling_pe_audio_video import (
     PeAudioVideoContrastiveHead,
     PeAudioVideoEncoder,
     PeAudioVideoEncoderPatchEmbedder,
-    PeAudioVideoPretrainedModel,
+    PeAudioVideoPreTrainedModel,
 )
 from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 
@@ -103,9 +103,9 @@ class PeVideoEncoderEmbedder(nn.Module):
         return inputs_embeds, padding_mask
 
 
-class PeVideoPreTrainedModel(PeAudioVideoPretrainedModel):
+class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
     _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.video_encoder": "video_encoder",
+        r"^audio_video_encoder\.embedder\.video_encoder": "video_encoder",
     }
 
 
@@ -119,7 +119,6 @@ class PeVideoEncoder(PeAudioVideoEncoder):
 
     def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)
-        # Override the embedder with video-specific one
         self.embedder = PeVideoEncoderEmbedder(config)
 
     @can_return_tuple

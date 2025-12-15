@@ -436,7 +436,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
         "attentions": PeVideoEncoderAttention,
     }
     _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.video_encoder": "video_encoder",
+        r"^audio_video_encoder\.embedder\.video_encoder": "video_encoder",
     }
 
     def _init_weights(self, module):
@@ -518,51 +518,18 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_docstring
-class PeVideoPretrainedModel(PreTrainedModel):
-    config: PeVideoConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["PeVideoEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": PeVideoEncoderLayer,
-        "attentions": PeVideoEncoderAttention,
-    }
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
-        if isinstance(module, PeVideoEncoderPatchEmbedder):
-            embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
-
-
 @auto_docstring(
     custom_intro="""
     The PeVideo Encoder model.
     """
 )
-class PeVideoEncoder(PeVideoPretrainedModel):
+class PeVideoEncoder(PeVideoPreTrainedModel):
     config: PeVideoEncoderConfig
     main_input_name = "input_values"
     base_model_prefix = "video_encoder"
 
     def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)
-        # Override the embedder with video-specific one
         self.embedder = PeVideoEncoderEmbedder(config)
         self.patch_embedder = PeVideoEncoderPatchEmbedder(config)
         self.layers = nn.ModuleList(

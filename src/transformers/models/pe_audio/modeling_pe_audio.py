@@ -170,7 +170,6 @@ class PeAudioEncoderEmbedder(nn.Module):
         input_values: torch.Tensor,
         padding_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        # Pre-encoding step
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.dac_encoder(input_values)  # (batch_size, hidden_size, seq_len)
             hidden_states = self.bottleneck(hidden_states)  # (batch_size, hidden_size, seq_len)
@@ -178,12 +177,10 @@ class PeAudioEncoderEmbedder(nn.Module):
             hidden_states, _ = hidden_states.chunk(2, dim=1)
 
         codec_features = hidden_states.transpose(1, 2)
+        inputs_embeds = self.data_proj(codec_features)
 
         if padding_mask is not None:
             padding_mask = padding_mask[:, :: self.config.dac_config.hop_length]
-
-        # Project codec features
-        inputs_embeds = self.data_proj(codec_features)
 
         return inputs_embeds, padding_mask
 
@@ -502,7 +499,7 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class PeAudioPretrainedModel(PreTrainedModel):
+class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -518,6 +515,10 @@ class PeAudioPretrainedModel(PreTrainedModel):
         "hidden_states": PeAudioEncoderLayer,
         "attentions": PeAudioEncoderAttention,
     }
+    _checkpoint_conversion_mapping = {
+        r"^audio_video_encoder\.embedder\.audio_encoder": "audio_encoder",
+    }
+
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -613,7 +614,7 @@ class PeAudioEncoderRotaryEmbedding(nn.Module):
     The PeAudio Encoder model.
     """
 )
-class PeAudioEncoder(PeAudioPretrainedModel):
+class PeAudioEncoder(PeAudioPreTrainedModel):
     config: PeAudioEncoderConfig
     main_input_name = "input_values"
     base_model_prefix = "audio_encoder"
@@ -706,7 +707,7 @@ class PeAudioOutput(ModelOutput):
         )
 
 
-class PeAudioModel(PeAudioPretrainedModel):
+class PeAudioModel(PeAudioPreTrainedModel):
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
