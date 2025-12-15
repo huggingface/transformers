@@ -26,6 +26,9 @@ from pathlib import Path
 import pytest
 from huggingface_hub import is_offline_mode
 
+from tests.generation.test_utils import GenerationTesterMixin
+from tests.test_configuration_common import ConfigTester
+from tests.test_pipeline_mixin import PipelineTesterMixin
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
@@ -40,6 +43,7 @@ from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
+    IsaacConfig,
     IsaacVisionAttention,
     document_mask_function_from_cu_seqlens,
     ensure_document_attention_mask,
@@ -62,7 +66,7 @@ if is_vision_available():
 else:
     Image = None
 
-from ...test_modeling_common import ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -596,7 +600,7 @@ def isaac_config(isaac_reference_checkpoint):
 @pytest.fixture(scope="session")
 def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
     model_config = IsaacConfig.from_dict(isaac_config.to_dict())
-    model_config.vision_attn_implementation = isaac_config.vision_attn_implementation
+    model_config.vision_config._attn_implementation = "flash_attention_2"
     model = _hf_from_pretrained(
         IsaacForConditionalGeneration,
         isaac_reference_checkpoint,
@@ -694,8 +698,16 @@ class IsaacModelTester:
 
 
 @require_torch
-class IsaacModelTest(unittest.TestCase):
+class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IsaacModel, IsaacForConditionalGeneration) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "image-to-text": IsaacForConditionalGeneration,
+            "image-text-to-text": IsaacForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
