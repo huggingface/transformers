@@ -1077,6 +1077,13 @@ class IsaacModel(PreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
+        # Keep vocab sizes in sync when embeddings are replaced.
+        vocab_size = getattr(value, "num_embeddings", None)
+        if vocab_size is not None:
+            self.config.vocab_size = vocab_size
+            if hasattr(self.config, "text_config"):
+                self.config.text_config.vocab_size = vocab_size
+            self.text_model.config.vocab_size = vocab_size
 
     @property
     def embed_tokens(self) -> nn.Module:
@@ -1264,6 +1271,8 @@ class IsaacModel(PreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            hidden_states=(hidden_states,),
+            attentions=None,
         )
 
 
@@ -1393,6 +1402,21 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=None,
         )
+
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.model.set_input_embeddings(value)
+        vocab_size = getattr(value, "num_embeddings", None)
+        if vocab_size is not None:
+            self.config.vocab_size = vocab_size
+            self.model.config.vocab_size = vocab_size
+            if hasattr(self.model, "text_model"):
+                self.model.text_model.config.vocab_size = vocab_size
+            # Resize lm_head if shapes differ
+            if self.lm_head.weight.shape[0] != vocab_size:
+                self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
+            # Retie lm_head to embeddings when applicable
+            if hasattr(self.model, "embed_tokens"):
+                self.lm_head.weight = self.model.embed_tokens.weight
 
     def get_rope_index(
         self,
