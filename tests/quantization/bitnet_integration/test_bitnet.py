@@ -65,7 +65,9 @@ class BitNetTest(unittest.TestCase):
         Load the model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, dtype=torch.bfloat16, device_map=torch_device)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name, dtype=torch.bfloat16, device_map=torch_device
+        )
 
     def tearDown(self):
         gc.collect()
