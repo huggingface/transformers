@@ -83,13 +83,11 @@
     - local: perf_infer_gpu_multi
       title: Distributed inference
     - local: kv_cache
-      title: KV cache strategies
+      title: Cache strategies
     - local: cache_explanation
       title: Caching
     - local: assisted_decoding
       title: Assisted decoding
-    - local: optimum
-      title: Optimum
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
