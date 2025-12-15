@@ -135,7 +135,6 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # define default Pixo configuration
     config = get_pixo_config(model_name)
-
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -148,7 +147,6 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     # load image
     image = prepare_img()
-
     processor = BitImageProcessor(
         size={"height": 256, "width": 256},
         do_center_crop=False,

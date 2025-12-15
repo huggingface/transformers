@@ -15,11 +15,12 @@
 
 from typing import Optional, Union
 
-from ..utils import is_gptqmodel_available, is_llm_awq_available, is_torch_available, logging
-from ..utils.quantization_config import (
-    AwqBackend,
-)
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_accelerate_available, is_torch_available, logging
 
+
+if is_accelerate_available():
+    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch
@@ -61,120 +62,63 @@ def replace_with_awq_linear(
     model,
     modules_to_not_convert=None,
     quantization_config=None,
-    current_key_name=None,
-    has_been_replaced=False,
     device_map: Optional[Union[str, dict]] = None,
 ) -> bool:
     """
-    Public method that recursively replaces the Linear layers of the given model with AWQ quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successful or not.
-
-    During the module replacement, we also infer the backend to use through the `quantization_config` object.
+    Public method that replaces the linear layers of the given model with awq quantized layers.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
         quantization_config (`AwqConfig`):
             The quantization config object that contains the quantization parameters.
-        modules_to_not_convert (`list`, *optional*):
-            A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
+            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
             converted.
-        current_key_name (`list`, *optional*):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
+        device_map (`Union[str, dict]`, *optional*, defaults to `None`):
+            The device map that maps the parameters to the device
     """
-    if modules_to_not_convert is None:
-        modules_to_not_convert = []
+    from gptqmodel.quantization import METHOD
+    from gptqmodel.utils.importer import hf_select_quant_linear_v2
 
-    backend = quantization_config.backend
+    target_cls = hf_select_quant_linear_v2(
+        bits=quantization_config.bits,
+        group_size=quantization_config.group_size,
+        desc_act=False,
+        sym=False,
+        format=quantization_config.format,
+        backend=quantization_config.backend,
+        device_map=device_map,
+        quant_method=METHOD.AWQ,
+        zero_point=quantization_config.zero_point,
+        pack=False,
+    )
 
-    if not is_gptqmodel_available() and not is_llm_awq_available():
-        raise ValueError(
-            "AWQ (either `llmawq`) is not available. Please install it with `pip install gptqmodel` or check out the installation guide in https://github.com/mit-han-lab/llm-awq"
-        )
-
-    if backend != AwqBackend.LLMAWQ:
-        from gptqmodel.quantization import METHOD
-        from gptqmodel.utils.importer import hf_select_quant_linear_v2
-
-        target_cls = hf_select_quant_linear_v2(
-            bits=quantization_config.bits,
-            group_size=quantization_config.group_size,
-            desc_act=False,
-            sym=False,
-            format=quantization_config.format,
-            backend=quantization_config.backend,
-            device_map=device_map,
-            quant_method=METHOD.AWQ,
-            zero_point=quantization_config.zero_point,
-            pack=False,
-        )
-    else:
-        from awq.quantize.qmodule import WQLinear
-
-        target_cls = WQLinear
-
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
-
-        if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
-            # Check if the current key is not in the `modules_to_not_convert`
-            if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
-                in_features = module.in_features
-                out_features = module.out_features
-
-                if backend != AwqBackend.LLMAWQ:
-                    model._modules[name] = target_cls(
-                        bits=quantization_config.bits,
-                        sym=quantization_config.sym,
-                        desc_act=quantization_config.desc_act,
-                        group_size=quantization_config.group_size,
-                        in_features=in_features,
-                        out_features=out_features,
-                        bias=module.bias is not None,
-                        dev=module.weight.device,
-                        register_buffers=True,
-                    )
-                else:
-                    model._modules[name] = target_cls(
-                        w_bit=quantization_config.bits,
-                        group_size=quantization_config.group_size,
-                        in_features=in_features,
-                        out_features=out_features,
-                        bias=module.bias is not None,
-                        dev=module.weight.device,
-                    )
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with init_empty_weights():
+            if isinstance(module, nn.Linear):
+                new_module = target_cls(
+                    bits=quantization_config.bits,
+                    sym=quantization_config.sym,
+                    desc_act=quantization_config.desc_act,
+                    group_size=quantization_config.group_size,
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    dev=module.weight.device,
+                    register_buffers=True,
+                )
+                new_module.requires_grad_(False)
+                model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 
-                # Force requires grad to False to avoid unexpected errors
-                model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_awq_linear(
-                module,
-                modules_to_not_convert=modules_to_not_convert,
-                current_key_name=current_key_name,
-                quantization_config=quantization_config,
-                has_been_replaced=has_been_replaced,
-                device_map=device_map,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
-
-
-def post_init_awq_ipex_modules(model):
-    """
-    Runs post init for IPEX layers which performs:
-        - Weights packing, reordering and repacking
-    """
-
-    from gptqmodel.quantization.awq.modules.linear.gemm_ipex import ipex_post_init
-
-    model = ipex_post_init(model)
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using eetq but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
 
     return model

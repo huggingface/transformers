@@ -15,6 +15,9 @@
 """PyTorch Pixo model."""
 
 from typing import Optional
+import collections.abc
+from collections.abc import Callable
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -26,23 +29,159 @@ from ...utils.generic import check_model_inputs
 from ..dinov2.modeling_dinov2 import Dinov2Backbone, Dinov2DropPath, Dinov2MLP
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 from .configuration_pixo import PixoConfig
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.generic import can_return_tuple, check_model_inputs
+from ..dinov2.configuration_dinov2 import Dinov2Config
+from ..dinov2.modeling_dinov2 import Dinov2PatchEmbeddings, Dinov2SelfAttention, Dinov2Attention, Dinov2SelfOutput, Dinov2DropPath, Dinov2MLP, Dinov2PreTrainedModel, Dinov2Backbone, Dinov2Model
 
 
 logger = logging.get_logger(__name__)
 
 
+
+class PixoConfig(Dinov2Config):
+    r"""
+    This is the configuration class to store the configuration of a [`PixoModel`]. It is used to instantiate a
+    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration 
+    with the defaults will yield a similar configuration to that of the ViT
+    [facebook/pixo-huge](https://huggingface.co/facebook/pixo-huge) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1280):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
+        n_cls_tokens (`int`, *optional*, defaults to 8):
+            Number of class tokens in the Transformer encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 256):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate per sample (when applied in the main path of residual layers).
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
+
+    Example:
+
+    ```python
+    >>> from transformers import PixoConfig, PixoModel
+
+    >>> # Initializing a Pixo pixo-huge style configuration
+    >>> configuration = PixoConfig()
+
+    >>> # Initializing a model (with random weights) from the pixo-huge style configuration
+    >>> model = PixoModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "pixo"
+
+    def __init__(
+        self,
+        hidden_size=1280,
+        num_hidden_layers=32,
+        num_attention_heads=16,
+        mlp_ratio=4,
+        n_cls_tokens=8,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
+        image_size=256,
+        patch_size=16,
+        num_channels=3,
+        qkv_bias=True,
+        drop_path_rate=0.0,
+        out_features=None,
+        out_indices=None,
+        apply_layernorm=True,
+        reshape_hidden_states=True,
+        **kwargs,
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            mlp_ratio=mlp_ratio,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            image_size=image_size,
+            patch_size=patch_size,
+            num_channels=num_channels,
+            qkv_bias=qkv_bias,
+            drop_path_rate=drop_path_rate,
+            apply_layernorm=apply_layernorm,
+            reshape_hidden_states=reshape_hidden_states,
+        )
+        
+        self.n_cls_tokens = n_cls_tokens
+        
+        del self.layerscale_value
+        del self.use_swiglu_ffn
+        del self.use_mask_token
+
+
 class PixoPatchEmbeddings(ViTPatchEmbeddings):
     pass
 
-
 class PixoEmbeddings(nn.Module):
-    """Construct the CLS tokens, position and patch embeddings while reusing ViT's initialization utilities."""
-
+    """
+    Construct the CLS tokens, position and patch embeddings.
+    """
+    
     def __init__(self, config: PixoConfig) -> None:
         super().__init__()
-        self.patch_embeddings = PixoPatchEmbeddings(config)
+        
         self.cls_token = nn.Parameter(torch.randn(1, config.n_cls_tokens, config.hidden_size))
         self.mask_token = None
+        self.patch_embeddings = PixoPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + config.n_cls_tokens, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -51,6 +190,14 @@ class PixoEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
         num_patches = embeddings.shape[1] - self.n_cls_tokens
         num_positions = self.position_embeddings.shape[1] - self.n_cls_tokens
 

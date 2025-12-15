@@ -78,13 +78,16 @@ class PixoPatchEmbeddings(nn.Module):
 
 
 class PixoEmbeddings(nn.Module):
-    """Construct the CLS tokens, position and patch embeddings while reusing ViT's initialization utilities."""
+    """
+    Construct the CLS tokens, position and patch embeddings.
+    """
 
     def __init__(self, config: PixoConfig) -> None:
         super().__init__()
-        self.patch_embeddings = PixoPatchEmbeddings(config)
+
         self.cls_token = nn.Parameter(torch.randn(1, config.n_cls_tokens, config.hidden_size))
         self.mask_token = None
+        self.patch_embeddings = PixoPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + config.n_cls_tokens, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -93,6 +96,14 @@ class PixoEmbeddings(nn.Module):
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
         num_patches = embeddings.shape[1] - self.n_cls_tokens
         num_positions = self.position_embeddings.shape[1] - self.n_cls_tokens
 
