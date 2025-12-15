@@ -615,10 +615,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
             raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
 
-        is_audio_text = pixel_values_videos is None
-        is_video_text = input_values is None
-
-        if is_audio_text:
+        if pixel_values_videos is None:
             audio_outputs = self.audio_model(
                 input_ids=input_ids,
                 input_values=input_values,
@@ -628,7 +625,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             )
             return PeAudioVideoOutput(**audio_outputs)
 
-        if is_video_text:
+        if input_values is None:
             video_outputs = self.video_model(
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
@@ -662,6 +659,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 audio_embeds=audio_embeds,
                 video_embeds=video_embeds,
                 audio_video_embeds=audio_video_embeds,
+                loss=audio_video_loss,
+                audio_video_loss=audio_video_loss,
             )
 
         text_outputs = self.text_model(
