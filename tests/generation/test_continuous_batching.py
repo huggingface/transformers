@@ -251,7 +251,17 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         generate_outputs = model.generate(**inputs.to(torch_device), generation_config=model.generation_config)
 
         for i, user_message in enumerate(user_messages):
-            continuous_batching_output = continuous_batching_outputs[f"req_{i}"].generated_tokens
+            # Find the corresponding request in the continuous batching outputs
+            input_tokens = inputs.input_ids[i][inputs.attention_mask[i] == 1].tolist()
+            key_to_pop = None
+            for key, state in continuous_batching_outputs.items():
+                if state.prompt_ids == input_tokens:
+                    key_to_pop = key
+                    break
+            if key_to_pop is None:
+                self.fail(f"Request {i} not found in continuous batching outputs")
+            continuous_batching_output = continuous_batching_outputs.pop(key_to_pop).generated_tokens
+
             generate_output = generate_outputs[i][num_input_tokens:].tolist()
             while generate_output[-1] == model.generation_config.pad_token_id:
                 generate_output.pop()

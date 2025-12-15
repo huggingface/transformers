@@ -259,7 +259,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
         self.max_seqlen_q = 0
         self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
-        self.output_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
+        self.output_ids = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -311,7 +311,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: b_size + 1].zero_()
         self.max_seqlen_q = 0
         self.logits_indices[:q_len].fill_(-1)
-        self.output_ids[:, :q_len].fill_(-1)
+        self.output_ids[:q_len].fill_(-1)
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -447,7 +447,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         # Reset the static tensors used for storage
-        self.reset_static_tensors()  # TODO: this might be unnecessary
+        self.reset_static_tensors()  # FIXME: why does this make the generation faster?
 
         # Prepare accumulators
         self.actual_query_length = 0
@@ -557,13 +557,10 @@ class ContinuousBatchProcessor:
             self.actual_index_sizes[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
-    def _sync(self) -> list[int]:
-        if self.output_ids is not None:
-            try:
-                return self.output_ids.tolist()[0]
-            except Exception:
-                return [0, 1]
-        return [0, 0]
+    def _get_new_tokens(self, num_new_tokens: int) -> list[int]:
+        indices = self.logits_indices[:num_new_tokens]
+        new_tokens = self.output_ids[indices]
+        return new_tokens.tolist()
 
     @traced
     def _maybe_send_output(self, state: RequestState) -> None:
@@ -574,13 +571,13 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        out_tokens = self._sync()
+        new_tokens = self._get_new_tokens(len(self.requests_in_batch))
         for i, state in enumerate(self.requests_in_batch):
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
-                token = out_tokens[self.logits_indices[i]]
+                token = new_tokens[i]
                 state.tokens_to_process = [token]
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
@@ -727,12 +724,11 @@ class ContinuousBatchProcessor:
             probs = nn.functional.softmax(probs, dim=-1)
             # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
-            # Add batch dimension back to match argmax output
-            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
-        tokens = next_tokens.size(1)  # Get seq_len dimension
-        self.output_ids[:, :tokens].copy_(next_tokens)
+            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
+            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
+        tokens = next_tokens.size(0)  # Get seq_len dimension
+        self.output_ids[:tokens].copy_(next_tokens)
 
 
 # Manager Class (User Interface)
@@ -950,6 +946,10 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
     ) -> None:
+        # If there is prefix sharing, we sort the inputs to maximize cache hits
+        if self._allow_prefix_sharing:
+            inputs = sorted(inputs, reverse=True)
+        # Add requests in order
         for input_ids in inputs:
             self.add_request(
                 input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
@@ -1080,10 +1080,6 @@ class ContinuousBatchingManager:
             )
 
         self._generation_step()
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()  # FIXME: why is this needed?
-        # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
 
     @traced
