@@ -125,7 +125,7 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
     return violations
 
 
-def main() -> int:
+def main():
     violations: list[str] = []
 
     for file_path in iter_modeling_files():
@@ -142,10 +142,8 @@ def main() -> int:
 
     if violations:
         print("\n".join(violations), file=sys.stderr)
-        return 1
-
-    return 0
+        raise ValueError("Found some errors. Check the offensive files above.")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
