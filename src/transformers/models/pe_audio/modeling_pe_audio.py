@@ -501,7 +501,7 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
-    base_model_prefix = "model"
+    base_model_prefix = "audio_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeAudioEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -514,9 +514,6 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": PeAudioEncoderLayer,
         "attentions": PeAudioEncoderAttention,
-    }
-    _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.embedder\.audio_encoder": "audio_encoder",
     }
 
     def _init_weights(self, module):
@@ -617,7 +614,7 @@ class PeAudioEncoderRotaryEmbedding(nn.Module):
 class PeAudioEncoder(PeAudioPreTrainedModel):
     config: PeAudioEncoderConfig
     main_input_name = "input_values"
-    base_model_prefix = "audio_encoder"
+    base_model_prefix = "audio_model.audio_encoder"
 
     def __init__(self, config: PeAudioEncoderConfig):
         super().__init__(config)
@@ -708,7 +705,6 @@ class PeAudioOutput(ModelOutput):
 
 
 class PeAudioModel(PeAudioPreTrainedModel):
-
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
@@ -730,8 +726,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
-        text_embeds = self.text_audio_head(text_embeds)
-        return text_embeds
+        return self.text_audio_head(text_embeds)
 
     def get_audio_embeds(self, input_values, padding_mask=None):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
@@ -740,8 +735,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             return_dict=True,
         )
         audio_embeds = audio_outputs.pooler_output
-        audio_embeds = self.audio_head(audio_embeds)
-        return audio_embeds
+        return self.audio_head(audio_embeds)
 
     @can_return_tuple
     def forward(

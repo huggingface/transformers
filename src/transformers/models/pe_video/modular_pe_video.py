@@ -104,9 +104,7 @@ class PeVideoEncoderEmbedder(nn.Module):
 
 
 class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.embedder\.video_encoder": "video_encoder",
-    }
+    base_model_prefix = "video_model"
 
 
 @auto_docstring(
@@ -115,7 +113,7 @@ class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
     """
 )
 class PeVideoEncoder(PeAudioVideoEncoder):
-    base_model_prefix = "video_encoder"
+    base_model_prefix = "video_model.video_encoder"
 
     def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)

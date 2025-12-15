@@ -421,7 +421,7 @@ class PeVideoEncoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class PeVideoPreTrainedModel(PreTrainedModel):
     config: PeVideoConfig
-    base_model_prefix = "model"
+    base_model_prefix = "video_model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeVideoEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -434,9 +434,6 @@ class PeVideoPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": PeVideoEncoderLayer,
         "attentions": PeVideoEncoderAttention,
-    }
-    _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.embedder\.video_encoder": "video_encoder",
     }
 
     def _init_weights(self, module):
@@ -526,7 +523,7 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
 class PeVideoEncoder(PeVideoPreTrainedModel):
     config: PeVideoEncoderConfig
     main_input_name = "input_values"
-    base_model_prefix = "video_encoder"
+    base_model_prefix = "video_model.video_encoder"
 
     def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)

@@ -72,9 +72,7 @@ class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^audio_video_encoder\.embedder\.audio_encoder": "audio_encoder",
-    }
+    base_model_prefix = "audio_model"
 
 
 @dataclass
@@ -95,7 +93,7 @@ class PeAudioEncoderOutput(BaseModelOutputWithPooling):
     """
 )
 class PeAudioEncoder(PeAudioVideoEncoder):
-    base_model_prefix = "audio_encoder"
+    base_model_prefix = "audio_model.audio_encoder"
 
     @can_return_tuple
     @check_model_inputs
