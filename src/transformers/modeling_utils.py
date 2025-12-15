@@ -4527,7 +4527,6 @@ def get_total_byte_count(
     This utility function calculates the total bytes count needed to load the model on each device.
     This is useful for caching_allocator_warmup as we want to know how much cache we need to pre-allocate.
     """
-    from .integrations.accelerate import compute_module_sizes
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
@@ -4543,11 +4542,11 @@ def get_total_byte_count(
         # Skip if the parameter has already been accounted for (tied weights)
         if param_name in tied_param_names:
             continue
-        
+
         param = model.get_parameter_or_buffer(param_name)
 
         if hf_quantizer is not None:
-            dtype_size = hf_quantizer.param_element_size(model, name, param)
+            dtype_size = hf_quantizer.param_element_size(model, param_name, param)
         else:
             dtype_size = param.element_size()
 
