@@ -186,9 +186,12 @@ class PeVideoEncoderPatchEmbedder(nn.Module):
 
 
 class PeVideoEncoderEmbedder(nn.Module):
-    def __init__(self, config: PeVideoEncoderConfig):
+    def __init__(self, config: PeVideoEncoderConfig, _init_vision_model: bool = True):
         super().__init__()
-        self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
+        if _init_vision_model:
+            self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
+        else:
+            self.vision_model = None
         self.proj = nn.Linear(config.vision_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
@@ -528,9 +531,9 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
     main_input_name = "input_values"
     base_model_prefix = "video_encoder"
 
-    def __init__(self, config: PeVideoEncoderConfig):
+    def __init__(self, config: PeVideoEncoderConfig, _init_vision_model: bool = True):
         super().__init__(config)
-        self.embedder = PeVideoEncoderEmbedder(config)
+        self.embedder = PeVideoEncoderEmbedder(config, _init_vision_model=_init_vision_model)
         self.patch_embedder = PeVideoEncoderPatchEmbedder(config)
         self.layers = nn.ModuleList(
             [PeVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -578,10 +581,10 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
 
 
 class PeVideoModel(PeVideoPreTrainedModel):
-    def __init__(self, config: PeVideoConfig):
+    def __init__(self, config: PeVideoConfig, _init_vision_model: bool = True):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.video_encoder = PeVideoEncoder(config.video_config)
+        self.video_encoder = PeVideoEncoder(config.video_config, _init_vision_model=_init_vision_model)
 
         self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
         self.video_head = PeVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
