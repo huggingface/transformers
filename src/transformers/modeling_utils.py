@@ -2398,13 +2398,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 source_is_there = source_param_name not in missing_keys
                 target_is_there = target_param_name not in missing_keys
                 # Both are already present -> it means the config is wrong and do not reflect the actual
-                # checkpoint -> let's raise a warning and do nothing
+                # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
                     logger.warning(
                         f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                         f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
                         "You should update the config with `tie_word_embeddings=False` to silence this warning"
                     )
+                    # Remove from internal attribute to correctly reflect actual tied weights
+                    self.all_tied_weights_keys.pop(target_param_name)
                     # Skip to next iteration
                     continue
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists

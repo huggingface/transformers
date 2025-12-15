@@ -505,8 +505,6 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3VideoModel(Sam3VideoPreTrainedModel):
-    all_tied_weights_keys = {}
-
     def __init__(self, config: Sam3VideoConfig):
         super().__init__(config)
         self.config = config
