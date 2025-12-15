@@ -184,7 +184,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 ).extract_vocab_merges_from_model(vocab_file)
 
             # Local conversion can lose global additional special tokens that may carry over
-            if len(kwargs.get("additional_special_tokens")) != len(local_kwargs.get("additional_special_tokens")):
+            if len(kwargs.get("additional_special_tokens", [])) != len(local_kwargs.get("additional_special_tokens", [])):
                 global_additional_special_tokens = kwargs.get("additional_special_tokens")
                 local_additional_special_tokens = local_kwargs.get("additional_special_tokens")
                 if local_additional_special_tokens is not None and global_additional_special_tokens is not None:
