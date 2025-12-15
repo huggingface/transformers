@@ -549,9 +549,9 @@ class SegformerMLP(nn.Module):
         return hidden_states
 
 
-class SegformerDecodeHead(SegformerPreTrainedModel):
+class SegformerDecodeHead(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
         for i in range(config.num_encoder_blocks):
