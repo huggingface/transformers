@@ -375,6 +375,9 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
             value // patch_size,
         ]
 
+        # keep the image_size in the __dict__ to save the value in the config file (backward compatibility)
+        self.__dict__["image_size"] = value
+
 
 class Sam3TrackerVideoInferenceCache(Sam2VideoInferenceCache):
     pass
