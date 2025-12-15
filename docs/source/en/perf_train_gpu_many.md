@@ -93,6 +93,116 @@ Tensor parallelism is effective for training large models that don't fit into th
 
 Refer to the [Tensor parallelism](./perf_infer_gpu_multi) guide to learn how to use it for inference.
 
+
+### Tensor parallelism for training with Trainer
+
+This section focuses on configuring tensor parallelism for training
+using Trainer.
+
+When training with `Trainer`, tensor parallelism must be configured and
+managed by  Accelerate rather than during model loading.
+
+**Important**
+
+Do **not** load the model with `device_map="auto"` when using `Trainer`
+in distributed training.  
+The `device_map="auto"` option pre-shards the model for inference and
+conflicts with Accelerate-managed training, which can lead to runtime
+errors.
+
+#### Minimal TP-only Trainer example
+
+The following example demonstrates tensor-parallel training using
+`Trainer` and `ParallelismConfig`, without combining data parallelism or
+other parallelism strategies.
+
+```python
+import os
+import torch
+from datasets import Dataset
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForLanguageModeling,
+)
+from accelerate import ParallelismConfig
+
+# Number of processes launched with accelerate
+tp_size = int(os.environ.get("WORLD_SIZE", 1))
+
+# Define TP-only parallelism
+parallelism_config = ParallelismConfig(
+    tp_size=tp_size,
+    cp_size=1,
+    dp_shard_size=1,
+    dp_replicate_size=1,
+)
+
+model_name = "facebook/opt-125m"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer.pad_token = tokenizer.eos_token
+
+# Load the model normally (do NOT use device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+)
+
+# Dummy dataset
+dataset = Dataset.from_dict(
+    {
+        "text": [ 
+               "Explain tensor parallelism in simple terms.",
+            "What is supervised fine-tuning?",
+        ]
+    }
+)
+
+def tokenize_fn(examples):
+    outputs = tokenizer(
+        examples["text"],
+        truncation=True,
+        padding="max_length",
+        max_length=64,
+    )
+    outputs["labels"] = outputs["input_ids"]
+    return outputs
+
+train_dataset = dataset.map(
+    tokenize_fn, batched=True, remove_columns=["text"]
+)
+data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
+
+training_args = TrainingArguments(
+    output_dir="./tp_only_trainer",
+    per_device_train_batch_size=1,
+    num_train_epochs=1,
+    logging_steps=1,
+    save_steps=0,
+    remove_unused_columns=False,
+    report_to=[],
+    accelerator_config={"parallelism_config": parallelism_config},
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    data_collator=data_collator,
+)
+
+trainer.train()
+```
+
+Run the script with:
+
+```bash
+accelerate launch --num_processes 2 tp_only_trainer.py
+```
+
 ## Hybrid parallelism
 
 Parallelism methods can be combined to achieve even greater memory savings and more efficiently train models with billions of parameters.
