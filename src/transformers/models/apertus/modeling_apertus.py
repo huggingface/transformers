@@ -25,7 +25,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
+from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -50,8 +50,6 @@ class ApertusMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
         if config.hidden_act == "xielu":
-            from ...activations import ACT2CLS
-
             self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
     def forward(self, x):
