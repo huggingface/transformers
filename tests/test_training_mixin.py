@@ -349,6 +349,8 @@ class TrainingTesterMixin(ABC):
 
             model_type = getattr(config, "model_type", "")
             use_cache = model_type == "recurrent_gemma"
+            if use_cache:
+                logger.info("Only RecurrentGemmaModel is using use_cache=True. Other models run with use_cache=False")
 
             with torch.no_grad():
                 generated_ids = model.generate(
