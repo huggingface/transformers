@@ -113,7 +113,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "ernie4_5_vl": [
+        "ernie4_5_vl_moe": [
             # vision
             WeightRenaming("vision_model", "vision_tower"),
             # resampler
@@ -288,7 +288,7 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
-    "ernie4_5_vl",
+    "ernie4_5_vl_moe",
 ]
 
 

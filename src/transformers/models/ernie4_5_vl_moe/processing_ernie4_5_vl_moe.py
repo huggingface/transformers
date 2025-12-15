@@ -26,7 +26,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
 
-class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+class Ernie4_5_VL_MoeProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -36,17 +36,17 @@ class Ernie4_5_VLProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class Ernie4_5_VLProcessor(ProcessorMixin):
+class Ernie4_5_VL_MoeProcessor(ProcessorMixin):
     r"""
     Constructs a Ernie 4.5 VL processor which wraps a Ernie 4.5 VL image processor and a Llama tokenizer into a single processor.
-    [`Ernie4_5_VLProcessor`] offers all the functionalities of [`Ernie4_5_VLImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~Ernie4_5_VLProcessor.__call__`] and [`~Ernie4_5_VLProcessor.decode`] for more information.
+    [`Ernie4_5_VL_MoeProcessor`] offers all the functionalities of [`Ernie4_5_VL_MoeImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~Ernie4_5_VL_MoeProcessor.__call__`] and [`~Ernie4_5_VL_MoeProcessor.decode`] for more information.
     Args:
-        image_processor ([`Ernie4_5_VLImageProcessor`], *optional*):
+        image_processor ([`Ernie4_5_VL_MoeImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        video_processor ([`Ernie4_5_VLVideoProcessor`], *optional*):
+        video_processor ([`Ernie4_5_VL_MoeVideoProcessor`], *optional*):
             The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
@@ -84,13 +84,13 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         videos: Optional[VideoInput] = None,
-        **kwargs: Unpack[Ernie4_5_VLProcessorKwargs],
+        **kwargs: Unpack[Ernie4_5_VL_MoeProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwargs` arguments to
-        Ernie4_5_VLImageProcessor's [`~Ernie4_5_VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+        Ernie4_5_VL_MoeImageProcessor's [`~Ernie4_5_VL_MoeImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -123,7 +123,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
               Returned when `text` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            Ernie4_5_VLProcessorKwargs,
+            Ernie4_5_VL_MoeProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -198,6 +198,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         """Additional `mm_token_type_ids` used for modality isolated MoE"""
         model_input_names = super().model_input_names
         model_input_names.append("mm_token_type_ids")
+        model_input_names.append("moe_mm_token_type_ids")
         return model_input_names
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -215,7 +216,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Ernie4_5_VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = Ernie4_5_VL_MoeProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
@@ -227,7 +228,7 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Ernie4_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs = Ernie4_5_VL_MoeProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
             temporal_merge_size = (
                 videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
@@ -245,4 +246,4 @@ class Ernie4_5_VLProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
-__all__ = ["Ernie4_5_VLProcessor"]
+__all__ = ["Ernie4_5_VL_MoeProcessor"]

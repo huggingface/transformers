@@ -28,7 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Ernie4_5_VLImageProcessorFast, Ernie4_5_VLProcessor
+    from transformers import Ernie4_5_VL_MoeImageProcessorFast, Ernie4_5_VL_MoeProcessor
 
 if is_torch_available():
     import torch
@@ -37,15 +37,15 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
-class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = Ernie4_5_VLProcessor
+class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Ernie4_5_VL_MoeProcessor
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         # TODO: update path
-        processor = Ernie4_5_VLProcessor.from_pretrained(
-            "/raid/anton/code/forks/transformers/AntonV/ErnieVL",
+        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(
+            "/raid/anton/code/forks/transformers/ErnieTest/ErnieVL",
             patch_size=4,
             size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
         )
@@ -86,23 +86,23 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VLProcessor(
+        processor = Ernie4_5_VL_MoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
         processor.save_pretrained(self.tmpdirname)
-        processor = Ernie4_5_VLProcessor.from_pretrained(self.tmpdirname)
+        processor = Ernie4_5_VL_MoeProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, LlamaTokenizerFast)
-        self.assertIsInstance(processor.image_processor, Ernie4_5_VLImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, Ernie4_5_VL_MoeImageProcessorFast)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VLProcessor(
+        processor = Ernie4_5_VL_MoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -119,7 +119,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         video_processor = self.get_video_processor()
 
-        processor = Ernie4_5_VLProcessor(
+        processor = Ernie4_5_VL_MoeProcessor(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
@@ -129,7 +129,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "mm_token_type_ids", "pixel_values", "image_grid_thw"],
+            ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids", "pixel_values", "image_grid_thw"],
         )
 
         # test if it raises when no input is passed
@@ -204,10 +204,11 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             return_tensors=return_tensors,
         )
-        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask", "mm_token_type_ids"]))
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"]))
         self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
         self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
         self.assertEqual(len(out_dict_text["mm_token_type_ids"]), batch_size)
+        self.assertEqual(len(out_dict_text["moe_mm_token_type_ids"]), batch_size)
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
@@ -226,6 +227,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
         self.assertEqual(len(out_dict["mm_token_type_ids"]), batch_size)
+        self.assertEqual(len(out_dict["moe_mm_token_type_ids"]), batch_size)
 
         if modality == "video":
             # qwen pixels don't scale with bs same way as other models, calculate expected video token count based on video_grid_thw
@@ -274,7 +276,7 @@ class Ernie4_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids", "moe_mm_token_type_ids"])
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {

@@ -19,9 +19,9 @@ from transformers import (
     AutoConfig,
     AutoModelForImageTextToText,
     AutoProcessor,
-    Ernie4_5_VLConfig,
-    Ernie4_5_VLForConditionalGeneration,
-    Ernie4_5_VLModel,
+    Ernie4_5_VL_MoeConfig,
+    Ernie4_5_VL_MoeForConditionalGeneration,
+    Ernie4_5_VL_MoeModel,
     is_torch_available,
     is_vision_available,
 )
@@ -54,7 +54,7 @@ if is_vision_available():
     pass
 
 
-class Ernie4_5_VLVisionText2TextModelTester:
+class Ernie4_5_VL_MoeVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -131,7 +131,7 @@ class Ernie4_5_VLVisionText2TextModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        return Ernie4_5_VLConfig(
+        return Ernie4_5_VL_MoeConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
@@ -183,11 +183,11 @@ class Ernie4_5_VLVisionText2TextModelTester:
 
 
 @require_torch
-class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Ernie4_5_VLModel,
-            Ernie4_5_VLForConditionalGeneration,
+            Ernie4_5_VL_MoeModel,
+            Ernie4_5_VL_MoeForConditionalGeneration,
         )
         if is_torch_available()
         else ()
@@ -197,8 +197,8 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Ernie4_5_VLVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VLConfig, has_text_modality=False)
+        self.model_tester = Ernie4_5_VL_MoeVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VL_MoeConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -266,14 +266,14 @@ class Ernie4_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 
 @slow
-@require_torch_multi_accelerator
-@require_torch_large_accelerator
+# @require_torch_multi_accelerator
+# @require_torch_large_accelerator
 @require_torch
-class Ernie4_5_VLIntegrationTest(unittest.TestCase):
+class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
     model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
     # TODO: remove after uploading
-    local_path = "/raid/anton/code/forks/transformers/AntonV/ErnieVL"
+    local_path = "/raid/anton/code/forks/transformers/ErnieTest/ErnieVL"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -346,9 +346,9 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and"
+        EXPECTED_DECODED_TEXT = "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and"
         self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
+            self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -366,12 +366,15 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species characterized by its distinctive ear tufts,"
+            "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
+            "The animal in the image is a lynx, not a dog. It's a wild cat species characterized by its distinctive ear tufts,"
         ]  # fmt: skip
 
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            [
+                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+            ],
             EXPECTED_DECODED_TEXT,
         )
 
@@ -403,10 +406,10 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = ['User: Only use English during your responses. Describe the following video.Video 1:\nAssistant: \n\n\n\nA black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi']  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'A black-and-white image shows a person lying on their back on a mat in a dojo. They are dressed in a white judo gi'  # fmt: skip
 
         self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
+            self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
 
@@ -422,12 +425,15 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, including a short tail',
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
+            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, including a short tail',
+            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
         ]  # fmt: skip
 
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            [
+                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+            ],
             EXPECTED_DECODED_TEXT,
         )
 
@@ -453,12 +459,15 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
-            "User: Who are you?\nAssistant: \n\n\n\nI am an AI assistant designed to help answer questions, provide information, and assist with tasks. I don't have personal experiences or a physical form"
+            "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
+            "I am an AI assistant designed to help answer questions, provide information, and assist with tasks. I don't have personal experiences or a physical form"
         ]  # fmt: skip
 
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            [
+                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+            ],
             EXPECTED_DECODED_TEXT,
         )
 
@@ -481,11 +490,14 @@ class Ernie4_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nThe animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
-            'User: What kind of dog is this?Picture 1:\nAssistant: \n\n\n\nthere are no dogs here, there are 2 cats',
+            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'there are no dogs here, there are 2 cats</s><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>',
         ]  # fmt: skip
 
         self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
+            [
+                self.processor.decode(output[0][len(inputs['input_ids'][0]):], skip_special_tokens=False),
+                self.processor.decode(output[1][len(inputs['input_ids'][1]):], skip_special_tokens=False),
+            ],
             EXPECTED_DECODED_TEXT,
         )

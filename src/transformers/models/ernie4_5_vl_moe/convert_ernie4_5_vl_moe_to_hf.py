@@ -24,10 +24,10 @@ from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    Ernie4_5_VLConfig,
-    Ernie4_5_VLImageProcessorFast,
-    Ernie4_5_VLProcessor,
-    Ernie4_5_VLVideoProcessor,
+    Ernie4_5_VL_MoeConfig,
+    Ernie4_5_VL_MoeImageProcessorFast,
+    Ernie4_5_VL_MoeProcessor,
+    Ernie4_5_VL_MoeVideoProcessor,
     LlamaTokenizer,
 )
 
@@ -221,7 +221,7 @@ def convert_config(model_path, save_dir):
     checkpoint_path = snapshot_download(repo_id=model_path, allow_patterns=["*config*"])
     for filename in sorted(os.listdir(checkpoint_path)):
         if filename == CONFIG_NAME:
-            hf_config = Ernie4_5_VLConfig()
+            hf_config = Ernie4_5_VL_MoeConfig()
             original_config = load_json(checkpoint_path, filename)
 
             # general config
@@ -237,7 +237,7 @@ def convert_config(model_path, save_dir):
             text_config = convert_text_config_to_hf(text_config, original_config)
 
             # total config
-            final_config = Ernie4_5_VLConfig(
+            final_config = Ernie4_5_VL_MoeConfig(
                 text_config=text_config,
                 vision_config=vision_config,
                 image_token_id=image_token_id,
@@ -267,7 +267,16 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
 
     # Manipulate special tokens and add video token
     tokenizer_config = load_json(TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
+    # Removed from list, re-add
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_PLACEHOLDER|>")
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_START|>")
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_END|>")
     tokenizer_config["extra_special_tokens"].append("<|VIDEO_PLACEHOLDER|>")
+    tokenizer_config["extra_special_tokens"].append("<|VIDEO_START|>")
+    tokenizer_config["extra_special_tokens"].append("<|VIDEO_END|>")
+    tokenizer_config["extra_special_tokens"].append("<think>")
+    tokenizer_config["extra_special_tokens"].append("</think>")
+    # To be called via `.xxx_token`
     tokenizer_config |= {
         "image_token": "<|IMAGE_PLACEHOLDER|>",
         "image_end_token": "<|IMAGE_END|>",
@@ -292,10 +301,10 @@ def convert_processor(model_path, save_dir):
     # font used within the video processor
     copyfile(hf_hub_download(FONT_REPO, FONT_NAME), Path(save_dir, FONT_NAME))
 
-    processor = Ernie4_5_VLProcessor(
-        image_processor=Ernie4_5_VLImageProcessorFast(),
+    processor = Ernie4_5_VL_MoeProcessor(
+        image_processor=Ernie4_5_VL_MoeImageProcessorFast(),
         tokenizer=tokenizer,
-        video_processor=Ernie4_5_VLVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
+        video_processor=Ernie4_5_VL_MoeVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
         chat_template=tokenizer.chat_template,
     )
     processor.save_pretrained(save_dir)
@@ -312,7 +321,7 @@ if __name__ == "__main__":
         default="baidu/ERNIE-4.5-VL-28B-A3B-PT",
         help="Path to the downloaded checkpoint",
     )
-    parser.add_argument("--output_folder", default="AntonV/ErnieVL", type=str, help="Path to your output directory.")
+    parser.add_argument("--output_folder", default="ErnieTest/ErnieVL", type=str, help="Path to your output directory.")
     parser.add_argument(
         "--convert_preprocessor",
         type=bool,

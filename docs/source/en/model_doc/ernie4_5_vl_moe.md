@@ -24,11 +24,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Ernie 4.5 VL
+# Ernie 4.5 VL MoE
 
 ## Overview
 
-The Ernie 4.5 VL model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
+The Ernie 4.5 VL MoE model was released in the [Ernie 4.5 Model Family](https://ernie.baidu.com/blog/posts/ernie4.5/) release by baidu.
 This family of models contains multiple different architectures and model sizes. The Vision-Language series in specific is
 composed of a novel multimodal heterogeneous structure, sharing paremeters across modalities and dedicating parameters
 to specific modalities. This becomes especially apparent in the Mixture of Expert (MoE) which is composed of
@@ -119,7 +119,7 @@ print(output_text)
 </hfoption>
 </hfoptions>
 
-Using Ernie 4.5 VL with video input is similar to using it with image input.
+Using Ernie 4.5 VL MoE with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python

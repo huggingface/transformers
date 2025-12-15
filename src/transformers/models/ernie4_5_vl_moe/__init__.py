@@ -18,9 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ernie4_5_vl import *
-    from .modeling_ernie4_5_vl import *
-    from .processing_ernie4_5_vl import *
+    from .configuration_ernie4_5_vl_moe import *
+    from .image_processing_ernie4_5_vl_moe import *
+    from .image_processing_ernie4_5_vl_moe_fast import *
+    from .modeling_ernie4_5_vl_moe import *
+    from .processing_ernie4_5_vl_moe import *
+    from .video_processing_ernie4_5_vl_moe import *
 else:
     import sys
 

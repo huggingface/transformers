@@ -29,11 +29,11 @@ if is_torch_available():
 
 if is_vision_available():
     if is_torchvision_available():
-        from transformers import Ernie4_5_VLVideoProcessor
-        from transformers.models.ernie4_5_vl.video_processing_ernie4_5_vl import smart_resize
+        from transformers import Ernie4_5_VL_MoeVideoProcessor
+        from transformers.models.ernie4_5_vl_moe.video_processing_ernie4_5_vl_moe import smart_resize
 
 
-class Ernie4_5_VLVideoProcessingTester:
+class Ernie4_5_VL_MoeVideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -152,13 +152,13 @@ class Ernie4_5_VLVideoProcessingTester:
 
 @require_torch
 @require_vision
-class Ernie4_5_VlVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Ernie4_5_VLVideoProcessor if is_torchvision_available() else None
+class Ernie4_5_VL_MoeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = Ernie4_5_VL_MoeVideoProcessor if is_torchvision_available() else None
     input_name = "pixel_values_videos"
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = Ernie4_5_VLVideoProcessingTester(self)
+        self.video_processor_tester = Ernie4_5_VL_MoeVideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):

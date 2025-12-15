@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, load_image
-from transformers.models.ernie4_5_vl.image_processing_ernie4_5_vl import smart_resize
+from transformers.models.ernie4_5_vl_moe.image_processing_ernie4_5_vl_moe import smart_resize
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -33,13 +33,13 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Ernie4_5_VLImageProcessor
+    from transformers import Ernie4_5_VL_MoeImageProcessor
 
     if is_torchvision_available():
-        from transformers import Ernie4_5_VLImageProcessorFast
+        from transformers import Ernie4_5_VL_MoeImageProcessorFast
 
 
-class Ernie4_5_VLImageProcessorTester:
+class Ernie4_5_VL_MoeImageProcessorTester:
     def __init__(
         self,
         parent,
@@ -97,13 +97,13 @@ class Ernie4_5_VLImageProcessorTester:
 
 @require_torch
 @require_vision
-class Ernie4_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = Ernie4_5_VLImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Ernie4_5_VLImageProcessorFast if is_torchvision_available() else None
+class Ernie4_5_VL_MoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = Ernie4_5_VL_MoeImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Ernie4_5_VL_MoeImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = Ernie4_5_VLImageProcessorTester(self)
+        self.image_processor_tester = Ernie4_5_VL_MoeImageProcessorTester(self)
 
     @property
     def image_processor_dict(self):
