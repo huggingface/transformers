@@ -600,6 +600,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
                 self.blocks.append(block)
                 total_block_idx += 1
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.patch_embed
 
