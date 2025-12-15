@@ -237,7 +237,6 @@ class QuantoQuantizationTest(unittest.TestCase):
         freeze(model.model)
         self.check_same_model(model, self.quantized_model)
         self.check_inference_correctness(model, device=torch_device)
-        
 
     def test_compute_module_sizes(self):
         r"""
