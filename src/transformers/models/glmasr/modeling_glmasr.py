@@ -231,7 +231,7 @@ class GlmasrAttention(nn.Module):
 
 
 class GlmasrEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmasrEncoderConfig):
+    def __init__(self, config: GlmasrConfig):
         super().__init__()
         self.embed_dim = config.d_model
 

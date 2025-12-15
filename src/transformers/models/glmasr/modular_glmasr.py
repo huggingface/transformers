@@ -259,7 +259,7 @@ class GlmasrAttention(VoxtralAttention):
 
 
 class GlmasrEncoderLayer(VoxtralEncoderLayer):
-    def __init__(self, config: GlmasrEncoderConfig):
+    def __init__(self, config: GlmasrConfig):
         super().__init__(config)
 
     def forward(

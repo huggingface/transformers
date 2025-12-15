@@ -467,7 +467,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
 MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
-        ("glmasr", "glmasr"),
         ("afmoe", "AFMoE"),
         ("aimv2", "AIMv2"),
         ("aimv2_vision_model", "Aimv2VisionModel"),
@@ -960,6 +959,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
         ("glm4v_moe_text", "glm4v_moe"),
+        ("glmasr_encoder", "glmasr"),
         ("grounding-dino", "grounding_dino"),
         ("mm-grounding-dino", "mm_grounding_dino"),
         ("idefics3_vision", "idefics3"),
@@ -992,7 +992,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
-        ("glmasr_encoder", "glmasr"),
     ]
 )
 
