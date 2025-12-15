@@ -955,6 +955,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.visual = BridgeTowerVisionTransformer(config)
+        self.post_init()
 
     @property
     def dtype(self):

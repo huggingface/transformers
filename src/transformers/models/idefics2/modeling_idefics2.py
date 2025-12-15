@@ -452,6 +452,8 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings
 
@@ -710,6 +712,8 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         # Create Transformer Blocks
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
+
+        self.post_init()
 
     @auto_docstring
     def forward(

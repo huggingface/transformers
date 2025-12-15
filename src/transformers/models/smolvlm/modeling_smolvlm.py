@@ -330,6 +330,8 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         self.patch_size = config.patch_size
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings
 

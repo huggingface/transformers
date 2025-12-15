@@ -1048,6 +1048,7 @@ class SamVisionEncoder(SamPreTrainedModel):
         self.neck = SamVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed

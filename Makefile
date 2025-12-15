@@ -45,7 +45,7 @@ repo-consistency:
 	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
-	python utils/check_init_weights_data.py
+	python utils/check_modeling_structure.py
 	python utils/check_inits.py
 	python utils/check_pipeline_typing.py
 	python utils/check_config_docstrings.py

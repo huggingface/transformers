@@ -740,6 +740,8 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         self.cls = BlipTextOnlyMLMHead(config)
         self.label_smoothing = config.label_smoothing
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.bert.get_input_embeddings()
 

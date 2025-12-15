@@ -1247,6 +1247,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.decoder = WhisperDecoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens

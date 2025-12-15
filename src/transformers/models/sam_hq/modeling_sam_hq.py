@@ -525,6 +525,7 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         self.neck = SamHQVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed

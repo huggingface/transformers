@@ -90,10 +90,6 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision", "timm"])
-        super().__init__(*args, **kwargs)
-
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
         super().post_init()
@@ -143,6 +139,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
@@ -265,6 +262,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
 
         if config.num_labels == 0:

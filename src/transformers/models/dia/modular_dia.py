@@ -241,6 +241,8 @@ class DiaEncoder(DiaPreTrainedModel):
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
 
+        self.post_init()
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -366,6 +368,8 @@ class DiaDecoder(DiaPreTrainedModel):
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
+
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple

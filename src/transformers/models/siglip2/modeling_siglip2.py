@@ -501,6 +501,8 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
+        self.post_init()
+
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
