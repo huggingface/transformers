@@ -34,7 +34,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
@@ -185,7 +185,7 @@ class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = freqs
             cos = emb.cos() * self.attention_scaling
@@ -239,7 +239,7 @@ def eager_attention_forward(
     combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
     probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
     scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training)
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -269,7 +269,6 @@ class GptOssAttention(Qwen2Attention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -299,7 +298,6 @@ class GptOssAttention(Qwen2Attention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            position_ids=position_ids,
             s_aux=self.sinks,  # diff with Llama
             **kwargs,
         )

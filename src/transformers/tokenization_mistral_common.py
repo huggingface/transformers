@@ -1986,3 +1986,7 @@ class MistralCommonBackend(PushToHubMixin):
         if mode not in [ValidationMode.finetuning, ValidationMode.test]:
             raise ValueError(_invalid_mode_msg)
         return mode
+
+
+# Backward compatibility alias for codebases still importing the legacy name.
+MistralCommonTokenizer = MistralCommonBackend

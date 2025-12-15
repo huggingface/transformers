@@ -22,6 +22,7 @@ import requests
 
 from transformers.testing_utils import (
     backend_empty_cache,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -1448,6 +1449,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         # Check that semantic seg has same spatial size as pred_masks
         self.assertEqual(outputs.semantic_seg.shape[-2:], outputs.pred_masks.shape[-2:])
 
+    @require_deterministic_for_xpu
     def test_efficient_multi_prompt_single_image(self):
         """Test efficient inference with multiple prompts on a single image using get_vision_features."""
         raw_image = prepare_coco_cat_image()
@@ -1491,6 +1493,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs_with_embeds.pred_boxes, outputs_direct.pred_boxes, atol=1e-5, rtol=1e-5)
         torch.testing.assert_close(outputs_with_embeds.pred_masks, outputs_direct.pred_masks, atol=1e-5, rtol=1e-5)
 
+    @require_deterministic_for_xpu
     def test_efficient_single_prompt_multi_images(self):
         """Test efficient inference with same prompt on multiple images using get_text_features."""
         raw_image1 = prepare_coco_cat_image()
