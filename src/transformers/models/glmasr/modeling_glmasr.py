@@ -533,9 +533,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
 class GlmasrMultiModalProjector(nn.Module):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(
-            config.audio_config.intermediate_size, config.text_config.hidden_size * 2, bias=False
-        )
+        self.linear_1 = nn.Linear(config.audio_config.d_model, config.text_config.hidden_size * 2, bias=False)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=False)
 
@@ -557,7 +555,7 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.audio_tower = GlmasrEncoderConfig(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.multi_modal_projector = GlmasrMultiModalProjector(config)
 

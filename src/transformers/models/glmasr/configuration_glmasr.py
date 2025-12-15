@@ -164,7 +164,7 @@ class GlmasrConfig(PreTrainedConfig):
         "hidden_size": 2048,
         "intermediate_size": 6144,
         "num_hidden_layers": 28,
-        "num_key_value_heads": 16,
+        "num_key_value_heads": 4,
         "max_position_embeddings": 8192,
         "rms_norm_eps": 1e-05,
         "use_cache": True,

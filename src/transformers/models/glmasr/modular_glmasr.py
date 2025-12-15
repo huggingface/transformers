@@ -174,7 +174,7 @@ class GlmasrConfig(VoxtralConfig):
         "hidden_size": 2048,
         "intermediate_size": 6144,
         "num_hidden_layers": 28,
-        "num_key_value_heads": 16,
+        "num_key_value_heads": 4,
         "max_position_embeddings": 8192,
         "rms_norm_eps": 1e-05,
         "use_cache": True,
@@ -407,7 +407,7 @@ class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
         self.linear_1 = nn.Linear(
-            config.audio_config.intermediate_size, config.text_config.hidden_size * 2, bias=False
+            config.audio_config.d_model, config.text_config.hidden_size * 2, bias=False
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=False)
