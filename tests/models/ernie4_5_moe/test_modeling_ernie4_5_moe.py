@@ -167,7 +167,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
 
         return cls.model
 
-    @require_torch_large_accelerator(memory=48)
+    @require_torch_large_accelerator(memory=48)  # Tested on A100 but requires around 48GiB
     @require_bitsandbytes
     def test_model_21b_a3b_generation(self):
         EXPECTED_TEXT_COMPLETION = "User: Hey, are you conscious? Can you talk to me?\nAssistant: \nI don't have consciousness in the way humans do. I don't feel emotions, have thoughts, or experience awareness. However, I'm"  # fmt: skip
