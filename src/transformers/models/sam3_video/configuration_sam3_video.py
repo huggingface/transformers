@@ -228,10 +228,16 @@ class Sam3VideoConfig(PreTrainedConfig):
         self.high_conf_thresh = high_conf_thresh
         self.high_iou_thresh = high_iou_thresh
 
-    def set_image_size(self, image_size):
+    @property
+    def image_size(self):
+        """Image size for the video model."""
+        return self.detector_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
         """Recursively propagate the image size to detector and tracker configs."""
-        self.detector_config.set_image_size(image_size)
-        self.tracker_config.set_image_size(image_size)
+        self.detector_config.image_size = value
+        self.tracker_config.image_size = value
 
 
 __all__ = ["Sam3VideoConfig"]

@@ -198,7 +198,7 @@ For faster inference or lower memory usage:
 
 ```python
 >>> config = Sam3VideoConfig.from_pretrained("facebook/sam3")
->>> config.set_image_size(560)
+>>> config.image_size = 560
 >>> model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device, dtype=torch.bfloat16)
 >>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```

@@ -364,7 +364,7 @@ For faster inference or lower memory usage:
 
 ```python
 >>> config = Sam3Config.from_pretrained("facebook/sam3")
->>> config.set_image_size(560)
+>>> config.image_size = 560
 >>> model = Sam3Model.from_pretrained("facebook/sam3", config=config).to(device)
 >>> processor = Sam3Processor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
