@@ -218,7 +218,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
-            ignore_keys_at_rope_validation={"mrope"},
+            ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
 

@@ -205,7 +205,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
         self.embedding_multiplier = config.embedding_multiplier
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

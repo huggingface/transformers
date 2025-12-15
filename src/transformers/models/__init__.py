@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .afmoe import *
     from .aimv2 import *
     from .albert import *
     from .align import *
@@ -126,6 +127,7 @@ if TYPE_CHECKING:
     from .falcon import *
     from .falcon_h1 import *
     from .falcon_mamba import *
+    from .fast_vlm import *
     from .fastspeech2_conformer import *
     from .flaubert import *
     from .flava import *
@@ -185,6 +187,7 @@ if TYPE_CHECKING:
     from .jetmoe import *
     from .kosmos2 import *
     from .kyutai_speech_to_text import *
+    from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
     from .layoutlmv3 import *
@@ -222,6 +225,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .minimax import *
     from .ministral import *
+    from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
@@ -263,6 +267,7 @@ if TYPE_CHECKING:
     from .ovis2 import *
     from .owlv2 import *
     from .owlvit import *
+    from .paddleocr_vl import *
     from .paligemma import *
     from .parakeet import *
     from .patchtsmixer import *
@@ -344,6 +349,7 @@ if TYPE_CHECKING:
     from .switch_transformers import *
     from .t5 import *
     from .t5gemma import *
+    from .t5gemma2 import *
     from .table_transformer import *
     from .tapas import *
     from .textnet import *

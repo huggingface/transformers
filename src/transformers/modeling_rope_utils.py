@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -653,20 +654,26 @@ class RotaryEmbeddingConfigMixin:
         Helper to standardize the config's rope params field by ensuring the params are defined for each
         later type. For old model the fn will duplicate a single rope param in each layer type (backward compatibility)
         """
-        # Move `rope_theta` and `partial_rotary_factor` to the params dict, if not there yet
+        # Move `rope_theta` and `partial_rotary_factor` to the `rope_parameters`, if not there yet
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
-        rope_parameters = self.rope_parameters
+        rope_parameters = getattr(self, "rope_parameters", None) or {}
+        layer_types = getattr(self, "layer_types", None)
 
+        # Case 0: no RoPE params defined
+        if not (rope_parameters or rope_theta):
+            # partial_rotary_factor without rope_theta is invalid, so we don't check for it here
+            logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
+            return
         # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        if getattr(self, "layer_types", None) is None or not set(rope_parameters.keys()).issubset(self.layer_types):
+        elif layer_types is None or rope_parameters == {} or not set(rope_parameters.keys()).issubset(layer_types):
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
                 rope_parameters["partial_rotary_factor"] = partial_rotary_factor
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in self.layer_types:
+            for layer_type in layer_types:
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
@@ -691,14 +698,14 @@ class RotaryEmbeddingConfigMixin:
 
         for rope_parameters in rope_parameters_dict.values():
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
-            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters")
+            validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
                 validation_fn(rope_parameters, ignore_keys=ignore_keys)
             else:
                 logger.warning(
-                    f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
+                    f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: Optional[set] = None):
@@ -913,3 +920,20 @@ class RotaryEmbeddingConfigMixin:
             unused_keys = received_keys - required_keys
         if unused_keys:
             logger.warning(f"Unrecognized keys in `rope_parameters` for 'rope_type'='{rope_type}': {unused_keys}")
+
+
+def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: Optional[set] = None):
+    """
+    This is a deprecated function.
+    It has been kept for backward compatibility with custom code models.
+    """
+    warnings.warn(
+        "`rope_config_validation` is deprecated and has been removed. "
+        "Its functionality has been moved to RotaryEmbeddingConfigMixin.validate_rope method. "
+        "PreTrainedConfig inherits this class, so please call self.validate_rope() instead. "
+        "Also, make sure to use the new rope_parameters syntax. "
+        "You can call self.standardize_rope_params() in the meantime.",
+        FutureWarning,
+    )
+    config.standardize_rope_params()
+    config.validate_rope(ignore_keys=ignore_keys)

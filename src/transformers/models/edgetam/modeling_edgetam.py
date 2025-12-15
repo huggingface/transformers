@@ -393,7 +393,7 @@ class EdgeTamVisionNeck(nn.Module):
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
             lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -437,7 +437,7 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1014,7 +1014,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

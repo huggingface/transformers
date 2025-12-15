@@ -387,7 +387,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         _, num_channels, height, width = pixel_values.shape
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).permute(0, 2, 3, 1)
         return embeddings
 
 
@@ -422,7 +422,7 @@ class Sam2VisionNeck(nn.Module):
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
             lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -727,7 +727,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -779,7 +779,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1281,7 +1281,7 @@ class Sam2Model(SamModel):
 
         return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

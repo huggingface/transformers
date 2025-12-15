@@ -28,7 +28,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, TypeVar, Union
 
 import numpy as np
 import typing_extensions
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
@@ -54,7 +54,6 @@ from .utils import (
     cached_file,
     copy_func,
     direct_transformers_import,
-    is_offline_mode,
     is_torch_available,
     list_repo_templates,
     logging,
@@ -696,14 +695,10 @@ class ProcessorMixin(PushToHubMixin):
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
-        if "tokenizer" in output:
-            del output["tokenizer"]
-        if "qformer_tokenizer" in output:
-            del output["qformer_tokenizer"]
-        if "protein_tokenizer" in output:
-            del output["protein_tokenizer"]
-        if "char_tokenizer" in output:
-            del output["char_tokenizer"]
+        for attribute in self.__class__.get_attributes():
+            if "tokenizer" in attribute and attribute in output:
+                del output[attribute]
+
         if "chat_template" in output:
             del output["chat_template"]
 
@@ -1465,7 +1460,24 @@ class ProcessorMixin(PushToHubMixin):
         # get args from processor init signature
         sub_processors = cls.get_attributes()
         for sub_processor_type in sub_processors:
-            if sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+            if "FuyuProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
+                from .tokenization_utils_tokenizers import TokenizersBackend
+
+                tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                if "token_type_ids" in tokenizer.model_input_names:
+                    tokenizer.model_input_names.remove("token_type_ids")
+                args.append(tokenizer)
+            elif "PixtralProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
+                from tokenizers import pre_tokenizers
+
+                from .models.llama import LlamaTokenizer
+
+                tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+                    [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
+                )
+                args.append(tokenizer)
+            elif sub_processor_type in MODALITY_TO_AUTOPROCESSOR_MAPPING:
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
                 sub_processor = auto_processor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
                 args.append(sub_processor)

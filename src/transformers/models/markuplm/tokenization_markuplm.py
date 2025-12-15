@@ -101,10 +101,10 @@ class MarkupLMTokenizer(TokenizersBackend):
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, the vocabulary is loaded from `vocab_file`.
+        merges (`str` or `list[str]`, *optional*):
+            Custom merges list. If not provided, merges are loaded from `merges_file`.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
@@ -149,12 +149,14 @@ class MarkupLMTokenizer(TokenizersBackend):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
         tags_dict,
-        vocab: Optional[Union[dict, list]] = None,
-        merges: Optional[list] = None,
+        vocab: Optional[Union[str, dict[str, int], list[tuple[str, float]]]] = None,
+        merges: Optional[Union[str, list[str]]] = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -172,57 +174,28 @@ class MarkupLMTokenizer(TokenizersBackend):
         trim_offsets=False,
         **kwargs,
     ):
-        if kwargs.get("from_slow"):
-            logger.warning(
-                "MarkupLMTokenizer no longer supports initialization from a slow tokenizer. Ignoring `from_slow=True`."
-            )
-        kwargs["from_slow"] = False
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        processed_vocab = vocab
-        processed_merges = merges
-
-        if isinstance(processed_vocab, list):
-            processed_vocab = {
-                token: index for index, (token, _score) in enumerate(processed_vocab) if isinstance(token, str)
-            }
-        elif isinstance(processed_vocab, dict):
-            processed_vocab = {str(token): int(index) for token, index in processed_vocab.items()}
-
-        if processed_vocab is None:
-            processed_vocab = {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
-
-        normalized_merges = []
-        if processed_merges is not None:
-            for merge in processed_merges:
-                if isinstance(merge, tuple) and len(merge) == 2:
-                    normalized_merges.append((merge[0], merge[1]))
-                elif isinstance(merge, list) and len(merge) == 2:
-                    normalized_merges.append((merge[0], merge[1]))
-                elif isinstance(merge, str):
-                    parts = merge.split()
-                    if len(parts) == 2 and not merge.startswith("#"):
-                        normalized_merges.append((parts[0], parts[1]))
-        processed_merges = normalized_merges if normalized_merges else []
-
+        merges = merges or []
         tokenizer = Tokenizer(
             BPE(
-                vocab=processed_vocab,
-                merges=processed_merges,
+                vocab=vocab,
+                merges=merges,
                 dropout=None,
                 continuing_subword_prefix="",
                 end_of_word_suffix="",
@@ -231,21 +204,11 @@ class MarkupLMTokenizer(TokenizersBackend):
         )
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-
-        sep_token_str = str(sep_token)
-        cls_token_str = str(cls_token)
-        tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep_token_str, processed_vocab.get(sep_token_str, processed_vocab.get("</s>", 2))),
-            cls=(cls_token_str, processed_vocab.get(cls_token_str, processed_vocab.get("<s>", 0))),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
-        )
-
+        self._vocab = vocab
+        self._merges = merges
+        self._tokenizer = tokenizer
         super().__init__(
-            tokenizer_object=tokenizer,
             tags_dict=tags_dict,
-            vocab=vocab,
-            merges=merges,
             errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -263,14 +226,18 @@ class MarkupLMTokenizer(TokenizersBackend):
             only_label_first_subword=only_label_first_subword,
             **kwargs,
         )
-        if trim_offsets:
-            # Not implemented yet, because we need to chain two post processors which is not possible yet
-            # We need to wait for https://github.com/huggingface/tokenizers/pull/1005
-            # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)`
-            # because it's not doing anything
-            raise NotImplementedError(
-                "`trim_offsets=True` is not implemented for MarkupLMTokenizer. Please set it to False."
-            )
+        sep_token_str = str(sep_token)
+        cls_token_str = str(cls_token)
+        cls_token_id = self.cls_token_id
+        sep_token_id = self.sep_token_id
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls_token_str} $A {sep_token_str}",
+            pair=f"{cls_token_str} $A {sep_token_str} $B {sep_token_str}",
+            special_tokens=[
+                (cls_token_str, cls_token_id),
+                (sep_token_str, sep_token_id),
+            ],
+        )
 
         self.tags_dict = tags_dict
 
