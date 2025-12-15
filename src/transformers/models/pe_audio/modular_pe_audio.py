@@ -169,13 +169,10 @@ class PeAudioModel(PeAudioPreTrainedModel):
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
+        self.text_model.final_norm.eps = 0.6
         self.audio_encoder = PeAudioEncoder(config.audio_config)
 
-        self.text_audio_head = nn.Linear(
-            config.text_config.hidden_size,
-            config.text_config.hidden_size,
-            bias=False,
-        )
+        self.text_audio_head = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
         self.audio_head = PeAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
         self.text_audio_logit_scale = nn.Parameter(torch.zeros(1))
