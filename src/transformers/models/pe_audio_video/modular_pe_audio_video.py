@@ -473,16 +473,12 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         # audio
         self.audio_head = PeAudioVideoContrastiveHead(audio_hidden_size, text_hidden_size)
         self.text_audio_head = PeAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
-        self.audio_logit_scale = nn.Parameter(torch.zeros(1))
-        self.audio_logit_bias = nn.Parameter(torch.zeros(1))
         self.text_audio_logit_scale = nn.Parameter(torch.zeros(1))
         self.text_audio_logit_bias = nn.Parameter(torch.zeros(1))
 
         # video
         self.video_head = PeAudioVideoContrastiveHead(video_hidden_size, text_hidden_size)
         self.text_video_head = PeAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
-        self.video_logit_scale = nn.Parameter(torch.zeros(1))
-        self.video_logit_bias = nn.Parameter(torch.zeros(1))
         self.text_video_logit_scale = nn.Parameter(torch.zeros(1))
         self.text_video_logit_bias = nn.Parameter(torch.zeros(1))
 

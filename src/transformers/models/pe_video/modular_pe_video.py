@@ -165,8 +165,8 @@ class PeVideoModel(PeVideoPreTrainedModel):
         self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
         self.video_head = PeVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
 
-        self.video_logit_scale = nn.Parameter(torch.zeros(1))
-        self.video_logit_bias = nn.Parameter(torch.zeros(1))
+        self.text_video_logit_scale = nn.Parameter(torch.zeros(1))
+        self.text_video_logit_bias = nn.Parameter(torch.zeros(1))
 
         self.post_init()
 
@@ -222,7 +222,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
         text_embeds = self.text_video_head(text_embeds)
 
         logits_per_video = video_embeds @ text_embeds.T
-        logits_per_video = logits_per_video * self.video_logit_scale + self.video_logit_bias
+        logits_per_video = logits_per_video * self.text_video_logit_scale + self.text_video_logit_bias
         logits_per_text = logits_per_video.t()
 
         loss = None

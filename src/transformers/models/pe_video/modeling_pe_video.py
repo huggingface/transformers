@@ -186,12 +186,9 @@ class PeVideoEncoderPatchEmbedder(nn.Module):
 
 
 class PeVideoEncoderEmbedder(nn.Module):
-    def __init__(self, config: PeVideoEncoderConfig, _init_vision_model: bool = True):
+    def __init__(self, config: PeVideoEncoderConfig):
         super().__init__()
-        if _init_vision_model:
-            self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
-        else:
-            self.vision_model = None
+        self.vision_model = AutoModelForImageClassification.from_config(config.vision_config)
         self.proj = nn.Linear(config.vision_config.num_labels, config.hidden_size, bias=False)
         self.data_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
@@ -531,9 +528,9 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
     main_input_name = "input_values"
     base_model_prefix = "video_encoder"
 
-    def __init__(self, config: PeVideoEncoderConfig, _init_vision_model: bool = True):
+    def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)
-        self.embedder = PeVideoEncoderEmbedder(config, _init_vision_model=_init_vision_model)
+        self.embedder = PeVideoEncoderEmbedder(config)
         self.patch_embedder = PeVideoEncoderPatchEmbedder(config)
         self.layers = nn.ModuleList(
             [PeVideoEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -581,16 +578,16 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
 
 
 class PeVideoModel(PeVideoPreTrainedModel):
-    def __init__(self, config: PeVideoConfig, _init_vision_model: bool = True):
+    def __init__(self, config: PeVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.video_encoder = PeVideoEncoder(config.video_config, _init_vision_model=_init_vision_model)
+        self.video_encoder = PeVideoEncoder(config.video_config)
 
         self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
         self.video_head = PeVideoContrastiveHead(config.video_config.hidden_size, config.text_config.hidden_size)
 
-        self.video_logit_scale = nn.Parameter(torch.zeros(1))
-        self.video_logit_bias = nn.Parameter(torch.zeros(1))
+        self.text_video_logit_scale = nn.Parameter(torch.zeros(1))
+        self.text_video_logit_bias = nn.Parameter(torch.zeros(1))
 
         self.post_init()
 
@@ -646,7 +643,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
         text_embeds = self.text_video_head(text_embeds)
 
         logits_per_video = video_embeds @ text_embeds.T
-        logits_per_video = logits_per_video * self.video_logit_scale + self.video_logit_bias
+        logits_per_video = logits_per_video * self.text_video_logit_scale + self.text_video_logit_bias
         logits_per_text = logits_per_video.t()
 
         loss = None

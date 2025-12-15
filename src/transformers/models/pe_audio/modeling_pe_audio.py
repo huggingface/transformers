@@ -716,8 +716,8 @@ class PeAudioModel(PeAudioPreTrainedModel):
         self.text_audio_head = PeAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
         self.audio_head = PeAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
-        self.audio_logit_scale = nn.Parameter(torch.zeros(1))
-        self.audio_logit_bias = nn.Parameter(torch.zeros(1))
+        self.text_audio_logit_scale = nn.Parameter(torch.zeros(1))
+        self.text_audio_logit_bias = nn.Parameter(torch.zeros(1))
 
         self.post_init()
 
@@ -772,7 +772,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_embeds = self.text_audio_head(text_embeds)
 
         logits_per_audio = audio_embeds @ text_embeds.T
-        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_audio = logits_per_audio * self.text_audio_logit_scale + self.text_audio_logit_bias
         logits_per_text = logits_per_audio.t()
 
         loss = None
@@ -835,7 +835,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
         text_embeds = self.text_audio_head(text_embeds)
 
         logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
-        logits_per_audio = logits_per_audio * self.audio_logit_scale + self.audio_logit_bias
+        logits_per_audio = logits_per_audio * self.text_audio_logit_scale + self.text_audio_logit_bias
         logits_per_text = logits_per_audio.transpose(0, 1)
 
         loss = None
