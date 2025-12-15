@@ -56,7 +56,7 @@ class HeliumIntegrationTest(unittest.TestCase):
         model_id = "kyutai/helium-1-preview"
         expected_texts = Expectations(
             {
-                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I"],
+                ("rocm", (9, 5)): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I have"],
                 (None, None): ["Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"],
                 ("cuda", 8): ['Hello, today is a great day to start a new project. I have been working on a new project for a while now, and I'],
             }
