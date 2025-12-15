@@ -540,6 +540,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
 
         self.tracker_neck = Sam3VisionNeck(config.detector_config.vision_config)
 
+        self.post_init()
+
     def get_vision_features_for_tracker(self, vision_embeds: torch.Tensor):
         hidden_states = vision_embeds.last_hidden_state
         batch_size = hidden_states.shape[0]
