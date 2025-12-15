@@ -888,6 +888,8 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.post_init()
+
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
         for t, h, w in grid_thw:
