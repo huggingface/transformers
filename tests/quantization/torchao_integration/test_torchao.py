@@ -539,17 +539,17 @@ class TorchAoTest(unittest.TestCase):
             not isinstance(quantized_model.model.layers[0].feed_forward.experts.gate_up_proj, Float8Tensor)
         )
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
- 
+
     def test_compute_module_sizes(self):
         r"""
         Test if we compute the right module sizes needed to generate the device map.
         Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
         Note that `compute_module_sizes` is being used in `get_total_byte_count`
         """
+        from transformers import AutoConfig
         from transformers.integrations.accelerate import compute_module_sizes
         from transformers.modeling_utils import expand_device_map, get_total_byte_count
         from transformers.quantizers import AutoHfQuantizer
-        from transformers import AutoConfig
 
         # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
         # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
@@ -565,7 +565,9 @@ class TorchAoTest(unittest.TestCase):
             total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
 
             # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
-            hf_quantizer = AutoHfQuantizer.from_config(TorchAoConfig(quant_type=Int4WeightOnlyConfig(**self.quant_scheme_kwargs)), pre_quantized=False)
+            hf_quantizer = AutoHfQuantizer.from_config(
+                TorchAoConfig(quant_type=Int4WeightOnlyConfig(**self.quant_scheme_kwargs)), pre_quantized=False
+            )
             hf_quantizer.preprocess_model(model=model, config=model.config)
             quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
@@ -589,6 +591,7 @@ class TorchAoTest(unittest.TestCase):
 
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 2
+
 
 @require_torch_accelerator
 class TorchAoAcceleratorTest(TorchAoTest):
