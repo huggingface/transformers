@@ -308,8 +308,7 @@ def dequantize_and_replace(model, quantization_config=None, dtype=None):
                 weight = weight.to(dtype)
             new_module.weight = torch.nn.Parameter(weight)
             if bias is not None:
-                bias = bias.to(weight.dtype) if dtype is None else bias.to(dtype)
-                new_module.bias = torch.nn.Parameter(bias)
+                new_module.bias = bias
             if hasattr(module, "_hf_hook"):
                 old_hook = module._hf_hook
                 new_hook = _create_accelerate_new_hook(old_hook)
