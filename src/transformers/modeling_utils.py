@@ -282,7 +282,6 @@ def get_state_dict_dtype(state_dict):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
-    print(state_dict)
     for t in state_dict.values():
         if t.is_floating_point():
             return t.dtype
@@ -323,15 +322,12 @@ def load_state_dict(
     """
     # Use safetensors if possible
     if checkpoint_file.endswith(".safetensors"):
-        print(checkpoint_file)
         with safe_open(checkpoint_file, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
                 if map_location == "meta":
                     _slice = f.get_slice(k)
                     k_dtype = _slice.get_dtype()
-                    print("getting dtype")
-                    print(k_dtype)
                     if k_dtype in str_to_torch_dtype:
                         dtype = str_to_torch_dtype[k_dtype]
                     else:
