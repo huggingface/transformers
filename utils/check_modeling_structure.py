@@ -117,7 +117,7 @@ def check_post_init(node: ast.AST, violations: list[str], file_path: str) -> lis
                 # If we did not break, `post_init` was never called
                 else:
                     violations.append(
-                        f"{file_path}:{sub_node.lineno}: `__init__` of a PreTrainedModel does not call `self.post_init`. "
+                        f"{file_path}:{sub_node.lineno}: `__init__` of {node.name} does not call `self.post_init`. "
                         "Please add it at the end of the `__init__` method."
                     )
                 break
