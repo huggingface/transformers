@@ -144,6 +144,12 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
