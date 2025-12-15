@@ -136,7 +136,7 @@ class UMT5Config(PreTrainedConfig):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
+            tie_word_embeddings=True,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
