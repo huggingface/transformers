@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Overview
 
-Transformers provides multiple inference optimization techniques to make models fast, affordable, and accessible. Options include alternative attention mechanisms for reduced memory traffic, code compilation for faster execution, and optimized kernels for throughput. Combine these techniques for maximum performance.
+Transformers provides multiple inference optimization techniques to make models fast, affordable, and accessible. Options include alternative attention mechanisms for reduced memory traffic, code compilation for faster execution, and optimized kernels for throughput. Stack these techniques for maximum performance.
 
 > [!NOTE]
 > Memory and speed are closely related but not the same. Shrinking your memory footprint makes a model "faster" because there is less data to move around. Pure speed optimizations don't always reduce memory and sometimes increase usage. Choose the appropriate optimization based on your use case and hardware.
@@ -33,7 +33,7 @@ Use the table below to pick an optimization technique.
 | [Parallelism](#parallelism) | ✅ | |
 | [Continuous batching](#continuous-batching) | ✅ | |
 
-This guide gives you a quick start on optimization in Transformers.
+This guide gives you a quick start on Transformers optimizations.
 
 ## Compilation
 
@@ -58,7 +58,7 @@ tokenizer.batch_decode(output, skip_special_tokens=True)[0]
 
 ## Attention backends
 
-Alternative [attention backends](./attention_interface) like FlashAttention lower memory traffic. They tile attention computations and avoid large intermediate tensors to reduce memory footprint.
+Alternative [attention backends](./attention_interface) lower memory traffic. For example, FlashAttention tiles attention computations and avoids large intermediate tensors to reduce memory footprint.
 
 Set `attn_implementation` in [`~PreTrainedModel.from_pretrained`] to load an optimized attention backend.
 
@@ -131,19 +131,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", tp_plan="auto")
 print(model._tp_plan)
-```
-
-[Expert parallelism](./expert_parallelism) distributes experts across devices for mixture-of-experts (MoE) models. Set `enable_expert_parallel` in [`DistributedConfig`] to enable it.
-
-```py
-from transformers import AutoModelForCausalLM
-from transformers.distributed.configuration_utils import DistributedConfig
-
-distributed_config = DistributedConfig(enable_expert_parallel=True)
-model = AutoModelForCausalLM.from_pretrained(
-    "openai/gpt-oss-120b",
-    distributed_config=distributed_config,
-)
 ```
 
 ## Continuous batching
