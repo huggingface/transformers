@@ -46,8 +46,7 @@ python3 run_qa.py \
  --num_train_epochs 2  \
  --max_seq_length 384 \
  --doc_stride 128  \
- --output_dir /tmp/debug_squad/ \
- --no_cuda
+ --output_dir /tmp/debug_squad/
 ```
 
 </hfoption>
@@ -83,7 +82,7 @@ python3 run_qa.py \
  --max_seq_length 384 \
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
- --no_cuda \
+ --use_cpu \
  --bf16
 ```
 
@@ -166,7 +165,6 @@ spec:
                     --max_seq_length 384 \
                     --doc_stride 128 \
                     --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
-                    --no_cuda \
                     --bf16;
               env:
               - name: LD_PRELOAD

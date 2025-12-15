@@ -1530,8 +1530,10 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
             if self.bf16 or self.bf16_full_eval:
-                if not self.use_cpu and not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
-                    error_message = "Your setup doesn't support bf16/gpu."
+                if (
+                    not self.use_cpu and not is_torch_bf16_gpu_available() and not is_torch_xla_available()
+                ):  # added for tpu support
+                    error_message = "Your setup doesn't support bf16/gpu. You need to assign use_cpu if you want to train the model on CPU"
                     if is_torch_cuda_available():
                         error_message += " You need Ampere+ GPU with cuda>=11.0"
                     # gpu
