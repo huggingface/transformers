@@ -769,7 +769,8 @@ class IsaacRotaryEmbedding(nn.Module):
 
         with torch.no_grad():
             pos = position_ids.clone()
-            not_spatial = modality_tensor != VisionType.image.value
+            image_value = VisionType.image.value if VisionType is not None else 1
+            not_spatial = modality_tensor != image_value
             if not_spatial.any():
                 data_1d = pos[not_spatial][..., 0].unsqueeze(-1)
                 pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
@@ -1156,10 +1157,10 @@ class IsaacModel(PreTrainedModel):
         tensor_stream: Optional[TensorStream] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        modality_tensor: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1175,6 +1176,11 @@ class IsaacModel(PreTrainedModel):
             values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
             omitted.
         """
+
+        modality_tensor = kwargs.pop("modality_tensor", None)
+        if modality_tensor is not None:
+            modality_tensor = modality_tensor.to(dtype=torch.long)
+        text_value = TextType.text.value if TextType is not None else 0
 
         # Get inputs
         if tensor_stream is not None and inputs_embeds is not None:
@@ -1193,9 +1199,20 @@ class IsaacModel(PreTrainedModel):
             if modality_tensor is None:
                 batch_size, seq_length = input_ids.shape
                 modality_tensor = torch.full(
-                    (batch_size, seq_length), TextType.text.value, device=input_ids.device, dtype=torch.long
+                    (batch_size, seq_length), text_value, device=input_ids.device, dtype=torch.long
                 )
-        elif inputs_embeds is None:
+        elif inputs_embeds is not None:
+            # Inputs provided directly as embeddings (no input_ids/tensor_stream)
+            if modality_tensor is None:
+                batch_size, seq_length = inputs_embeds.shape[:2]
+                modality_tensor = torch.full(
+                    (batch_size, seq_length), text_value, device=inputs_embeds.device, dtype=torch.long
+                )
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
+                )
+        else:
             raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
 
         # Ensure cache exists when requested
@@ -1215,8 +1232,17 @@ class IsaacModel(PreTrainedModel):
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
-            else:
+            elif input_ids is not None:
                 position_ids = compute_position_ids_input_ids(input_ids)
+            else:
+                batch_size, seq_length = inputs_embeds.shape[:2]
+                dummy_ids = torch.zeros((batch_size, seq_length), device=inputs_embeds.device, dtype=torch.long)
+                position_ids = compute_position_ids_input_ids(dummy_ids)
+
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
+            )
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(
@@ -1247,6 +1273,7 @@ class IsaacModel(PreTrainedModel):
 
         # Initialize hidden states
         hidden_states = inputs_embeds
+        all_attentions = [] if output_attentions else None
 
         for decoder_layer in self.text_model.layers:
             layer_attention_mask = (
@@ -1260,10 +1287,16 @@ class IsaacModel(PreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
+                output_attentions=output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
+            if isinstance(layer_outputs, tuple):
+                hidden_states = layer_outputs[0]
+                if output_attentions:
+                    all_attentions.append(layer_outputs[1])
+            else:
+                hidden_states = layer_outputs
 
         # Final layer norm
         hidden_states = self.text_model.norm(hidden_states)
@@ -1272,7 +1305,7 @@ class IsaacModel(PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=(hidden_states,),
-            attentions=None,
+            attentions=tuple(all_attentions) if output_attentions else None,
         )
 
 
@@ -1330,6 +1363,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1366,12 +1400,25 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
                 batch_size = input_ids.shape[0]
                 rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
             position_ids = position_ids.add(rope_delta)
+        elif position_ids is None and inputs_embeds is not None:
+            batch_size, seq_len = inputs_embeds.shape[:2]
+            dummy_ids = torch.zeros((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+            position_ids = compute_position_ids_input_ids(dummy_ids)
+
+        text_value = TextType.text.value if TextType is not None else 0
 
         if tensor_stream is not None:
             modality_tensor = modality_mask(tensor_stream)
-        else:
+        elif input_ids is not None:
             batch_size, seq_len = input_ids.shape
-            modality_tensor = torch.empty(batch_size, seq_len, device=position_ids.device).fill_(TextType.text.value)
+            modality_tensor = torch.full(
+                (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
+            )
+        else:
+            batch_size, seq_len = inputs_embeds.shape[:2]
+            modality_tensor = torch.full(
+                (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
+            )
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1382,6 +1429,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
@@ -1400,7 +1448,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=None,
+            attentions=outputs.attentions if output_attentions else None,
         )
 
     def set_input_embeddings(self, value: nn.Module) -> None:
