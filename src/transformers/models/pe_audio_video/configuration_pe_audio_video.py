@@ -28,7 +28,8 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PeAudioVideoEncoderModel`]. It is used to instantiate a
     PeAudioVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of TODO.
+    with the defaults will yield a similar configuration to that of pe-av-large.
+    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -79,7 +80,7 @@ class PeAudioVideoEncoderConfig(PreTrainedConfig):
     >>> # Initializing a PeAudioVideoEncoder style configuration
     >>> configuration = PeAudioVideoEncoderConfig()
 
-    >>> # Initializing a model from the TODO style configuration
+    >>> # Initializing a model from the pe-av-large style configuration
     >>> model = PeAudioVideoEncoder(configuration)
 
     >>> # Accessing the model configuration
@@ -150,7 +151,8 @@ class PeAudioVideoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PeAudioVideoModel`]. It is used to instantiate a
     PeAudioVideoModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of TODO.
+    with the defaults will yield a similar configuration to that of pe-av-large.
+    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -168,7 +170,7 @@ class PeAudioVideoConfig(PretrainedConfig):
     >>> # Initializing a PeAudioVideoModel style configuration
     >>> configuration = PeAudioVideoConfig()
 
-    >>> # Initializing a model from the TODO style configuration
+    >>> # Initializing a model from the pe-av-large style configuration
     >>> model = PeAudioModel(configuration)
 
     >>> # Accessing the model configuration
