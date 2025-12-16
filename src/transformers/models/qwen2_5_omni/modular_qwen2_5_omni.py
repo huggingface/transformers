@@ -42,7 +42,7 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
-from ..modeling_llama import LlamaRotaryEmbedding, rotate_half
+from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
