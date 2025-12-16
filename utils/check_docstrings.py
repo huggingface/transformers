@@ -189,6 +189,7 @@ OBJECTS_TO_IGNORE = {
     "CanineTokenizer",
     "ChineseCLIPTextModel",
     "ClapTextConfig",
+    "CompressedTensorsConfig",
     "ConditionalDetrConfig",
     "ConditionalDetrImageProcessor",
     "ConvBertConfig",
