@@ -43,6 +43,7 @@ else:
     METHOD = None
     hf_select_quant_linear_v2 = None
 
+
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):
         with self.assertRaises(ValueError):
