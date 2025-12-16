@@ -21,6 +21,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from huggingface_hub import hf_hub_download, snapshot_download
+from tokenizers import AddedToken
 
 from transformers import (
     AutoTokenizer,
@@ -73,7 +74,6 @@ ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
 ]
 
 TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
-TOKENIZER_FILE = "tokenizer.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 DEFAULT_CHAT_TEMPLATE = """
 {%- set image_count = namespace(value=0) -%}
@@ -260,10 +260,11 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
         add_bos_token=False,
         add_prefix_space=False,
         chat_template=DEFAULT_CHAT_TEMPLATE,
-        legacy=True,
     )
     hf_tok.model_max_length = 131072
     hf_tok.init_kwargs.pop("auto_map", None)  # remote specific
+    # SPM special added but we want to treat them as non-special
+    hf_tok.add_tokens([AddedToken(f"{i}", normalized=False, special=False) for i in range(10)])
     hf_tok.save_pretrained(TMP_TOKENIZER_DIR)
 
     # Manipulate special tokens and add video token
@@ -275,7 +276,14 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
     for i in range(10):
         tokenizer_config["extra_special_tokens"].remove(f"{i}")
     # Removed from list, re-add
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_PLACEHOLDER|>")
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_START|>")
+    tokenizer_config["extra_special_tokens"].append("<|IMAGE_END|>")
     tokenizer_config["extra_special_tokens"].append("<|VIDEO_PLACEHOLDER|>")
+    tokenizer_config["extra_special_tokens"].append("<|VIDEO_START|>")
+    tokenizer_config["extra_special_tokens"].append("<|VIDEO_END|>")
+    tokenizer_config["extra_special_tokens"].append("<think>")
+    tokenizer_config["extra_special_tokens"].append("</think>")
     # To be called via `.xxx_token`
     tokenizer_config |= {
         "image_token": "<|IMAGE_PLACEHOLDER|>",
@@ -286,12 +294,6 @@ def convert_tokenizer(original_tokenizer_path, save_dir):
         "video_start_token": "<|VIDEO_START|>",
     }
     write_json(tokenizer_config, TMP_TOKENIZER_DIR, TOKENIZER_CONFIG_FILE)
-
-    # Originally added as "added" tokens which will always be interpreted as special tokens
-    # BUT we want to treat them as non-special tokens during decode, i.e. this is a workaround
-    tokenizer_file = load_json(TMP_TOKENIZER_DIR, TOKENIZER_FILE)
-    del tokenizer_file["added_tokens"][3:13]
-    write_json(tokenizer_file, TMP_TOKENIZER_DIR, TOKENIZER_FILE)
 
     # Reload and save to get correct formatting
     tokenizer = AutoTokenizer.from_pretrained(TMP_TOKENIZER_DIR)
