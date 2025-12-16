@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
-from ..dac.modeling_dac import DacEncoder, Snake1d
+from ..dac.modeling_dac import DacEncoder, Snake1d, DacEncoderBlock
 from ..pe_audio_video.modeling_pe_audio_video import (
     PeAudioVideoContrastiveHead,
     PeAudioVideoEncoder,
@@ -34,7 +34,15 @@ from ..pe_audio_video.modeling_pe_audio_video import (
 from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
 
-class PeAudioDacEncoder(DacEncoder): ...
+class PeAudioDacEncoderBlock(DacEncoderBlock):
+    def __init__(self, config: PeAudioEncoderConfig):
+        super().__init__(config)
+
+
+class PeAudioDacEncoder(DacEncoder):
+    def __init__(self, config: PeAudioEncoderConfig):
+        super().__init__(config)
+
 
 
 class PeAudioEncoderEmbedder(nn.Module):
@@ -64,6 +72,9 @@ class PeAudioEncoderEmbedder(nn.Module):
 
 
 class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
+
+
+
 
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
