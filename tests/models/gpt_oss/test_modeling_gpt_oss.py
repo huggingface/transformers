@@ -31,9 +31,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
+    require_kernels,
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -62,22 +65,38 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
+    @require_kernels
+    @require_flash_attn
+    @require_torch_gpu
     def test_initialization_raises_error_for_flash_attn(self):
         """
         Tests that initializing the model with unsupported Flash Attention implementations raises a ValueError,
         but allows the specific vllm kernel.
         """
 
-        config = self.model_tester.get_config()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
         config._attn_implementation = "flash_attention_2"
-        with self.assertRaisesRegex(ValueError, "GPT-OSS models do not support"):
-            GptOssModel(config)
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            model = GptOssModel(config)
 
         config._attn_implementation = "kernels-community/vllm-flash-attn3"
-        try:
-            GptOssModel(config)
-        except ValueError:
-            self.fail("GptOssModel raised ValueError unexpectedly with vllm-flash-attn3!")
+        model = GptOssModel(config).to(torch_device)
+
+        model.eval()
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
+        model.config._attn_implementation = "flash_attention_2"
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            with torch.no_grad():
+                model(**inputs_dict)
+
+        model.config._attn_implementation = "kernels-community/vllm-flash-attn3"
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
