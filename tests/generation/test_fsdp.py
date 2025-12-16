@@ -147,7 +147,8 @@ class TestFSDPGenericTaskModel(TestCasePlus):
             from torch.distributed.fsdp import fully_shard
             from transformers import AutoModelForTokenClassification
 
-            accelerator_type = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+            current_accelerator = torch.accelerator.current_accelerator(check_availabe=True)
+            accelerater_type = "cpu" if current_accelerator is None else current_accelerator.type
             torch_accelerator_module = getattr(torch, accelerator_type, torch.cuda)
 
             backend = "gloo"
