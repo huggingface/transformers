@@ -79,7 +79,10 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if dtype != torch.bfloat16:
-            raise ValueError(f"Invalid `dtype` {dtype}. fp_quant quantization only supports `dtype=torch.bfloat16`.")
+            logger.warning_once(
+                f"Setting dtype to {dtype}, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
+            )
+            dtype = torch.bfloat16
         return dtype
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
