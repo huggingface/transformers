@@ -114,6 +114,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab / merges from the tokenizer file to pass them to __init__
             processor = TokenizerFast.from_file(fast_tokenizer_file).post_processor
+            tokenizer_object = TokenizerFast.from_file(fast_tokenizer_file)
+            # Preserve original tokenizer for ByteLevel decoder restoration. Some models (e.g., Mistral/Ministral)
+            # use ByteLevel encoding in tokenizer.json but are loaded via tokenizer classes (e.g., LlamaTokenizer)
+            # that have custom __init__ methods that overwrite the ByteLevel decoder with Metaspace decoder.
+            if "ByteLevel" in str(tokenizer_object.decoder):
+                local_kwargs["_original_tokenizer_object"] = tokenizer_object
             with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
                 tokenizer_json = json.load(tokenizer_handle)
             vocab = tokenizer_json.get("model", {}).get("vocab", None)
@@ -230,6 +236,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+        # Pop _original_tokenizer_object to prevent it from being serialized to JSON
+        # This is set by convert_to_native_format for ByteLevel decoder restoration
+        original_tokenizer_object = kwargs.pop("_original_tokenizer_object", None)
         # Note: added_tokens_decoder is NOT popped - it's passed to super().__init__() for processing
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden
@@ -297,6 +306,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+
+        # Restore ByteLevel decoder/pre_tokenizer/post_processor if preserved from tokenizer.json
+        # This must happen right after super().__init__() to ensure it's applied before tokenizer is used
+        if original_tokenizer_object is not None:
+            self._tokenizer.decoder = original_tokenizer_object.decoder
 
         if vocab_file is not None:
             self.vocab_file = vocab_file
