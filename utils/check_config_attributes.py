@@ -67,6 +67,25 @@ SPECIAL_CASES_TO_ALLOW = {
     "Qwen2_5OmniTalkerConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen3Config": ["max_window_layers", "use_sliding_window"],  # now use `layer_types` instead
     "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
+    # MossTTSD uses Qwen3Model internally, so it needs the same config attributes
+    "MossTTSDConfig": [
+        "attention_bias",
+        "attention_dropout",
+        "head_dim",
+        "hidden_act",
+        "intermediate_size",
+        "layer_types",
+        "max_position_embeddings",
+        "max_window_layers",
+        "num_attention_heads",
+        "num_hidden_layers",
+        "num_key_value_heads",
+        "rms_norm_eps",
+        "rope_scaling",
+        "sliding_window",
+        "tie_word_embeddings",
+        "use_sliding_window",
+    ],
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],

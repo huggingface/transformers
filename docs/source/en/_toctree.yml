@@ -915,6 +915,8 @@
         title: Moonshine
       - local: model_doc/moshi
         title: Moshi
+      - local: model_doc/moss_ttsd
+        title: MOSS-TTSD
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody

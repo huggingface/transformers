@@ -80,6 +80,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xcodec", "DacFeatureExtractor"),
+        ("xy_tokenizer", "XYTokenizerFeatureExtractor"),
     ]
 )
 
