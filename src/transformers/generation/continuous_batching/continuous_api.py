@@ -760,29 +760,34 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals: (optional) Number of intervals used to pad the keys/values dimension
             allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
         """
-        # Reloade paged version if necessary
+        # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
             model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
+        # Internal arguments
         self.model = model.eval()
-        generation_config = model.generation_config if generation_config is None else generation_config
-        self.generation_config = generation_config
-        self.input_queue = queue.Queue(maxsize=max_queue_size)
-        self.output_queue = queue.Queue()
-        self.stop_event = threading.Event()
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
-        self._generation_thread = None
-        self._request_counter = 0
-        self._request_lock = threading.Lock()
-        self.model.generation_config.top_p = None
-        self.do_sample = getattr(generation_config, "do_sample", True)
-        self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
-        self.batch_processor: ContinuousBatchProcessor | None = None
         self._allow_block_sharing = allow_block_sharing
         self._use_prefix_sharing = allow_block_sharing  # approximation until the cache is created
 
+        self.input_queue = queue.Queue(maxsize=max_queue_size)
+        self.output_queue = queue.Queue()
+        self.stop_event = threading.Event()
+        self.batch_processor: ContinuousBatchProcessor | None = None
+        self._generation_thread = None
+        self._request_counter = 0
+        self._request_lock = threading.Lock()
+
+        # Generation config related arguments
+        generation_config = model.generation_config if generation_config is None else generation_config
+        self.generation_config = generation_config
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
+        self.do_sample = getattr(generation_config, "do_sample", True)
+        self.logit_processor = self.model._get_logits_processor(generation_config)
+
+        # self.model.generation_config.top_p = None NOTE: figure out why this was here
+
+        # Cuda graph behavior is determined below using either user-specified arguments or heuristics
         self.use_cuda_graph = self._decide_use_cuda_graphs(
             use_cuda_graph=getattr(generation_config, "use_cuda_graph", None),
             num_q_padding_intervals=num_q_padding_intervals,
@@ -796,6 +801,7 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals if num_kv_padding_intervals > 0 else NUM_KV_PADDING_INTERVALS
         )
 
+        # Log probability generation is not supported yet (TODO)
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
 
@@ -1227,23 +1233,24 @@ class ContinuousMixin:
         # Initialize manager with the batch inputs
         results = {}
         num_requests = len(inputs)
-        with (
-            self.continuous_batching_context_manager(
-                generation_config=generation_config,
-                num_q_cuda_graphs=num_q_padding_intervals,
-                num_kv_cuda_graphs=num_kv_padding_intervals,
-                allow_block_sharing=allow_block_sharing,
-                block=True,
-                timeout=5,
-            ) as manager,
-            logging_redirect_tqdm([logger]),
-            tqdm(
-                total=num_requests,
-                disable=(not progress_bar),
-                desc=f"Solving {num_requests} requests",
-                unit="request",
-            ) as pbar,
-        ):
+        # Prepare context managers for the main loop
+        manager_cm = self.continuous_batching_context_manager(
+            generation_config=generation_config,
+            num_q_cuda_graphs=num_q_padding_intervals,
+            num_kv_cuda_graphs=num_kv_padding_intervals,
+            allow_block_sharing=allow_block_sharing,
+            block=True,
+            timeout=5,
+        )
+        logging_cm = logging_redirect_tqdm([logger])
+        pbar_cm = tqdm(
+            total=num_requests,
+            disable=(not progress_bar),
+            desc=f"Solving {num_requests} requests",
+            unit="request",
+        )
+        # Main loop
+        with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
                 manager.add_requests(
                     inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
