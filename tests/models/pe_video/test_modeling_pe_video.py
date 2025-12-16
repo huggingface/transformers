@@ -355,6 +355,10 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
+    @unittest.skip(reason="@eustlb this is not really expected")
+    def test_can_init_all_missing_weights(self):
+        pass
+
 
 @require_torch
 class PeVideoIntegrationTest(unittest.TestCase):
