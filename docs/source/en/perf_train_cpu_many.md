@@ -96,7 +96,7 @@ Distributed training with CPUs can also be deployed to a Kubernetes cluster with
 1. Ensure you have access to a Kubernetes cluster with [Kubeflow](https://www.kubeflow.org/docs/started/installing-kubeflow/) installed.
 1. Install and configure [kubectl](https://kubernetes.io/docs/tasks/tools) to interact with the cluster.
 1. Set up a [PersistentVolumeClaim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) to store datasets and model files. There are multiple options to choose from, including a [StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) or a cloud storage bucket.
-1. Set up a Docker container for the training script and all required dependencies such as PyTorch, Transformers, and OpenSSH to facilitate communicattion between containers.
+1. Set up a Docker container for the training script and all required dependencies such as PyTorch, Transformers, and OpenSSH to facilitate communication between containers.
 
 The example Dockerfile below uses a base image that supports distributed training with CPUs, and extracts Transformers to the `/workspace` directory to include the training scripts in the image. The image needs to be built and copied to the clusters nodes or pushed to a container registry prior to deployment.
 
