@@ -1419,7 +1419,7 @@ class MT5ForTokenClassification(MT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
- 
+
     @can_return_tuple
     @auto_docstring
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.forward with T5->MT5
