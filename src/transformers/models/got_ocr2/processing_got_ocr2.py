@@ -108,6 +108,10 @@ class GotOcr2Processor(ProcessorMixin):
         self.img_pad_token = "<imgpad>"
         self.image_token = "<imgpad>"  # keep the above for BC, but we need to call it `image_token`
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_ids = [
+            tokenizer.convert_tokens_to_ids(token)
+            for token in [self.image_token, self.img_pad_token, self.img_end_token]
+        ]
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
     def _make_list_of_inputs(self, images, text, box, color, multi_page):
@@ -241,7 +245,7 @@ class GotOcr2Processor(ProcessorMixin):
                     + self.message_start_token
                     + "user\n"
                     + self.img_start_token
-                    + self.img_pad_token * num_image_tokens * num_patches
+                    + self.image_token * num_image_tokens * num_patches
                     + self.img_end_token
                     + "\n"
                     + query
@@ -252,8 +256,15 @@ class GotOcr2Processor(ProcessorMixin):
                 text.append(prompt)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 

@@ -19,6 +19,8 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 import os
 from typing import Union
 
+import numpy as np
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -42,6 +44,7 @@ class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
             "return_token_type_ids": False,
             "return_length": False,
             "verbose": True,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {},
     }
@@ -73,11 +76,12 @@ class InstructBlipProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "image_token"):
-            self.image_token = AddedToken("<image>", normalized=False, special=True)
-            tokenizer.add_tokens([self.image_token], special_tokens=True)
+            self.image_token = "<image>"
+            tokenizer.add_tokens([AddedToken(self.image_token, normalized=False, special=True)], special_tokens=True)
         else:
             self.image_token = tokenizer.image_token
         self.num_query_tokens = num_query_tokens
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
 
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 
@@ -113,6 +117,7 @@ class InstructBlipProcessor(ProcessorMixin):
         )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_tensors", None)
         encoding = {}
         if text is not None:
             if isinstance(text, str):
@@ -131,7 +136,7 @@ class InstructBlipProcessor(ProcessorMixin):
 
             if images is not None:
                 # Image tokens should not be padded/truncated or prepended with special BOS token
-                image_tokens = self.image_token.content * self.num_query_tokens
+                image_tokens = self.image_token * self.num_query_tokens
                 output_kwargs["text_kwargs"]["add_special_tokens"] = False
                 output_kwargs["text_kwargs"]["padding"] = False
                 output_kwargs["text_kwargs"]["truncation"] = False
@@ -143,6 +148,12 @@ class InstructBlipProcessor(ProcessorMixin):
         if images is not None:
             image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
+
+        if text is not None and return_mm_token_type_ids:
+            array_ids = np.array(encoding["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            encoding["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         # Cast to desired return tensors type
         encoding = BatchFeature(encoding, tensor_type=return_tensors)

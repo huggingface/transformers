@@ -186,7 +186,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
             patches_height_width = int(math.sqrt(self.num_image_tokens))
             pooled_height_width = math.ceil(patches_height_width / 2)
-            num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
+            num_video_tokens = num_frames * pooled_height_width * pooled_height_width  # + 1  # +1 for newline token
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
@@ -198,6 +198,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs}, tensor_type=return_tensors)
@@ -295,8 +296,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 The input sizes formatted as (height, width) per each image.
             video_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (list[int], *optional*):
-                The input length formatted as per each audio.
+
         Returns:
             dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
@@ -326,6 +326,16 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            batch_num_video_tokens = []
+            for video_size in video_sizes:
+                num_frames, height, width = video_size
+                patches_height_width = int(math.sqrt(self.num_image_tokens))
+                pooled_height_width = math.ceil(patches_height_width / 2)
+                num_video_tokens = (num_frames * pooled_height_width * pooled_height_width) + 1  # +1 for newline token
+                batch_num_video_tokens.append(num_video_tokens)
+            vision_data.update({"num_video_tokens": num_video_tokens})
 
         return MultiModalData(**vision_data)
 

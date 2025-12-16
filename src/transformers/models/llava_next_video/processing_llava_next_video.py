@@ -37,6 +37,7 @@ class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "common_kwargs": {
             "return_tensors": "pt",
@@ -216,8 +217,16 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             text = prompt_strings
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
@@ -265,12 +274,15 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         newline_features = current_height
         return (unpadded_features, newline_features)
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
             image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
@@ -299,6 +311,15 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            batch_num_video_tokens = []
+            for video_size in video_sizes:
+                num_frames, height, width = video_size
+                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+                num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+                batch_num_video_tokens.append(num_video_tokens)
+            vision_data.update({"num_video_tokens": num_video_tokens})
 
         return MultiModalData(**vision_data)
 

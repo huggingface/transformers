@@ -57,6 +57,7 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "padding_side": "left",
+            "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {
             "seconds_per_chunk": 2.0,
@@ -207,11 +208,25 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 seconds_per_chunk=seconds_per_chunk,
             )
 
-        texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(texts_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[
+                np.isin(array_ids, [self.video_token_id, self.vision_eos_token, self.vision_bos_token])
+            ] = 2
+            mm_token_type_ids[
+                np.isin(array_ids, [self.audio_token_id, self.audio_bos_token, self.audio_eos_token])
+            ] = 3
+            texts_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(
             data={**texts_inputs, **images_inputs, **videos_inputs, **audio_inputs},
-            tensor_type=kwargs.get("return_tensors"),
+            tensor_type=return_tensors,
         )
 
     def replace_multimodal_special_tokens(

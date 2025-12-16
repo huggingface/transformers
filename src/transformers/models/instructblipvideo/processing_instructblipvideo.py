@@ -17,23 +17,41 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 """
 
 import os
-from typing import Optional, Union
+from typing import Union
+
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     AddedToken,
-    PaddingStrategy,
     PreTokenizedInput,
     TextInput,
-    TruncationStrategy,
 )
-from ...utils import TensorType, logging
+from ...utils import logging
 from ...video_utils import VideoInput
 from ..auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
+
+
+class InstructBlipVideoProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+            "return_mm_token_type_ids": False,
+        },
+        "images_kwargs": {},
+    }
 
 
 class InstructBlipVideoProcessor(ProcessorMixin):
@@ -62,32 +80,19 @@ class InstructBlipVideoProcessor(ProcessorMixin):
 
     def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         if not hasattr(tokenizer, "video_token"):
-            self.video_token = AddedToken("<video>", normalized=False, special=True)
-            tokenizer.add_tokens([self.video_token], special_tokens=True)
+            self.video_token = "<video>"
+            tokenizer.add_tokens([AddedToken(self.video_token, normalized=False, special=True)], special_tokens=True)
         else:
             self.video_token = tokenizer.video_token
         self.num_query_tokens = num_query_tokens
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         super().__init__(video_processor, tokenizer, qformer_tokenizer)
 
     def __call__(
         self,
         images: VideoInput = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        **kwargs: Unpack[InstructBlipVideoProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`InstructBlipVideoImageProcessor.__call__`] method to prepare image(s) or video(s) for the model, and
@@ -98,6 +103,19 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify at least one of images or text.")
 
+        output_kwargs = self._merge_kwargs(
+            InstructBlipVideoProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        # BC for explicit return_tensors
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["return_mm_token_type_ids"].pop("return_mm_token_type_ids", None)
+        max_length = output_kwargs["text_kwargs"].pop("max_length", None)
+        if max_length is not None:
+            output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
+
         encoding = {}
         if text is not None:
             if isinstance(text, str):
@@ -105,70 +123,31 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-            qformer_text_encoding = self.qformer_tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
+            qformer_text_encoding = self.qformer_tokenizer(text=text, **output_kwargs["text_kwargs"])
             encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
-            # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
-            # InstrucBLIP works with 4 frames only
-            if max_length is not None:
-                max_length -= self.num_query_tokens
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=None,  # required to concatenate below
-                **kwargs,
-            )
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
             if images is not None:
-                video_tokens = self.video_token.content * self.num_query_tokens * 4
-                video_text_encoding = self.tokenizer(
-                    video_tokens,
-                    add_special_tokens=False,  # required to concatenate below
-                    return_attention_mask=return_attention_mask,
-                    return_overflowing_tokens=return_overflowing_tokens,
-                    return_special_tokens_mask=return_special_tokens_mask,
-                    return_offsets_mapping=return_offsets_mapping,
-                    return_token_type_ids=return_token_type_ids,
-                    return_length=return_length,
-                    return_tensors=None,
-                )
+                video_tokens = self.video_token * self.num_query_tokens * 4
+                output_kwargs["text_kwargs"]["add_special_tokens"] = False
+                output_kwargs["text_kwargs"]["padding"] = False
+                output_kwargs["text_kwargs"]["truncation"] = False
+                video_text_encoding = self.tokenizer(video_tokens, **output_kwargs["text_kwargs"])
                 for k in text_encoding:
                     text_encoding[k] = [video_text_encoding[k] + sample for sample in text_encoding[k]]
             encoding.update(text_encoding)
 
         if images is not None:
-            image_encoding = self.video_processor(images, return_tensors=return_tensors)
+            image_encoding = self.video_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
+
+        if text is not None and return_mm_token_type_ids:
+            array_ids = np.array(encoding["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
+            encoding["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
