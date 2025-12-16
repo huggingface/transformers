@@ -881,6 +881,8 @@
     - sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/pe_audio
+        title: PE Audio
       - local: model_doc/bark
         title: Bark
       - local: model_doc/clap
@@ -971,6 +973,8 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
+      - local: model_doc/pe_video
+        title: PE Video
       title: Video models
     - sections:
       - local: model_doc/align
@@ -1187,6 +1191,8 @@
         title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
       title: Multimodal models
     - sections:
       - local: model_doc/decision_transformer
