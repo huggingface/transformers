@@ -16,7 +16,6 @@
 
 import copy
 import math
-from collections.abc import Callable
 from typing import Any, Optional, Union
 
 import torch
@@ -35,19 +34,22 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    TransformersKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
-    can_return_tuple,
     logging,
 )
-from ..utils.generic import OutputRecorder, check_model_inputs
 from .configuration_longt5 import LongT5Config
+
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -314,59 +316,25 @@ class LongT5LayerFF(nn.Module):
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
-# Copied from transformers.models.t5.modeling_t5.eager_attention_forward
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
-    if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->LongT5
 class LongT5Attention(nn.Module):
     def __init__(
         self,
-        config: MT5Config,
+        config: LongT5Config,
         has_relative_attention_bias=False,
         layer_idx: Optional[int] = None,
-        is_causal: bool = False,
     ):
         super().__init__()
-        self.config = config
         self.is_decoder = config.is_decoder
-        self.is_causal = is_causal
-        self.scaling = 1.0
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.d_model
-        self.head_dim = config.d_kv
+        self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.head_dim
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
         self.layer_idx = layer_idx
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
@@ -461,34 +429,34 @@ class LongT5Attention(nn.Module):
         position_bias=None,
         past_key_values=None,
         query_length=None,
+        use_cache=False,
+        output_attentions=False,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs],
     ):
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
-        # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        query_states = self.q(hidden_states)
+        query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
-
-        # get query proj
-        query_states = self.q(hidden_states).view(*q_input_shape).transpose(1, 2)
-
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
-                else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+        if isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
+            if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
+                curr_past_key_values = past_key_values.cross_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_past_key_values = past_key_values.self_attention_cache
+        else:
+            curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_values is not None and is_updated:
@@ -498,8 +466,8 @@ class LongT5Attention(nn.Module):
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
-            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
-            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+            key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+            value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -511,65 +479,53 @@ class LongT5Attention(nn.Module):
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
 
+        # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        scores = torch.matmul(query_states, key_states.transpose(3, 2))
+
         if position_bias is None:
-            q_length = query_states.shape[-2]
-            kv_length = key_states.shape[-2]
+            key_length = key_states.shape[-2]
             # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
             real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, q_length, kv_length), device=query_states.device, dtype=query_states.dtype
+                    (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    real_seq_length, kv_length, device=query_states.device, cache_position=cache_position
+                    real_seq_length, key_length, device=scores.device, cache_position=cache_position
                 )
-                position_bias = position_bias[:, :, -q_length:, :]
+                position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
-                if mask.dtype == torch.bool:
-                    min_dtype = torch.finfo(query_states.dtype).min
-                    # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-                    mask = torch.where(
-                        mask, torch.tensor(0.0, device=mask.device, dtype=query_states.dtype), min_dtype
-                    )
+                causal_mask = mask[:, :, :, : key_states.shape[-2]]
+                position_bias = position_bias + causal_mask
 
-                mask = mask[:, :, :, : key_states.shape[-2]]
-                position_bias = position_bias + mask
+        position_bias_masked = position_bias
+        scores += position_bias_masked
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    f"Relative bias attention is only supported by `eager` and `sdpa` but found {self.config._attn_implementation}."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            position_bias,  # position bias acts as mask
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        attn_output = torch.matmul(attn_weights, value_states)
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, -1, self.inner_dim)
         attn_output = self.o(attn_output)
-        return attn_output, position_bias, attn_weights
+
+        outputs = (attn_output, position_bias)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
 
 
 class LongT5LocalAttention(nn.Module):
-    def __init__(self, config: LongT5Config, has_relative_attention_bias: bool = False,) -> None:
+    def __init__(self, config: LongT5Config, has_relative_attention_bias: bool = False) -> None:
         super().__init__()
-        self.config = config
         self.is_decoder = config.is_decoder
-        self.is_causal = False
-        self.scaling = 1.0
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -669,7 +625,7 @@ class LongT5LocalAttention(nn.Module):
         hidden_states,
         mask=None,
         position_bias=None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -695,6 +651,10 @@ class LongT5LocalAttention(nn.Module):
         key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
         value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
 
+        # Compute scores
+        scores = torch.einsum(
+            "...qhd,...khd->...hqk", query_states, key_states
+        )  # (batch_size, num_block, n_heads, block_len, 3 * block_len)
 
         if position_bias is None:
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
@@ -713,37 +673,31 @@ class LongT5LocalAttention(nn.Module):
                 # We need to adjust position bias shape to be sum with mask
                 position_bias = position_bias + mask.transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    f"Relative bias attention is only supported by `eager` and `sdpa` but found {self.config._attn_implementation}."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        scores += position_bias
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            position_bias,  # position bias acts as mask
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
+        attn_weights = attn_weights.type(value_states.dtype)
+        attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
+        attn_output = attn_output[:, :seq_length, :]
+        attn_output = self.o(attn_output)
+
+        outputs = (
+            attn_output,
+            position_bias,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-        attn_output = self.o(attn_output)
-        return attn_output, position_bias, attn_weights
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
 
 
 class LongT5TransientGlobalAttention(nn.Module):
     def __init__(self, config: LongT5Config, has_relative_attention_bias: bool = False) -> None:
         super().__init__()
-        self.config = config
         self.is_decoder = config.is_decoder
-        self.is_causal = False
-        self.scaling = 1.0
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -868,7 +822,7 @@ class LongT5TransientGlobalAttention(nn.Module):
         hidden_states,
         mask=None,
         position_bias=None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -922,6 +876,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         key_states = torch.cat([key_states, side_key_states], dim=2)
         value_states = torch.cat([value_states, side_value_states], dim=2)
 
+        # Compute scores -> (batch_size, num_block, n_heads, block_len, 3 * block_len + global_seq_len)
+        scores = torch.einsum("...qhd,...khd->...hqk", query_states, key_states)
 
         if mask is not None:
             # We need to adjust position bias shape to be sum with mask
@@ -960,28 +916,21 @@ class LongT5TransientGlobalAttention(nn.Module):
             # (batch_size, num_blocks, num_heads, block_len, 3 * block_len + global_seq_len)
             position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation != "sdpa":
-                raise ValueError(
-                    f"Relative bias attention is only supported by `eager` and `sdpa` but found {self.config._attn_implementation}."
-                )
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        scores += position_bias
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            position_bias,  # position bias acts as mask
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_weights = attn_weights.type(value_states.dtype)
+        attn_output = unshape(torch.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
+        attn_output = attn_output[:, :seq_length, :]
         attn_output = self.o(attn_output)
-        return attn_output, position_bias, attn_weights
+
+        outputs = (attn_output, position_bias)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->LongT5
@@ -989,10 +938,7 @@ class LongT5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.SelfAttention = LongT5Attention(
-            config,
-            has_relative_attention_bias=has_relative_attention_bias,
-            layer_idx=layer_idx,
-            is_causal=config.is_decoder,
+            config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
         )
         self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -1003,20 +949,23 @@ class LongT5LayerSelfAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
+        use_cache=False,
+        output_attentions=False,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attn_output, position_bias, attn_weights = self.SelfAttention(
+        attention_output = self.SelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
             cache_position=cache_position,
-            **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attn_output)
-        return hidden_states, position_bias, attn_weights
+        hidden_states = hidden_states + self.dropout(attention_output[0])
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
 
 
 class LongT5LayerLocalSelfAttention(nn.Module):
@@ -1033,17 +982,19 @@ class LongT5LayerLocalSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions=False,
+        **kwargs: Any,  # to accept past_key_values and use_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attn_output, position_bias, attn_weights = self.LocalSelfAttention(
+        attention_output = self.LocalSelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            **kwargs,
+            output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + self.dropout(attn_output)
-        return hidden_states, position_bias, attn_weights
+        hidden_states = hidden_states + self.dropout(attention_output[0])
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
 
 
 class LongT5LayerTransientGlobalSelfAttention(nn.Module):
@@ -1062,26 +1013,26 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions=False,
+        **kwargs: Any,  # to accept past_key_values and use_cache kwargs
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attn_output, position_bias, attn_weights = self.TransientGlobalSelfAttention(
+        attention_output = self.TransientGlobalSelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            **kwargs,
+            output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + self.dropout(attn_output)
-        return hidden_states, position_bias, attn_weights
+        hidden_states = hidden_states + self.dropout(attention_output[0])
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->LongT5
 class LongT5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.EncDecAttention = LongT5Attention(
-            config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False
-        )
+        self.EncDecAttention = LongT5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
         self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -1092,9 +1043,10 @@ class LongT5LayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
+        use_cache=False,
         query_length=None,
+        output_attentions=False,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -1103,12 +1055,14 @@ class LongT5LayerCrossAttention(nn.Module):
             key_value_states=key_value_states,
             position_bias=position_bias,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             query_length=query_length,
+            output_attentions=output_attentions,
             cache_position=cache_position,
-            **kwargs,
         )
-        hidden_states = hidden_states + self.dropout(attn_output)
-        return hidden_states, position_bias, attn_weights
+        layer_output = hidden_states + self.dropout(attention_output[0])
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        return outputs
 
 
 class LongT5Block(GradientCheckpointingLayer):
@@ -1144,18 +1098,22 @@ class LongT5Block(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         past_key_values=None,
+        use_cache=False,
+        output_attentions=False,
+        return_dict=True,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs],
     ):
-        self_attention_output, self_attention_position_bias, _ = self.layer[0](
+        self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
             cache_position=cache_position,
-            **kwargs,
         )
-        hidden_states = self_attention_output
+        hidden_states = self_attention_outputs[0]
+        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
 
         # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -1163,18 +1121,19 @@ class LongT5Block(GradientCheckpointingLayer):
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
-        cross_attention_position_bias = None
         if do_cross_attention:
-            cross_attention_output, cross_attention_position_bias, _ = self.layer[1](
+            cross_attention_outputs = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
                 query_length=cache_position[-1] + 1,
-                **kwargs,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                cache_position=cache_position,
             )
-            hidden_states = cross_attention_output
+            hidden_states = cross_attention_outputs[0]
 
             # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -1192,7 +1151,9 @@ class LongT5Block(GradientCheckpointingLayer):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        return hidden_states, self_attention_position_bias, cross_attention_position_bias
+        return (
+            (hidden_states,) + attention_outputs
+        )  # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
 @auto_docstring
@@ -1200,20 +1161,9 @@ class LongT5PreTrainedModel(PreTrainedModel):
     config: LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _supports_attention_backend = True
-    _supports_sdpa = True
-    _supports_flash_attn = False
-    _supports_flex_attn = False
-    _can_compile_fullgraph = False  # TODO: @raushan more involved due to local/global attn
-
     _no_split_modules = ["LongT5Block"]
 
-    _can_record_outputs = {
-        "hidden_states": OutputRecorder(LongT5Block, index=0),
-        "attentions": OutputRecorder(LongT5LayerSelfAttention, index=-1),
-        "cross_attentions": OutputRecorder(LongT5LayerCrossAttention, index=-1),
-    }
-
+    _can_compile_fullgraph = False  # TODO: @raushan more involved due to local/global attn
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
@@ -1320,7 +1270,6 @@ class LongT5Stack(LongT5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
-    @check_model_inputs
     def forward(
         self,
         input_ids=None,
@@ -1330,33 +1279,58 @@ class LongT5Stack(LongT5PreTrainedModel):
         inputs_embeds=None,
         past_key_values=None,
         use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ):
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if input_ids is not None and inputs_embeds is not None:
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(
+                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
+            )
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         if inputs_embeds is None:
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
-            )
+        batch_size, seq_length = input_shape
+
+        if self.is_decoder:
+            if use_cache and past_key_values is None:
+                if self.config.is_encoder_decoder:
+                    past_key_values = EncoderDecoderCache(
+                        DynamicCache(config=self.config), DynamicCache(config=self.config)
+                    )
+                else:
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
-
-        device = inputs_embeds.device
-        seq_length = inputs_embeds.shape[1]
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
@@ -1367,7 +1341,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past
             mask_seq_length = past_key_values_length + seq_length
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=device)
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.is_decoder:
             causal_mask = self._update_causal_mask(
@@ -1377,6 +1351,7 @@ class LongT5Stack(LongT5PreTrainedModel):
                 past_key_values.self_attention_cache
                 if isinstance(past_key_values, EncoderDecoderCache)
                 else past_key_values,
+                output_attentions,
             )
         # We use local attention in encoder self-attention, otherwise standard self & cross attentions are used
         elif self.config.encoder_attention_type == "local":
@@ -1390,18 +1365,24 @@ class LongT5Stack(LongT5PreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
         for i, layer_module in enumerate(self.block):
-            hidden_states, self_attention_position_bias, cross_attention_bias = layer_module(
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
@@ -1409,22 +1390,54 @@ class LongT5Stack(LongT5PreTrainedModel):
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
                 past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                return_dict=return_dict,
                 cache_position=cache_position,
-                **kwargs,
             )
-           
-            # We share the position biases between the layers
-            position_bias = self_attention_position_bias
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = cross_attention_position_bias
 
+            # layer_outputs is a tuple with:
+            # hidden-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+
+            hidden_states = layer_outputs[0]
+
+            # We share the position biases between the layers - the first layer store them
+            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
+            # (cross-attention position bias), (cross-attention weights)
+            position_bias = layer_outputs[1]
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[2],)
+                if self.is_decoder:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
+        # Add last layer
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    past_key_values,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
@@ -1434,6 +1447,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
+        output_attentions: bool = False,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -1451,7 +1465,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1485,6 +1499,7 @@ class LongT5Stack(LongT5PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
+            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -1503,7 +1518,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         dtype: torch.dtype,
         cache_position: torch.Tensor,
         batch_size: int,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -1588,7 +1603,6 @@ class LongT5Model(LongT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1600,8 +1614,12 @@ class LongT5Model(LongT5PreTrainedModel):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1652,16 +1670,27 @@ class LongT5Model(LongT5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                **kwargs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
             )
-        hidden_states = encoder_outputs.last_hidden_state
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
 
+        hidden_states = encoder_outputs[0]
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1671,11 +1700,15 @@ class LongT5Model(LongT5PreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
-            return_dict=True,
-            **kwargs,
         )
 
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1734,8 +1767,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
-    
-    @can_return_tuple
+
     @auto_docstring
     def forward(
         self,
@@ -1748,8 +1780,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1803,6 +1839,9 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -1810,10 +1849,18 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                return_dict=True,
-                **kwargs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
             )
-        hidden_states = encoder_outputs.last_hidden_state
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        hidden_states = encoder_outputs[0]
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
@@ -1827,12 +1874,14 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             cache_position=cache_position,
-            return_dict=True,
-            **kwargs,
         )
 
-        sequence_output = decoder_outputs.last_hidden_state
+        sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
             sequence_output = sequence_output * (self.model_dim**-0.5)
@@ -1846,6 +1895,9 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
             labels = labels.to(lm_logits.device)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
@@ -1888,14 +1940,16 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1921,11 +1975,15 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            *kwargs,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         return encoder_outputs
