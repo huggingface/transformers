@@ -495,6 +495,7 @@ class GatherParallel(TensorParallelLayer):
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
+        use_dtensor: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -502,6 +503,7 @@ class GatherParallel(TensorParallelLayer):
         self.output_layouts = output_layouts
         self.desired_input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -782,7 +784,7 @@ class RowwiseParallel(TensorParallelLayer):
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
-        use_dtensor=True,
+        use_dtensor: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1064,10 +1066,10 @@ class RouterParallel(TensorParallelLayer):
     Allows to reshape the router scores to support running expert parallel.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, use_dtensor: bool = False, *args, **kwargs):
         super().__init__(**kwargs)
         self.args = args
-        self.use_dtensor = False
+        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -1118,7 +1120,7 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
             )
         num_local_experts = mod.num_experts // ep_size
-        router_scores, router_indices = outputs
+        router_logits, router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
         # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
@@ -1129,7 +1131,7 @@ class RouterParallel(TensorParallelLayer):
         router_indices = router_indices.masked_fill(
             router_indices == -1, num_local_experts
         )  # masking class for one hot
-        return router_scores, router_indices
+        return router_logits, router_scores, router_indices
 
     def shard_tensor(
         self,

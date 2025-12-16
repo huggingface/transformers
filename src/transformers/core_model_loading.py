@@ -895,10 +895,12 @@ def convert_and_load_state_dict_in_model(
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
-                        tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
+                        tp_layer_instance = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]]
+                        tp_layer = tp_layer_instance.__class__
                         mapping.distributed_operation = tp_layer(
                             device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
                         )
+                        mapping.distributed_operation.use_dtensor = tp_layer_instance.use_dtensor
                     shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future_or_tensor = spawn_tp_materialize(
                         thread_pool,
