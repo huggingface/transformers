@@ -21,7 +21,8 @@ from torch import nn
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, filter_out_non_signature_kwargs, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -104,7 +105,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -112,12 +113,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`CLIPTextModel`].
@@ -140,25 +138,19 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=text_outputs.last_hidden_state,
-                pooler_output=text_features,
-            )
+        return text_outputs
 
-        return text_features
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor, return_dict: bool = False) -> torch.FloatTensor:
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.FloatTensor:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`CLIPVisionModel`].
@@ -181,16 +173,10 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
-        image_features = self.visual_projection(vision_outputs.pooler_output)
+        vision_outputs = self.vision_model(pixel_values=pixel_values, **kwargs)
+        vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def forward(

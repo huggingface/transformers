@@ -36,8 +36,8 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...utils import auto_docstring, filter_out_non_signature_kwargs
-from ...utils.generic import check_model_inputs
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -316,16 +316,14 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -356,29 +354,26 @@ class Siglip2VisionModel(SiglipVisionModel):
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
 class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -403,17 +398,12 @@ class Siglip2Model(SiglipModel):
         ...     image_features = model.get_image_features(**inputs)
         ```
         """
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
+            **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        if return_dict:
-            return vision_outputs
-
-        return pooled_output
 
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     def forward(

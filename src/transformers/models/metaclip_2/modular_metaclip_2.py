@@ -555,12 +555,14 @@ class MetaClip2Model(CLIPModel):
             **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Returns:
@@ -582,19 +584,18 @@ class MetaClip2Model(CLIPModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=return_dict,
+            **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
@@ -619,7 +620,7 @@ class MetaClip2Model(CLIPModel):
         return super().get_image_features(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 

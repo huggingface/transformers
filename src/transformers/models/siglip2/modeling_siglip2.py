@@ -36,7 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
@@ -752,16 +752,14 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -792,8 +790,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
 
@@ -833,19 +830,16 @@ class Siglip2Model(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`Siglip2TextModel`].
@@ -864,34 +858,27 @@ class Siglip2Model(Siglip2PreTrainedModel):
         >>> with torch.no_grad():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
-        pooled_output = text_outputs.pooler_output
 
-        if return_dict:
-            return text_outputs
-
-        return pooled_output
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         spatial_shapes: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -916,17 +903,12 @@ class Siglip2Model(Siglip2PreTrainedModel):
         ...     image_features = model.get_image_features(**inputs)
         ```
         """
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
+            **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        if return_dict:
-            return vision_outputs
-
-        return pooled_output
 
     # NOTE: Siglip2Model uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     @can_return_tuple

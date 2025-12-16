@@ -768,8 +768,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> torch.Tensor:
         """
         Args:
@@ -777,8 +779,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -807,6 +807,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         hidden_states = self.post_layernorm(hidden_states)
@@ -819,13 +820,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         merged_hidden_states = self.merger(hidden_states)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=hidden_states,
-                pooler_output=merged_hidden_states,
-            )
-
-        return merged_hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @auto_docstring
@@ -1149,11 +1147,13 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1163,8 +1163,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 The tensors corresponding to the input videos.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -1173,17 +1171,12 @@ class Glm4vModel(Glm4vPreTrainedModel):
             repeated_row = torch.tensor([1, h.item(), w.item()]).unsqueeze(0).repeat(t, 1)
             temp_frames_hw.append(repeated_row)
         flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
-        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=video_embeds,
-            )
-
-        return video_embeds
+        return vision_outputs
 
     def get_image_features(
         self,

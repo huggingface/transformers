@@ -1066,7 +1066,7 @@ class Blip2Model(Blip2PreTrainedModel):
         else:
             return super().get_encoder(modality=modality)
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1075,6 +1075,7 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1115,7 +1116,7 @@ class Blip2Model(Blip2PreTrainedModel):
             text_outputs: CausalLMOutputWithPast = self.language_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                return_dict=True,
+                **kwargs,
             )
         else:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
@@ -1125,23 +1126,20 @@ class Blip2Model(Blip2PreTrainedModel):
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
                 labels=labels,
-                return_dict=True,
+                **kwargs,
             )
 
-        return text_outputs.logits
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             vision_outputs (`torch.FloatTensor`):
                 The vision model's last layer pooled logits.
@@ -1162,20 +1160,11 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_outputs = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
+            **kwargs,
         )
-        image_features = vision_outputs.pooler_output
-
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
 
     @filter_out_non_signature_kwargs()
     @auto_docstring

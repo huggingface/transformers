@@ -571,18 +571,16 @@ class BlipModel(BlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
             applying the projection layer to the pooled output of [`BlipTextModel`].
@@ -602,30 +600,22 @@ class BlipModel(BlipPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=text_outputs.last_hidden_state,
-                pooler_output=text_features,
-            )
-
-        return text_features
-
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`BlipVisionModel`].
@@ -651,17 +641,12 @@ class BlipModel(BlipPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def get_multimodal_features(

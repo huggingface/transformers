@@ -33,7 +33,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     logging,
     torch_int,
 )
@@ -781,7 +780,7 @@ class CLIPModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False, default_return_pooled=True)
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -820,7 +819,7 @@ class CLIPModel(CLIPPreTrainedModel):
 
         return text_outputs
 
-    @check_model_inputs(tie_last_hidden_states=False, default_return_pooled=True)
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
