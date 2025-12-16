@@ -2415,6 +2415,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if source_backup == source_param_name:
                             target_backup_is_there = target_backup not in missing_keys
                             # If the target is present, we found the correct weight to tie into (we know the source is missing)
+                            # Note here that we do not tie the missing source right now as well, as it will be done anyway when
+                            # the pair (target_backup, source_backup) becomes the main pair (target_param_name, source_param_name)
                             if target_backup_is_there:
                                 source_param_name = target_backup
                                 break
