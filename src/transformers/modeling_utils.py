@@ -2386,12 +2386,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
         tied_keys = list(tied_keys.items())
-        expected_present_pairs = set()
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
-            # Usually we tie a single target to a single source, but when both are missing we may later tie
-            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
-            # a list here
-            target_param_names = [target_param_name]
 
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
@@ -2401,16 +2396,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    # In case of more than 2 keys tying to the same weight, it may be expected that both are
-                    # already tied, so we need this check before showing the warning
-                    if (target_param_name, source_param_name) not in expected_present_pairs:
-                        logger.warning(
-                            f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                            f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                            "You should update the config with `tie_word_embeddings=False` to silence this warning"
-                        )
-                        # Remove from internal attribute to correctly reflect actual tied weights
-                        self.all_tied_weights_keys.pop(target_param_name)
+                    logger.warning(
+                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
+                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
+                    )
+                    # Remove from internal attribute to correctly reflect actual tied weights
+                    self.all_tied_weights_keys.pop(target_param_name)
                     # Skip to next iteration
                     continue
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
@@ -2426,13 +2418,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             target_backup_is_there = target_backup not in missing_keys
                             # If the target is present, we found the correct weight to tie into (we know the source is missing)
                             if target_backup_is_there:
-                                # Append the source as well, since both are missing we'll tie both
-                                target_param_names.append(source_param_name)
-                                # The new source to tie into both initial source and target is the target backup
                                 source_param_name = target_backup
-                                # When we will later iterate over the backups, both will be already present because we
-                                # tie the source as well, so we need to skip the warning in this case
-                                expected_present_pairs.add((target_backup, source_backup))
                                 break
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
@@ -2448,19 +2434,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # Perform the actual tying
             source_param = self.get_parameter_or_buffer(source_param_name)
-            for target_param_name in target_param_names:
-                if "." in target_param_name:
-                    parent_name, name = target_param_name.rsplit(".", 1)
-                    parent = self.get_submodule(parent_name)
-                else:
-                    name = target_param_name
-                    parent = self
-                # Tie the weights
-                setattr(parent, name, source_param)
-                self._adjust_bias(parent, source_param)
-                # Remove from missing if necesary
-                if missing_keys is not None and remove_from_missing:
-                    missing_keys.discard(target_param_name)
+            if "." in target_param_name:
+                parent_name, name = target_param_name.rsplit(".", 1)
+                parent = self.get_submodule(parent_name)
+            else:
+                name = target_param_name
+                parent = self
+            # Tie the weights
+            setattr(parent, name, source_param)
+            self._adjust_bias(parent, source_param)
+            # Remove from missing if necesary
+            if missing_keys is not None and remove_from_missing:
+                missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
