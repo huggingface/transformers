@@ -2387,7 +2387,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_keys = list(tied_keys.items())
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
-
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
                 remove_from_missing = True
@@ -2408,7 +2407,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
-                    target_param_names = [target_param_name]
                 # Both are missing -> check other keys in case more than 2 keys are tied to the same weight
                 elif not source_is_there and not target_is_there:
                     for target_backup, source_backup in tied_keys[i + 1 :]:
