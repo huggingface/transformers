@@ -43,9 +43,8 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        # TODO: update path
         processor = Ernie4_5_VL_MoeProcessor.from_pretrained(
-            "/raid/anton/code/forks/transformers/AntonV/ErnieVL",
+            "hf-internal-testing/Ernie-VL-Moe-Small",
             patch_size=4,
             size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56},
         )
