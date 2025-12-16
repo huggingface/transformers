@@ -69,6 +69,9 @@ class BatchFeature(UserDict):
             initialization.
         skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
             List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+        device (`str` or `torch.device`, *optional*):
+            The device to place tensors on. When specified, all tensor values will be moved to this device.
+            Note: This is a simple tensor movement operation, not GPU-accelerated processing.
     """
 
     def __init__(
@@ -76,9 +79,12 @@ class BatchFeature(UserDict):
         data: Optional[dict[str, Any]] = None,
         tensor_type: Union[None, str, TensorType] = None,
         skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        device: Optional[Union[str, "torch.device"]] = None,
     ):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
+        if device is not None:
+            self.to(device)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -663,3 +669,4 @@ if FeatureExtractionMixin.push_to_hub.__doc__ is not None:
     FeatureExtractionMixin.push_to_hub.__doc__ = FeatureExtractionMixin.push_to_hub.__doc__.format(
         object="feature extractor", object_class="AutoFeatureExtractor", object_files="feature extractor file"
     )
+

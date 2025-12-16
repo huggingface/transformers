@@ -447,6 +447,7 @@ class ProcessingKwargs(TypedDict, total=False):
     audio_kwargs: AudioKwargs = {
         **AudioKwargs.__annotations__,
     }
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
 
 
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
@@ -625,9 +626,13 @@ class ProcessorMixin(PushToHubMixin):
 
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
+            device (`str` or `torch.device`, *optional*):
+                The device to place tensors on. When specified, all output tensors will be moved to this device.
+                Note: This is a simple tensor movement operation, not GPU-accelerated processing like fast image processors.
 
         Returns:
-            [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
+            [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format. All tensor outputs
+            will be on the same device when `device` is specified.
         """
         if "audios" in kwargs and audio is None:
             raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
@@ -655,7 +660,9 @@ class ProcessorMixin(PushToHubMixin):
                 attribute_output = attribute(input_data, **kwargs[input_kwargs])
                 outputs.update(attribute_output)
 
-        return BatchFeature(outputs)
+        # Extract device parameter if present
+        device = kwargs.get("device")
+        return BatchFeature(outputs, device=device)
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
@@ -1857,3 +1864,4 @@ if ProcessorMixin.push_to_hub.__doc__ is not None:
     ProcessorMixin.push_to_hub.__doc__ = ProcessorMixin.push_to_hub.__doc__.format(
         object="processor", object_class="AutoProcessor", object_files="processor files"
     )
+
