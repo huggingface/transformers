@@ -98,6 +98,7 @@ class IsaacConfig(PretrainedConfig):
         **kwargs,
     ):
         self._rope_parameters: Optional[dict[str, Any]] = None
+        attn_implementation = kwargs.get("attn_implementation")
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
@@ -138,22 +139,21 @@ class IsaacConfig(PretrainedConfig):
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
+        # Propagate user-requested attention backend to the vision sub-config when provided.
+        if attn_implementation is not None:
+            if isinstance(attn_implementation, dict):
+                vision_attn = attn_implementation.get("vision_config", attn_implementation.get("", None))
+            else:
+                vision_attn = attn_implementation
+            if vision_attn is not None:
+                self.vision_config._attn_implementation = vision_attn
+
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
 
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-
-        # Default and propagate attention implementation
-        attn_impl = getattr(self, "_attn_implementation", None)
-        if attn_impl is None:
-            attn_impl = "sdpa"
-            self._attn_implementation = attn_impl
-        if hasattr(self, "text_config") and self.text_config is not None:
-            self.text_config._attn_implementation = attn_impl
-        if hasattr(self, "vision_config") and self.vision_config is not None:
-            self.vision_config._attn_implementation = attn_impl
 
     @property
     def rope_scaling(self):
@@ -190,14 +190,6 @@ class IsaacConfig(PretrainedConfig):
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
-
-    def __setattr__(self, name, value):
-        super().__setattr__(name, value)
-        if name == "_attn_implementation":
-            if hasattr(self, "text_config") and self.text_config is not None:
-                setattr(self.text_config, "_attn_implementation", value)
-            if hasattr(self, "vision_config") and self.vision_config is not None:
-                setattr(self.vision_config, "_attn_implementation", value)
 
 
 __all__ = ["IsaacConfig"]
