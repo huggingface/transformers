@@ -46,8 +46,7 @@ class PeVideoOutput(ModelOutput):
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_outputs", "video_outputs"] else getattr(self, k).to_tuple()
-            for k in self.keys()
+            self[k] if k not in ["text_outputs", "video_outputs"] else getattr(self, k).to_tuple() for k in self.keys()
         )
 
 
