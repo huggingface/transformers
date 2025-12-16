@@ -432,7 +432,7 @@ class BlenderbotSmallPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):
-        super()._init_weights(self, module)
+        super()._init_weights(module)
         if isinstance(module, BlenderbotSmallForConditionalGeneration):
             init.zeros_(module.final_logits_bias)
 
