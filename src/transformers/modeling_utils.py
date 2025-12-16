@@ -2398,6 +2398,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             tied_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
+        # Cache original missing keys for logging purposes only
+        if missing_keys is not None:
+            original_missing_keys = missing_keys.copy()
+
         tied_keys = list(tied_keys.items())
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
@@ -2408,11 +2412,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    logger.warning(
-                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
-                    )
+                    # For logging, check against original missing keys (skip warning if key was newly tied)
+                    if (
+                        source_param_name not in original_missing_keys
+                        and target_param_name not in original_missing_keys
+                    ):
+                        logger.warning(
+                            f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                            f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
+                            "You should update the config with `tie_word_embeddings=False` to silence this warning"
+                        )
                     # Remove from internal attribute to correctly reflect actual tied weights
                     self.all_tied_weights_keys.pop(target_param_name)
                     # Skip to next iteration
