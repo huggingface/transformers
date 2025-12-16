@@ -300,6 +300,11 @@ def _test_eager_matches_sdpa_inference(
                 if key in inputs_dict:
                     processed_inputs[key] = inputs_dict[key]
 
+            # Preserve any remaining inputs from inputs_dict for multi-modal models
+            for key, value in inputs_dict.items():
+                if key not in processed_inputs:
+                    processed_inputs[key] = value
+
             for key, value in processed_inputs.items():
                 if torch.is_floating_point(value):
                     value = value.to(dtype)
