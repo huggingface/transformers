@@ -1386,6 +1386,11 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
+        elif isinstance(module, SeamlessM4TConformerRotaryPositionalEmbedding):
+            dim = self.config.hidden_size // self.config.speech_encoder_attention_heads
+            base = self.config.rotary_embedding_base
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride

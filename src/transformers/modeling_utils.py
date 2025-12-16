@@ -2231,7 +2231,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 init.ones_(module.weight)
             if hasattr(module, "bias") and module.bias is not None:
                 init.zeros_(module.bias)
-        # This matches all the usual RotaryEmbeddings
+        # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
             rope_fn = (
                 ROPE_INIT_FUNCTIONS[module.rope_type]

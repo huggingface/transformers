@@ -820,6 +820,10 @@ class ClvpPreTrainedModel(PreTrainedModel):
                 bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
                 bias = bias.view(1, 1, max_positions, max_positions)
                 init.copy_(module.bias, bias)
+        elif isinstance(module, ClvpRotaryPositionalEmbedding):
+            dim = max(self.config.projection_dim // (self.config.num_attention_heads * 2), 32)
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
         if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
