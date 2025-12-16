@@ -551,6 +551,8 @@
         title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/intern_s1
+        title: Intern-S1
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
