@@ -150,6 +150,9 @@ class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip("PeAudioEncoder does not support feed forward chunking")
+    def test_feed_forward_chunking(self):
+        pass
 
 class PeAudioTextModelTester:
     """
