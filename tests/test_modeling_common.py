@@ -1088,7 +1088,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             # First, initialize the model directly with `__init__`, with the context manager making sure that we do
             # not run `initialiaze_weights()`, i.e. buffers are the same as in the modules's `__init__` initial definition
-            with skip_init_weights():
+            with skip_weight_init():
                 model_from_init = model_class(copy.deepcopy(config))
             # Second, initialize the model fully on meta device, then move everything to cpu and run `init_weights`
             with torch.device("meta"):
@@ -4386,8 +4386,8 @@ def seeded_weight_init():
 
 
 @contextmanager
-def skip_init_weights():
-    """Skip weight initialization by `init_weights` altogether."""
+def skip_weight_init():
+    """Skip weight initialization by `_init_weights` altogether."""
     try:
         original_initialize_weights = PreTrainedModel._initialize_weights
 
