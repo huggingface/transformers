@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_dict, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -1224,7 +1224,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_dict
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1261,7 +1261,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         return text_outputs
 
-    @can_return_dict
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
