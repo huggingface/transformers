@@ -482,7 +482,7 @@ class MBartPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MBartForConditionalGeneration):
-            init.zeros(module.final_logits_bias)
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):

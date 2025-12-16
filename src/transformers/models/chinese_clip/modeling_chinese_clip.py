@@ -578,7 +578,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
                     init.zeros_(embedding.weight[embedding.padding_idx])

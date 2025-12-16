@@ -452,7 +452,7 @@ class MarianPreTrainedModel(PreTrainedModel):
         if isinstance(module, MarianSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
         elif isinstance(module, MarianMTModel):
-            init.zeros(module.final_logits_bias)
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):

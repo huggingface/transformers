@@ -846,7 +846,7 @@ class AlignPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, AlignTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring(

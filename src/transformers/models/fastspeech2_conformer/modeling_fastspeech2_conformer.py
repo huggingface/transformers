@@ -1413,7 +1413,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FastSpeech2ConformerHifiGan):
-            init.zeros(module.mean)
+            init.zeros_(module.mean)
             init.ones_(module.scale)
 
     def apply_weight_norm(self):

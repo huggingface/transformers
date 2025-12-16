@@ -608,7 +608,7 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
             init.constant_(module.layers[-1].bias, 0)
         elif isinstance(module, MMGroundingDinoFrozenBatchNorm2d):
             init.ones_(module.weight)
-            init.zeros(module.bias)
+            init.zeros_(module.bias)
             module.zeros_(module.running_mean)
             module.ones_(module.running_var)
 

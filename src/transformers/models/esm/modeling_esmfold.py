@@ -912,7 +912,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                 elif module.init == "gating":
                     init.zeros_(module.weight)
                     if module.bias:
-                        init.ones(module.bias)
+                        init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
                 elif module.init == "final":

@@ -854,7 +854,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             init.normal_(module.latents)
         elif isinstance(module, IdeficsEmbedding):
             inv_freq = 1.0 / (module.base ** (torch.arange(0, module.dim, 2) / module.dim))
-            init.copy(module.inv_freq, inv_freq)
+            init.copy_(module.inv_freq, inv_freq)
             t = torch.arange(module.max_position_embeddings).type_as(inv_freq)
             freqs = torch.einsum("i,j->ij", t, inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation

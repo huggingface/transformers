@@ -947,7 +947,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, BridgeTowerTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
 
         if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
             init.zeros_(module.bias)

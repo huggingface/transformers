@@ -995,7 +995,7 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, ConditionalDetrFrozenBatchNorm2d):
             init.ones_(module.weight)
-            init.zeros(module.bias)
+            init.zeros_(module.bias)
             init.zeros_(module.running_mean)
             init.ones_(module.running_var)
 

@@ -679,7 +679,7 @@ class FlavaPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.mask_token)
         elif isinstance(module, FlavaTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
                 init.zeros_(module.cls_token)

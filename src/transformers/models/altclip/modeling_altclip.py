@@ -818,7 +818,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, AltRobertaEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
 
 
 class AltCLIPVisionTransformer(nn.Module):

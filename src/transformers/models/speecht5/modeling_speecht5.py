@@ -3029,7 +3029,7 @@ class SpeechT5HifiGan(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, SpeechT5HifiGan):
-            init.zeros(module.mean)
+            init.zeros_(module.mean)
             init.ones_(module.scale)
 
     def apply_weight_norm(self):

@@ -499,7 +499,7 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Data2VecTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
 
 
 class Data2VecTextEncoder(nn.Module):

@@ -1318,7 +1318,7 @@ class ClapPreTrainedModel(PreTrainedModel):
             init.normal_(module.position_embeddings.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.token_type_embeddings.weight, mean=0.0, std=factor * 0.02)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            init.zeros(module.token_type_ids)
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, ClapModel):
             init.constant_(module.logit_scale_a, math.log(self.config.logit_scale_init_value))
             init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))

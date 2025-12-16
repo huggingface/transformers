@@ -658,7 +658,7 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
 
         if isinstance(module, DFineFrozenBatchNorm2d):
             init.ones_(module.weight)
-            init.zeros(module.bias)
+            init.zeros_(module.bias)
             module.zeros_(module.running_mean)
             module.ones_(module.running_var)
 
