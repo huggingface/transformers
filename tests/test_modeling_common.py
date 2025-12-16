@@ -710,7 +710,6 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
-            model1 = model
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
