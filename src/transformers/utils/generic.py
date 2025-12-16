@@ -814,7 +814,7 @@ class OutputRecorder:
     class_name: str | None = None
 
 
-def check_model_inputs(func=None, *, tie_last_hidden_states=True):
+def check_model_inputs(func=None, *, tie_last_hidden_states=True, default_return_pooled=False):
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
@@ -825,6 +825,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             This is true for all language models and should be toggled off only if
             `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
             is needed for some vision models (e.g. CLIP, SigLIP)
+        default_return_pooled (`bool`, *optional*, defaults to `False`):
+            Whether the default behavior is to return pooled outputs. If `True`, and `return_dict`
+            is not specified in the function call, then `return_dict` will be set to `False` instead
+            of reading from `self.config.return_dict`.
     """
 
     def wrapped_fn(func):
@@ -859,7 +863,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                 else:
                     kwargs["use_cache"] = use_cache
 
-            return_dict = kwargs.pop("return_dict", None)
+            # User-provided kwargs will always take precedence, but if the wrapped method should return pooled outputs
+            # by default, then we set return_dict to False instead of reading from the model config.
+            default_return_dict = False if default_return_pooled else None
+            return_dict = kwargs.pop("return_dict", default_return_dict)
             if return_dict is None:
                 return_dict = getattr(self.config, "return_dict", True)
 
@@ -983,7 +990,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                 else:
                     outputs[key] = collected_outputs[key]
             if return_dict is False:
-                outputs = outputs.to_tuple()
+                if default_return_pooled:
+                    outputs = outputs.pooler_output
+                else:
+                    outputs = outputs.to_tuple()
             return outputs
 
         return wrapper
