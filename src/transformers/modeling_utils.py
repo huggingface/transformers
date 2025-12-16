@@ -4001,7 +4001,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model)  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing 
+            hf_quantizer.postprocess_model(
+                model
+            )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
