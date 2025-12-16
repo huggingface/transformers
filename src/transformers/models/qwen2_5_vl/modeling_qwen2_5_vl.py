@@ -1169,6 +1169,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,

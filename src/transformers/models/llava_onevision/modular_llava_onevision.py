@@ -46,7 +46,6 @@ from ...image_utils import (
     get_image_size,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -407,12 +406,13 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         return image_outputs
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
@@ -427,8 +427,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
@@ -436,7 +434,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -452,14 +450,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
+        vision_outputs.pooler_output = video_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=video_features,
-            )
-
-        return video_features
+        return vision_outputs
 
     def forward(
         self,

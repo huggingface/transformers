@@ -340,6 +340,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
         language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        # NOTE: @Tom the easy solution with the new format would be to grab vision_outputs,
+        # override the pooler_output with language_model_inputs and return that, but we'd lose the
+        # query_outputs
         if return_dict:
             return language_model_inputs, vision_outputs, query_outputs
         return language_model_inputs

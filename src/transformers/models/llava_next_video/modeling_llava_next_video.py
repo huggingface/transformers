@@ -33,7 +33,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -615,12 +615,13 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -635,8 +636,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
+
         Returns:
             video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
@@ -652,14 +652,14 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
-        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        video_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_video_features = video_features.hidden_states[vision_feature_layer]
+            selected_video_features = video_outputs.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [video_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_video_features = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -669,14 +669,9 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
+        video_outputs.pooler_output = video_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=video_features.last_hidden_state,
-                pooler_output=video_features,
-            )
-
-        return video_features
+        return video_outputs
 
 
 @auto_docstring(
@@ -967,13 +962,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_video_features(
             pixel_values=pixel_values,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 

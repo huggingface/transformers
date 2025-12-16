@@ -33,7 +33,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -598,12 +598,13 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
@@ -618,8 +619,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
@@ -627,7 +626,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -643,14 +642,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
+        vision_outputs.pooler_output = video_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=video_features,
-            )
-
-        return video_features
+        return vision_outputs
 
     def apply_pooling(self, image_features):
         height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -946,13 +940,13 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_video_features(
             pixel_values=pixel_values,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 

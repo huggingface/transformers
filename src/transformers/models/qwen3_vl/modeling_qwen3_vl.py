@@ -1087,6 +1087,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
