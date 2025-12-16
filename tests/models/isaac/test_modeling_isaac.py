@@ -737,20 +737,24 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.maxDiff = None
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does implement returning attentions")
+    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does not implement returning attentions")
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         pass
 
-    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does implement returning attentions")
+    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does not implement returning attentions")
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does implement returning attentions")
+    @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does not implement returning attentions")
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(reason="Prompt lookup decodeing not supported; Qwen3 backbone does not return attentions")
+    @unittest.skip(reason="Prompt lookup decoding not supported; Qwen3 backbone does not return attentions")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Output attentions not supported")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @require_tensorstream
