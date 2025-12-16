@@ -21,7 +21,7 @@ from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 
 if is_torch_available():
