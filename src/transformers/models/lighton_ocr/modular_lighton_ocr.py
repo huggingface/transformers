@@ -33,6 +33,7 @@ from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Model,
 )
+from ...modeling_rope_utils import RopeParameters
 
 
 class LightOnOcrVisionConfig(PixtralVisionConfig):
@@ -41,6 +42,55 @@ class LightOnOcrVisionConfig(PixtralVisionConfig):
 
 class LightOnOcrTextConfig(Qwen3Config):
     model_type = "lighton_ocr_text"
+
+    def __init__(
+        self,
+        vocab_size: Optional[int] = 151936,
+        hidden_size: Optional[int] = 4096,
+        intermediate_size: Optional[int] = 22016,
+        num_hidden_layers: Optional[int] = 32,
+        num_attention_heads: Optional[int] = 32,
+        num_key_value_heads: Optional[int] = 32,
+        head_dim: Optional[int] = 128,
+        hidden_act: Optional[str] = "silu",
+        max_position_embeddings: Optional[int] = 32768,
+        initializer_range: Optional[float] = 0.02,
+        rms_norm_eps: Optional[float] = 1e-6,
+        use_cache: Optional[bool] = True,
+        tie_word_embeddings: Optional[bool] = False,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        attention_bias: Optional[bool] = False,
+        sliding_window: Optional[int] = None,
+        layer_types: Optional[list[str]] = None,
+        attention_dropout: Optional[float] = 0.0,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab_size,
+            hidden_size,
+            intermediate_size,
+            num_hidden_layers,
+            num_attention_heads,
+            num_key_value_heads,
+            head_dim,
+            hidden_act,
+            max_position_embeddings,
+            initializer_range,
+            rms_norm_eps,
+            use_cache,
+            tie_word_embeddings,
+            rope_parameters,
+            attention_bias,
+            False,  # use_sliding_window
+            sliding_window,
+            None,  # max_window_layers
+            layer_types,
+            attention_dropout,
+            **kwargs,
+        )
+        del self.use_sliding_window
+        del self.max_window_layers
+        self.sliding_window = sliding_window
 
 
 class LightOnOcrConfig(PretrainedConfig):
@@ -122,7 +172,6 @@ class LightOnOcrConfig(PretrainedConfig):
                 initializer_range=0.02,
                 intermediate_size=3072,
                 max_position_embeddings=40960,
-                model_type="qwen3",
                 num_attention_heads=16,
                 num_hidden_layers=28,
                 num_key_value_heads=8,
@@ -130,7 +179,6 @@ class LightOnOcrConfig(PretrainedConfig):
                 rope_theta=1000000,
                 sliding_window=None,
                 use_cache=True,
-                use_sliding_window=False,
                 vocab_size=151936,
             )
         elif isinstance(text_config, PretrainedConfig):

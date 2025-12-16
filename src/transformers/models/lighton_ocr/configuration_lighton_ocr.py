@@ -200,14 +200,12 @@ class LightOnOcrTextConfig(PreTrainedConfig):
         hidden_act: Optional[str] = "silu",
         max_position_embeddings: Optional[int] = 32768,
         initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
+        rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 4096,
-        max_window_layers: Optional[int] = 28,
+        sliding_window: Optional[int] = None,
         layer_types: Optional[list[str]] = None,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
@@ -218,9 +216,7 @@ class LightOnOcrTextConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
+        self.sliding_window = sliding_window
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -332,7 +328,6 @@ class LightOnOcrConfig(PretrainedConfig):
                 initializer_range=0.02,
                 intermediate_size=3072,
                 max_position_embeddings=40960,
-                model_type="qwen3",
                 num_attention_heads=16,
                 num_hidden_layers=28,
                 num_key_value_heads=8,
@@ -340,7 +335,6 @@ class LightOnOcrConfig(PretrainedConfig):
                 rope_theta=1000000,
                 sliding_window=None,
                 use_cache=True,
-                use_sliding_window=False,
                 vocab_size=151936,
             )
         elif isinstance(text_config, PretrainedConfig):
