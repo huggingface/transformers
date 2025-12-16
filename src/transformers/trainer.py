@@ -4021,7 +4021,16 @@ class Trainer:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
-                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                )
+                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
+                if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
+                    # When using PEFT with DeepSpeed ZeRO Stage 3,
+                    # we do not need to load the frozen parameters
+                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
+                else:
+                    state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
             except ValueError:
