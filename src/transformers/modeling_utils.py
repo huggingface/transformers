@@ -2238,7 +2238,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if module.rope_type != "default"
                 else module.compute_default_rope_parameters
             )
-            buffer_value = rope_fn(module.config)
+            buffer_value, _ = rope_fn(module.config)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
