@@ -444,7 +444,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
         if isinstance(module, PegasusSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
         elif isinstance(module, PegasusForConditionalGeneration):
-            init.zeros_(module.final_logit_bias)
+            init.zeros_(module.final_logits_bias)
 
 
 class PegasusEncoder(PegasusPreTrainedModel):

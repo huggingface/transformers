@@ -1924,7 +1924,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             init.copy_(module.inv_timescales, inv_timescales.float().unsqueeze(0).unsqueeze(0))
         elif isinstance(module, Gemma3nTextModel):
             init.constant_(module.per_layer_projection_scale, self.hidden_size**-0.5)
-            init.constant_(module.per_layer_input_scale, math.rsqrt(2.0))
+            init.constant_(module.per_layer_input_scale, 1 / math.sqrt(2.0))
 
         if hasattr(module, "gradient_clipping"):
             init.constant_(module.gradient_clipping, self.config.gradient_clipping)

@@ -816,7 +816,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
         elif isinstance(module, ClvpSelfAttention):
             if hasattr(module.config, "max_position_embeddings"):
-                max_positions = config.max_position_embeddings
+                max_positions = module.config.max_position_embeddings
                 bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
                 bias = bias.view(1, 1, max_positions, max_positions)
                 init.copy_(module.bias, bias)

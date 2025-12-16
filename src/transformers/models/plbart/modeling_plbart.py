@@ -77,7 +77,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, PLBartForConditionalGeneration):
-            init.zeros_(module.final_logit_bias)
+            init.zeros_(module.final_logits_bias)
 
 
 class PLBartLearnedPositionalEmbedding(nn.Embedding):
