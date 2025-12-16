@@ -951,7 +951,7 @@ class MT5IntegrationTest(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = AutoModelForSeq2SeqLM.from_pretrained("google/mt5-small", attn_implementation).to(
+        model = AutoModelForSeq2SeqLM.from_pretrained("google/mt5-small", attn_implementation="eager").to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
