@@ -18,7 +18,7 @@ import unittest
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    is_flaky,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -74,7 +74,7 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @slow
-@require_torch
+@require_torch_accelerator
 class Jais2IntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -82,8 +82,7 @@ class Jais2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_torch_accelerator
-    @is_flaky(max_attempts=3)
+    @require_read_token
     def test_model_logits(self):
         model_id = "inceptionai/Jais-2-8B-Chat"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
@@ -95,22 +94,23 @@ class Jais2IntegrationTest(unittest.TestCase):
             logits = model(dummy_input, attention_mask=attention_mask).logits
         logits = logits.float()
 
-        EXPECTED_LOGITS_BATCH0 = [-0.97509765625, -1.091796875, -0.9599609375]
-        EXPECTED_LOGITS_BATCH1 = [-1.5361328125, -1.6328125, -1.5283203125]
+        EXPECTED_LOGITS_BATCH0 = [-0.9795, -1.0957, -0.9644, -0.9570, -0.9648, -0.9595, -0.9668, -0.9688, -0.9688, -0.9644, -0.9609, -0.9707, -0.9629, -0.9736, -0.9712]  # fmt: skip
+        EXPECTED_LOGITS_BATCH1 = [-1.5332, -1.6289, -1.5264, -1.5195, -1.5264, -1.5215, -1.5303, -1.5303, -1.5312, -1.5264, -1.5234, -1.5322, -1.5254, -1.5352, -1.5332]  # fmt: skip
 
         torch.testing.assert_close(
-            logits[0, -1, :3],
+            logits[0, -1, :15],
             torch.tensor(EXPECTED_LOGITS_BATCH0, device=torch_device),
             rtol=1e-3,
             atol=1e-3,
         )
         torch.testing.assert_close(
-            logits[1, -1, :3],
+            logits[1, -1, :15],
             torch.tensor(EXPECTED_LOGITS_BATCH1, device=torch_device),
             rtol=1e-3,
             atol=1e-3,
         )
 
+    @require_read_token
     def test_model_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("inceptionai/Jais-2-8B-Chat")
         model = Jais2ForCausalLM.from_pretrained(
@@ -123,5 +123,5 @@ class Jais2IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        EXPECTED_TEXT = "Simply put, the theory of relativity states that the laws of physics are the same for all non-accelerating observers, and that the speed of light in a vacuum is the same for all observers,"
+        EXPECTED_TEXT = "Simply put, the theory of relativity states that the laws of physics are the same for all non-accelerating observers, and that the speed of light in a vacuum is the same for all observers,"  # fmt: skip
         self.assertEqual(generated_text, EXPECTED_TEXT)
