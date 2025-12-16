@@ -69,6 +69,7 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
+        "lazy_load_kernel",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
@@ -216,6 +217,7 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
+        lazy_load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,

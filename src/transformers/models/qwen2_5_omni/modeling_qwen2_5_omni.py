@@ -1105,6 +1105,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         )
         self.gradient_checkpointing = False
 
+        self.post_init()
+
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
         for t, h, w in grid_thw:
@@ -3441,6 +3443,8 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
             config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
         )
 
+        self.post_init()
+
     def normalize_spectrogram(self, spectrogram, max_value, min_db):
         return torch.clamp((2 * max_value) * ((spectrogram - min_db) / (-min_db)) - max_value, -max_value, max_value)
 
@@ -3567,6 +3571,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         self.norm_out = Qwen2_5_OmniAdaLayerNormZero_Final(config.hidden_size)  # final modulation
         self.proj_out = nn.Linear(config.hidden_size, config.mel_dim)
+
+        self.post_init()
 
     def _create_block_diff(self, hidden_states):
         batch, seq_len = hidden_states.shape[0], hidden_states.shape[1]
@@ -3719,6 +3725,8 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         self.code2wav_bigvgan_model = Qwen2_5OmniToken2WavBigVGANModel._from_config(
             config.bigvgan_config, attn_implementation=attn_impl
         )
+
+        self.post_init()
 
     def forward(
         self,
