@@ -37,36 +37,16 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 @dataclass
 # @auto_docstring
 class PeVideoOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for video-text similarity.
-    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-        similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
-        similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`PeVideoTextModel`].
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The video embeddings obtained by applying the projection layer to the pooled output of [`PeVideoVisionModel`].
-    text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PeVideoTextModel`].
-    video_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PeVideoVisionModel`].
-    """
-
     loss: Optional[torch.FloatTensor] = None
-    logits_per_video: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
+    logits_video_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
     video_embeds: Optional[torch.FloatTensor] = None
-    text_model_output: BaseModelOutputWithPooling = None
-    video_model_output: BaseModelOutputWithPooling = None
+    text_outputs: BaseModelOutputWithPooling = None
+    video_outputs: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "video_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in ["text_outputs", "video_outputs"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
@@ -201,41 +181,39 @@ class PeVideoModel(PeVideoPreTrainedModel):
         return_loss: Optional[bool] = None,
         **kwargs,
     ) -> PeVideoOutput:
-        video_output: BaseModelOutputWithPooling = self.video_encoder(
+        video_outputs: BaseModelOutputWithPooling = self.video_encoder(
             pixel_values_videos=pixel_values_videos,
             padding_mask_videos=padding_mask_videos,
             **{**kwargs, "return_dict": True},
         )
 
-        text_output: MaskedLMOutput = self.text_model(
+        text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             **{**kwargs, "return_dict": True},
             output_hidden_states=True,
         )
 
-        video_embeds = video_output.pooler_output
+        video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)
 
-        text_embeds = text_output.hidden_states[-1][:, 0]
+        text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_video_head(text_embeds)
 
-        logits_per_video = video_embeds @ text_embeds.T
-        logits_per_video = logits_per_video * self.text_video_logit_scale + self.text_video_logit_bias
-        logits_per_text = logits_per_video.t()
+        logits_video_text = video_embeds @ text_embeds.T
+        logits_video_text = logits_video_text * self.text_video_logit_scale + self.text_video_logit_bias
 
         loss = None
         if return_loss:
-            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
-            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
+            labels = torch.eye(logits_video_text.shape[0], device=logits_video_text.device)
+            loss = -F.logsigmoid(labels * logits_video_text).sum() / logits_video_text.shape[0]
 
         return PeVideoOutput(
-            logits_per_text=logits_per_text,
-            logits_per_video=logits_per_video,
+            logits_video_text=logits_video_text,
             text_embeds=text_embeds,
             video_embeds=video_embeds,
-            text_model_output=text_output,
-            video_model_output=video_output,
+            text_outputs=text_outputs,
+            video_outputs=video_outputs,
             loss=loss,
         )
 

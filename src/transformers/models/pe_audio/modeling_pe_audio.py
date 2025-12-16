@@ -664,37 +664,16 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
 @dataclass
 # @auto_docstring
 class PeAudioOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
-    logits_per_audio (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-        The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the image-text
-        similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-        The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-image
-        similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The text embeddings obtained by applying the projection layer to the pooled output of [`PeAudioTextModel`].
-    audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`PeAudioVisionModel`].
-    text_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PeAudioTextModel`].
-    audio_model_output (`BaseModelOutputWithPooling`):
-        The output of the [`PeAudioVisionModel`].
-    """
-
     loss: Optional[torch.FloatTensor] = None
-    logits_per_audio: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
+    logits_audio_text: Optional[torch.FloatTensor] = None
     text_embeds: Optional[torch.FloatTensor] = None
     audio_embeds: Optional[torch.FloatTensor] = None
-    text_model_output: BaseModelOutputWithPooling = None
-    audio_model_output: BaseModelOutputWithPooling = None
+    text_outputs: BaseModelOutputWithPooling = None
+    audio_outputs: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "audio_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
+            self[k] if k not in ["text_outputs", "audio_outputs"] else getattr(self, k).to_tuple() for k in self.keys()
         )
 
 
@@ -761,22 +740,20 @@ class PeAudioModel(PeAudioPreTrainedModel):
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
-        logits_per_audio = audio_embeds @ text_embeds.T
-        logits_per_audio = logits_per_audio * self.text_audio_logit_scale + self.text_audio_logit_bias
-        logits_per_text = logits_per_audio.t()
+        logits_audio_text = audio_embeds @ text_embeds.T
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
 
         loss = None
         if return_loss:
-            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
-            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
+            labels = torch.eye(logits_audio_text.shape[0], device=logits_audio_text.device)
+            loss = -F.logsigmoid(labels * logits_audio_text).sum() / logits_audio_text.shape[0]
 
         return PeAudioOutput(
-            logits_per_text=logits_per_text,
-            logits_per_audio=logits_per_audio,
+            logits_audio_text=logits_audio_text,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
-            text_model_output=text_outputs,
-            audio_model_output=audio_outputs,
+            text_outputs=text_outputs,
+            audio_outputs=audio_outputs,
             loss=loss,
         )
 
@@ -824,22 +801,20 @@ class PeAudioFrameLevelModel(PeAudioModel):
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         text_embeds = self.text_audio_head(text_embeds)
 
-        logits_per_audio = (audio_embeds @ text_embeds.T).transpose(1, 2)
-        logits_per_audio = logits_per_audio * self.text_audio_logit_scale + self.text_audio_logit_bias
-        logits_per_text = logits_per_audio.transpose(0, 1)
+        logits_audio_text = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
 
         loss = None
         if return_loss:
-            labels = torch.eye(text_embeds.shape[0], device=text_embeds.device)
-            loss = -F.logsigmoid(labels * logits_per_text).sum() / text_embeds.shape[0]
+            labels = torch.eye(logits_audio_text.shape[0], device=logits_audio_text.device)
+            loss = -F.logsigmoid(labels * logits_audio_text).sum() / logits_audio_text.shape[0]
 
         return PeAudioOutput(
-            logits_per_text=logits_per_text,
-            logits_per_audio=logits_per_audio,
+            logits_audio_text=logits_audio_text,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
-            text_model_output=text_outputs,
-            audio_model_output=audio_outputs,
+            text_outputs=text_outputs,
+            audio_outputs=audio_outputs,
             loss=loss,
         )
 
