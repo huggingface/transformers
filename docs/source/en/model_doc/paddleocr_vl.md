@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-11.*
 *This model was released on 2025.10.16 and added to Hugging Face Transformers on 2025.12.10*
 
 # PaddleOCR-VL

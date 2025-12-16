@@ -68,7 +68,7 @@ def get_pixio_config(model_name):
         raise ValueError(f"Model '{model_name}' not supported")
 
     config = PixioConfig(**kwargs)
-    
+
     return config
 
 
