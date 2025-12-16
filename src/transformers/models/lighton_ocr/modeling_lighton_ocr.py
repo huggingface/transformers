@@ -190,7 +190,8 @@ def vision_eager_attention_forward(
 
 class LightOnOcrAttention(nn.Module):
     """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    Multi-headed attention using vision_eager_attention_forward to avoid
+    naming collision with Qwen3's eager_attention_forward (which has GQA support).
     """
 
     def __init__(self, config):
