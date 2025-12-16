@@ -2,6 +2,8 @@ from collections.abc import Callable
 from typing import Any, Optional, Union
 
 import numpy as np
+import torch
+from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -30,14 +32,6 @@ from ..qwen3.modeling_qwen3 import (
     Qwen3Model,
     Qwen3RMSNorm,
 )
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-if is_vision_available():
-    from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
 class LightOnOcrVisionConfig(PixtralVisionConfig):
