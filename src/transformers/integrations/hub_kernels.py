@@ -370,7 +370,7 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
         if callable(is_kernel_available) and is_kernel_available():
             # Try to import the module "{kernel_name}" from parent package level
             try:
-                module = importlib.import_module(f"{kernel_name}")
+                module = importlib.import_module(f"{new_kernel_name}")
                 mapping[kernel_name] = module
                 return module
             except Exception:
