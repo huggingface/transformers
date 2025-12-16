@@ -424,6 +424,7 @@ class CsmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CsmBackboneModelEmbeddings):
             init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.vocab_size)
 
+
 @auto_docstring
 class CsmDepthDecoderModel(CsmPreTrainedModel):
     config: CsmDepthDecoderConfig

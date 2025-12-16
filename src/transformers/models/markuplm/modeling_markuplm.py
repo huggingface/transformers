@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarkupLM model."""
 
-import os
 from collections.abc import Callable
 from typing import Optional, Union
 

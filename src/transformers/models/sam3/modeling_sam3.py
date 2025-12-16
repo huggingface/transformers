@@ -420,6 +420,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         self.end_x, self.end_y = end_x, end_y
         self.dim = dim
         self.rope_theta = config.rope_theta
+        self.scale = scale
         freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
@@ -784,8 +785,8 @@ class Sam3PreTrainedModel(PreTrainedModel):
             dim = module.dim
             freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
             flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-            x_positions = (flattened_indices % end_x) * scale
-            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
+            x_positions = (flattened_indices % end_x) * module.scale
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
             freqs_x = torch.outer(x_positions, freqs).float()
             freqs_y = torch.outer(y_positions, freqs).float()
             inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)

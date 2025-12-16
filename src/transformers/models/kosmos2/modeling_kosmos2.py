@@ -1173,11 +1173,14 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             init.zeros_(module.bias)
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
-            emb_weights = module.get_embedding(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
             init.copy_(module.weights, emb_weights)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+
 
 class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     config: Kosmos2VisionConfig

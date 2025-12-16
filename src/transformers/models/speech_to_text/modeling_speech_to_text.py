@@ -500,7 +500,9 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Speech2TextSinusoidalPositionalEmbedding):
-            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            emb_weights = module.make_weights(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
             init.copy_(module.weights, emb_weights)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):

@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
@@ -264,7 +265,9 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Attention):
             n_positions = module.n_positions
-            init.copy_(module.bias, torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions))
+            init.copy_(
+                module.bias, torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+            )
         elif isinstance(module, OpenAIGPTModel):
             init.copy_(module.position_ids, torch.arange(module.config.n_positions))
 

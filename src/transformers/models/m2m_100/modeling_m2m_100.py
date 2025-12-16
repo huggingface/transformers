@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -518,8 +519,10 @@ class M2M100PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, M2M100SinusoidalPositionalEmbedding)
-            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+        if isinstance(module, M2M100SinusoidalPositionalEmbedding):
+            emb_weights = module.make_weights(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
             init.copy_(module.weights, emb_weights)
 
 

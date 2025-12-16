@@ -26,21 +26,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
 
-from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VisionTransformerPretrainedModel,
-    Qwen2_5_VLAttention,
-    Qwen2_5_VLMLP,
-    Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLTextModel,
-    Qwen2_5_VLVisionBlock,
-    eager_attention_forward,
-)
-from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
-from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
-from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
-
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
@@ -56,6 +42,20 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.hub import cached_file
+from ..modeling_llama import LlamaRotaryEmbedding, rotate_half
+from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+from ..qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLAttention,
+    Qwen2_5_VLMLP,
+    Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLTextModel,
+    Qwen2_5_VLVisionBlock,
+    eager_attention_forward,
+)
+from ..qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
+from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -1055,7 +1055,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _can_compile_fullgraph = False
 
     def _init_weights(self, module):
-        super()._init_weights(module):
+        super()._init_weights(module)
         if isinstance(module, SinusoidsPositionEmbedding):
             log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
             inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())

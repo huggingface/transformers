@@ -462,6 +462,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Aimv2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
+
 @auto_docstring(
     custom_intro="""
     The Vision model from AIMv2 without any head or projection on top.

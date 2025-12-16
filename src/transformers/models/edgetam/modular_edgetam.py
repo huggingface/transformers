@@ -182,8 +182,7 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
         elif hasattr(module, "positional_embedding"):
-            positional_embedding = module.scale * torch.randn((2, config.hidden_size // 2))
-            init.copy_(module.positional_embedding, positional_embedding)
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 @auto_docstring(

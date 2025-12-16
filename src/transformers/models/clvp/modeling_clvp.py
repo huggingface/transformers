@@ -824,6 +824,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
 
+
 class ClvpEncoder(ClvpPreTrainedModel):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a

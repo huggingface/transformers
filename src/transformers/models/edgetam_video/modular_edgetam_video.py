@@ -29,6 +29,7 @@ from transformers.models.sam2.modeling_sam2 import (
 )
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -668,7 +669,9 @@ class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
         super()._init_weights()
         if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
             dim = self.dim
-            freqs = 1.0 / (self.config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            freqs = 1.0 / (
+                self.config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim)
+            )
             # Generate 2D position indices for axial rotary embedding
             flattened_indices = torch.arange(module.end_x * module.end_y, dtype=torch.long)
             x_positions = flattened_indices % module.end_x

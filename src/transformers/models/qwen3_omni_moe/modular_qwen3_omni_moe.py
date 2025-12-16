@@ -62,7 +62,11 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniThinkerForConditionalGeneration,
     SnakeBeta,
 )
-from ..qwen2_5_omni.processing_qwen2_5_omni import Qwen2_5OmniProcessor, Qwen2_5OmniProcessorKwargs, SinusoidsPositionEmbedding
+from ..qwen2_5_omni.processing_qwen2_5_omni import (
+    Qwen2_5OmniProcessor,
+    Qwen2_5OmniProcessorKwargs,
+    SinusoidsPositionEmbedding,
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
@@ -901,7 +905,10 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
             init.normal_(module.gate.weight, mean=0.0, std=std)
         elif isinstance(module, Qwen3OmniMoeCode2Wav):
-            init.copy_(module.code_offset, torch.arange(module.config.num_quantizers).view(1, -1, 1) * module.config.codebook_size)
+            init.copy_(
+                module.code_offset,
+                torch.arange(module.config.num_quantizers).view(1, -1, 1) * module.config.codebook_size,
+            )
         elif isinstance(module, SinusoidsPositionEmbedding):
             log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
             inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())

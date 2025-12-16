@@ -273,8 +273,14 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesFmPositionalEmbedding):
             num_timescales = module.embedding_dims // 2
             max_timescale, min_timescale = module.max_timescale, module.min_timescale
-            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
-            init.copy_(module.inv_timescales, min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment))
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 @auto_docstring

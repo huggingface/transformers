@@ -30,6 +30,7 @@ from typing import Any, Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN, GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin

@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
@@ -348,7 +349,7 @@ class BarkPreTrainedModel(PreTrainedModel):
                 return torch.device(module._hf_hook.execution_device)
 
         return super().device
-    
+
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BarkSelfAttention):

@@ -820,6 +820,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
             init.zeros(module.token_type_ids)
 
+
 class AltCLIPVisionTransformer(nn.Module):
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__()

@@ -1219,22 +1219,6 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
             init.copy_(module.k_minus_1, torch.tensor([module.k - 1]).view(1, -1, 1, 1))
 
 
-class LogBinomialSoftmax(nn.Module):
-    def __init__(self, n_classes=256, act=torch.softmax):
-        """Compute log binomial distribution for n_classes
-
-        Args:
-            n_classes (`int`, *optional*, defaults to 256):
-                Number of output classes.
-            act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
-                Activation function to apply to the output.
-        """
-        super().__init__()
-        self.k = n_classes
-        self.act = act
-        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
-        self.register_buffer("k_minus_1", torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
-
 @auto_docstring(
     custom_intro="""
     ZoeDepth model with one or multiple metric depth estimation head(s) on top.

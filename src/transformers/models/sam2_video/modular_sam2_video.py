@@ -50,8 +50,8 @@ from ..sam2.modeling_sam2 import (
     Sam2FeedForward,
     Sam2ImageSegmentationOutput,
     Sam2LayerNorm,
-    Sam2PositionalEmbedding,
     Sam2Model,
+    Sam2PositionalEmbedding,
     Sam2SinePositionEmbedding,
     Sam2TwoWayAttentionBlock,
     eager_attention_forward,
@@ -1413,6 +1413,7 @@ class Sam2VideoMaskDownSampler(nn.Module):
         x = self.final_conv(x)
         return x
 
+
 class Sam2VideoMemoryEncoder(nn.Module):
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
@@ -1442,10 +1443,11 @@ class Sam2VideoMemoryEncoder(nn.Module):
         vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
         return vision_features, vision_pos_enc
-    
+
 
 class Sam2VideoPositionalEmbedding(Sam2PositionalEmbedding):
     pass
+
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0

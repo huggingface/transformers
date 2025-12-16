@@ -703,8 +703,12 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
         elif isinstance(module, Swin2SRSelfAttention):
-            relative_coords_h = torch.arange(-(module.window_size[0] - 1), module.window_size[0], dtype=torch.int64).float()
-            relative_coords_w = torch.arange(-(module.window_size[1] - 1), module.window_size[1], dtype=torch.int64).float()
+            relative_coords_h = torch.arange(
+                -(module.window_size[0] - 1), module.window_size[0], dtype=torch.int64
+            ).float()
+            relative_coords_w = torch.arange(
+                -(module.window_size[1] - 1), module.window_size[1], dtype=torch.int64
+            ).float()
             relative_coords_table = (
                 torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
                 .permute(1, 2, 0)
@@ -712,8 +716,8 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
                 .unsqueeze(0)
             )
             if module.pretrained_window_size[0] > 0:
-                relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
-                relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
+                relative_coords_table[:, :, :, 0] /= module.pretrained_window_size[0] - 1
+                relative_coords_table[:, :, :, 1] /= module.pretrained_window_size[1] - 1
             elif module.window_size > 1:
                 relative_coords_table[:, :, :, 0] /= module.window_size[0] - 1
                 relative_coords_table[:, :, :, 1] /= module.window_size[1] - 1
@@ -722,7 +726,9 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
                 torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
             )
             # set to same dtype as mlp weight
-            relative_coords_table = relative_coords_table.to(next(module.continuous_position_bias_mlp.parameters()).dtype)
+            relative_coords_table = relative_coords_table.to(
+                next(module.continuous_position_bias_mlp.parameters()).dtype
+            )
             init.copy_(module.relative_coords_table, relative_coords_table)
 
             # get pair-wise relative position index for each token inside the window

@@ -1293,7 +1293,9 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, SeamlessM4Tv2SinusoidalPositionalEmbedding):
-            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            emb_weights = module.make_weights(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
             init.copy_(module.weights, emb_weights)
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TPreTrainedModel._compute_sub_sample_lengths_from_attention_mask

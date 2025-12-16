@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -480,9 +481,14 @@ class LevitPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LevitAttention):
-            init.copy_(module.attention_bias_idxs, torch.LongTensor(module.indices).view(module.len_points, module.len_points))
-        elif isinstance(module, LevitAttentionSubSample):
-            init.copy_(module.attention_bias_idxs, torch.LongTensor(module.indices).view(module.len_points_, module.len_points))
+            init.copy_(
+                module.attention_bias_idxs, torch.LongTensor(module.indices).view(module.len_points, module.len_points)
+            )
+        elif isinstance(module, LevitAttentionSubsample):
+            init.copy_(
+                module.attention_bias_idxs,
+                torch.LongTensor(module.indices).view(module.len_points_, module.len_points),
+            )
 
 
 @auto_docstring

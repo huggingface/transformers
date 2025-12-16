@@ -859,8 +859,8 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             freqs = torch.einsum("i,j->ij", t, inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation
             emb = torch.cat((freqs, freqs), dim=-1)
-            init.copy_(cos_cached, emb.cos())
-            init.copy_(sin_cached, emb.sin())
+            init.copy_(module.cos_cached, emb.cos())
+            init.copy_(module.sin_cached, emb.sin())
 
 
 @auto_docstring

@@ -306,7 +306,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, Embeddings):
-            if self.config.sinusoidal_pos_embds
+            if self.config.sinusoidal_pos_embds:
                 init.copy_(
                     module.position_embeddings.weight,
                     create_sinusoidal_embeddings(

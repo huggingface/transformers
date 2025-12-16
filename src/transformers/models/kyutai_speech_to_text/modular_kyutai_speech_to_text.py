@@ -20,6 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin

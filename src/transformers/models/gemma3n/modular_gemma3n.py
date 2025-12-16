@@ -1898,10 +1898,12 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             init.copy_(module.q_scale, q_scale * r_softplus_0)
             init.constant_(module.softcap, module.attention_logits_soft_cap)
 
-            lower_causal_mask = torch.tril(torch.ones((module.context_size, module.chunk_size), dtype=torch.bool), diagonal=0).T
+            lower_causal_mask = torch.tril(
+                torch.ones((module.context_size, module.chunk_size), dtype=torch.bool), diagonal=0
+            ).T
             upper_causal_mask = torch.tril(
                 torch.ones((module.chunk_size, module.context_size), dtype=torch.bool),
-                diagonal=module.max_past_horizon + modle.max_future_horizon,
+                diagonal=module.max_past_horizon + module.max_future_horizon,
             )
             local_causal_valid_mask = torch.ones((module.chunk_size, module.context_size), dtype=torch.bool)
             local_causal_valid_mask = local_causal_valid_mask * lower_causal_mask * upper_causal_mask
@@ -1915,13 +1917,15 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             min_timescale = 1.0
             max_timescale = 1.0e4
             num_timescales = module.channels // 2
-            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
             inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
             init.copy_(module.inv_timescales, inv_timescales.float().unsqueeze(0).unsqueeze(0))
         elif isinstance(module, Gemma3nTextModel):
             init.constant_(module.per_layer_projection_scale, self.hidden_size**-0.5)
             init.constant_(module.per_layer_input_scale, math.rsqrt(2.0))
-        
+
         if hasattr(module, "gradient_clipping"):
             init.constant_(module.gradient_clipping, self.config.gradient_clipping)
 

@@ -33,13 +33,13 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderOutput,
     RTDetrEncoder,
     RTDetrForObjectDetection,
+    RTDetrFrozenBatchNorm2d,
     RTDetrHybridEncoder,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
     RTDetrRepVggBlock,
     inverse_sigmoid,
-    RTDetrFrozenBatchNorm2d,
 )
 from ..rt_detr_v2.modeling_rt_detr_v2 import multi_scale_deformable_attention_v2
 
@@ -863,6 +863,7 @@ class DFineDecoder(RTDetrDecoder):
 
 class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
     pass
+
 
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):

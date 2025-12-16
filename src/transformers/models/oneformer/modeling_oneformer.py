@@ -935,7 +935,6 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
-
 # Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->OneFormerPixelDecoderEncoder
 class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
     """
