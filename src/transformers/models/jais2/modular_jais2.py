@@ -67,8 +67,6 @@ class Jais2Config(LlamaConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 150024):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism rank used during pretraining.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings.
         attention_bias (`bool`, *optional*, defaults to `True`):
@@ -79,8 +77,6 @@ class Jais2Config(LlamaConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers.
         head_dim (`int`, *optional*):
             The attention head dimension.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The base period of the RoPE embeddings.
         rope_parameters (`dict`, *optional*):
             The RoPE parameters.
     """
