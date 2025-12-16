@@ -273,7 +273,6 @@ def convert_and_write_processor_and_tokenizer(
 
     tokenizer_file = os.path.join(input_dir, "tekken.json")
     tokenizer = convert_tekken_tokenizer(tokenizer_file)
-    tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     # No vision
     if isinstance(model_config, Ministral3Config):
