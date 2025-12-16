@@ -163,6 +163,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_commit_hash",
                 "_attn_implementation_internal",
                 "transformers_version",
+                "tie_word_embeddings",  # was omitted in purpose and will be deleted from base config soon
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
