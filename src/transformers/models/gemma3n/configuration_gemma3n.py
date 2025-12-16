@@ -495,6 +495,9 @@ class Gemma3nVisionConfig(PreTrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        # Create a copy to avoid mutating the original dict
+        config_dict = config_dict.copy()
+
         label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 

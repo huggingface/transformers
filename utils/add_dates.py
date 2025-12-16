@@ -368,5 +368,9 @@ if __name__ == "__main__":
     group.add_argument("--check-only", action="store_true", help="Check if the dates are already present")
 
     args = parser.parse_args()
-
-    main(args.all, args.models, args.check_only)
+    try:
+        main(args.all, args.models, args.check_only)
+    except subprocess.CalledProcessError as e:
+        print(
+            f"An error occurred while executing git commands but it can be ignored (git issue) most probably local: {e}"
+        )

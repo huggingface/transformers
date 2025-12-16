@@ -921,6 +921,8 @@
         title: MusicGen Melody
       - local: model_doc/parakeet
         title: Parakeet
+      - local: model_doc/pe_audio
+        title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -963,6 +965,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/pe_video
+        title: PE Video
       - local: model_doc/sam2_video
         title: SAM2 Video
       - local: model_doc/sam3_tracker_video
@@ -1129,6 +1133,8 @@
         title: PaddleOCRVL
       - local: model_doc/paligemma
         title: PaliGemma
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/perception_lm
