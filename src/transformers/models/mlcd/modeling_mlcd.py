@@ -55,6 +55,8 @@ class MLCDRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
+        self.dim = dim
+        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -448,6 +450,9 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+        elif isinstance(module, MLCDRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class MLCDVisionTransformer(nn.Module):

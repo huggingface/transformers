@@ -781,6 +781,9 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PaddleOCRVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, PaddleOCRVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):

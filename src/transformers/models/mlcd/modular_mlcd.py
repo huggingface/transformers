@@ -387,6 +387,9 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+        elif isinstance(module, MLCDRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class MLCDVisionTransformer(CLIPVisionTransformer):

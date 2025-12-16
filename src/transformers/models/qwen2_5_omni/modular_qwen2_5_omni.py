@@ -45,6 +45,7 @@ from ...utils.hub import cached_file
 from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
     Qwen2_5_VLMLP,
@@ -1067,6 +1068,9 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, DownSample1d):
             filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
+        elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -1933,6 +1937,10 @@ class Qwen2_5OmniVisionBlock(Qwen2_5_VLVisionBlock):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
+
+
+class Qwen2_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
+    pass
 
 
 class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
