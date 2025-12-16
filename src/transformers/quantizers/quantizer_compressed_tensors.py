@@ -82,7 +82,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self._update_transforms_tied_weights(model)
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
 
-        # compress meta model to patch compressed checkpoint
+        # compress meta model to match compressed checkpoint
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
