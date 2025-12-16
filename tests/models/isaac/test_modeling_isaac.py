@@ -17,6 +17,8 @@
 import base64
 import hashlib
 import io
+import random
+import numpy as np
 import json
 import os
 import unittest
@@ -961,6 +963,83 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
     decoded_prompt = isaac_processor.tokenizer.decode(generated[0], skip_special_tokens=True)
     assert isinstance(decoded_prompt, str)
     assert decoded_prompt.strip() != ""
+
+
+def test_hf_generate_something():
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    os.environ["PYTHONHASHSEED"] = "0"
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    seed = 123
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True, warn_only=False)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
+    torch.set_float32_matmul_precision("highest")
+    # Configuration
+    MAX_NEW_TOKENS = 10
+    DTYPE = torch.bfloat16
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    genesis_hf_checkpoint = "/home/phil/backup/genesis/genesis_isaac_base_hf_converted_checkpoint/"
+
+    hf_config = IsaacConfig.from_pretrained(genesis_hf_checkpoint)
+    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
+    messages = [{"role": "user", "content": "Describe this image:"}, {"role": "user", "content": "<image>"}]
+    images = []
+    image_bytes = base64.b64decode(RED_DOT_B64)
+    pil_image = Image.open(io.BytesIO(image_bytes))
+    images.append(pil_image)
+    print("----------")
+    print(messages)
+    print("----------")
+
+    tokenizer = AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
+    genesis_processor = create_isaac_processor(tokenizer, hf_config)
+    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
+    # Added strip because our generation events don't add new line
+    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
+    tensor_stream = processor_output["tensor_stream"].to(device)
+
+    # Process document to TensorStream
+    hf_config.vision_config._attn_implementation = "flash_attention_2"
+    hf_config.vision_config.attn_implementation = "flash_attention_2"
+    hf_model = IsaacForConditionalGeneration.from_pretrained(genesis_hf_checkpoint, config=hf_config)
+    hf_model = hf_model.to(device=device, dtype=DTYPE)
+    hf_model.eval()
+
+    # Load HF tokenizer
+
+    # Validate that weights are identical between models
+
+    with torch.inference_mode():
+        print("\n1️⃣ Running HuggingFace model.generate()...")
+        # Generate with HF model using the training tensor stream converted to Open variant
+        hf_output = hf_model.generate(
+            tensor_stream=tensor_stream,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=False,  # Deterministic generation
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+        hf_generated_ids = hf_output.sequences
+        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
+        print(f"   HF Generated: '{hf_generated_text}'")
+        assert "is" in hf_generated_text
+        hf_logits = torch.cat(hf_output.logits, dim=0)
+        logit_stats = compute_logits_statistics(hf_logits)
+        print("-------------")
+        print(logit_stats)
+        print("-------------")
 
 
 @require_torch
