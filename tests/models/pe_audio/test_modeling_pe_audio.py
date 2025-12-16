@@ -157,6 +157,7 @@ class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+
 class PeAudioTextModelTester:
     """
     Only a ModelTester and no PeAudioTextModelTest since text model is ModernBertModel that is already tested.
@@ -319,7 +320,6 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_batching_equivalence(self):
         pass
-
 
 
 @require_torch

@@ -267,7 +267,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-
 @require_torch
 class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):

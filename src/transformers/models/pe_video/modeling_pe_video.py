@@ -21,11 +21,12 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
-from ... import initialization as init
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -414,7 +415,6 @@ class PeVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PeVideoEncoderLayer,
         "attentions": PeVideoEncoderAttention,
     }
-
 
     def _init_weights(self, module):
         super()._init_weights(module)

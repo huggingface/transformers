@@ -18,8 +18,8 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ... import initialization as init
 
+from ... import initialization as init
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
@@ -200,17 +200,11 @@ class PeAudioModel(PeAudioPreTrainedModel):
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **kwargs
+            input_values=input_values, padding_mask=padding_mask, **kwargs
         )
 
         kwargs["output_hidden_states"] = True
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs
-        )
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_head(audio_embeds)
@@ -261,16 +255,10 @@ class PeAudioFrameLevelModel(PeAudioModel):
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **kwargs
+            input_values=input_values, padding_mask=padding_mask, **kwargs
         )
         kwargs["output_hidden_states"] = True
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs
-        )
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.last_hidden_state
         audio_embeds = self.audio_head(audio_embeds)

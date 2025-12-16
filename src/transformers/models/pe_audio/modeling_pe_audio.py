@@ -491,7 +491,9 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         return hidden_states
 
+
 from ... import initialization as init
+
 
 @auto_docstring
 class PeAudioPreTrainedModel(PreTrainedModel):

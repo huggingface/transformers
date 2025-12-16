@@ -531,6 +531,7 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
         "attentions": PeAudioVideoEncoderAttention,
     }
 
+
 @dataclass
 @auto_docstring(
     custom_intro="""

@@ -192,7 +192,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-
 class PeVideoTextModelTester:
     """
     Only a ModelTester and no PeVideoTextModelTest since text model is ModernBertModel that is already tested.
@@ -355,7 +354,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_batching_equivalence(self):
         pass
-
 
 
 @require_torch

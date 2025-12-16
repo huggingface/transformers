@@ -137,6 +137,7 @@ class PeVideoEncoder(PeAudioVideoEncoder):
 
 class PeVideoModel(PeVideoPreTrainedModel):
     main_input_name = "input_ids"
+
     def __init__(self, config: PeVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
@@ -183,16 +184,10 @@ class PeVideoModel(PeVideoPreTrainedModel):
         **kwargs,
     ) -> PeVideoOutput:
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(
-            pixel_values_videos=pixel_values_videos,
-            padding_mask_videos=padding_mask_videos,
-            **kwargs
+            pixel_values_videos=pixel_values_videos, padding_mask_videos=padding_mask_videos, **kwargs
         )
         kwargs["output_hidden_states"] = True
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs
-        )
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)

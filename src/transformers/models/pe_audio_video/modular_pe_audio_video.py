@@ -544,14 +544,14 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             pixel_values_videos=pixel_values_videos,
             padding_mask=padding_mask,
             padding_mask_videos=padding_mask_videos,
-            **kwargs
+            **kwargs,
         )
         if return_audio_embeds:
             audio_embeds = self.audio_model.audio_head(audio_video_outputs.audio_model_output.pooler_output)
         if return_video_embeds:
             video_embeds = self.video_model.video_head(audio_video_outputs.video_model_output.pooler_output)
 
-        audio_video_embeds =  self.audio_video_head(audio_video_outputs.pooler_output)
+        audio_video_embeds = self.audio_video_head(audio_video_outputs.pooler_output)
         return AudioVideoEmbeddings(
             audio_embeds=audio_embeds if return_audio_embeds else None,
             video_embeds=video_embeds if return_video_embeds else None,
@@ -642,7 +642,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             pixel_values_videos=pixel_values_videos,
             padding_mask=padding_mask,
             padding_mask_videos=padding_mask_videos,
-            **kwargs
+            **kwargs,
         )
         audio_embeds = audio_video_outputs.audio_model_output.pooler_output
         video_embeds = audio_video_outputs.video_model_output.pooler_output
@@ -666,11 +666,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             )
 
         kwargs["output_hidden_states"] = True
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs
-        )
+        text_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         audio_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.audio_model_output.pooler_output], dim=-1)
         video_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.video_model_output.pooler_output], dim=-1)
