@@ -71,6 +71,8 @@ class Ernie4_5_VL_MoeProcessor(ProcessorMixin):
 
     def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
         """We additionally save a copy of the font to the `save_directory` (if we found a file there)"""
+        os.makedirs(save_directory, exist_ok=True)
+
         if os.path.isfile(self.video_processor.font):
             try:
                 copyfile(self.video_processor.font, Path(save_directory, Path(self.video_processor.font).name))

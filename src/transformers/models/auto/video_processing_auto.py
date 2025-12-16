@@ -17,6 +17,7 @@
 import importlib
 import os
 from collections import OrderedDict
+from copy import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all video processors
@@ -323,15 +324,27 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, processed_kwargs = BaseVideoProcessor.get_video_processor_dict(
+        reloaded_kwargs = copy(kwargs)
+        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
             pretrained_model_name_or_path, **kwargs
         )
-        # Specific models need the original path for modification in `from_dict`, e.g. see `Ernie 4.5 VL` with fonts
-        # TODO: Remove this workaround when the processor no longer relies on the `Auto`, i.e. `BaseVideoProcessor`, class
-        # and resolves the underlying class instead
-        kwargs["resolved_file_path"] = processed_kwargs.get("resolved_file_path")
-
         video_processor_class = config_dict.get("video_processor_type", None)
+
+        # We have a circular dependency
+        #   - We need the actual class to load the dict properly (custom logic, e.g. fonts)
+        #   - We can only find the actual class by loading the base json first
+        #
+        # This is an exception to allow the `Ernie4_5_VL_Moe` to load by its logic
+        if 'Ernie4_5_VL_MoeVideoProcessor' == video_processor_class:
+            from ..ernie4_5_vl_moe import Ernie4_5_VL_MoeVideoProcessor
+
+            # Ernie 4.5 VL Moe has extra logic to load fonts at the same time
+            # Our logic relies heavily on this being unifiable which is not the case here
+            config_dict, _ = Ernie4_5_VL_MoeVideoProcessor.get_video_processor_dict(
+                pretrained_model_name_or_path, **reloaded_kwargs
+            )
+            kwargs = reloaded_kwargs
+
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
             video_processor_auto_map = config_dict["auto_map"]["AutoVideoProcessor"]
