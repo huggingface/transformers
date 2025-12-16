@@ -78,13 +78,13 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
 
     if device not in ["cuda", "rocm", "xpu", "npu"]:
         raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
-    repo_layer_name = repo_name.split(":")[2]
-    repo_package_name = repo_name.split(":")[1]
-    repo_path = Path(repo_name.split(":")[0])
+    repo_layer_name = repo_name.split(":")[1]
+    repo_path = repo_name.split(":")[0]
+    repo_package_name = repo_path.split("/")[-1]
     compatible_mapping[layer_name] = {
         device: {
             mode: LocalLayerRepository(
-                repo_path=repo_path,
+                repo_path=Path(repo_path),
                 package_name=repo_package_name,
                 layer_name=repo_layer_name,
             )
@@ -102,18 +102,18 @@ class KernelConfig(PushToHubMixin):
         self.registered_layer_names = {}
         self.check_kernel_from_local = False
 
-    # def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
-    #     from kernels import LayerRepository
+    def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
+        from kernels import LayerRepository
 
-    #     self.kernel_mapping[registered_name] = {
-    #         device: {
-    #             mode: LayerRepository(
-    #                 repo_id=repo_id,
-    #                 layer_name=layer_name,
-    #                 revision=revision,
-    #             )
-    #         }
-    #     }
+        self.kernel_mapping[registered_name] = {
+            device: {
+                mode: LayerRepository(
+                    repo_id=repo_id,
+                    layer_name=layer_name,
+                    revision=revision,
+                )
+            }
+        }
 
     def store_registered_layer_names(self, model):
         for name, module in model.named_modules():
@@ -127,7 +127,7 @@ class KernelConfig(PushToHubMixin):
         2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such strings.
         3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
         4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
-        5. If a local path is detected, it should be in the format '/abs-path:package_name:layer_name'.
+        5. If a local path is detected, it should be in the format '/abs-path/package_name:layer_name'. The abs-path must include the `package_name`, like "/home/path/layer_norm".
 
         Args:
             model: The model instance whose modules are checked for registered kernel_layer_name attributes.
@@ -157,16 +157,16 @@ class KernelConfig(PushToHubMixin):
         For single device form local
         {
             "RMSNorm":
-                "/abs-path:package_name:LlamaRMSNorm",
+                "/abs-path:LlamaRMSNorm",
             ...
         },
         For multiple devices form local
         {
             "RMSNorm": {
                 "cuda":
-                    "/abs-path:package_name:LlamaRMSNorm",
+                    "/abs-path:LlamaRMSNorm",
                 "rocm":
-                    "/abs-path:package_name:LlamaRMSNorm",
+                    "/abs-path:LlamaRMSNorm",
                 ...
             },
             ...
@@ -188,7 +188,7 @@ class KernelConfig(PushToHubMixin):
             if isinstance(kernel, str):
                 if "/" not in kernel or ":" not in kernel:
                     raise ValueError(
-                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path/to/layer_name'), got: {kernel}"
+                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path:layer_name'), got: {kernel}"
                     )
 
             elif isinstance(kernel, dict):
@@ -198,7 +198,7 @@ class KernelConfig(PushToHubMixin):
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
-                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path/to/layer_name'), got: {repo_name}"
+                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path:layer_name'), got: {repo_name}"
                         )
             if kernel is not None and kernel[0] == "/":
                 self.check_kernel_from_local = True
@@ -215,18 +215,13 @@ class KernelConfig(PushToHubMixin):
                 ...
             },
 
-            or
+            or for local path:
 
             {
-                "RMSNorm": {
-                    "cuda":
-                        "kernels-community/layer_norm:LlamaRMSNorm",
-                    "rocm":
-                        "kernels-community/layer_norm:LlamaRMSNorm",
-                    ...
-                },
+                "RMSNorm":
+                    "/home/user/liger_kernels:LigerRMSNorm",
                 ...
-            }
+            },
 
         into a nested mapping:
 
@@ -236,6 +231,20 @@ class KernelConfig(PushToHubMixin):
                         Mode.INFERENCE: LayerRepository(
                             repo_id="kernels-community/layer_norm",
                             layer_name="LlamaRMSNorm",
+                        )
+                    }
+                }
+            }
+
+            or for local path:
+
+            {
+                "RMSNorm": {
+                    "cuda": {
+                        Mode.INFERENCE: LocalLayerRepository(
+                            repo_path=Path("/home/user/liger_kernels"),
+                            package_name="liger_kernels",
+                            layer_name="LigerRMSNorm",
                         )
                     }
                 }
