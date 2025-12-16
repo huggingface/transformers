@@ -2441,6 +2441,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             # the pair (target_backup, source_backup) becomes the main pair (target_param_name, source_param_name)
                             if target_backup_is_there:
                                 source_param_name = target_backup
+                                # Append the source as well, since both are missing we'll tie both
+                                target_param_names.append(source_param_name)
                                 break
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
