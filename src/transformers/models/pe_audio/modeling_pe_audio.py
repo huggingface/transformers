@@ -666,7 +666,7 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
 class PeAudioOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits_audio_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
+    text_audio_embeds: Optional[torch.FloatTensor] = None
     audio_embeds: Optional[torch.FloatTensor] = None
     text_outputs: BaseModelOutputWithPooling = None
     audio_outputs: BaseModelOutputWithPooling = None
@@ -691,15 +691,15 @@ class PeAudioModel(PeAudioPreTrainedModel):
 
         self.post_init()
 
-    def get_text_embeds(self, input_ids, attention_mask=None):
+    def get_text_audio_embeds(self, input_ids, attention_mask=None):
         # TODO: naming can be improved here...
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             return_dict=True,
         )
-        text_embeds = text_outputs.hidden_states[-1][:, 0]
-        return self.text_audio_head(text_embeds)
+        text_audio_embeds = text_outputs.hidden_states[-1][:, 0]
+        return self.text_audio_head(text_audio_embeds)
 
     def get_audio_embeds(self, input_values, padding_mask=None):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
@@ -736,10 +736,10 @@ class PeAudioModel(PeAudioPreTrainedModel):
         audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_head(audio_embeds)
 
-        text_embeds = text_outputs.hidden_states[-1][:, 0]
-        text_embeds = self.text_audio_head(text_embeds)
+        text_audio_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
-        logits_audio_text = audio_embeds @ text_embeds.T
+        logits_audio_text = audio_embeds @ text_audio_embeds.T
         logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
 
         loss = None
@@ -749,7 +749,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
 
         return PeAudioOutput(
             logits_audio_text=logits_audio_text,
-            text_embeds=text_embeds,
+            text_audio_embeds=text_audio_embeds,
             audio_embeds=audio_embeds,
             text_outputs=text_outputs,
             audio_outputs=audio_outputs,
@@ -797,10 +797,10 @@ class PeAudioFrameLevelModel(PeAudioModel):
         audio_embeds = audio_outputs.last_hidden_state
         audio_embeds = self.audio_head(audio_embeds)
 
-        text_embeds = text_outputs.hidden_states[-1][:, 0]
-        text_embeds = self.text_audio_head(text_embeds)
+        text_audio_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_audio_embeds = self.text_audio_head(text_audio_embeds)
 
-        logits_audio_text = (audio_embeds @ text_embeds.T).transpose(1, 2)
+        logits_audio_text = (audio_embeds @ text_audio_embeds.T).transpose(1, 2)
         logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
 
         loss = None
@@ -810,7 +810,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
 
         return PeAudioOutput(
             logits_audio_text=logits_audio_text,
-            text_embeds=text_embeds,
+            text_audio_embeds=text_audio_embeds,
             audio_embeds=audio_embeds,
             text_outputs=text_outputs,
             audio_outputs=audio_outputs,

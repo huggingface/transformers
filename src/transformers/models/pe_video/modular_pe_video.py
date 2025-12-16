@@ -39,7 +39,7 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 class PeVideoOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits_video_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
+    text_video_embeds: Optional[torch.FloatTensor] = None
     video_embeds: Optional[torch.FloatTensor] = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
@@ -198,10 +198,10 @@ class PeVideoModel(PeVideoPreTrainedModel):
         video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)
 
-        text_embeds = text_outputs.hidden_states[-1][:, 0]
-        text_embeds = self.text_video_head(text_embeds)
+        text_video_embeds = text_outputs.hidden_states[-1][:, 0]
+        text_video_embeds = self.text_video_head(text_video_embeds)
 
-        logits_video_text = video_embeds @ text_embeds.T
+        logits_video_text = video_embeds @ text_video_embeds.T
         logits_video_text = logits_video_text * self.text_video_logit_scale + self.text_video_logit_bias
 
         loss = None
@@ -211,7 +211,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
 
         return PeVideoOutput(
             logits_video_text=logits_video_text,
-            text_embeds=text_embeds,
+            text_video_embeds=text_video_embeds,
             video_embeds=video_embeds,
             text_outputs=text_outputs,
             video_outputs=video_outputs,
