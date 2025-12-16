@@ -380,62 +380,6 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             if hasattr(outputs1, "last_hidden_state") and hasattr(outputs2, "last_hidden_state"):
                 self.assertTrue(torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5))
 
-    @unittest.skip(
-        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
-    )
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_eager_matches_fa2_generate(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_flash_attn_2_from_config(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_flex_attention_with_grads(self):
-        pass
-
     def test_initialization(self):
         """
         Test that model initializes correctly with proper weight initialization.
