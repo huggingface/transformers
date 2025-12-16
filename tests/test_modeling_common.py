@@ -3618,25 +3618,26 @@ class ModelTesterMixin:
             else:
                 return False
 
-        def get_leaf_tensors(obj) -> dict[str, torch.Tensor]:
+        def _get_leaf_tensors(obj) -> dict[str, torch.Tensor]:
             if _is_pure_python_object(obj):
                 return {}
             elif isinstance(obj, torch.Tensor):
                 return {"": obj}
             elif isinstance(obj, (list, tuple, set)):
-                return get_leaf_tensors(dict(enumerate(obj)))
+                return _get_leaf_tensors(dict(enumerate(obj)))
             elif isinstance(obj, dict):
                 leaf_tensors = {}
                 for key, value in obj.items():
-                    for sub_key, tensor in get_leaf_tensors(value).items():
+                    for sub_key, tensor in _get_leaf_tensors(value).items():
                         full_key = f"{key}.{sub_key}" if sub_key else str(key)
                         leaf_tensors[full_key] = tensor
                 return leaf_tensors
             else:
                 raise ValueError(f"Unexpected object type: {type(obj)}")
 
-        def prepare_for_export(model, inputs_dict):
-            # we don't test cache ouptut for now (needs pytree registration for cache classes)
+        def _prepare_for_export(model, inputs_dict):
+            # we don't test outputing a cache class for now
+            # (needs pytree registration for each class)
             inputs_dict.pop("use_cache", None)
 
             for module in model.modules():
@@ -3662,7 +3663,7 @@ class ModelTesterMixin:
                 model = model_class(config).eval().to(torch_device)
 
                 # Prepare model and inputs for export
-                model, inputs_dict = prepare_for_export(model, inputs_dict)
+                model, inputs_dict = _prepare_for_export(model, inputs_dict)
 
                 with torch.no_grad():
                     # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
@@ -3670,7 +3671,7 @@ class ModelTesterMixin:
                     # This happens on cuda for example with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
                     set_seed(1234)
                     eager_outputs = model(**copy.deepcopy(inputs_dict))
-                    eager_outputs = get_leaf_tensors(eager_outputs)
+                    eager_outputs = _get_leaf_tensors(eager_outputs)
                     self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
                 try:
@@ -3684,7 +3685,7 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     set_seed(1234)
                     exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
-                    exported_outputs = get_leaf_tensors(exported_outputs)
+                    exported_outputs = _get_leaf_tensors(exported_outputs)
                     self.assertTrue(exported_outputs, "Exported outputs is empty.")
 
                 # Check outputs closeness:
