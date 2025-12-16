@@ -2250,7 +2250,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
-        module._is_hf_initialized = True
+        # If we are not currently under meta device (which would virtually skip `_init_weights`), mark as initialized
+        if get_torch_context_manager_or_global_device() != torch.device("meta"):
+            module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
