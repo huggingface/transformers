@@ -2422,9 +2422,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             target_backup_is_there = target_backup not in missing_keys
                             # If the target is present, we found the correct weight to tie into (we know the source is missing)
                             if target_backup_is_there:
-                                source_param_name = target_backup
                                 # Append the source as well, since both are missing we'll tie both
-                                target_param_names.append(source_backup)
+                                target_param_names.append(source_param_name)
+                                # The new source to tie into both initial source and target is the target backup
+                                source_param_name = target_backup
                                 break
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
