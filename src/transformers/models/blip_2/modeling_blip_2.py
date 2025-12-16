@@ -603,7 +603,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
+        attention_probs_dropped = self.dropout(attention_probs).to(value_layer.dtype)
 
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
@@ -1948,6 +1948,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Blip2ImageTextMatchingModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
