@@ -577,7 +577,7 @@ class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如'
+        EXPECTED_DECODED_TEXT = "知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如"
         self.assertEqual(
             self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
