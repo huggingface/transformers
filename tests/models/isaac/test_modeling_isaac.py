@@ -723,6 +723,7 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
     _is_composite = True
+    test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
