@@ -60,7 +60,7 @@ class Snake1d(nn.Module):
         return hidden_states
 
 
-class PeAudioResidualUnit(nn.Module):
+class PeAudioDacResidualUnit(nn.Module):
     """
     A residual unit composed of Snake1d and weight-normalized Conv1d layers with dilations.
     """
@@ -97,16 +97,16 @@ class PeAudioResidualUnit(nn.Module):
         return output_tensor
 
 
-class PeAudioEncoderBlock(nn.Module):
-    """Encoder block used in PE_AUDIO encoder."""
+class PeAudioDacEncoderBlock(nn.Module):
+    """Encoder block used in PE_AUDIO_DAC encoder."""
 
-    def __init__(self, config: PeAudioConfig, stride: int = 1, stride_index: int = 1):
+    def __init__(self, config: PeAudioEncoderConfig):
         super().__init__()
 
         dimension = config.encoder_hidden_size * 2**stride_index
-        self.res_unit1 = PeAudioResidualUnit(dimension // 2, dilation=1)
-        self.res_unit2 = PeAudioResidualUnit(dimension // 2, dilation=3)
-        self.res_unit3 = PeAudioResidualUnit(dimension // 2, dilation=9)
+        self.res_unit1 = PeAudioDacResidualUnit(dimension // 2, dilation=1)
+        self.res_unit2 = PeAudioDacResidualUnit(dimension // 2, dilation=3)
+        self.res_unit3 = PeAudioDacResidualUnit(dimension // 2, dilation=9)
         self.snake1 = Snake1d(dimension // 2)
         self.conv1 = nn.Conv1d(
             dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
@@ -124,7 +124,7 @@ class PeAudioEncoderBlock(nn.Module):
 class PeAudioDacEncoder(nn.Module):
     """PE_AUDIO_DAC Encoder"""
 
-    def __init__(self, config: PeAudioConfig):
+    def __init__(self, config: PeAudioEncoderConfig):
         super().__init__()
 
         strides = config.downsampling_ratios
@@ -135,7 +135,7 @@ class PeAudioDacEncoder(nn.Module):
         # Create EncoderBlocks that double channels as they downsample by `stride`
         for stride_index, stride in enumerate(strides):
             stride_index = stride_index + 1
-            self.block += [PeAudioEncoderBlock(config, stride=stride, stride_index=stride_index)]
+            self.block += [PeAudioDacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
         self.block = nn.ModuleList(self.block)
         d_model = config.encoder_hidden_size * 2**stride_index
