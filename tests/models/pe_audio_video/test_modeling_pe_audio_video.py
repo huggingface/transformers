@@ -262,6 +262,7 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @unittest.skip(reason="TODO when released")
     def test(self):
         video_path = hf_hub_download(
             repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
