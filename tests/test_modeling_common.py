@@ -1015,6 +1015,7 @@ class ModelTesterMixin:
             )
 
     def test_can_init_all_missing_weights(self):
+        """Ensure that all weights are correctly taken into account in `_init_weights`"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # This is used to get the addition year of the model
@@ -1026,31 +1027,20 @@ class ModelTesterMixin:
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
             addition_year = int(match_object.group(1))
 
-        for model_class in self.all_model_classes[::-1]:
-            # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
+        for model_class in self.all_model_classes:
+            # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
             # TODO: relax this as we patch more and more models
             if addition_year < 2023:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
-            # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
-            # `_init_weights` so that it can add the seed for composite models as well)
-            original_initialize_weights = PreTrainedModel._initialize_weights
-
-            def seeded_initialize_weights(self, module):
-                set_seed(0)
-                original_initialize_weights(self, module)
-
-            PreTrainedModel._initialize_weights = seeded_initialize_weights
-
-            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
-            # _init_weights() does not take all weights into account correctly
-            model_from_config = model_class(copy.deepcopy(config)).eval()
-            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
-            # by _init_weights()
-            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={}).eval()
-
-            # Back to original method to avoid issues if running several other tests
-            PreTrainedModel._initialize_weights = original_initialize_weights
+            # This context manager makes sure that we get the same results deterministically for random new weights
+            with seeded_weight_init():
+                # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+                # _init_weights() does not take all weights into account correctly
+                model_from_config = model_class(copy.deepcopy(config)).eval()
+                # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+                # by _init_weights()
+                model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={}).eval()
 
             # First, check if any parameters are still on meta -> this is usually an issue with tied weights
             params_on_meta = []
@@ -1064,13 +1054,19 @@ class ModelTesterMixin:
             )
 
             # Everything must be exactly the same as we set the same seed for each init
+            from_pretrained_state_dict = model_from_pretrained.state_dict()
+            from_config_state_dict = model_from_config.state_dict()
+            self.assertEqual(
+                sorted(from_pretrained_state_dict.keys()),
+                sorted(from_config_state_dict.keys()),
+                "The keys from each model should be the exact same",
+            )
             different_weights = []
-            from_pre_state = dict(model_from_pretrained.state_dict())
-            for k1, v1 in model_from_config.state_dict().items():
+            for k1, v1 in from_config_state_dict.items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
-                v2 = from_pre_state[k1]
+                v2 = from_pretrained_state_dict[k1]
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
@@ -1083,6 +1079,43 @@ class ModelTesterMixin:
             self.assertTrue(
                 len(different_weights) == 0,
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+            )
+
+    def test_init_weights_can_init_buffers(self):
+        """Ensure that all buffers (persistent and non-persistent) are correctly taken into account in `_init_weights`"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # First, initialize the model directly with `__init__`, with the context manager making sure that we do
+            # not run `initialiaze_weights()`, i.e. buffers are the same as in the modules's `__init__` initial definition
+            with skip_init_weights():
+                model_from_init = model_class(copy.deepcopy(config))
+            # Second, initialize the model fully on meta device, then move everything to cpu and run `init_weights`
+            with torch.device("meta"):
+                model_from_meta_init = model_class(copy.deepcopy(config))
+            # move everything randomly to cpu
+            model_from_meta_init.to_empty()
+            # Now, run all the inits
+            model_from_meta_init.init_weights()
+
+            buffers_from_init = dict(model_from_init.named_buffers())
+            buffers_from_meta_init = dict(model_from_meta_init.named_buffers())
+
+            # Buffers are not random usually, so everything must match exactly
+            self.assertEqual(
+                sorted(buffers_from_init.keys()),
+                sorted(buffers_from_meta_init.keys()),
+                "The name of the buffers from each model should be the exact same",
+            )
+            different_buffers = []
+            for k1, v1 in buffers_from_init:
+                v2 = buffers_from_meta_init[k1]
+                if not (v1 == v2).all():
+                    different_buffers.append(k1)
+
+            self.assertTrue(
+                len(different_buffers) == 0,
+                f"The following buffers are not properly handled by `_init_weights()`:\n{different_buffers}",
             )
 
     def test_torch_save_load(self):
@@ -4330,6 +4363,44 @@ def compare_state_dicts(state_dict1, state_dict2) -> bool:
             raise AssertionError(f"For key {k}: {e}")
 
     return True
+
+
+@contextmanager
+def seeded_weight_init():
+    """Add a seed before weight initialization, to get the same random weights deterministically"""
+    try:
+        # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
+        # `_init_weights` so that it can add the seed for composite models as well)
+        original_initialize_weights = PreTrainedModel._initialize_weights
+
+        def seeded_initialize_weights(self, module):
+            set_seed(0)
+            original_initialize_weights(self, module)
+
+        PreTrainedModel._initialize_weights = seeded_initialize_weights
+
+        yield
+    finally:
+        # Restore it
+        PreTrainedModel._initialize_weights = original_initialize_weights
+
+
+@contextmanager
+def skip_init_weights():
+    """Skip weight initialization by `init_weights` altogether."""
+    try:
+        original_initialize_weights = PreTrainedModel._initialize_weights
+
+        # Just do nothing instead
+        def skip_initialize_weights(self, module):
+            pass
+
+        PreTrainedModel._initialize_weights = skip_initialize_weights
+
+        yield
+    finally:
+        # Restore it
+        PreTrainedModel._initialize_weights = original_initialize_weights
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):
