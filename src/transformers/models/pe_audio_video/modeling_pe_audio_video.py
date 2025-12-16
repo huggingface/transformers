@@ -686,8 +686,6 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     def __init__(self, config: PeAudioVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.text_model.final_norm.eps = 0.6
-
         self.audio_model = AutoModel.from_config(config.audio_config)
         self.video_model = AutoModel.from_config(config.video_config)
         self.audio_video_encoder = PeAudioVideoEncoder(config.audio_video_config)

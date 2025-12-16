@@ -147,7 +147,6 @@ class PeAudioModel(PeAudioPreTrainedModel):
     def __init__(self, config: PeAudioConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.text_model.final_norm.eps = 0.6
         self.audio_encoder = PeAudioEncoder(config.audio_config)
 
         self.text_audio_head = PeAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
