@@ -190,8 +190,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
         # Skip the test if Flash Attention 2 is required but not available
-        if attn_implementation == "flash_attention_2" and not (
-            is_flash_attn_2_available() or is_kernels_available() or torch_device == "cpu"
+        if attn_implementation == "flash_attention_2" and (
+            not (is_flash_attn_2_available() or is_kernels_available()) or torch_device == "cpu"
         ):
             self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
