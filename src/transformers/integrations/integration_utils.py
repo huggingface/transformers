@@ -975,12 +975,8 @@ class TrackioCallback(TrainerCallback):
                     "version. Use TrainingArguments.trackio_space_id instead."
                 )
                 space_id = os.getenv("TRACKIO_SPACE_ID")
-                print("space_id from env", space_id)
             else:
                 space_id = args.trackio_space_id
-                print("space_id from args", space_id)
-
-            print("space_id", space_id)
 
             combined_dict = {**args.to_dict()}
 
@@ -994,7 +990,7 @@ class TrackioCallback(TrainerCallback):
             self._trackio.init(
                 project=project,
                 name=args.run_name,
-                space_id=None,
+                space_id=space_id,
                 resume="allow",
                 private=args.hub_private_repo,
             )
@@ -1070,9 +1066,9 @@ class TrackioCallback(TrainerCallback):
         if (current_project := self._trackio.context_vars.current_project.get()) is None:
             return
         trackio_version = packaging.version.parse(self._trackio.__version__)
-        if trackio_version < packaging.version.parse("0.12.0"):  # TODO: change back to <=
+        if trackio_version < packaging.version.parse("0.13.0"):
             warnings.warn(
-                "The version of `trackio` that is installed is <=0.12.0, so "
+                "The version of `trackio` that is installed is <=0.13.0, so "
                 "the local Trackio project will not be pushed to Hugging Face. Run "
                 "`pip install --upgrade trackio` to fix this."
             )
