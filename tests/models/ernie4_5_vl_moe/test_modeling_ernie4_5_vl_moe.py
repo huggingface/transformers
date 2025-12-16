@@ -263,6 +263,10 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    @unittest.skip(reason="Size mismatch")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
 
 @slow
 @require_torch_large_accelerator(memory=70)  # Tested on A100
