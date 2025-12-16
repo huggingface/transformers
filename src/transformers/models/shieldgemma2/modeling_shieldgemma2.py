@@ -57,6 +57,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.yes_token_index = getattr(config, "yes_token_index", 10_784)
         self.no_token_index = getattr(config, "no_token_index", 3771)
         self.model = AutoModelForImageTextToText.from_config(config=config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()

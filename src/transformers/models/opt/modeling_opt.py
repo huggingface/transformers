@@ -836,6 +836,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -947,6 +948,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         Example:

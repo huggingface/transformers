@@ -394,7 +394,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
-            ignore_keys_at_rope_validation={"mrope"},
+            ignore_keys_at_rope_validation={"mrope_section"},
             **kwargs,
         )
 
@@ -742,7 +742,9 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope"}, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
+        )
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
@@ -2507,6 +2509,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Qwen2_5OmniTalkerCausalLMOutputWithPast]:
         r"""
         thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -3589,6 +3592,8 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
             config.upsample_initial_channel // (2**self.num_upsample_layers), 1, 7, 1, padding=3, bias=False
         )
 
+        self.post_init()
+
     def normalize_spectrogram(self, spectrogram, max_value, min_db):
         return torch.clamp((2 * max_value) * ((spectrogram - min_db) / (-min_db)) - max_value, -max_value, max_value)
 
@@ -3603,7 +3608,7 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
         decibel_spectrum = self.amplitude_to_db(amplitude_spectrum, -115) - 20
         return self.normalize_spectrogram(decibel_spectrum, 1, -115)
 
-    def forward(self, mel_spectrogram):
+    def forward(self, mel_spectrogram, **kwargs):
         processed_spectrogram = self.process_mel_spectrogram(mel_spectrogram)
         hidden_representation = self.conv_pre(processed_spectrogram)
 
@@ -3716,6 +3721,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         self.norm_out = Qwen2_5_OmniAdaLayerNormZero_Final(config.hidden_size)  # final modulation
         self.proj_out = nn.Linear(config.hidden_size, config.mel_dim)
 
+        self.post_init()
+
     def _create_block_diff(self, hidden_states):
         batch, seq_len = hidden_states.shape[0], hidden_states.shape[1]
         block_indices = torch.arange(seq_len, device=hidden_states.device) // self.block_size  # [seq_length]
@@ -3736,6 +3743,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         drop_audio_conditioning=False,
         drop_code=False,
         apply_cfg=True,
+        **kwargs,
     ):
         batch_size = hidden_states.shape[0]
         if time_step.ndim == 0:
@@ -3866,6 +3874,8 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         self.code2wav_bigvgan_model = Qwen2_5OmniToken2WavBigVGANModel._from_config(
             config.bigvgan_config, attn_implementation=attn_impl
         )
+
+        self.post_init()
 
     def forward(
         self,

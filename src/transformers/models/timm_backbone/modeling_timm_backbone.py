@@ -84,6 +84,8 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
+        self.post_init()
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])

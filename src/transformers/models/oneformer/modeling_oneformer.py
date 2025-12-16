@@ -40,6 +40,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -323,7 +324,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with torch.autocast(device_type="cuda", enabled=False):
+            with maybe_autocast(device_type="cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 
@@ -2874,6 +2875,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerModelOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -3060,6 +3062,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerForUniversalSegmentationOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
