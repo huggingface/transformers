@@ -1216,7 +1216,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, SpeechT5SinusoidalPositionalEmbedding):
-            emb_weights = module.make_weights(
+            emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)

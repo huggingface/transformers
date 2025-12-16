@@ -1382,7 +1382,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, SeamlessM4TSinusoidalPositionalEmbedding):
-            emb_weights = module.make_weights(
+            emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)

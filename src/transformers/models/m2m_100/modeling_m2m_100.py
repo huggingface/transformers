@@ -520,7 +520,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, M2M100SinusoidalPositionalEmbedding):
-            emb_weights = module.make_weights(
+            emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
             )
             init.copy_(module.weights, emb_weights)
