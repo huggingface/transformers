@@ -26,7 +26,7 @@ import warnings
 from safetensors import safe_open
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
+from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -54,11 +54,7 @@ def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    if torch.cuda.is_available():
-        torch.cuda.set_device(rank)
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
-    else:
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -485,7 +481,7 @@ class TestTensorParallelDense4Proc(TestTensorParallelDenseBase):
 # ====== MOE MODEL TEST FUNCTIONS ======
 def _test_model_moe_forward_impl(rank, mode):
     """Implementation for comparing TP and non-TP MoE model outputs."""
-    model_id = "hf-internal-testing/tiny-qwen3-moe"
+    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
     # Ensure same random seed for reproducibility
     torch.manual_seed(0)
@@ -536,8 +532,8 @@ def _test_model_moe_forward_impl(rank, mode):
 
 def _test_model_moe_backward_pass_impl(rank):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
-    model_id = "hf-internal-testing/tiny-qwen3-moe"
-
+    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
+    
     torch.manual_seed(0)
 
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
@@ -575,9 +571,7 @@ def _test_model_moe_backward_pass_impl(rank):
             if isinstance(param_tp.data, dist.tensor.DTensor):
                 placement = param_tp.data.placements[0]
                 if hasattr(placement, "dim") and placement.dim is not None:
-                    dim = placement.dim
-                    world_size = param_tp.data.device_mesh.size()
-                    grad_shard = grad.chunk(world_size, dim=dim)[rank]
+                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
                 else:
                     grad_shard = grad
             else:
@@ -594,7 +588,7 @@ def _test_model_moe_backward_pass_impl(rank):
 
 def _test_model_moe_forward_compile_impl(rank, mode):
     """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
-    model_id = "hf-internal-testing/tiny-qwen3-moe"
+    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
     torch.manual_seed(0)
 
@@ -640,15 +634,15 @@ def _test_model_moe_forward_compile_impl(rank, mode):
 
 def _test_model_moe_save_impl(rank, tmp_dir):
     """Implementation of test_model_save for MoE model distributed execution."""
-    model_id = "hf-internal-testing/tiny-qwen3-moe"
-
+    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
+    
     if dist.is_initialized():
         kwargs = {"tp_plan": "auto"}
         result_dir = f"{tmp_dir}/tp"
     else:
         kwargs = {}
         result_dir = f"{tmp_dir}/nontp"
-
+        
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", **kwargs)
     model.save_pretrained(result_dir)
 
