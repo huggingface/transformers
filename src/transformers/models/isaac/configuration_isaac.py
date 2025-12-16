@@ -74,7 +74,7 @@ class IsaacVisionConfig(PreTrainedConfig):
 
         # Ensure a sensible default attention backend
         if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "eager"
+            self._attn_implementation = "sdpa"
 
 
 class IsaacConfig(PretrainedConfig):
@@ -148,7 +148,7 @@ class IsaacConfig(PretrainedConfig):
         # Default and propagate attention implementation
         attn_impl = getattr(self, "_attn_implementation", None)
         if attn_impl is None:
-            attn_impl = "eager"
+            attn_impl = "sdpa"
             self._attn_implementation = attn_impl
         if hasattr(self, "text_config") and self.text_config is not None:
             self.text_config._attn_implementation = attn_impl
@@ -184,7 +184,6 @@ class IsaacConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
-        output["_attn_implementation"] = self._attn_implementation
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
             output["text_config"] = self.text_config.to_dict()

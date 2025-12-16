@@ -159,7 +159,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 
         # Ensure a sensible default attention backend
         if getattr(self, "_attn_implementation", None) is None:
-            self._attn_implementation = "eager"
+            self._attn_implementation = "sdpa"
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
@@ -1185,7 +1185,7 @@ class IsaacConfig(PretrainedConfig):
         # Default and propagate attention implementation
         attn_impl = getattr(self, "_attn_implementation", None)
         if attn_impl is None:
-            attn_impl = "eager"
+            attn_impl = "sdpa"
             self._attn_implementation = attn_impl
         if hasattr(self, "text_config") and self.text_config is not None:
             self.text_config._attn_implementation = attn_impl
@@ -1221,7 +1221,6 @@ class IsaacConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
-        output["_attn_implementation"] = self._attn_implementation
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
             output["text_config"] = self.text_config.to_dict()
@@ -2069,14 +2068,18 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
         cache_position = model_inputs.get("cache_position", cache_position)
 
-        # Handle TensorStream for first forward pass only
-        if tensor_stream is not None and (cache_position is None or cache_position[0] == 0):
-            model_inputs["tensor_stream"] = tensor_stream
-        # Let forward rebuild position_ids using cached deltas during decode
-        model_inputs["position_ids"] = None
-        # Drop tensor_stream after step 0
-        if cache_position is not None and cache_position[0] != 0:
-            model_inputs["tensor_stream"] = None
+        # Handle TensorStream for first forward pass only. For plain text, keep the parent-computed
+        # position_ids so cache offsets stay aligned.
+        if tensor_stream is not None:
+            if cache_position is None or cache_position[0] == 0:
+                model_inputs["tensor_stream"] = tensor_stream
+            else:
+                model_inputs["tensor_stream"] = None
+            # Let forward rebuild position_ids using cached deltas during decode
+            model_inputs["position_ids"] = None
+        else:
+            model_inputs.pop("tensor_stream", None)
+
         return model_inputs
 
     @classmethod
