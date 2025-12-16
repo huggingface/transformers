@@ -182,6 +182,7 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->MT5
 class MT5Attention(nn.Module):
     def __init__(
@@ -400,7 +401,6 @@ class MT5Attention(nn.Module):
         return attn_output, position_bias, attn_weights
 
 
-
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->MT5
 class MT5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
@@ -421,7 +421,7 @@ class MT5LayerSelfAttention(nn.Module):
         position_bias=None,
         past_key_values=None,
         cache_position=None,
-        **kwargs: Unpack[TransformersKwargs]
+        **kwargs: Unpack[TransformersKwargs],
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attn_output, position_bias, attn_weights = self.SelfAttention(
@@ -440,7 +440,11 @@ class MT5LayerSelfAttention(nn.Module):
 class MT5LayerCrossAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.EncDecAttention = MT5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx, is_causal=False,
+        self.EncDecAttention = MT5Attention(
+            config,
+            has_relative_attention_bias=False,
+            layer_idx=layer_idx,
+            is_causal=False,
         )
         self.layer_norm = MT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -517,7 +521,7 @@ class MT5Block(GradientCheckpointingLayer):
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
-        cross_attention_position_bias=None
+        cross_attention_position_bias = None
         if do_cross_attention:
             cross_attention_output, cross_attention_position_bias, _ = self.layer[1](
                 hidden_states,
@@ -550,7 +554,6 @@ class MT5Block(GradientCheckpointingLayer):
                 torch.finfo(hidden_states.dtype).max,
             )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
 
         return hidden_states, self_attention_position_bias, cross_attention_position_bias
 
@@ -1622,7 +1625,6 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
 
         return Seq2SeqQuestionAnsweringModelOutput(
             loss=total_loss,
