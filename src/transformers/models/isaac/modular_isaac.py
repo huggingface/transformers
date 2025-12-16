@@ -1769,6 +1769,11 @@ class IsaacModel(Qwen3PreTrainedModel):
                 (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
             )
 
+        # Expand 2D position ids (from generic padding tests) to 3D MRoPE coords
+        if position_ids is not None and position_ids.ndim == 2:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(
             position_ids,
