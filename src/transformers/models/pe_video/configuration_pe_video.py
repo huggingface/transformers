@@ -36,20 +36,35 @@ class PeVideoEncoderConfig(PreTrainedConfig):
 
 
     Args:
-        vision_config (`Union`, *optional*): <fill_docstring>
-        hidden_size (`Optional`, *optional*, defaults to 1792): <fill_docstring>
-        intermediate_size (`Optional`, *optional*, defaults to 4800): <fill_docstring>
-        num_hidden_layers (`Optional`, *optional*, defaults to 6): <fill_docstring>
-        num_attention_heads (`Optional`, *optional*, defaults to 14): <fill_docstring>
-        num_key_value_heads (`Optional`, *optional*): <fill_docstring>
-        head_dim (`Optional`, *optional*, defaults to 128): <fill_docstring>
-        hidden_act (`Optional`, *optional*, defaults to `"silu"`): <fill_docstring>
-        max_position_embeddings (`Optional`, *optional*, defaults to 10000): <fill_docstring>
-        initializer_range (`Optional`, *optional*, defaults to 0.02): <fill_docstring>
-        rms_norm_eps (`Optional`, *optional*, defaults to 1e-05): <fill_docstring>
-        rope_parameters (`Union`, *optional*, defaults to `{'rope_theta': 20000}`): <fill_docstring>
-        attention_bias (`Optional`, *optional*, defaults to `False`): <fill_docstring>
-        attention_dropout (`Optional`, *optional*, defaults to 0.0): <fill_docstring>
+        vision_config (`Union[PreTrainedConfig, dict]`, *optional*):
+            Configuration for the vision backbone used to extract frame embeddings. If a dictionary is provided, it is
+            used to instantiate a [`~transformers.TimmWrapperConfig`] with the PE default arguments.
+        hidden_size (`int`, *optional*, defaults to 1792):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 4800):
+            Dimension of the feedforward layers in the Transformer blocks.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of Transformer encoder blocks.
+        num_attention_heads (`int`, *optional*, defaults to 14):
+            Number of attention heads used in each attention layer.
+        num_key_value_heads (`int`, *optional*):
+            Number of key and value heads for grouped-query attention. If unset, this defaults to `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head for query, key, and value projections.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the Transformer blocks.
+        max_position_embeddings (`int`, *optional*, defaults to 10000):
+            Maximum sequence length supported by the rotary position embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            Standard deviation of the truncated normal initializer for weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            Epsilon used by the RMS normalization layers.
+        rope_parameters (`Union[RopeParameters, dict]`, *optional*, defaults to `{'rope_theta': 20000}`):
+            Parameters for the rotary position embeddings, such as the base `rope_theta`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias terms in the query, key, value, and output projections.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout ratio applied to attention probabilities.
 
     ```python
     >>> from transformers import PeAudioEncoder, PeAudioEncoderConfig
