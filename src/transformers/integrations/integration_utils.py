@@ -993,7 +993,7 @@ class TrackioCallback(TrainerCallback):
             self._trackio.init(
                 project=project,
                 name=args.run_name,
-                space_id=space_id,
+                space_id=None,
                 resume="allow",
                 private=args.hub_private_repo,
             )
