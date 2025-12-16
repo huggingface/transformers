@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
@@ -1211,6 +1212,28 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LogBinomialSoftmax):
+            init.copy_(module.k_idx, torch.arange(0, module.k).view(1, -1, 1, 1))
+            init.copy_(module.k_minus_1, torch.tensor([module.k - 1]).view(1, -1, 1, 1))
+
+
+class LogBinomialSoftmax(nn.Module):
+    def __init__(self, n_classes=256, act=torch.softmax):
+        """Compute log binomial distribution for n_classes
+
+        Args:
+            n_classes (`int`, *optional*, defaults to 256):
+                Number of output classes.
+            act (`torch.nn.Module`, *optional*, defaults to `torch.softmax`):
+                Activation function to apply to the output.
+        """
+        super().__init__()
+        self.k = n_classes
+        self.act = act
+        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
+        self.register_buffer("k_minus_1", torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
 
 @auto_docstring(
     custom_intro="""

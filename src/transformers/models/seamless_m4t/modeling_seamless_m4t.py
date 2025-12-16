@@ -1380,6 +1380,9 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, SeamlessM4TSinusoidalPositionalEmbedding):
+            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            init.copy_(module.weights, emb_weights)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride

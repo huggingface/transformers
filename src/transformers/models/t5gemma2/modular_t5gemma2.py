@@ -774,6 +774,7 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
             init.zeros_(module.mm_input_projection_weight)
         elif isinstance(module, T5Gemma2TextScaledWordEmbedding):
             init.zeros_(module.eoi_embedding)
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
         elif isinstance(module, T5Gemma2ClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
             init.normal_(module.out_proj.weight, mean=0.0, std=self.config.initializer_range * scale)

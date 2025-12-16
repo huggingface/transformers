@@ -417,6 +417,9 @@ class XLMRobertaPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, XLMRobertaLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, XLMRobertaEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros(module.token_type_ids)
 
 
 class XLMRobertaEmbeddings(nn.Module):

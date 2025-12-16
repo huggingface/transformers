@@ -905,6 +905,41 @@ class Swinv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Swinv2SelfAttention):
             init.constant_(module.logit_scale, math.log(10))
 
+            relative_coords_h = torch.arange(-(module.window_size[0] - 1), module.window_size[0], dtype=torch.int64).float()
+            relative_coords_w = torch.arange(-(module.window_size[1] - 1), module.window_size[1], dtype=torch.int64).float()
+            relative_coords_table = (
+                torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+                .permute(1, 2, 0)
+                .contiguous()
+                .unsqueeze(0)
+            )
+            if module.pretrained_window_size[0] > 0:
+                relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
+                relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
+            elif module.window_size > 1:
+                relative_coords_table[:, :, :, 0] /= module.window_size[0] - 1
+                relative_coords_table[:, :, :, 1] /= module.window_size[1] - 1
+            relative_coords_table *= 8  # normalize to -8, 8
+            relative_coords_table = (
+                torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+            )
+            # set to same dtype as mlp weight
+            relative_coords_table = relative_coords_table.to(next(module.continuous_position_bias_mlp.parameters()).dtype)
+            init.copy_(module.relative_coords_table, relative_coords_table)
+
+            # get pair-wise relative position index for each token inside the window
+            coords_h = torch.arange(module.window_size[0])
+            coords_w = torch.arange(module.window_size[1])
+            coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+            coords_flatten = torch.flatten(coords, 1)
+            relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+            relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+            relative_coords[:, :, 0] += module.window_size[0] - 1
+            relative_coords[:, :, 1] += module.window_size[1] - 1
+            relative_coords[:, :, 0] *= 2 * module.window_size[1] - 1
+            relative_position_index = relative_coords.sum(-1)
+            init.copy_(module.relative_position_index, relative_position_index)
+
 
 @auto_docstring
 # Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2

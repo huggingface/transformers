@@ -639,6 +639,7 @@ class XLMPreTrainedModel(PreTrainedModel):
                     out=torch.empty_like(module.position_embeddings.weight),
                 ),
             )
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass
