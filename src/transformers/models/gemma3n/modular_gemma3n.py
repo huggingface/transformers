@@ -15,6 +15,7 @@
 # limitations under the License.
 import math
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
@@ -620,6 +621,40 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+
+
+@dataclass
+class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, audio_soft_tokens_per_image, hidden_size)`):
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        audio_mel_mask (`torch.FloatTensor`, *optional*):
+            A torch.BoolTensor of shape `(batch_size, num_frames)`
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    audio_mel_mask: Optional[torch.BoolTensor] = None
 
 
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -1473,8 +1508,9 @@ class Gemma3nAudioEncoder(PreTrainedModel):
             [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
         )
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs
+        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.BoolTensor]:
         """Encodes a batch of MELs.
 
@@ -1526,7 +1562,10 @@ class Gemma3nAudioEncoder(PreTrainedModel):
             current_mask = current_mask[:, :: self.config.conf_reduction_factor]
 
         audio_encodings = audio_encodings.masked_fill(current_mask.unsqueeze(-1), 0.0)
-        return audio_encodings, current_mask
+        return Gemma3nAudioEncoderModelOutput(
+            last_hidden_state=audio_encodings,
+            audio_mel_mask=current_mask,
+        )
 
 
 # ==== Language Model ====
@@ -2327,7 +2366,9 @@ class Gemma3nModel(PaliGemmaModel):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_features, audio_mask = self.get_audio_features(input_features, ~input_features_mask)
+            audio_features = self.get_audio_features(input_features, ~input_features_mask)
+            audio_features = audio_features.pooler_output
+            audio_mask = audio_features.audio_mel_mask
 
             # The Gemma3nProcessor expects all audio will be 30s in length and inserts 188 audio soft tokens into the
             # text to account for this. However, the audio preprocessing and encoder do not gurarantee they will
@@ -2374,7 +2415,10 @@ class Gemma3nModel(PaliGemmaModel):
         )
 
     def get_audio_features(
-        self, input_features: torch.Tensor, input_features_mask: torch.Tensor, return_dict: bool = False
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Projects the last hidden state from the audio encoder into language model space.
@@ -2388,16 +2432,11 @@ class Gemma3nModel(PaliGemmaModel):
         Returns:
             audio_features (`torch.Tensor`): Audio feature tensor of shape `(num_images, audio_length, embed_dim)`).
         """
-        audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
-        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs)
+        audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(input_features, input_features_mask)
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        audio_outputs.pooler_output = audio_embeds
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=audio_outputs.last_hidden_state,
-                pooler_output=audio_embeds,
-            )
-
-        return audio_embeds, audio_mask
+        return audio_outputs
 
 
 @auto_docstring(

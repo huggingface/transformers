@@ -1420,12 +1420,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
+    @can_return_tuple
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         feature_attention_mask: Optional[torch.LongTensor] = None,
         audio_feature_lengths: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes audios into continuous embeddings that can be forwarded to the language model.
@@ -1437,8 +1438,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
             audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
                 The length of feature shape of each audio in LLM.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
@@ -1450,13 +1449,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
+            **kwargs,
         )
-        audio_features = audio_outputs.last_hidden_state
 
-        if return_dict:
-            return audio_outputs
-
-        return audio_features
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring

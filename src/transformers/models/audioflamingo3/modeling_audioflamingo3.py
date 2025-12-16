@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -443,8 +443,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor, return_dict: bool = False
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
@@ -457,8 +461,6 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
             input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
                 Mask to avoid performing attention on padded feature indices.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             `torch.FloatTensor`:
@@ -466,21 +468,16 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         """
 
         # Encode audio
-        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
-        audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
+        audio_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_output.pooler_output = audio_embeds
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=encoder_output.last_hidden_state,
-                pooler_output=audio_embeds,
-            )
-
-        return audio_embeds
+        return audio_output
 
     @can_return_tuple
     @auto_docstring

@@ -26,7 +26,9 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_peft_available, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -267,7 +269,8 @@ class GraniteSpeechCTCEncoder(nn.Module):
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.num_layers = config.num_layers
 
-    def forward(self, hidden_states: torch.Tensor):
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
@@ -276,7 +279,8 @@ class GraniteSpeechCTCEncoder(nn.Module):
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        return hidden_states
+
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -334,18 +338,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
-    def get_audio_features(self, input_features: torch.Tensor, return_dict: bool = False) -> torch.Tensor:
+    @can_return_tuple
+    def get_audio_features(self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         """Get the audio features to merged into the multimodal embeddings."""
-        encoder_embeds = self.encoder(input_features)
-        projected_embeds = self.projector(encoder_embeds)
+        audio_outputs = self.encoder(input_features, **kwargs)
+        projected_embeds = self.projector(audio_outputs.last_hidden_state)
+        audio_outputs.pooler_output = projected_embeds
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=encoder_embeds,
-                pooler_output=projected_embeds,
-            )
-
-        return projected_embeds
+        return audio_outputs
 
     @auto_docstring
     def forward(

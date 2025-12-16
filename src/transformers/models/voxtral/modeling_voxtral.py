@@ -31,12 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -405,9 +400,11 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_features(self, input_features: torch.FloatTensor, return_dict: bool = False):
+    @can_return_tuple
+    def get_audio_features(self, input_features: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
+
         Args:
             input_features (`torch.FloatTensor`):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
@@ -420,18 +417,13 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             `torch.FloatTensor`:
                 The audio embeddings.
         """
-        audio_outputs = self.audio_tower(input_features)
+        audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
+        audio_outputs.pooler_output = audio_embeds
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=audio_outputs.last_hidden_state,
-                pooler_output=audio_embeds,
-            )
-
-        return audio_embeds
+        return audio_outputs
 
     def get_audio_embeds(self, input_features: torch.FloatTensor):
         warnings.warn(
