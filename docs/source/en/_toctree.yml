@@ -881,8 +881,6 @@
     - sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
-      - local: model_doc/pe_audio
-        title: PE Audio
       - local: model_doc/bark
         title: Bark
       - local: model_doc/clap
@@ -919,6 +917,8 @@
         title: MusicGen Melody
       - local: model_doc/parakeet
         title: Parakeet
+      - local: model_doc/pe_audio
+        title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -961,6 +961,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/pe_video
+        title: PE Video
       - local: model_doc/sam2_video
         title: SAM2 Video
       - local: model_doc/sam3_tracker_video
@@ -973,8 +975,6 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
-      - local: model_doc/pe_video
-        title: PE Video
       title: Video models
     - sections:
       - local: model_doc/align
@@ -1125,6 +1125,8 @@
         title: OWLv2
       - local: model_doc/paligemma
         title: PaliGemma
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/perception_lm
@@ -1191,8 +1193,6 @@
         title: Voxtral
       - local: model_doc/xclip
         title: X-CLIP
-      - local: model_doc/pe_audio_video
-        title: PE Audio Video
       title: Multimodal models
     - sections:
       - local: model_doc/decision_transformer
