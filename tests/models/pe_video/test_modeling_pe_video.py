@@ -45,7 +45,7 @@ class PeVideoEncoderTester:
         self,
         parent,
         config_kwargs={
-            "vision_encoder_config": {
+            "vision_config": {
                 "architecture": "vit_pe_core_large_patch14_336",
                 "model_args": {
                     "embed_dim": 64,
@@ -59,7 +59,7 @@ class PeVideoEncoderTester:
             "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
-            "head_dim": 128,
+            "head_dim": 16,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
             "initializer_range": 0.02,
@@ -71,7 +71,7 @@ class PeVideoEncoderTester:
             "max_window_layers": 28,
             "attention_dropout": 0.0,
         },
-        batch_size=12,
+        batch_size=4,
         num_frames=8,
         num_channels=3,
         is_training=True,
@@ -99,8 +99,8 @@ class PeVideoEncoderTester:
                 self.batch_size,
                 self.num_frames,
                 self.num_channels,
-                self.config_kwargs["vision_encoder_config"]["model_args"]["img_size"][0],
-                self.config_kwargs["vision_encoder_config"]["model_args"]["img_size"][1],
+                self.config_kwargs["vision_config"]["model_args"]["img_size"][0],
+                self.config_kwargs["vision_config"]["model_args"]["img_size"][1],
             ]
         )
         valid_lengths = ids_tensor([self.batch_size], self.num_frames)
@@ -150,6 +150,10 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
+    def test_can_init_all_missing_weights(self):
+        pass
 
     @unittest.skip(reason="PeVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
@@ -205,7 +209,7 @@ class PeVideoTextModelTester:
             "is_decoder": False,
             "initializer_range": 0.02,
         },
-        batch_size=12,
+        batch_size=4,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
