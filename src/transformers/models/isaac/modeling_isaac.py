@@ -1610,6 +1610,11 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         else:
             model_inputs["tensor_stream"] = None
 
+        # TensorStream decode path: preserve rotary offsets from prefill
+        if tensor_stream is not None and not first_step and self.rope_deltas is not None:
+            model_inputs["position_ids"] = None
+            return model_inputs
+
         # For decode steps, synthesize position_ids that continue from the cache offsets
         if model_inputs.get("position_ids") is None and cache_position is not None and not first_step:
             batch_size = 1
