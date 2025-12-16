@@ -3533,7 +3533,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 # This is a context manager to override the default kernel mapping
                 # We are calling kernelize inside this context manager using the use_kernels setter
-                with use_kernel_mapping(kernel_config.kernel_mapping):
+                # Param inherit_mapping should be False to avoid still loading kernel from remote
+                inherit_mapping = not kernel_config.use_local_kernel
+                with use_kernel_mapping(kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
                     self.use_kernels = True
             # We use the default kernel mapping in .integrations.hub_kernels
             else:
