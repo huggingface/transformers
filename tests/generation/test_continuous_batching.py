@@ -31,8 +31,6 @@ from transformers.generation.continuous_batching.cache import group_layers_by_at
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
-    require_deterministic_for_xpu,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -178,7 +176,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
-    @require_deterministic_for_xpu
+
     def _test_continuous_batching_parity(
         self,
         model_id: str,
@@ -191,7 +189,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
         # Skip the test if Flash Attention 2 is required but not available
-        if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
+        if attn_implementation == "flash_attention_2" and not (
+            is_flash_attn_2_available() or is_kernels_available() or torch_device == "cpu"
+        ):
             self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
         if use_cuda_graph and torch_device != "cuda":
@@ -288,7 +288,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_config_combinations(
         self,
@@ -314,7 +313,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
@@ -322,12 +320,10 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         finally:
             flush_memory(flush_compile=use_compile)
 
-    @require_torch_accelerator
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
 
-    @require_torch_accelerator
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
@@ -374,22 +370,19 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         manager.stop(block=True)
 
-    @require_torch_accelerator
     def test_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=False)
 
-    @require_torch_accelerator
     def test_non_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=False, with_non_streaming=True)
 
-    @require_torch_accelerator
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    @require_torch_accelerator
+
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 32
@@ -449,5 +442,30 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         # As an additional sanity check, we also compare to the generated tokens when prefix sharing is disabled
         expected_generated_tokens = Expectations({
             ("rocm", (9, 4)): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904],
+            ("cpu", None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 7945, 1846, 16176, 389, 279, 3460, 12934, 4128, 4119, 320, 4086, 44, 8, 2390, 13],
         }).get_expectation()  # fmt: skip
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_generated_tokens)
+
+
+"""
+EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cpu", None): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a grassy hill. The alpaca has",
+                ],
+                ("cuda", None): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
+                ],
+                ("xpu", 3): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image features a cute, light-colored puppy sitting on a paved surface with",
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young alpaca standing on a patch of ground with some dry grass. The",
+                ],
+                ("rocm", (9, 5)): [
+                    "<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n <image>\n USER: What's the difference of two images?\n ASSISTANT:<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The first image shows a cute golden retriever puppy sitting on a paved surface with a stick",
+                    '<|im_start|>user\n<fim_prefix><fim_suffix> <image>\n USER: Describe the image.\n ASSISTANT:<|im_end|>\n <|im_start|>assistant\n The image shows a young llama standing on a patch of ground with some dry grass and dirt. The'
+                ],
+            }
+        )  # fmt: skip
+"""
