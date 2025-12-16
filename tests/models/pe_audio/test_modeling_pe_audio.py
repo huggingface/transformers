@@ -14,8 +14,10 @@
 import unittest
 
 from transformers import PeAudioConfig, PeAudioEncoderConfig
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     require_torch,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
@@ -35,6 +37,7 @@ if is_torch_available():
     from transformers import (
         ModernBertConfig,
         PeAudioEncoder,
+        PeAudioFrameLevelModel,
         PeAudioModel,
     )
 
@@ -325,62 +328,55 @@ class PeAudioIntegrationTest(unittest.TestCase):
         self.checkpoint_name = "/raid/eustache/sam-audio/pe-a-frame-small"
         self.dtype = torch.float32
 
-    # def test_inference(self):
-    #     checkpoint_name = "/raid/eustache/sam-audio/pe-av-small"
-    #     descriptions = ["glass breaking", "somebody speaking"]
-    #     audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+    @slow
+    @unittest.skip(reason="TODO when released")
+    def test_inference(self):
+        checkpoint_name = "/raid/eustache/sam-audio/pe-av-small"
+        descriptions = ["glass breaking", "somebody speaking"]
+        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
 
-    #     # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
-    #     model = PeAudioModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
+        # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
+        model = PeAudioModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
 
-    #     inputs = self.processor(
-    #         text=descriptions,
-    #         audio=[load_audio(audio_file, self.processor.feature_extractor.sampling_rate)],
-    #         return_tensors="pt",
-    #         padding=True,
-    #     )
-    #     inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = self.processor(
+            text=descriptions,
+            audio=[load_audio(audio_file, self.processor.feature_extractor.sampling_rate)],
+            return_tensors="pt",
+            padding=True,
+        )
+        inputs = inputs.to(torch_device, dtype=self.dtype)
+        model(**inputs)
 
-    #     outputs = model(**inputs)
+    @slow
+    @unittest.skip(reason="TODO when released")
+    def test_inference_frame_level(self):
+        checkpoint_name = "/raid/eustache/sam-audio/pe-a-frame-small"
+        descriptions = ["glass breaking", "somebody speaking"]
+        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
 
-    # TODO: logits test
+        # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
+        model = PeAudioFrameLevelModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
 
-    # @slow
-    # @unittest.skip(reason="TODO when released")
-    # def test_inference_frame_level(self):
-    #     checkpoint_name = "/raid/eustache/sam-audio/pe-a-frame-small"
-    #     descriptions = ["glass breaking", "somebody speaking"]
-    #     audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+        inputs = self.processor(
+            text=descriptions,
+            audio=[load_audio(audio_file, self.processor.feature_extractor.sampling_rate)],
+            return_tensors="pt",
+            padding=True,
+        )
+        inputs = inputs.to(torch_device, dtype=self.dtype)
 
-    #     # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
-    #     model = PeAudioFrameLevelModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
+        outputs = model(**inputs)
+        #
+        # TODO: this should be incorporated into the `forward` pass itself
+        threshold = 0.3
+        logits_per_audio = outputs.logits_per_audio
+        probs_per_audio = logits_per_audio.sigmoid()
+        preds = probs_per_audio > threshold
 
-    #     inputs = self.processor(
-    #         text=descriptions,
-    #         audio=[load_audio(audio_file, self.processor.feature_extractor.sampling_rate)],
-    #         return_tensors="pt",
-    #         padding=True,
-    #     )
-    #     inputs = inputs.to(torch_device, dtype=self.dtype)
-
-    # outputs = model(**inputs)
-
-    # TODO: this should be incorporated into the `forward` pass itself
-    # threshold = 0.3
-    # logits_per_audio = outputs.logits_per_audio
-    # probs_per_audio = logits_per_audio.sigmoid()
-    # preds = probs_per_audio > threshold
-
-    # fmt: off
-        # EXPECTED = torch.tensor([
-        #     [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True],
-        #     [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, False, False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True]
-        # ])
-
-
-    # fmt: on
-
-    # torch.testing.assert_close(preds, EXPECTED)
-
-    # TODO: rather a test on logits
-    #  torch.testing.assert_close(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, rtol=1e-4, atol=1e-4)
+        # fmt: off
+        EXPECTED = torch.tensor([
+            [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True],
+            [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, False, False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True]
+        ])
+        # fmt: on
+        torch.testing.assert_close(preds, EXPECTED)
