@@ -434,7 +434,7 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MusicgenSinusoidalPositionalEmbedding):
-            emb_weights = self.get_embedding(module.num_positions, module.embedding_dim)
+            emb_weights = module.get_embedding(module.num_positions, module.embedding_dim)
             init.copy_(module.weights, emb_weights)
 
 
