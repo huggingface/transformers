@@ -603,9 +603,6 @@ class XLMPreTrainedModel(PreTrainedModel):
     config: XLMConfig
     base_model_prefix = "transformer"
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @property
     def dummy_inputs(self):
         inputs_list = torch.tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
