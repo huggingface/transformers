@@ -189,38 +189,42 @@ def get_imports(filename: Union[str, os.PathLike]) -> list[str]:
 
     import transformers.utils
 
-    def recursive_look_for_imports(node):
-        if isinstance(node, ast.Try):
-            return  # Don't recurse into Try blocks and ignore imports in them
-        elif isinstance(node, ast.If):
+    def recursive_look_for_imports(node, always=True):
+        """
+        Traverse AST and collect top-level imports only.
+        - 'always=True' means code in this branch is guaranteed to execute when the module is imported.
+        - Imports inside Try blocks are ignored.
+        - For if blocks:
+            * if True --> unconditional
+            * else    --> conditional (ignored)
+        """
+        if isinstance(node,ast.Try):
+            return
+        if isinstance(node,ast.If):
             test = node.test
-            for condition_node in ast.walk(test):
-                if isinstance(condition_node, ast.Call):
-                    check_function = getattr(condition_node.func, "id", "")
-                    if (
-                        check_function.endswith("available")
-                        and check_function.startswith("is_flash_attn")
-                        or hasattr(transformers.utils.import_utils, check_function)
-                    ):
-                        # Don't recurse into "if flash_attn_available()" or any "if library_available" blocks
-                        # that appears in `transformers.utils.import_utils` and ignore imports in them
-                        return
-        elif isinstance(node, ast.Import):
-            # Handle 'import x' statements
+            if isinstance(test,ast.Constant) and test.value is True:
+                for child in node.body:
+                    recursive_look_for_imports(child, always=True)
+                for child in node.orelse:
+                    recursive_look_for_imports(child, always=False)
+            else:
+                for child in node.body:
+                    recursive_look_for_imports(child, always=False)
+                for child in node.orelse:
+                    recursive_look_for_imports(child, always=False)
+            return
+        if isinstance(node, ast.Import) and always:
             for alias in node.names:
-                top_module = alias.name.split(".")[0]
-                if top_module:
-                    imported_modules.add(top_module)
-        elif isinstance(node, ast.ImportFrom):
-            # Handle 'from x import y' statements, ignoring relative imports
+                imported_modules.add(alias.name.split(".")[0])
+            return
+        if isinstance(node, ast.ImportFrom) and always:
             if node.level == 0 and node.module:
-                top_module = node.module.split(".")[0]
-                if top_module:
-                    imported_modules.add(top_module)
+                imported_modules.add(node.module.split(".")[0])
+            return
 
         # Recursively visit all children
         for child in ast.iter_child_nodes(node):
-            recursive_look_for_imports(child)
+            recursive_look_for_imports(child,always)
 
     tree = ast.parse(content)
     recursive_look_for_imports(tree)
