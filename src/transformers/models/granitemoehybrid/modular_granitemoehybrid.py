@@ -39,6 +39,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedModel,
     GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
+    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -57,6 +58,7 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # None or rope embeddings
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -65,6 +67,10 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -203,6 +209,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.embedding_multiplier = config.embedding_multiplier
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if config.position_embedding_type == "rope" else None
 
     @auto_docstring
     @check_model_inputs
@@ -245,7 +252,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
