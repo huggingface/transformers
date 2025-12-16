@@ -784,7 +784,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        help="Location of GPT OSS model weights, which contains tokenizer.model and model folders",
+        help="Location of `./original` subfolder of the GPT OSS model repo.",
     )
     parser.add_argument(
         "--output_dir",
