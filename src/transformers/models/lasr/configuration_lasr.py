@@ -240,5 +240,9 @@ class LasrCTCConfig(PreTrainedConfig):
 
         return cls(encoder_config=encoder_config.to_dict(), **kwargs)
 
+    @property
+    def inputs_to_logits_ratio(self):
+        return self.encoder_config.subsampling_conv_stride**2
+
 
 __all__ = ["LasrEncoderConfig", "LasrCTCConfig"]

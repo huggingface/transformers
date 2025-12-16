@@ -107,6 +107,7 @@ class DeepseekV3NaiveMoe(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
         self.num_experts = config.num_local_experts
+        self.intermediate_dim = config.moe_intermediate_size
 
 
 class DeepseekV3MoE(nn.Module):
