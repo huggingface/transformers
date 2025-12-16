@@ -1094,7 +1094,7 @@ class ModelTesterMixin:
             with torch.device("meta"):
                 model_from_meta_init = model_class(copy.deepcopy(config))
             # move everything randomly to cpu
-            model_from_meta_init.to_empty("cpu")
+            model_from_meta_init.to_empty(device="cpu")
             # Now, run all the inits
             model_from_meta_init.init_weights()
 
