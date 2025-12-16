@@ -495,7 +495,6 @@ class GatherParallel(TensorParallelLayer):
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
-        use_dtensor: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -503,7 +502,6 @@ class GatherParallel(TensorParallelLayer):
         self.output_layouts = output_layouts
         self.desired_input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
-        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -760,6 +758,15 @@ class PackedColwiseParallel(ColwiseParallel):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
+class LocalColwiseParallel(ColwiseParallel):
+    """
+    Colwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Partition a compatible nn.Module in a row-wise fashion. Currently supports nn.Linear and nn.Embedding.
@@ -913,6 +920,24 @@ class PackedRowwiseParallel(RowwiseParallel):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
+
+
+class LocalRowwiseParallel(RowwiseParallel):
+    """
+    Rowwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class LocalPackedRowwiseParallel(PackedRowwiseParallel):
+    """
+    Packed rowwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
 
 
 class SequenceParallel(TensorParallelLayer):
@@ -1173,11 +1198,11 @@ class ParallelInterface(GeneralInterface):
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
             "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-            "local_colwise": ColwiseParallel(use_dtensor=False),
-            "local_rowwise": RowwiseParallel(use_dtensor=False),
+            "local_colwise": LocalColwiseParallel(),
+            "local_rowwise": LocalRowwiseParallel(),
             "local": IsolatedParallel(),
             "gather": GatherParallel(),
-            "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+            "local_packed_rowwise": LocalPackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
             "grouped_gemm": GroupedGemmParallel(),
