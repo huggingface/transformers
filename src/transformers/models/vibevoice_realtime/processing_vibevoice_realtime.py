@@ -21,7 +21,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_soundfile_available, is_torch_available, logging
-
+from transformers.cache_utils import DynamicCache
+from ...modeling_outputs import BaseModelOutputWithPast
 
 logger = logging.get_logger(__name__)
 
@@ -63,10 +64,60 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
 
+        if not hasattr(tokenizer, "pad_id"):
+            # NOTE original used <image_pad>: https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/modular/modular_vibevoice_text_tokenizer.py#L181
+            self.pad_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
+        else:
+            self.pad_id = tokenizer.pad_id
+
+    def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
+        for key in ["lm", "tts_lm", "neg_lm", "neg_tts_lm"]:
+            if key not in voice_preset:
+                raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
+            for sub_key in ["last_hidden_state", "past_key_values"]:
+                if sub_key not in voice_preset[key]:
+                    raise ValueError(f"Voice preset unrecognized, missing {sub_key} in {key}.")
+                
+            if not isinstance(voice_preset[key]["last_hidden_state"], torch.Tensor):
+                raise TypeError(f"voice_preset[{key}][{sub_key}] must be of type torch.Tensor.")
+            
+            if not isinstance(voice_preset[key]["past_key_values"], dict):
+                raise TypeError(f"voice_preset[{key}][{sub_key}] must be of type dict.")
+            
+            for cache_key in ["key_cache", "value_cache"]:
+                if cache_key not in voice_preset[key]["past_key_values"]:
+                    raise ValueError(f"Voice preset unrecognized, missing {cache_key} in past_key_values of {key}.")
+                if not isinstance(voice_preset[key]["past_key_values"][cache_key], list):
+                    raise TypeError(f"voice_preset[{key}]['past_key_values'][{cache_key}] must be of type list.")
+                for tensor in voice_preset[key]["past_key_values"][cache_key]:
+                    if not isinstance(tensor, torch.Tensor):
+                        raise TypeError(f"Each item in voice_preset[{key}]['past_key_values'][{cache_key}] must be of type torch.Tensor.")
+            
+    def _rebuild_voice_preset_entry(self, entry):
+        """Main part is rebuilding DynamicCache (for past_key_values) from raw tensors."""
+
+        past_key_value_dict = entry["past_key_values"]
+        key_cache = past_key_value_dict["key_cache"]
+        value_cache = past_key_value_dict["value_cache"]
+        if len(key_cache) != len(value_cache):
+            raise ValueError("key_cache and value_cache must have the same length")
+        cache = DynamicCache()
+        for layer_idx, (k, v) in enumerate(zip(key_cache, value_cache)):
+            cache.update(
+                key_states=k,
+                value_states=v,
+                layer_idx=layer_idx,
+            )
+        # TODO (ebezzam) don't use model output here?
+        return BaseModelOutputWithPast(
+            last_hidden_state=entry["last_hidden_state"],
+            past_key_values=cache,
+        )
+
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        preset: Optional[Union[str, list[str]]] = None,
+        voice_preset: Optional[Union[str, dict["torch.Tensor"]]] = None,
         **kwargs: Unpack[VibeVoiceRealTimeProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -75,8 +126,12 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         Args:
             text (`str`, `List[str]`):
                 The input text(s) to tokenizer.
-            preset (`str`, `List[str]`, *optional*):
-                Preset(s) to set the voice for the generated audio.
+            voice_preset (`str`, `dict`, *optional*):
+                TODO update
+                Preset(s) to set the voice for the generated audio.  It can either be a valid voice_preset name, e.g
+                `"de-Spk0_man"`, or it can be a valid file name of a local `.pt` single voice preset containing the
+                keys "lm", "tts_lm", "neg_lm", and "neg_tts_lm". With each key contains the keys "last_hidden_state"
+                and "past_key_values".
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
@@ -93,30 +148,87 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         return_tensors = text_kwargs.get("return_tensors", None)
+        return_attention_mask = text_kwargs.get("return_attention_mask", True)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
+        # make batch
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
+        
+        # TODO mimic their preprocessing but maybe not necessary?
+        # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
+        text_preprocessed = [t.strip() + "\n" for t in text]
+        # NOTE (ebezzam) this will create "inputs_id" and "attention_mask" according to Transformers convention
+        encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
+        # TODO (ebezzam) hacks to imitate original, `tts_attention_mask` of below doesn't seem to be used by original?
+        del encoded_text["attention_mask"]      # original doesn't use this, but manually creates it, and manual has different shape
+        encoded_text["tts_input_ids"] = encoded_text.pop("input_ids")
 
-        data = {}
-        encoding = self.tokenizer(text, **text_kwargs)
-        data.update(encoding)
+        lm_input_ids = None    # input_ids in original
+        tts_lm_input_ids = None # tts_lm_input_ids in original
+        if voice_preset is not None:
+            lm_input_ids = []
+            tts_lm_input_ids = []
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+            # TODO how to handle batching? Bark doesn't
+            # make batch
+            if isinstance(voice_preset, (str, dict)):
+                voice_preset = [voice_preset]
+            elif not isinstance(voice_preset, (list, tuple)):
+                raise ValueError("voice_preset input must be a string, dict, or list of strings/dicts")
+
+            # load and validate each voice preset
+            for i, _preset in enumerate(voice_preset):
+                if isinstance(_preset, str) and _preset.endswith(".pt"):
+                    # loaded_tensors = torch.load(_preset, weights_only=False)
+                    # voice_preset[i] = {k: self._rebuild_voice_preset_entry(v) for k, v in loaded_tensors.items()}
+                    voice_preset[i] = torch.load(_preset, weights_only=False)
+                elif not isinstance(_preset, dict):
+                    raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {_preset}")
+                self._validate_voice_preset_dict(voice_preset[i])
+
+                lm_input_ids.append([self.pad_id] * voice_preset[i]['lm']['last_hidden_state'].size(1))
+                tts_lm_input_ids.append([self.pad_id] * voice_preset[i]['tts_lm']['last_hidden_state'].size(1))
+
+            lm_attention_masks = [[1] * len(ids) for ids in lm_input_ids] if return_attention_mask else None
+            tts_lm_attention_masks = [[1] * len(ids) for ids in tts_lm_input_ids] if return_attention_mask else None
+
+            # TODO (ebezzam) proper batching
+            encoded_text.update({
+                "input_ids": torch.tensor(lm_input_ids, dtype=torch.long),
+                # NOTE (ebezzam) original seems to use this as the attention mask and NOT from tokenizer...
+                "attention_mask": torch.tensor(lm_attention_masks, dtype=torch.long) if lm_attention_masks is not None else None,
+                "tts_lm_input_ids": torch.tensor(tts_lm_input_ids, dtype=torch.long),
+                "tts_lm_attention_mask": torch.tensor(tts_lm_attention_masks, dtype=torch.long) if tts_lm_attention_masks is not None else None,
+            })
+
+            # NOTE (ebezzam) like in Bark: https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
+            # TODO should we batch? not done in Bark
+            encoded_text["history_prompt"] = voice_preset
+            # encoded_text["history_prompt"] = {
+            #     "preset_lm": [voice_preset[i]["lm"] for i in range(len(voice_preset))],
+            #     "preset_tts_lm": [voice_preset[i]["tts_lm"] for i in range(len(voice_preset))],
+            #     "preset_neg_lm": [voice_preset[i]["neg_lm"] for i in range(len(voice_preset))],
+            #     "preset_neg_tts_lm": [voice_preset[i]["neg_tts_lm"] for i in range(len(voice_preset))],
+            # }
+
+        return encoded_text
 
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        # return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["lm_input_ids", "lm_attention_mask", "tts_lm_input_ids", "tts_lm_attention_mask"]))
 
     def save_audio(
         self,
         audio: AudioInput,
         output_path: Optional[str] = None,
+        sampling_rate: Optional[int] = 24000,
     ) -> list[str]:
         """
         Save audio data to WAV file(s).
@@ -129,14 +241,13 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         Returns:
             List[str]: Paths to the saved audio files.
         """
-        sampling_rate = self.feature_extractor.sampling_rate
 
         if not is_soundfile_available():
             raise ImportError("Please install `soundfile` to save audio files.")
 
         audio = make_list_of_audio(audio)
         for idx, item in enumerate(audio):
-            audio[idx] = item.detach().cpu().numpy().squeeze()
+            audio[idx] = item.detach().cpu().float().numpy().squeeze()
 
         if len(audio) == 1:
             if output_path is None:

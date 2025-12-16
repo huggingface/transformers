@@ -114,10 +114,8 @@ class VibeVoiceRealTimeConfig(PretrainedConfig):
             The config object or dictionary of the acoustic tokenizer.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text model.
-        tts_backbone_num_hidden_layers (`int`, *optional*, defaults to 20):
-            Two language models are created according to `text_config`. `tts_backbone_num_hidden_layers` specifies the
-            number of upper Transformer layers used for encoding text and generating speech. The remaining lower
-            Transformer layers are only used for encoding text.
+        tts_text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the TTS text model.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models).
         pad_token_id (`int`, *optional*, defaults to 151643):
