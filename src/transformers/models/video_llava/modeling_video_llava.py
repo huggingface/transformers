@@ -37,28 +37,6 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BaseModelOutputWithNumFrames(ModelOutput):
-    """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        num_frames (`int`):
-            Number of frames the videos have.
-    """
-
-    last_hidden_state: torch.FloatTensor
-    pooler_output: torch.FloatTensor
-    num_frames: int
-
-
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for VideoLlava base model outputs.
@@ -287,7 +265,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        video_outputs = self.video_tower(pixel_values, output_hidden_states=True)
+        video_outputs = self.video_tower(pixel_values, output_hidden_states=True, return_dict=True)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -300,13 +278,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         video_features = self.multi_modal_projector(video_features)
 
         if return_dict:
-            return BaseModelOutputWithNumFrames(
-                last_hidden_state=video_outputs.last_hidden_state,
-                pooler_output=video_features,
-                num_frames=num_frames,
-            )
+            video_outputs.pooler_output = video_features
+            return video_outputs
 
-        return video_features, num_frames
+        # NOTE: @Tom backwards incompatibility
+        return video_features
 
     def get_placeholder_mask(
         self,
@@ -407,7 +383,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if pixel_values_videos is not None:
-            video_features, num_frames = self.get_video_features(
+            video_features = self.get_video_features(
                 pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer
             )
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
