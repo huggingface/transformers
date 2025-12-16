@@ -603,6 +603,8 @@ class IBertPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, IBertLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, IBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
     def resize_token_embeddings(self, new_num_tokens=None):
         raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")

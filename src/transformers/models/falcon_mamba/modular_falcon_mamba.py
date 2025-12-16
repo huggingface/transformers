@@ -536,6 +536,7 @@ class FalconMambaPreTrainedModel(MambaPreTrainedModel):
             init.ones_(module.b_c_rms)
             init.ones_(module.dt_rms)
 
+
 class FalconMambaOutput(MambaOutput):
     pass
 

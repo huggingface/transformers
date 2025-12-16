@@ -1253,6 +1253,9 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
             init.normal_(module.latent_query, mean=0.0, std=1.0)
+        elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            init.copy_(module.weights, emb_weights)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):

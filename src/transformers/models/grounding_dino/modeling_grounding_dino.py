@@ -1430,6 +1430,11 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroundingDinoMLPPredictionHead):
             init.constant_(module.layers[-1].weight, 0)
             init.constant_(module.layers[-1].bias, 0)
+        elif isinstance(module, GroundingDinoFrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros(module.bias)
+            module.zeros_(module.running_mean)
+            module.ones_(module.running_var)
 
         if hasattr(module, "reference_points") and not self.config.two_stage:
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
