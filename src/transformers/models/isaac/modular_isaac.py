@@ -2068,18 +2068,14 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
         cache_position = model_inputs.get("cache_position", cache_position)
 
-        # Handle TensorStream for first forward pass only. For plain text, keep the parent-computed
-        # position_ids so cache offsets stay aligned.
-        if tensor_stream is not None:
-            if cache_position is None or cache_position[0] == 0:
-                model_inputs["tensor_stream"] = tensor_stream
-            else:
-                model_inputs["tensor_stream"] = None
-            # Let forward rebuild position_ids using cached deltas during decode
-            model_inputs["position_ids"] = None
-        else:
-            model_inputs.pop("tensor_stream", None)
-
+        # Handle TensorStream for first forward pass only
+        if tensor_stream is not None and (cache_position is None or cache_position[0] == 0):
+            model_inputs["tensor_stream"] = tensor_stream
+        # Let forward rebuild position_ids using cached deltas during decode
+        model_inputs["position_ids"] = None
+        # Drop tensor_stream after step 0
+        if cache_position is not None and cache_position[0] != 0:
+            model_inputs["tensor_stream"] = None
         return model_inputs
 
     @classmethod
