@@ -1770,6 +1770,9 @@ class IsaacModel(Qwen3PreTrainedModel):
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
+            elif cache_position is not None:
+                batch_size = modality_tensor.shape[0] if modality_tensor is not None else inputs_embeds.shape[0]
+                position_ids = cache_position.view(1, -1).expand(batch_size, -1)
             elif input_ids is not None:
                 position_ids = compute_position_ids_input_ids(input_ids)
             else:
@@ -1782,10 +1785,25 @@ class IsaacModel(Qwen3PreTrainedModel):
                 (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
             )
 
-        # Expand 2D position ids (from generic padding tests) to 3D MRoPE coords
+        # Expand 2D position ids (from generic padding tests or decode cache positions) to 3D MRoPE coords
         if position_ids is not None and position_ids.ndim == 2:
             position_ids = position_ids.to(device=inputs_embeds.device)
             position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        # Align lengths so rotary embedding sees matching shapes
+        seq_len = inputs_embeds.shape[1]
+        if position_ids is not None and position_ids.shape[1] != seq_len:
+            start_positions = position_ids[:, :1, 0]
+            position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
+            position_ids = position_ids + start_positions
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        if modality_tensor.shape[1] != seq_len:
+            if modality_tensor.shape[1] > seq_len:
+                modality_tensor = modality_tensor[:, :seq_len]
+            else:
+                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
+                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(
@@ -2068,14 +2086,26 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
         cache_position = model_inputs.get("cache_position", cache_position)
 
-        # Handle TensorStream for first forward pass only
-        if tensor_stream is not None and (cache_position is None or cache_position[0] == 0):
+        # Handle TensorStream only for the prefill step
+        first_step = cache_position is None or cache_position[0] == 0
+        if tensor_stream is not None and first_step:
             model_inputs["tensor_stream"] = tensor_stream
-        # Let forward rebuild position_ids using cached deltas during decode
-        model_inputs["position_ids"] = None
-        # Drop tensor_stream after step 0
-        if cache_position is not None and cache_position[0] != 0:
+            # Let forward rebuild MRoPE coordinates from the TensorStream
+            model_inputs["position_ids"] = None
+        else:
             model_inputs["tensor_stream"] = None
+
+        # For decode steps, synthesize position_ids that continue from the cache offsets
+        if model_inputs.get("position_ids") is None and cache_position is not None and not first_step:
+            batch_size = 1
+            if model_inputs.get("input_ids") is not None:
+                batch_size = model_inputs["input_ids"].shape[0]
+            elif model_inputs.get("inputs_embeds") is not None:
+                batch_size = model_inputs["inputs_embeds"].shape[0]
+            pos_ids = cache_position.view(1, -1).expand(batch_size, -1)
+            pos_ids = pos_ids.unsqueeze(-1).expand(-1, -1, 3)
+            model_inputs["position_ids"] = pos_ids
+
         return model_inputs
 
     @classmethod
