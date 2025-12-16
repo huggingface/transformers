@@ -424,7 +424,7 @@ class TrainerCallback:
         """
         Event called before pushing the model to the hub, at the beginning of Trainer.push_to_hub and Trainer._push_from_checkpoint.
         """
-    
+
 
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
