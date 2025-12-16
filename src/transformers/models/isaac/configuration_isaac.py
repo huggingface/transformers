@@ -72,6 +72,10 @@ class IsaacVisionConfig(PreTrainedConfig):
         # Add our custom fields
         self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
 
+        # Ensure a sensible default attention backend
+        if getattr(self, "_attn_implementation", None) is None:
+            self._attn_implementation = "eager"
+
 
 class IsaacConfig(PretrainedConfig):
     """Configuration class for Isaac multimodal model.
@@ -141,6 +145,16 @@ class IsaacConfig(PretrainedConfig):
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
 
+        # Default and propagate attention implementation
+        attn_impl = getattr(self, "_attn_implementation", None)
+        if attn_impl is None:
+            attn_impl = "eager"
+            self._attn_implementation = attn_impl
+        if hasattr(self, "text_config") and self.text_config is not None:
+            self.text_config._attn_implementation = attn_impl
+        if hasattr(self, "vision_config") and self.vision_config is not None:
+            self.vision_config._attn_implementation = attn_impl
+
     @property
     def rope_scaling(self):
         if hasattr(self, "text_config") and self.text_config is not None:
@@ -176,6 +190,14 @@ class IsaacConfig(PretrainedConfig):
         if hasattr(self, "vision_config") and self.vision_config is not None:
             output["vision_config"] = self.vision_config.to_dict()
         return output
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        if name == "_attn_implementation":
+            if hasattr(self, "text_config") and self.text_config is not None:
+                setattr(self.text_config, "_attn_implementation", value)
+            if hasattr(self, "vision_config") and self.vision_config is not None:
+                setattr(self.vision_config, "_attn_implementation", value)
 
 
 __all__ = ["IsaacConfig"]

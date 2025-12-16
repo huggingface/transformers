@@ -1036,14 +1036,14 @@ class IsaacModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-
+    _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
+    # Expose tied-weights mapping even if empty for base model tests.
     all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
@@ -1073,12 +1073,18 @@ class IsaacModel(PreTrainedModel):
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
 
+        # Initialize weights and parallel plans (including tp_plan from the text model)
+        self.post_init()
+
+        # Respect config-specified gradient checkpointing
+        if getattr(config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
-        # Keep vocab sizes in sync when embeddings are replaced.
         vocab_size = getattr(value, "num_embeddings", None)
         if vocab_size is not None:
             self.config.vocab_size = vocab_size
@@ -1167,14 +1173,14 @@ class IsaacModel(PreTrainedModel):
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        tensor_stream (`TensorStream`, *optional*):
-            Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
-            `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
-            if they are not supplied.
         modality_tensor (`torch.LongTensor`, *optional*):
             Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
             values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
             omitted.
+        tensor_stream (`TensorStream`, *optional*):
+            Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+            `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+            if they are not supplied.
         """
 
         modality_tensor = kwargs.pop("modality_tensor", None)
@@ -1183,6 +1189,7 @@ class IsaacModel(PreTrainedModel):
         text_value = TextType.text.value if TextType is not None else 0
 
         # Get inputs
+
         if tensor_stream is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both tensor_stream and inputs_embeds")
         elif tensor_stream is not None:
@@ -1320,13 +1327,12 @@ class IsaacPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
-    all_tied_weights_keys: dict[str, str] = {}
 
 
 @auto_docstring
@@ -1334,11 +1340,12 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     """Isaac multimodal model for conditional generation."""
 
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     config_class = IsaacConfig
+    _can_compile_fullgraph = False
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
@@ -1405,6 +1412,14 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             dummy_ids = torch.zeros((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
             position_ids = compute_position_ids_input_ids(dummy_ids)
 
+        if attention_mask is None:
+            if input_ids is not None:
+                batch_size, seq_len = input_ids.shape
+                attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.long)
+            else:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+                attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+
         text_value = TextType.text.value if TextType is not None else 0
 
         if tensor_stream is not None:
@@ -1459,10 +1474,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             self.model.config.vocab_size = vocab_size
             if hasattr(self.model, "text_model"):
                 self.model.text_model.config.vocab_size = vocab_size
-            # Resize lm_head if shapes differ
             if self.lm_head.weight.shape[0] != vocab_size:
                 self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
-            # Retie lm_head to embeddings when applicable
             if hasattr(self.model, "embed_tokens"):
                 self.lm_head.weight = self.model.text_model.embed_tokens.weight
 
