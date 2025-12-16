@@ -196,7 +196,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ):
+    ) -> DeepseekVLBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -268,7 +268,7 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> DeepseekVLCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
