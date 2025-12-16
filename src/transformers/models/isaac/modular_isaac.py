@@ -1870,19 +1870,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.model.set_input_embeddings(value)
-        vocab_size = getattr(value, "num_embeddings", None)
-        if vocab_size is not None:
-            self.config.vocab_size = vocab_size
-            self.model.config.vocab_size = vocab_size
-            if hasattr(self.model, "text_model"):
-                self.model.text_model.config.vocab_size = vocab_size
-            if self.lm_head.weight.shape[0] != vocab_size:
-                self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
-            if hasattr(self.model, "embed_tokens"):
-                self.lm_head.weight = self.model.text_model.embed_tokens.weight
-
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
         self.model = IsaacModel(config)  # Use our custom model
@@ -1890,39 +1877,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         # Tracks rotary position offsets computed during a full forward pass so decode steps can reuse them.
         self.rope_deltas = None
-
-    def get_rope_index(
-        self,
-        input_ids: Optional[torch.Tensor],
-        tensor_stream: Optional[TensorStream],
-        attention_mask: Optional[torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compute MRoPE position ids from a TensorStream (or 1D fallback).
-
-        Returns (position_ids, rope_deltas). position_ids is (B,L,3) for MRoPE.
-        rope_deltas is (B,1) used to advance positions in decode.
-        """
-        # tensor_stream present: compute 3D coords
-        if tensor_stream is None and input_ids is None:
-            raise ValueError("`tensor_stream` or `input_ids` must be provided to compute rope indices")
-
-        if tensor_stream is not None:
-            pos_3d = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
-        else:
-            pos_3d = compute_position_ids_input_ids(input_ids)
-        B, L, _ = pos_3d.shape
-
-        # Max position per batch across the 3 planes and sequence dimension: (B,)
-        m_per_batch = pos_3d.amax(dim=(1, 2))
-
-        # Sequence lengths per batch: (B,)
-        if attention_mask is None:
-            seq_lens = torch.full_like(m_per_batch, L)
-        else:
-            seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=m_per_batch.device)
-
-        rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=pos_3d.dtype).unsqueeze(1)
-        return pos_3d, rope_deltas
 
     def forward(
         self,
@@ -2031,6 +1985,52 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions if output_attentions else None,
         )
+
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.model.set_input_embeddings(value)
+        vocab_size = getattr(value, "num_embeddings", None)
+        if vocab_size is not None:
+            self.config.vocab_size = vocab_size
+            self.model.config.vocab_size = vocab_size
+            if hasattr(self.model, "text_model"):
+                self.model.text_model.config.vocab_size = vocab_size
+            if self.lm_head.weight.shape[0] != vocab_size:
+                self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
+            if hasattr(self.model, "embed_tokens"):
+                self.lm_head.weight = self.model.text_model.embed_tokens.weight
+
+    def get_rope_index(
+        self,
+        input_ids: Optional[torch.Tensor],
+        tensor_stream: Optional[TensorStream],
+        attention_mask: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Compute MRoPE position ids from a TensorStream (or 1D fallback).
+
+        Returns (position_ids, rope_deltas). position_ids is (B,L,3) for MRoPE.
+        rope_deltas is (B,1) used to advance positions in decode.
+        """
+        # tensor_stream present: compute 3D coords
+        if tensor_stream is None and input_ids is None:
+            raise ValueError("`tensor_stream` or `input_ids` must be provided to compute rope indices")
+
+        if tensor_stream is not None:
+            pos_3d = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
+        else:
+            pos_3d = compute_position_ids_input_ids(input_ids)
+        B, L, _ = pos_3d.shape
+
+        # Max position per batch across the 3 planes and sequence dimension: (B,)
+        m_per_batch = pos_3d.amax(dim=(1, 2))
+
+        # Sequence lengths per batch: (B,)
+        if attention_mask is None:
+            seq_lens = torch.full_like(m_per_batch, L)
+        else:
+            seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=m_per_batch.device)
+
+        rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=pos_3d.dtype).unsqueeze(1)
+        return pos_3d, rope_deltas
 
     def prepare_inputs_for_generation(
         self,
