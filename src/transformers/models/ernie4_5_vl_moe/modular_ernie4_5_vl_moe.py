@@ -79,14 +79,13 @@ from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
-    Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
-from ..qwen2_vl.modeling_qwen2_vl import VisionMlp
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, VisionMlp
 
 
 logger = logging.get_logger(__name__)
@@ -849,14 +848,10 @@ class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
         )
 
 
-class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerPretrainedModel):
-    _no_split_modules = ["Ernie4_5_VL_MoeVisionBlock"]
+class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
+    def __init__(self, config) -> None:
+        super().__init__(config)
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
-        super().__init__(config, *inputs, **kwargs)
-
-        del self.fullatt_block_indexes
-        del self.window_size
         del self.merger
 
         self.patch_embed = Ernie4_5_VL_MoePatchEmbed(
@@ -870,8 +865,11 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerP
 
         self.ln = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def get_window_index(self, grid_thw):
-        raise AttributeError("Ernie 4.5 VL does not use windowed attention!")
+    def get_dtype(self):
+        raise AttributeError("Ernie 4.5 VL Moe does not need this!")
+
+    def get_device(self):
+        raise AttributeError("Ernie 4.5 VL Moe does not need this!")
 
     def forward(
         self,
@@ -880,10 +878,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2_5_VisionTransformerP
         **kwargs,
     ) -> torch.Tensor:
         hidden_states = self.patch_embed(hidden_states)
-
-        seq_len, _ = hidden_states.size()
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 

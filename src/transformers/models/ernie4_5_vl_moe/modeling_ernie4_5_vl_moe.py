@@ -863,16 +863,16 @@ class Ernie4_5_VL_MoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedModel):
     config: Ernie4_5_VL_MoeVisionConfig
+    input_modalities = ("image", "video")
     _no_split_modules = ["Ernie4_5_VL_MoeVisionBlock"]
     _input_embed_layer = "patch_embed"
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
-        super().__init__(config, *inputs, **kwargs)
+    def __init__(self, config) -> None:
+        super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
-        self.patch_size = config.patch_size
-        self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
         self.patch_embed = Ernie4_5_VL_MoePatchEmbed(
             patch_size=config.patch_size,
@@ -919,27 +919,19 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
-
-        Returns:
-            `torch.Tensor`: hidden_states.
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
         hidden_states = self.patch_embed(hidden_states)
-
-        seq_len, _ = hidden_states.size()
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 

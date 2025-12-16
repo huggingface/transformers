@@ -17,7 +17,6 @@
 import importlib
 import os
 from collections import OrderedDict
-from copy import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all video processors
@@ -326,25 +325,8 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        reloaded_kwargs = copy(kwargs)
         config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
-
-        # We have a circular dependency
-        #   - We need the actual class to load the dict properly (custom logic, e.g. fonts)
-        #   - We can only find the actual class by loading the base json first
-        #
-        # This is an exception to allow the `Ernie4_5_VL_Moe` to load by its logic
-        if "Ernie4_5_VL_MoeVideoProcessor" == video_processor_class:
-            from ..ernie4_5_vl_moe import Ernie4_5_VL_MoeVideoProcessor
-
-            # Ernie 4.5 VL Moe has extra logic to load fonts at the same time
-            # Our logic relies heavily on this being unifiable which is not the case here
-            config_dict, _ = Ernie4_5_VL_MoeVideoProcessor.get_video_processor_dict(
-                pretrained_model_name_or_path, **reloaded_kwargs
-            )
-            kwargs = reloaded_kwargs
-
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
             video_processor_auto_map = config_dict["auto_map"]["AutoVideoProcessor"]
@@ -394,9 +376,9 @@ class AutoVideoProcessor:
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif video_processor_class is not None:
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
