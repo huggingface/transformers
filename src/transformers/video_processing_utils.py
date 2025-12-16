@@ -175,7 +175,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[VideosKwargs]) -> None:
         super().__init__()
 
-        self._processor_class = kwargs.pop("processor_class", None)
+        kwargs.pop("processor_class", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -798,12 +798,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

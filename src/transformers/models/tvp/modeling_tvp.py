@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -462,7 +462,7 @@ class TvpEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -722,7 +722,7 @@ class TvpModel(TvpPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
         ```python
@@ -824,7 +824,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs,
-    ):
+    ) -> Union[tuple, TvpVideoGroundingOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.
