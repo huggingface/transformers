@@ -38,7 +38,10 @@ if is_gptqmodel_available():
     from gptqmodel import BACKEND
     from gptqmodel.quantization import METHOD
     from gptqmodel.utils.importer import hf_select_quant_linear_v2
-
+else:
+    BACKEND = None
+    METHOD = None
+    hf_select_quant_linear_v2 = None
 
 class GPTQConfigTest(unittest.TestCase):
     def test_bits(self):

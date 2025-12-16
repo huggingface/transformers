@@ -35,41 +35,20 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
 
     Args:
-            dac_config (`dict` or `PreTrainedConfig`, *optional*):
-                Configuration for the Dac encoder component.
-            hidden_size (`int`, *optional*, defaults to 1792):
-                Dimension of the hidden representations.
-            intermediate_size (`int`, *optional*, defaults to 4800):
-                Dimension of the MLP representations.
-            num_hidden_layers (`int`, *optional*, defaults to 6):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 14):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            num_key_value_heads (`int`, *optional*):
-                This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-                `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-                `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-                converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-                by meanpooling all the original heads within that group. For more details, check out [this
-                paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
-            head_dim (`int`, *optional*, defaults to 128):
-                The attention head dimension.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder.
-            max_position_embeddings (`int`, *optional*, defaults to 10000):
-                The maximum sequence length that this model might ever be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            rope_parameters (`RopeParameters` or `dict`, *optional*, defaults to `{'rope_theta': 20000}`):
-                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-                with longer `max_position_embeddings`.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use a bias in the query, key, value and output projection layers during self-attention.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the attention probabilities.
+        dac_config (`Union`, *optional*): <fill_docstring>
+        hidden_size (`Optional`, *optional*, defaults to 1792): <fill_docstring>
+        intermediate_size (`Optional`, *optional*, defaults to 4800): <fill_docstring>
+        num_hidden_layers (`Optional`, *optional*, defaults to 6): <fill_docstring>
+        num_attention_heads (`Optional`, *optional*, defaults to 14): <fill_docstring>
+        num_key_value_heads (`Optional`, *optional*): <fill_docstring>
+        head_dim (`Optional`, *optional*, defaults to 128): <fill_docstring>
+        hidden_act (`Optional`, *optional*, defaults to `"silu"`): <fill_docstring>
+        max_position_embeddings (`Optional`, *optional*, defaults to 10000): <fill_docstring>
+        initializer_range (`Optional`, *optional*, defaults to 0.02): <fill_docstring>
+        rms_norm_eps (`Optional`, *optional*, defaults to 1e-05): <fill_docstring>
+        rope_parameters (`Union`, *optional*, defaults to `{'rope_theta': 20000}`): <fill_docstring>
+        attention_bias (`Optional`, *optional*, defaults to `False`): <fill_docstring>
+        attention_dropout (`Optional`, *optional*, defaults to 0.0): <fill_docstring>
 
     ```python
     >>> from transformers import PeAudioEncoder, PeAudioEncoderConfig
