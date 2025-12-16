@@ -19,18 +19,18 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available, is_vision_available
+from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 from ..pixtral.modeling_pixtral import (
     PixtralAttention,
+    PixtralRMSNorm,
     PixtralVisionModel,
 )
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Model,
-    Qwen3RMSNorm,
 )
 
 
@@ -281,8 +281,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
-# Text model RMSNorm defined early for use in MultiModalProjector
-class LightOnOcrTextRMSNorm(Qwen3RMSNorm):
+class LightOnOcrRMSNorm(PixtralRMSNorm):
     pass
 
 
@@ -338,7 +337,7 @@ class LightOnOcrVisionProjector(nn.Module):
         super().__init__()
         self.config = config
 
-        self.norm = LightOnOcrTextRMSNorm(config.vision_config.hidden_size, eps=1e-6)
+        self.norm = LightOnOcrRMSNorm(config.vision_config.hidden_size, eps=1e-6)
         self.patch_merger = LightOnOcrPatchMerger(config)
         self.act = nn.GELU()
         self.linear_1 = nn.Linear(
