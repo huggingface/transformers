@@ -421,7 +421,7 @@ def test_isaac_flash_attention_backend():
         num_patches=16,
         patch_size=4,
     )
-    config._attn_implementation = "flash_attention_3"
+    config._attn_implementation = "flash_attention_2"
 
     attn_module = IsaacVisionAttention(config).half().eval().cuda()
     seq_len = 8
