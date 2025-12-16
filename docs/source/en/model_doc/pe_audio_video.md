@@ -34,7 +34,7 @@ TODO
 
 ## PeAudioVideoConfig
 
-[[autodoc]] PeAudioConfig
+[[autodoc]] PeAudioVideoConfig
 
 ## PeAudioVideoEncoderConfig
 

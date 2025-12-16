@@ -67,7 +67,7 @@ TODO
 
 ## PeAudioFrameLevelModel 
 
-[[autodoc]] PeAudioForSequenceClassification
+[[autodoc]] PeAudioFrameLevelModel 
     - forward
 
 ## PeAudioModel
