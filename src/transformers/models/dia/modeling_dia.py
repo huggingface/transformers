@@ -452,6 +452,8 @@ class DiaEncoder(DiaPreTrainedModel):
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
 
+        self.post_init()
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -525,7 +527,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         self_attn_cache = past_key_values
@@ -578,6 +579,8 @@ class DiaDecoder(DiaPreTrainedModel):
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
+
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple

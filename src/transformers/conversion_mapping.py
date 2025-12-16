@@ -142,11 +142,11 @@ def _build_checkpoint_conversion_mapping():
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
             WeightRenaming(
-                source_patterns=r"weight_g$",
+                source_patterns="weight_g",
                 target_patterns="parametrizations.weight.original0",
             ),
             WeightRenaming(
-                source_patterns=r"weight_v$",
+                source_patterns="weight_v",
                 target_patterns="parametrizations.weight.original1",
             ),
         ]
@@ -166,6 +166,9 @@ def _build_checkpoint_conversion_mapping():
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
     mapping["dots1"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
@@ -186,8 +189,20 @@ _checkpoint_conversion_mapping_cache = None
 
 def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
-    _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+
+
+def register_checkpoint_conversion_mapping(
+    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False
+) -> None:
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if model_type in _checkpoint_conversion_mapping_cache and not overwrite:
+        raise ValueError(f"Model type {model_type} already exists in the checkpoint conversion mapping.")
+    _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
@@ -213,6 +228,7 @@ VLMS = [
     "sam3",
     "sam3_tracker",
     "sam3_tracker_video",
+    "paddleocrvl",
 ]
 
 
