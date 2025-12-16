@@ -265,7 +265,7 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 
 
 @slow
-@require_torch_large_accelerator(memory=70)  # TODO: check actual memory usage
+@require_torch_large_accelerator(memory=70)  # Tested on A100
 @require_torch
 class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
@@ -490,6 +490,239 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = [
             'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
             'there are no dogs here, there are 2 cats',
+        ]  # fmt: skip
+
+        self.assertEqual(
+            [
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
+            ],
+            EXPECTED_DECODED_TEXT,
+        )
+
+
+# Garbage output expected as it is a dummy model to be run on the CI
+@slow
+@require_torch
+class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
+    model = None
+    model_id = "hf-internal-testing/Ernie-VL-Moe-Small"
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What kind of dog is this?"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                ],
+            }
+        ]
+        self.message2 = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What kind of dog is this?"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                    },
+                ],
+            }
+        ]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def load_model(self, dtype, attn_implementation="sdpa"):
+        return AutoModelForImageTextToText.from_pretrained(
+            self.model_id,
+            device_map="auto",
+            dtype=dtype,
+            attn_implementation=attn_implementation,
+        )
+
+    def test_small_model_integration_test(self):
+        model = self.load_model("auto")
+        inputs = self.processor.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        )
+        expected_input_ids = [100273, 2969, 93963, 1912, 3836, 315, 9159, 357, 501, 94009, 39082, 93919, 4, 93963, 101304, 100295, 100295]  # fmt: skip
+        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
+
+        expected_pixel_slice = torch.tensor(
+            [
+                [-0.0988, -0.0842, -0.0842],
+                [-0.5660, -0.5514, -0.4200],
+                [-0.0259, -0.0259, -0.0259],
+                [-0.1280, -0.0988, -0.2010],
+                [-0.4638, -0.5806, -0.6974],
+                [-1.2083, -1.2229, -1.2083],
+            ],
+            dtype=torch.float32,
+            device="cpu",
+        )
+        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=3e-3)
+
+        # verify generation
+        inputs = inputs.to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如'
+        self.assertEqual(
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    def test_small_model_integration_test_batch(self):
+        model = self.load_model("auto")
+        batch_messages = [self.message] * 2
+        inputs = self.processor.apply_chat_template(
+            batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+            '不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊',
+        ]  # fmt: skip
+
+        self.assertEqual(
+            [
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
+            ],
+            EXPECTED_DECODED_TEXT,
+        )
+
+    def test_small_model_integration_test_with_video(self):
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176})
+        model = self.load_model(dtype=torch.float16)
+        questions = ["Only use English during your responses. Describe the following video."]
+        video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": question},
+                        {
+                            "type": "video",
+                            "video": video_url,
+                        },
+                    ],
+                }
+            ]
+            for question, video_url in zip(questions, video_urls)
+        ]
+        inputs = processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True
+        ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = 'uschuschusch载载载载载载载载载载载载载载载载载载载载载载载载载载载'  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    def test_small_model_integration_test_expand(self):
+        model = self.load_model("auto")
+        inputs = self.processor.apply_chat_template(
+            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
+
+        EXPECTED_DECODED_TEXT = [
+            '不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊错的错的错的错的错的错的错的错的错的错的错的错的错的',
+            '不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊错的错的错的错的错的错的错的错的错的错的错的错的就是这样',
+        ]  # fmt: skip
+
+        self.assertEqual(
+            [
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+            ],
+            EXPECTED_DECODED_TEXT,
+        )
+
+    def test_small_model_integration_test_batch_wo_image(self):
+        model = self.load_model("auto")
+        message_wo_image = [
+            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
+        ]
+        batched_messages = [self.message, message_wo_image]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+            '用具柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄柄',
+        ]  # fmt: skip
+
+        self.assertEqual(
+            [
+                self.processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True),
+                self.processor.decode(output[1][len(inputs["input_ids"][1]) :], skip_special_tokens=True),
+            ],
+            EXPECTED_DECODED_TEXT,
+        )
+
+    def test_small_model_integration_test_batch_different_resolutions(self):
+        model = self.load_model("auto")
+        batched_messages = [self.message, self.message2]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # This model on the hub has `do_sample=True`.
+        torch.manual_seed(42)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30)
+
+        EXPECTED_DECODED_TEXT = [
+            '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+            '填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空',
         ]  # fmt: skip
 
         self.assertEqual(
