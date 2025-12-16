@@ -19,11 +19,11 @@ specific language governing permissions and limitations under the License.
     </div>
 </div>
 
-# Pixo
+# Pixio
 
-[Pixo]() is a vision foundation model that uses [ViT](./vit) as a feature extractor for multiple downstream tasks like depth estimation, semantic segmentation, feed-forward 3D reconstruction, robotics, and image classification. It is built on the Masked Autoencoder (MAE) pre-training framework, with four minimal yet critical updates: 1) deeper decoder, 2) larger masking granularity, 3) more class tokens, and 4) web-scale curated training data.
+[Pixio]() is a vision foundation model that uses [ViT](./vit) as a feature extractor for multiple downstream tasks like depth estimation, semantic segmentation, feed-forward 3D reconstruction, robotics, and image classification. It is built on the Masked Autoencoder (MAE) pre-training framework, with four minimal yet critical updates: 1) deeper decoder, 2) larger masking granularity, 3) more class tokens, and 4) web-scale curated training data.
 
-You can find all the original Pixo checkpoints under the [Pixo]() collection.
+You can find all the original Pixio checkpoints under the [Pixio]() collection.
 
 The example below demonstrates how to obtain an image embedding with the [`AutoModel`] class.
 
@@ -38,13 +38,8 @@ from PIL import Image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-processor = AutoImageProcessor.from_pretrained("facebook/pixo-vith16")
-model = AutoModel.from_pretrained(
-    "facebook/pixo-vith16",
-    dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
+processor = AutoImageProcessor.from_pretrained("facebook/pixio-vith16")
+model = AutoModel.from_pretrained("facebook/pixio-vith16")
 
 inputs = processor(images=image, return_tensors="pt")
 outputs = model(**inputs)
@@ -70,8 +65,8 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   image = Image.open(requests.get(url, stream=True).raw)
   print(image.height, image.width)  # [480, 640]
 
-  processor = AutoImageProcessor.from_pretrained('facebook/pixo-vith16')
-  model = AutoModel.from_pretrained('facebook/pixo-vith16')
+  processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16')
   patch_size = model.config.patch_size
 
   inputs = processor(images=image, return_tensors="pt")
@@ -101,8 +96,8 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
   image = Image.open(requests.get(url, stream=True).raw)
 
-  processor = AutoImageProcessor.from_pretrained('facebook/pixo-vith16')
-  model = AutoModel.from_pretrained('facebook/pixo-vith16')
+  processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16')
 
   inputs = processor(images=image, return_tensors="pt")
   outputs = model(**inputs)
@@ -118,16 +113,16 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   print((last_hidden_states - traced_outputs.last_hidden_state).abs().max())
   ```
 
-## PixoConfig
+## PixioConfig
 
-[[autodoc]] PixoConfig
+[[autodoc]] PixioConfig
 
-## PixoModel
+## PixioModel
 
-[[autodoc]] PixoModel
+[[autodoc]] PixioModel
     - forward
 
-## PixoBackbone
+## PixioBackbone
 
-[[autodoc]] PixoBackbone
+[[autodoc]] PixioBackbone
     - forward

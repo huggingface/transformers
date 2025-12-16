@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pixo model configuration"""
+"""Pixio model configuration"""
 
 from typing import TYPE_CHECKING
 
@@ -21,8 +21,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pixo import *
-    from .modeling_pixo import *
+    from .configuration_pixio import *
+    from .modeling_pixio import *
 else:
     import sys
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Pixo model."""
+"""PyTorch Pixio model."""
 
 from typing import Optional
 
@@ -35,12 +35,12 @@ from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedMo
 logger = logging.get_logger(__name__)
 
 
-class PixoConfig(Dinov2Config):
+class PixioConfig(Dinov2Config):
     r"""
-    This is the configuration class to store the configuration of a [`PixoModel`]. It is used to instantiate a
-    Pixo model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PixioModel`]. It is used to instantiate a
+    Pixio model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ViT
-    [facebook/pixo-huge](https://huggingface.co/facebook/pixo-huge) architecture.
+    [facebook/pixio-huge](https://huggingface.co/facebook/pixio-huge) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -97,19 +97,19 @@ class PixoConfig(Dinov2Config):
     Example:
 
     ```python
-    >>> from transformers import PixoConfig, PixoModel
+    >>> from transformers import PixioConfig, PixioModel
 
-    >>> # Initializing a Pixo pixo-huge style configuration
-    >>> configuration = PixoConfig()
+    >>> # Initializing a Pixio pixio-huge style configuration
+    >>> configuration = PixioConfig()
 
-    >>> # Initializing a model (with random weights) from the pixo-huge style configuration
-    >>> model = PixoModel(configuration)
+    >>> # Initializing a model (with random weights) from the pixio-huge style configuration
+    >>> model = PixioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "pixo"
+    model_type = "pixio"
 
     def __init__(
         self,
@@ -160,21 +160,21 @@ class PixoConfig(Dinov2Config):
         del self.use_mask_token
 
 
-class PixoPatchEmbeddings(ViTPatchEmbeddings):
+class PixioPatchEmbeddings(ViTPatchEmbeddings):
     pass
 
 
-class PixoEmbeddings(nn.Module):
+class PixioEmbeddings(nn.Module):
     """
     Construct the CLS tokens, position and patch embeddings.
     """
 
-    def __init__(self, config: PixoConfig) -> None:
+    def __init__(self, config: PixioConfig) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.randn(1, config.n_cls_tokens, config.hidden_size))
         self.mask_token = None
-        self.patch_embeddings = PixoPatchEmbeddings(config)
+        self.patch_embeddings = PixioPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + config.n_cls_tokens, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -235,28 +235,28 @@ class PixoEmbeddings(nn.Module):
         return embeddings
 
 
-class PixoAttention(ViTAttention):
+class PixioAttention(ViTAttention):
     pass
 
 
-class PixoDropPath(Dinov2DropPath):
+class PixioDropPath(Dinov2DropPath):
     pass
 
 
-class PixoMLP(Dinov2MLP):
+class PixioMLP(Dinov2MLP):
     pass
 
 
-class PixoLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PixoConfig) -> None:
+class PixioLayer(GradientCheckpointingLayer):
+    def __init__(self, config: PixioConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = PixoAttention(config)
-        self.drop_path = PixoDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.attention = PixioAttention(config)
+        self.drop_path = PixioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = PixoMLP(config)
+        self.mlp = PixioMLP(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states_norm = self.norm1(hidden_states)
@@ -272,11 +272,11 @@ class PixoLayer(GradientCheckpointingLayer):
         return layer_output
 
 
-class PixoEncoder(nn.Module):
-    def __init__(self, config: PixoConfig):
+class PixioEncoder(nn.Module):
+    def __init__(self, config: PixioConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([PixoLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([PixioLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
@@ -292,24 +292,24 @@ class PixoEncoder(nn.Module):
         )
 
 
-class PixoPreTrainedModel(ViTPreTrainedModel):
+class PixioPreTrainedModel(ViTPreTrainedModel):
     pass
 
 
 @auto_docstring
-class PixoModel(PixoPreTrainedModel):
-    def __init__(self, config: PixoConfig):
+class PixioModel(PixioPreTrainedModel):
+    def __init__(self, config: PixioConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = PixoEmbeddings(config)
-        self.encoder = PixoEncoder(config)
+        self.embeddings = PixioEmbeddings(config)
+        self.encoder = PixioEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_init()
 
-    def get_input_embeddings(self) -> PixoPatchEmbeddings:
+    def get_input_embeddings(self) -> PixioPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     @check_model_inputs(tie_last_hidden_states=False)
@@ -342,10 +342,10 @@ class PixoModel(PixoPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Pixo backbone, to be used with frameworks like DETR and MaskFormer.
+    Pixio backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class PixoBackbone(Dinov2Backbone):
+class PixioBackbone(Dinov2Backbone):
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -363,9 +363,9 @@ class PixoBackbone(Dinov2Backbone):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("facebook/pixo-huge")
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/pixio-huge")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "facebook/pixo-huge", out_features=["stage7", "stage15", "stage23", "stage31"]
+        ...     "facebook/pixio-huge", out_features=["stage7", "stage15", "stage23", "stage31"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")
@@ -401,4 +401,4 @@ class PixoBackbone(Dinov2Backbone):
         )
 
 
-__all__ = ["PixoConfig", "PixoModel", "PixoPreTrainedModel", "PixoBackbone"]
+__all__ = ["PixioConfig", "PixioModel", "PixioPreTrainedModel", "PixioBackbone"]

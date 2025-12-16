@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Pixo model."""
+"""Testing suite for the PyTorch Pixio model."""
 
 import unittest
 from functools import cached_property
 
-from transformers import PixoConfig
+from transformers import PixioConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import PixoBackbone, PixoModel
+    from transformers import PixioBackbone, PixioModel
 
 
 if is_vision_available():
@@ -44,7 +44,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class PixoModelTester:
+class PixioModelTester:
     def __init__(
         self,
         parent,
@@ -87,7 +87,7 @@ class PixoModelTester:
         self.scope = scope
         self.attn_implementation = attn_implementation
 
-        # in Pixo, the seq length equals the number of patches + class tokens
+        # in Pixio, the seq length equals the number of patches + class tokens
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + n_cls_tokens
 
@@ -103,7 +103,7 @@ class PixoModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return PixoConfig(
+        return PixioConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -120,14 +120,14 @@ class PixoModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = PixoModel(config=config)
+        model = PixioModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_backbone(self, config, pixel_values, labels):
-        model = PixoBackbone(config=config)
+        model = PixioBackbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -144,7 +144,7 @@ class PixoModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
-        model = PixoBackbone(config=config)
+        model = PixioBackbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -162,7 +162,7 @@ class PixoModelTester:
         config.apply_layernorm = False
         config.reshape_hidden_states = False
 
-        model = PixoBackbone(config=config)
+        model = PixioBackbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -174,7 +174,7 @@ class PixoModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        self.parent.skipTest(reason="Pixo currently exposes only the base model and backbone.")
+        self.parent.skipTest(reason="Pixio currently exposes only the base model and backbone.")
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -188,9 +188,9 @@ class PixoModelTester:
 
 
 @require_torch
-class PixoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PixioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as Pixo does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Pixio does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -198,24 +198,24 @@ class PixoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            PixoModel,
-            PixoBackbone,
+            PixioModel,
+            PixioBackbone,
         )
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-feature-extraction": PixoModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": PixioModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = PixoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PixoConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = PixioModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PixioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Pixo does not use inputs_embeds")
+    @unittest.skip(reason="Pixio does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -258,14 +258,14 @@ class PixoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
-    @unittest.skip(reason="Pixo does not support feedforward chunking yet")
+    @unittest.skip(reason="Pixio does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "LiheYoung/pixo-vith16"
-        model = PixoModel.from_pretrained(model_name)
+        model_name = "LiheYoung/pixio-vith16"
+        model = PixioModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
 
@@ -277,14 +277,14 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class PixoModelIntegrationTest(unittest.TestCase):
+class PixioModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("LiheYoung/pixo-vith16") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("LiheYoung/pixio-vith16") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
-        model = PixoModel.from_pretrained("LiheYoung/pixo-vith16").to(torch_device)
+        model = PixioModel.from_pretrained("LiheYoung/pixio-vith16").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -307,11 +307,11 @@ class PixoModelIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class PixoBackboneTest(unittest.TestCase, BackboneTesterMixin):
-    all_model_classes = (PixoBackbone,) if is_torch_available() else ()
-    config_class = PixoConfig
+class PixioBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (PixioBackbone,) if is_torch_available() else ()
+    config_class = PixioConfig
 
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PixoModelTester(self)
+        self.model_tester = PixioModelTester(self)

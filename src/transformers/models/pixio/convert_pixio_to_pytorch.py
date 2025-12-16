@@ -12,9 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Pixo checkpoints from the original repository.
+"""Convert Pixio checkpoints from the original repository.
 
-URL: https://github.com/facebookresearch/pixo/tree/main
+URL: https://github.com/facebookresearch/pixio/tree/main
 """
 
 import argparse
@@ -24,7 +24,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import BitImageProcessor, PixoConfig, PixoModel
+from transformers import BitImageProcessor, PixioConfig, PixioModel
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from transformers.utils import logging
 
@@ -33,7 +33,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_pixo_config(model_name):
+def get_pixio_config(model_name):
     if "vitb16" in model_name:
         kwargs = {
             "hidden_size": 768,
@@ -67,7 +67,7 @@ def get_pixo_config(model_name):
     else:
         raise ValueError(f"Model '{model_name}' not supported")
 
-    config = PixoConfig(**kwargs)
+    config = PixioConfig(**kwargs)
     
     return config
 
@@ -137,13 +137,13 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_pixio_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
     """
-    Copy/paste/tweak model's weights to our Pixo structure.
+    Copy/paste/tweak model's weights to our Pixio structure.
     """
 
-    # define default Pixo configuration
-    config = get_pixo_config(model_name)
+    # define default Pixio configuration
+    config = get_pixio_config(model_name)
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -151,7 +151,7 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
     read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
-    model = PixoModel(config).eval()
+    model = PixioModel(config).eval()
     model.load_state_dict(state_dict)
 
     # load image
@@ -187,8 +187,8 @@ def convert_pixo_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     if push_to_hub:
         name = model_name.replace("_", "-")
-        model.push_to_hub(f"facebook/{name}")
-        processor.push_to_hub(f"facebook/{name}")
+        model.push_to_hub(f"LiheYoung/{name}")
+        processor.push_to_hub(f"LiheYoung/{name}")
 
 
 if __name__ == "__main__":
@@ -196,14 +196,14 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="pixo_vith16",
+        default="pixio_vith16",
         type=str,
         choices=[
-            "pixo_vitb16",
-            "pixo_vitl16",
-            "pixo_vith16",
-            "pixo_vit1b16",
-            "pixo_vit5b16",
+            "pixio_vitb16",
+            "pixio_vitl16",
+            "pixio_vith16",
+            "pixio_vit1b16",
+            "pixio_vit5b16",
         ],
         help="Name of the model you'd like to convert.",
     )
@@ -226,4 +226,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_pixo_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_pixio_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
