@@ -80,6 +80,22 @@ class TokenizerUtilTester(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
+    def test_offline_mode_does_not_call_model_info_api(self):
+        # Test that when in offline mode, model_info is not called during Mistral base check
+        # This prevents network errors when loading tokenizers offline
+
+        # Download this model to make sure it's in the cache
+        _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Mock is_offline_mode to return True
+        with mock.patch("transformers.tokenization_utils_base.is_offline_mode", return_value=True):
+            # Mock model_info to track if it's called
+            with mock.patch("huggingface_hub.model_info") as mock_model_info:
+                # Load tokenizer in offline mode
+                _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+                # model_info should NOT be called when in offline mode
+                mock_model_info.assert_not_called()
+
     def test_legacy_load_from_one_file(self):
         # This test is for deprecated behavior and can be removed in v5
         try:
