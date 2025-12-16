@@ -455,10 +455,9 @@ class GlmasrProcessor(VoxtralProcessor):
         feature_extractor,
         tokenizer,
     ):
+        super().__init__(feature_extractor, tokenizer)
         self.audio_token_id = 59260
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
-
-        super().__init__(feature_extractor, tokenizer)
 
 
 __all__ = [

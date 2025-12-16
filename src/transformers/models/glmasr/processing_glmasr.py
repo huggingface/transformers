@@ -83,9 +83,8 @@ class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
 
 class GlmasrProcessor(ProcessorMixin):
     r"""
-    Constructs a Voxtral processor which wraps [`WhisperFeatureExtractor`] and
-    [`MistralCommonBackend`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities.
+    Constructs a Glmasr processor which wraps [`WhisperFeatureExtractor`] into a single processor
+    that inherits both the audio feature extraction and tokenizer functionalities.
 
     Args:
         feature_extractor ([`WhisperFeatureExtractor`]):
@@ -100,8 +99,6 @@ class GlmasrProcessor(ProcessorMixin):
         tokenizer,
     ):
         self.audio_token_id = 59260
-        self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
-        self.audio_token_id = 24
         self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
 
         super().__init__(feature_extractor, tokenizer)
