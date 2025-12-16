@@ -226,6 +226,7 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
         video_hidden_state = self.video_norm(video_hidden_state)
         inputs_embeds = torch.cat([audio_hidden_state, video_hidden_state], dim=-1)
         inputs_embeds = self.concat_modality_proj(inputs_embeds)
+        inputs_embeds = self.data_proj(inputs_embeds)
 
         return inputs_embeds, padding_mask, audio_output, video_output
 
@@ -467,7 +468,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     _tied_weights_keys = {
         r"audio_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
         r"video_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
-        r"audio_model\.audio_encoder\.(?!rotary_emb)": r"audio_video_encoder\.embedder\.audio_encoder\.(?!rotary_emb)", 
+        r"audio_model\.audio_encoder\.(?!rotary_emb)": r"audio_video_encoder\.embedder\.audio_encoder\.(?!rotary_emb)",
         r"video_model\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)": r"audio_video_encoder\.embedder\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)",
     }
 
@@ -671,8 +672,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             output_hidden_states=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
-        audio_plus_text_embeds = torch.cat([text_embeds, audio_embeds], dim=-1)
-        video_plus_text_embeds = torch.cat([text_embeds, video_embeds], dim=-1)
+        audio_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.audio_model_output.pooler_output], dim=-1)
+        video_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.video_model_output.pooler_output], dim=-1)
 
         text_audio_embeds = self.audio_model.text_audio_head(text_embeds)
         text_video_embeds = self.video_model.text_video_head(text_embeds)
@@ -687,10 +688,10 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         logits_audio_plus_text_video = audio_plus_text_embeds @ video_embeds.T # TODO: check this
         logits_video_plus_text_audio = video_plus_text_embeds @ audio_embeds.T # TODO: check this
 
-        logits_audio_text = logits_audio_text * self.text_audio_logit_scale + self.text_audio_logit_bias
-        logits_video_text = logits_video_text * self.text_video_logit_scale + self.text_video_logit_bias
+        logits_audio_text = logits_audio_text * self.audio_model.text_audio_logit_scale + self.audio_model.text_audio_logit_bias
+        logits_video_text = logits_video_text * self.video_model.text_video_logit_scale + self.video_model.text_video_logit_bias
         logits_audio_video_text = logits_audio_video_text * self.text_audio_video_logit_scale + self.text_audio_video_logit_bias
-        
+
         logits_audio_plus_text_video = logits_audio_plus_text_video * self.audio_plus_text_logit_scale + self.audio_plus_text_logit_bias
         logits_video_plus_text_audio = logits_video_plus_text_audio * self.video_plus_text_logit_scale + self.video_plus_text_logit_bias
 
@@ -703,28 +704,35 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             loss = audio_video_text_loss + audio_text_loss + video_text_loss + audio_video_loss + audio_plus_text_video_loss + video_plus_text_audio_loss
 
         return PeAudioVideoOutput(
-            logits_audio_text=logits_audio_text,
-            logits_video_text=logits_video_text,
-            logits_audio_video_text=logits_audio_video_text,
-            logits_audio_video=logits_audio_video,
-            logits_audio_plus_text_video=logits_audio_plus_text_video,
-            logits_video_plus_text_audio=logits_video_plus_text_audio,
+            # embeddings
             audio_embeds=audio_embeds,
             video_embeds=video_embeds,
+            audio_video_embeds=audio_video_embeds,
             text_audio_embeds=text_audio_embeds,
             text_video_embeds=text_video_embeds,
             text_audio_video_embeds=text_audio_video_embeds,
             audio_plus_text_embeds=audio_plus_text_embeds,
             video_plus_text_embeds=video_plus_text_embeds,
-            text_model_output=text_outputs,
-            audio_video_model_output=audio_video_outputs,
-            loss=loss if return_loss else None,
+            # model outputs
+            text_outputs=text_outputs,
+            audio_outputs=audio_video_outputs.audio_model_output,
+            video_outputs=audio_video_outputs.video_model_output,
+            audio_video_outputs=audio_video_outputs,
+            # logits
+            logits_audio_text=logits_audio_text,
+            logits_video_text=logits_video_text,
+            logits_audio_video=logits_audio_video,
+            logits_audio_video_text=logits_audio_video_text,
+            logits_audio_plus_text_video=logits_audio_plus_text_video,
+            logits_video_plus_text_audio=logits_video_plus_text_audio,
+            # losses
             audio_text_loss=audio_text_loss if return_loss else None,
             video_text_loss=video_text_loss if return_loss else None,
-            audio_video_text_loss=audio_video_text_loss if return_loss else None,
             audio_video_loss=audio_video_loss if return_loss else None,
+            audio_video_text_loss=audio_video_text_loss if return_loss else None,
             audio_plus_text_video_loss=audio_plus_text_video_loss if return_loss else None,
             video_plus_text_audio_loss=video_plus_text_audio_loss if return_loss else None,
+            loss=loss if return_loss else None,
         )
 
 
