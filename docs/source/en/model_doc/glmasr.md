@@ -46,30 +46,6 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 ## Usage examples
 
 ```python
-import torch
-from transformers import GlmasrForConditionalGeneration, AutoProcessor, pipeline
-from datasets import load_dataset
-
-torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-model_id = "zai-org/GLM-ASR-Nano-2512"
-model = GlmasrForConditionalGeneration.from_pretrained(model_id).to(device)
-processor = AutoProcessor.from_pretrained(model_id)
-
-pipe = pipeline(
-    "automatic-speech-recognition",
-    model=model,
-    tokenizer=processor.tokenizer,
-    feature_extractor=processor.feature_extractor,
-    torch_dtype=torch_dtype,
-    device=device,
-)
-
-dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
-sample = dataset[0]["audio"]
-
-result = pipe(sample)
-print(result["text"])
 ```
 
 ## GlmasrEncoderConfig
@@ -84,6 +60,10 @@ print(result["text"])
 
 [[autodoc]] GlmasrPreTrainedModel
     - forward
+
+## GlmasrProcessor
+
+[[autodoc]] GlmasrProcessor
 
 ## GlmasrEncoder
 

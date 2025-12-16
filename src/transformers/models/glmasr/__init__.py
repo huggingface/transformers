@@ -22,6 +22,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_glmasr import *
     from .modeling_glmasr import *
+    from .processing_glmasr import *
 else:
     import sys
 

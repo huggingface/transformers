@@ -34,6 +34,7 @@ from ..voxtral.modeling_voxtral import (
     VoxtralPreTrainedModel,
     eager_attention_forward,
 )
+from ..voxtral.processing_voxtral import VoxtralProcessor, VoxtralProcessorKwargs
 
 
 class GlmasrRotaryEmbedding(nn.Module):
@@ -433,10 +434,38 @@ class GlmasrForConditionalGeneration(VoxtralForConditionalGeneration):
     pass
 
 
+class GlmasrlProcessorKwargs(VoxtralProcessorKwargs):
+    pass
+
+
+class GlmasrProcessor(VoxtralProcessor):
+    r"""
+    Constructs a Glmasr processor which wraps [`WhisperFeatureExtractor`] into a single processor
+    that inherits both the audio feature extraction and tokenizer functionalities.
+
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`MistralCommonBackend`]):
+            The tokenizer is a required input.
+    """
+
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+    ):
+        self.audio_token_id = 59260
+        self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
+
+        super().__init__(feature_extractor, tokenizer)
+
+
 __all__ = [
     "GlmasrEncoderConfig",
     "GlmasrConfig",
     "GlmasrPreTrainedModel",
     "GlmasrEncoder",
     "GlmasrForConditionalGeneration",
+    "GlmasrProcessor",
 ]
