@@ -325,9 +325,7 @@ class AutoVideoProcessor:
         kwargs["_from_auto"] = True
 
         reloaded_kwargs = copy(kwargs)
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
-            pretrained_model_name_or_path, **kwargs
-        )
+        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
 
         # We have a circular dependency
@@ -335,7 +333,7 @@ class AutoVideoProcessor:
         #   - We can only find the actual class by loading the base json first
         #
         # This is an exception to allow the `Ernie4_5_VL_Moe` to load by its logic
-        if 'Ernie4_5_VL_MoeVideoProcessor' == video_processor_class:
+        if "Ernie4_5_VL_MoeVideoProcessor" == video_processor_class:
             from ..ernie4_5_vl_moe import Ernie4_5_VL_MoeVideoProcessor
 
             # Ernie 4.5 VL Moe has extra logic to load fonts at the same time
