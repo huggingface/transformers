@@ -790,12 +790,6 @@ def main():
         "--output_dir",
         help="Location to write the converted HF model and tokenizer",
     )
-    parser.add_argument(
-        "--special_tokens",
-        default=None,
-        type=list[str],
-        help="The list of special tokens that should be added to the ",
-    )
 
     # Only specify this if you want to use the model with mxfp4 quantization
     # It means the model will be unpacked, and quantized using mxfp4 during inference if all the triton requirements are satisfied (triton >= 3.4.0)
