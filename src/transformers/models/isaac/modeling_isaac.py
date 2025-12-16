@@ -1459,7 +1459,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             if input_ids is not None:
                 batch_size, seq_len = input_ids.shape
                 attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.long)
-            else:
+            elif inputs_embeds is not None:
                 batch_size, seq_len = inputs_embeds.shape[:2]
                 attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
 
