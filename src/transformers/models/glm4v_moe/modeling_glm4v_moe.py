@@ -605,6 +605,8 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm4vMoeTextNaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Glm4vMoeTextTopkRouter):
+            init.zeros_(module.e_score_correction_bias)
 
 
 @dataclass
@@ -713,7 +715,6 @@ class Glm4vMoeVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
         """

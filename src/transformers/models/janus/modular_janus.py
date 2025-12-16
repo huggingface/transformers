@@ -391,7 +391,7 @@ class JanusPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
-    def _init_weigts(self, module):
+    def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, JanusVisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))

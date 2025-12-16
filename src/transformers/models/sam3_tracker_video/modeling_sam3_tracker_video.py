@@ -692,6 +692,21 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam3TrackerVideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
+        elif isinstance(module, Sam3TrackerVideoVisionRotaryEmbedding):
+            end_x, end_y = module.end_x, module.end_y
+            dim = module.dim
+            freqs = 1.0 / (module.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+            x_positions = flattened_indices % end_x
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, Sam3TrackerVideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
@@ -709,6 +724,9 @@ class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
         if dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
         end_x, end_y = config.memory_attention_rope_feat_sizes
+        self.end_x, self.end_y = end_x, end_y
+        self.dim = dim
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
         freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         # Generate 2D position indices for axial rotary embedding

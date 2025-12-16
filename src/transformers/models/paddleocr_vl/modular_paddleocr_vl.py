@@ -894,6 +894,9 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
 
 class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
+    def __init__(self, config: PaddleOCRVisionConfig):
+        super().__init__()
+
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_positions = self.position_embedding.weight.shape[0]
 

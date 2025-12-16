@@ -315,6 +315,8 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif hasattr(module, "positional_embedding"):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
