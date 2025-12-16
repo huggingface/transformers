@@ -311,9 +311,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # This must happen right after super().__init__() to ensure it's applied before tokenizer is used
         if original_tokenizer_object is not None:
             self._tokenizer.decoder = original_tokenizer_object.decoder
-            if not explicit_bos_eos_in_kwargs:
-                self._tokenizer.post_processor = original_tokenizer_object.post_processor
-                self._should_update_post_processor = False
 
         if vocab_file is not None:
             self.vocab_file = vocab_file
