@@ -414,6 +414,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PeVideoEncoderLayer,
         "attentions": PeVideoEncoderAttention,
     }
+    main_input_name = "pixel_values_videos"
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -501,7 +502,7 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
 )
 class PeVideoEncoder(PeVideoPreTrainedModel):
     config: PeVideoEncoderConfig
-    main_input_name = "input_values"
+    main_input_name = "pixel_values_videos"
     base_model_prefix = "video_model.video_encoder"
 
     def __init__(self, config: PeVideoEncoderConfig):
@@ -557,7 +558,6 @@ class PeVideoModel(PeVideoPreTrainedModel):
     def __init__(self, config: PeVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)
-        self.text_model.final_norm.eps = 0.6
         self.video_encoder = PeVideoEncoder(config.video_config)
 
         self.text_video_head = PeVideoContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)

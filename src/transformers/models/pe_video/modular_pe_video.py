@@ -85,6 +85,7 @@ class PeVideoEncoderEmbedder(nn.Module):
 
 class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "video_model"
+    main_input_name = "pixel_values_videos"
 
 
 @auto_docstring(
@@ -94,6 +95,7 @@ class PeVideoPreTrainedModel(PeAudioVideoPreTrainedModel):
 )
 class PeVideoEncoder(PeAudioVideoEncoder):
     base_model_prefix = "video_model.video_encoder"
+    main_input_name = "pixel_values_videos"
 
     def __init__(self, config: PeVideoEncoderConfig):
         super().__init__(config)
