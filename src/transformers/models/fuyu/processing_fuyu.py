@@ -347,6 +347,22 @@ class FuyuProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
 
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        """
+        Override for BC. Fuyu uses TokenizersBackend and requires token_type_ids to be removed from model_input_names
+        because Fuyu uses mm_token_type_ids instead for multimodal token identification.    `
+        """
+        from ...tokenization_utils_tokenizers import TokenizersBackend
+
+        tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # Remove token_type_ids as Fuyu uses mm_token_type_ids instead
+        if "token_type_ids" in tokenizer.model_input_names:
+            tokenizer.model_input_names.remove("token_type_ids")
+        return tokenizer
+
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor

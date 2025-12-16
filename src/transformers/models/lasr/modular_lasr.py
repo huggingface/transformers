@@ -97,7 +97,7 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
 
 class LasrProcessor(ParakeetProcessor):
-    tokenizer_class = "ParakeetTokenizerFast"
+    pass
 
 
 class LasrEncoderConfig(ParakeetEncoderConfig):

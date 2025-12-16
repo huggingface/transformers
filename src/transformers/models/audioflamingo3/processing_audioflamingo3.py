@@ -74,10 +74,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
             Special token used to represent audio inputs in the chat template.
     """
 
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
-
     def __init__(
         self,
         feature_extractor,
