@@ -252,7 +252,7 @@ class UdopPatchEmbeddings(nn.Module):
 class UdopPreTrainedModel(PreTrainedModel):
     config: UdopConfig
     base_model_prefix = "transformer"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
@@ -1060,7 +1060,6 @@ class UdopStack(UdopPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.embed_patches = UdopPatchEmbeddings(config)
         self.is_decoder = config.is_decoder
-        self._max_length = config.max_length
         self.num_layers = config.num_layers
 
         self.block = nn.ModuleList(
@@ -1106,7 +1105,8 @@ class UdopStack(UdopPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
-    ):
+        **kwargs,
+    ) -> Union[tuple, BaseModelOutputWithAttentionMask]:
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1456,9 +1456,6 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1478,7 +1475,8 @@ class UdopModel(UdopPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> tuple[Tensor, ...]:
+        **kwargs,
+    ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1636,9 +1634,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1659,7 +1654,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> tuple[Tensor, ...]:
+        **kwargs,
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1816,9 +1812,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1831,6 +1824,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

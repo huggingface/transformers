@@ -22,6 +22,7 @@ from functools import partial
 from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
@@ -43,9 +44,6 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     copy_func,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torchcodec_available,
     is_torchvision_v2_available,
@@ -177,7 +175,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[VideosKwargs]) -> None:
         super().__init__()
 
-        self._processor_class = kwargs.pop("processor_class", None)
+        kwargs.pop("processor_class", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -444,7 +442,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             processed_videos_grouped[shape] = stacked_videos
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
 
         return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
 
@@ -570,7 +567,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -638,10 +635,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             resolved_video_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            video_processor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             video_processor_file = VIDEO_PROCESSOR_NAME
             try:
@@ -777,11 +770,21 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
         output = deepcopy(self.__dict__)
-        output.pop("model_valid_processing_keys", None)
-        output.pop("_valid_kwargs_names", None)
-        output["video_processor_type"] = self.__class__.__name__
+        filtered_dict = {}
+        for key, value in output.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
 
-        return output
+        filtered_dict.pop("model_valid_processing_keys", None)
+        filtered_dict.pop("_valid_kwargs_names", None)
+        filtered_dict["video_processor_type"] = self.__class__.__name__
+
+        return filtered_dict
 
     def to_json_string(self) -> str:
         """
@@ -795,12 +798,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

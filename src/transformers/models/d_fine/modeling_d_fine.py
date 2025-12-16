@@ -441,7 +441,7 @@ class DFinePreTrainedModel(PreTrainedModel):
     config: DFineConfig
     base_model_prefix = "d_fine"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"DFineHybridEncoder", r"DFineDecoderLayer"]
 
     @torch.no_grad()
@@ -681,6 +681,7 @@ class DFineDecoder(DFinePreTrainedModel):
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
+        **kwargs,
     ) -> DFineDecoderOutput:
         r"""
         Args:
@@ -1198,9 +1199,6 @@ class DFineModel(DFinePreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad_(False)
@@ -1250,6 +1248,7 @@ class DFineModel(DFinePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], DFineModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

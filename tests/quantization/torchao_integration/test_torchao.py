@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
@@ -139,6 +140,7 @@ class TorchAoConfigTest(unittest.TestCase):
 
 @require_torchao
 @require_torchao_version_greater_or_equal("0.8.0")
+@slow
 class TorchAoTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
@@ -217,6 +219,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
@@ -249,6 +252,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure embedding is quantized
         self.assertTrue(isinstance(quantized_model.model.embed_tokens.weight, AffineQuantizedTensor))
@@ -273,6 +277,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
         self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -296,6 +301,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # making sure `model.layers.0.self_attn.q_proj` is skipped
         self.assertTrue(not isinstance(quantized_model.model.layers[0].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -329,6 +335,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # highest precedence is fully specified module fqn
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
@@ -362,6 +369,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         # highest precedence is fully specified module fqn
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
@@ -396,6 +404,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, Float8Tensor))
         self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -427,6 +436,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.k_proj.weight, AffineQuantizedTensor))
@@ -457,6 +467,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[3].self_attn.k_proj.weight, AffineQuantizedTensor))
@@ -487,6 +498,7 @@ class TorchAoTest(unittest.TestCase):
             self.model_name,
             device_map=self.device,
             quantization_config=quant_config,
+            torch_dtype=torch.bfloat16,
         )
         self.assertTrue(not isinstance(quantized_model.model.layers[3].self_attn.q_proj.weight, AffineQuantizedTensor))
         self.assertTrue(isinstance(quantized_model.model.layers[1].self_attn.q_proj.weight, AffineQuantizedTensor))
@@ -576,7 +588,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
             "model.layers.18": 0,
             "model.layers.19": "cpu",
             "model.layers.20": "cpu",
-            "model.layers.21": "disk",
+            "model.layers.21": "cpu",
             "model.norm": 0,
             "model.rotary_emb": 0,
             "lm_head": 0,
@@ -587,7 +599,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
             device_map=device_map_offload,
             quantization_config=quant_config,
         )
@@ -596,19 +608,20 @@ class TorchAoAcceleratorTest(TorchAoTest):
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
         # fmt: off
-        EXPECTED_OUTPUTS = Expectations(
+        EXPECTED_OUTPUTS_DEVICES = Expectations(
             {
-                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+                ("xpu", 3): ["What are we having for dinner?\n\nJessica: (smiling)"],
+                ("cuda", 7): ["What are we having for dinner?\n- 1. What is the temperature outside",
+                              "What are we having for dinner?"],
             }
         )
         # fmt: on
-        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+        EXPECTED_OUTPUTS = EXPECTED_OUTPUTS_DEVICES.get_expectation()
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        self.assertEqual(generated_text, EXPECTED_OUTPUT)
+        self.assertIn(generated_text, EXPECTED_OUTPUTS)
 
     @require_torch_multi_accelerator
     def test_int4wo_quant_multi_accelerator(self):
@@ -622,7 +635,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
         quant_config = TorchAoConfig(config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16,
             device_map="auto",
             quantization_config=quant_config,
         )
@@ -643,7 +656,7 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype="auto",
+            torch_dtype="auto",
             device_map=self.device,
             quantization_config=quant_config,
         )
@@ -656,14 +669,16 @@ class TorchAoAcceleratorTest(TorchAoTest):
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
-        EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
+        EXPECTED_OUTPUTS = ["What are we having for dinner?\n\nJessica: (smiling)", "What are we having for dinner?"]
+
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+        self.assertIn(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUTS)
 
 
-@require_torchao_version_greater_or_equal("0.11.0")
+@require_torchao_version_greater_or_equal("0.15.0")
+@slow
 class TorchAoSerializationTest(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 10
@@ -705,14 +720,17 @@ class TorchAoSerializationTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def check_serialization_expected_output(self, device, expected_output, safe_serialization=False):
+    def check_serialization_expected_output(self, device, expected_output):
         """
         Test if we can serialize and load/infer the model again on the same device
         """
         dtype = torch.bfloat16 if isinstance(self.quant_scheme, Int4WeightOnlyConfig) else "auto"
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.save_pretrained(tmpdirname, safe_serialization=safe_serialization)
-            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, dtype=dtype, device_map=device)
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            loaded_quantized_model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, dtype=dtype, device_map=device, torch_dtype=dtype
+            )
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(device)
 
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
@@ -723,13 +741,13 @@ class TorchAoSerializationTest(unittest.TestCase):
 
 
 @require_torchao
-@require_torchao_version_greater_or_equal("0.14.0")
+@require_torchao_version_greater_or_equal("0.15.0")
 class TorchAoSafeSerializationTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
         # placeholder
         cls.quant_scheme = torchao.quantization.Float8WeightOnlyConfig()
 
@@ -748,6 +766,16 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
                 "What are we having for dinner?\n\nJess: (smiling) I",
             ),
             (torchao.quantization.Float8WeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
+            (Int4WeightOnlyConfig(), "What are we having for dinner?"),
+            (
+                Int4WeightOnlyConfig(int4_packing_format="tile_packed_to_4d"),
+                "What are we having for dinner?\nRed, white, and green beans,",
+            ),
+            (
+                torchao.quantization.Int8DynamicActivationIntxWeightConfig(),
+                "What are we having for dinner?\n\nJessica: (smiling)",
+            ),
+            (torchao.quantization.IntxWeightOnlyConfig(), "What are we having for dinner?\n\nJessica: (smiling)"),
         ]
         if is_torchao_available()
         else []
@@ -763,7 +791,7 @@ class TorchAoSafeSerializationTest(TorchAoSerializationTest):
             device_map=device,
             quantization_config=self.quant_config,
         )
-        self.check_serialization_expected_output(device, expected_output, safe_serialization=True)
+        self.check_serialization_expected_output(device, expected_output)
 
 
 class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):

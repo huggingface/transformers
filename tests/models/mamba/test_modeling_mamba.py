@@ -398,6 +398,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
 
+@slow
 @require_torch
 class MambaIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -445,7 +446,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_small(self, device):
         expected_output = "Hello my name is\n\nI am a\n\nI am a"
 
@@ -458,7 +458,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_mid(self, device):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"
 
@@ -471,7 +470,6 @@ class MambaIntegrationTests(unittest.TestCase):
         self.assertEqual(output_sentence, expected_output)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
-    @slow
     def test_simple_generate_cuda_kernels_big(self, device):
         expected_output = "Hello my name is John and I am a new member of this forum. I am a retired Marine and I am a member of the Marine Corps League. I am a"
 
@@ -483,7 +481,6 @@ class MambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_sentence, expected_output)
 
-    @slow
     @pytest.mark.torch_compile_test
     def test_compile_mamba_cache(self):
         expected_output = "Hello my name is John and I am a\n\nI am a single father of a beautiful daughter. I am a"

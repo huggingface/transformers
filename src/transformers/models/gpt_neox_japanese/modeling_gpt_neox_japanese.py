@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.generic import maybe_autocast
 from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
 
 
@@ -116,7 +117,7 @@ class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -174,7 +175,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
             )
 
         self.layer_idx = layer_idx
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        self.rotary_ndims = int(self.head_size * partial_rotary_factor)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = math.sqrt(self.head_size)
 
@@ -430,6 +432,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         Example:

@@ -340,9 +340,6 @@ def sdpa_mask(
         allow_is_causal_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
             `torch.sdpa` instead. Default to `True`.
-        allow_torch_fix (`bool`, optional):
-            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
-            versions. We need an arg to skip it when using eager. By default `True`.
         allow_is_bidirectional_skip (`bool`, optional):
             Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
             i.e. full attention without any padding. Default to `False`.
@@ -480,6 +477,7 @@ def eager_mask(
     mask_function: Callable = causal_mask_function,
     attention_mask: Optional[torch.Tensor] = None,
     dtype: torch.dtype = torch.float32,
+    allow_is_bidirectional_skip: bool = False,
     use_vmap: bool = False,
     **kwargs,
 ) -> torch.Tensor:
@@ -503,13 +501,15 @@ def eager_mask(
             The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
         dtype (`torch.dtype`, optional):
             The dtype to use for the mask. By default, `torch.float32`.
+        allow_is_bidirectional_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we do not have to add any bias,
+            i.e. full attention without any padding. Default to `False`.
         use_vmap (`bool`, optional):
             Whether to use `vmap` during the mask construction or not. Allows powerful custom patterns that may not be
             index-based (for the cost of speed performance). By default `False`.
     """
     # The masks for eager attention are simply boolean mask from sdpa, casted to 0 and -inf
     _ = kwargs.pop("allow_is_causal_skip", None)
-    _ = kwargs.pop("allow_is_bidirectional_skip", None)
     _ = kwargs.pop("allow_torch_fix", None)
     mask = sdpa_mask(
         batch_size=batch_size,
@@ -519,14 +519,16 @@ def eager_mask(
         mask_function=mask_function,
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
-        allow_is_bidirectional_skip=False,
+        allow_is_bidirectional_skip=allow_is_bidirectional_skip,
         allow_torch_fix=False,
         use_vmap=use_vmap,
         **kwargs,
     )
-    min_dtype = torch.finfo(dtype).min
-    # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-    mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+    # only bidirectional masks can be skipped, otherwise we convert bool -> float
+    if mask is not None:
+        min_dtype = torch.finfo(dtype).min
+        # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
+        mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
     return mask
 
 
@@ -642,7 +644,7 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
-def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor:
+def find_packed_sequence_indices(position_ids: torch.Tensor) -> Optional[torch.Tensor]:
     """
     Find the indices of the sequence to which each new query token in the sequence belongs when using packed
     tensor format (i.e. several sequences packed in the same batch dimension).
@@ -654,6 +656,9 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor:
     Returns:
         A 2D tensor where each similar integer indicates that the tokens belong to the same sequence. For example, if we
         pack 3 sequences of 2, 3 and 1 tokens respectively along a single batch dim, this will return [[0, 0, 1, 1, 1, 2]].
+
+        If the there is only one sequence in each batch item (and we don't compile), then we return `None` indicating
+        no packed sequences. This is the same as [[0, 0, 0, 0, 0, 0]] for the example above.
     """
     # What separate different sequences is when 2 consecutive positions_ids are separated by more than 1. So
     # taking the diff (by prepending the first value - 1 to keep correct indexing) and applying cumsum to the result
@@ -664,8 +669,10 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor:
     position_diff = torch.diff(position_ids, prepend=first_dummy_value, dim=-1)
     packed_sequence_mask = (position_diff != 1).cumsum(-1)
 
-    # Here it would be nice to return None if we did not detect packed sequence format, i.e. if `packed_sequence_mask[:, -1] == 0`
-    # but it causes issues with export
+    # Sadly this is a dynamic control flow, so we cannot enable this check on anything compile related
+    if not is_tracing(packed_sequence_mask) and (packed_sequence_mask[:, -1] == 0).all():
+        return None
+
     return packed_sequence_mask
 
 

@@ -180,9 +180,9 @@ print("success")
 
     def test_is_offline_mode(self):
         """
-        Test `_is_offline_mode` helper (should respect both HF_HUB_OFFLINE and legacy TRANSFORMERS_OFFLINE env vars)
+        Test `is_offline_mode` helper (should respect both HF_HUB_OFFLINE and legacy TRANSFORMERS_OFFLINE env vars)
         """
-        load = "from transformers.utils import is_offline_mode"
+        load = "from huggingface_hub import is_offline_mode"
         run = "print(is_offline_mode())"
 
         stdout, _ = self._execute_with_env(load, run)

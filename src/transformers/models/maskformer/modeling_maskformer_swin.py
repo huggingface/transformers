@@ -19,7 +19,7 @@ states before downsampling, which is different from the default Swin Transformer
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -656,7 +656,7 @@ class MaskFormerSwinEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-    ):
+    ) -> Union[tuple, MaskFormerSwinBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
@@ -698,7 +698,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     config: MaskFormerSwinConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["MaskFormerSwinStage"]
 
@@ -738,7 +738,8 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         output_hidden_states=None,
         interpolate_pos_encoding=False,
         return_dict=None,
-    ):
+        **kwargs,
+    ) -> Union[tuple, MaskFormerSwinModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -815,6 +816,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

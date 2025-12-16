@@ -32,6 +32,10 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    "AfmoeConfig": [
+        "global_attn_every_n_layers",  # used internally in config to generate `layer_types`
+        "rope_scaling",  # used internally in config to generate `rope_parameters`
+    ],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
@@ -54,6 +58,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "PaddleOCRTextConfig": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -124,6 +129,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
+    # used by sam3 video, kept here for consistency with sam2
+    "Sam3VisionConfig": ["backbone_feature_sizes"],
     # used internally to calculate `mlp_dim`
     "SamHQVisionConfig": ["mlp_ratio"],
     # For (head) training, but so far not implemented
@@ -273,6 +280,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
     "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "T5Gemma2TextConfig": ["tie_word_embeddings"],
+    "T5Gemma2DecoderConfig": ["tie_word_embeddings"],
     "ShieldGemma2Config": [
         "boi_token_index",
         "eoi_token_index",
@@ -311,6 +320,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "VaultGemmaConfig": ["tie_word_embeddings"],
     "GemmaConfig": ["tie_word_embeddings"],
     "CsmConfig": ["tie_codebooks_embeddings"],
+    "LayoutXLMConfig": True,
+    "DeepseekV2Config": ["norm_topk_prob"],
 }
 
 

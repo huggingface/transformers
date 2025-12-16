@@ -418,7 +418,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["SamHQVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
@@ -525,6 +525,7 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         self.neck = SamHQVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -1230,7 +1231,7 @@ class SamHQPromptEncoder(nn.Module):
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1311,7 +1312,7 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
