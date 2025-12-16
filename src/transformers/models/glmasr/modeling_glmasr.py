@@ -48,7 +48,7 @@ from .configuration_glmasr import GlmasrConfig, GlmasrEncoderConfig
 logger = logging.get_logger(__name__)
 
 
-class GlmasrRotaryEmbedding(nn.Module):
+class GlmasrAudioRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -95,45 +95,17 @@ def rotate_half(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+def apply_rotary_pos_emb_audio(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
     return q_embed, k_embed
 
 
@@ -188,7 +160,7 @@ class GlmasrAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -202,16 +174,10 @@ class GlmasrAttention(nn.Module):
         # and enforce no scaling (1.0) in the attention call below.
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-
-        query_states, key_states = [
-            apply_rotary_pos_emb(
-                i.transpose(1, 2),
-                rotary_pos_emb,
-            ).transpose(1, 2)
-            for i in (query_states, key_states)
-        ]
-
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_audio(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -259,7 +225,7 @@ class GlmasrEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: bool = False,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
@@ -277,7 +243,7 @@ class GlmasrEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
             position_ids=position_ids,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -361,7 +327,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
-        self.rotary_emb = GlmasrRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
+        self.rotary_pos_emb = GlmasrAudioRotaryEmbedding(config.hidden_size // config.encoder_attention_heads)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -384,7 +350,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         position_ids=None,
         **kwargs,
     ):
@@ -425,11 +391,12 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        rotary_pos_emb = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+        seqlen = inputs_embeds.shape[1]
+        freqs = self.rotary_pos_emb(seqlen)
+        rotary_embs = torch.stack([freqs.cos(), freqs.sin()], dim=-1).to(dtype=inputs_embeds.dtype)
+        position_embeddings = rotary_embs[position_ids]
 
-        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
-
-        hidden_states = inputs_embeds + self.embed_positions(all_positions)
+        hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
@@ -452,7 +419,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
                     hidden_states,
                     None,
                     output_attentions=output_attentions,
-                    rotary_pos_emb=rotary_pos_emb,
+                    position_embeddings=position_embeddings,
                     position_ids=position_ids,
                 )
 

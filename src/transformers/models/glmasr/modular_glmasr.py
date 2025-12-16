@@ -23,7 +23,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..auto import AutoConfig
-from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 from ..voxtral.modeling_voxtral import (
     VoxtralAttention,
@@ -37,7 +36,28 @@ from ..voxtral.modeling_voxtral import (
 from ..voxtral.processing_voxtral import VoxtralProcessor, VoxtralProcessorKwargs
 
 
-class GlmasrRotaryEmbedding(nn.Module):
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
+def apply_rotary_pos_emb_audio(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
+
+
+class GlmasrAudioRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
@@ -216,7 +236,7 @@ class GlmasrAttention(VoxtralAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -230,16 +250,11 @@ class GlmasrAttention(VoxtralAttention):
         # and enforce no scaling (1.0) in the attention call below.
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-
-        query_states, key_states = [
-            apply_rotary_pos_emb(
-                i.transpose(1, 2),
-                rotary_pos_emb,
-            ).transpose(1, 2)
-            for i in (query_states, key_states)
-        ]
-
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_audio(query_states, key_states, cos, sin)
+
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -272,7 +287,7 @@ class GlmasrEncoderLayer(VoxtralEncoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: bool = False,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
@@ -290,7 +305,7 @@ class GlmasrEncoderLayer(VoxtralEncoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
             position_ids=position_ids,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -318,8 +333,26 @@ class GlmasrPreTrainedModel(VoxtralPreTrainedModel):
 class GlmasrEncoder(VoxtralEncoder):
     def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
-        self.rotary_emb = GlmasrRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
+        self.dropout = config.dropout
+        self.layerdrop = config.encoder_layerdrop
+
+        embed_dim = config.d_model
+        self.num_mel_bins = config.num_mel_bins
+        self.padding_idx = config.pad_token_id
+        self.max_source_positions = config.max_source_positions
+
+        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
+
+        self.layers = nn.ModuleList([GlmasrEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.hidden_size)
+        # Ignore copy
+        self.avg_pooler = nn.AvgPool1d(2, stride=2)
+
+        self.gradient_checkpointing = False
+        self.rotary_pos_emb = GlmasrAudioRotaryEmbedding(config.hidden_size // config.encoder_attention_heads)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -328,7 +361,7 @@ class GlmasrEncoder(VoxtralEncoder):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         position_ids=None,
         **kwargs,
     ):
@@ -369,11 +402,12 @@ class GlmasrEncoder(VoxtralEncoder):
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        rotary_pos_emb = self.rotary_emb(inputs_embeds, position_ids=position_ids)
+        seqlen = inputs_embeds.shape[1]
+        freqs = self.rotary_pos_emb(seqlen)
+        rotary_embs = torch.stack([freqs.cos(), freqs.sin()], dim=-1).to(dtype=inputs_embeds.dtype)
+        position_embeddings = rotary_embs[position_ids]
 
-        all_positions = torch.arange(self.embed_positions.num_embeddings, device=inputs_embeds.device)
-
-        hidden_states = inputs_embeds + self.embed_positions(all_positions)
+        hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         encoder_states = () if output_hidden_states else None
@@ -396,7 +430,7 @@ class GlmasrEncoder(VoxtralEncoder):
                     hidden_states,
                     None,
                     output_attentions=output_attentions,
-                    rotary_pos_emb=rotary_pos_emb,
+                    position_embeddings=position_embeddings,
                     position_ids=position_ids,
                 )
 
