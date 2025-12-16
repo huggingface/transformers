@@ -34,32 +34,41 @@ logger = logging.get_logger(__name__)
 
 
 def get_pixo_config(model_name):
-    config = PixoConfig()
-
-    # size of the architecture
     if "vitb16" in model_name:
-        config.hidden_size = 768
-        config.num_hidden_layers = 12
-        config.num_attention_heads = 12
+        kwargs = {
+            "hidden_size": 768,
+            "num_hidden_layers": 12,
+            "num_attention_heads": 12,
+        }
     elif "vitl16" in model_name:
-        config.hidden_size = 1024
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
+        kwargs = {
+            "hidden_size": 1024,
+            "num_hidden_layers": 24,
+            "num_attention_heads": 16,
+        }
     elif "vith16" in model_name:
-        config.hidden_size = 1280
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
+        kwargs = {
+            "hidden_size": 1280,
+            "num_hidden_layers": 32,
+            "num_attention_heads": 16,
+        }
     elif "vit1b16" in model_name:
-        config.hidden_size = 1536
-        config.num_hidden_layers = 48
-        config.num_attention_heads = 24
+        kwargs = {
+            "hidden_size": 1536,
+            "num_hidden_layers": 48,
+            "num_attention_heads": 24,
+        }
     elif "vit5b16" in model_name:
-        config.hidden_size = 3072
-        config.num_hidden_layers = 48
-        config.num_attention_heads = 32
+        kwargs = {
+            "hidden_size": 3072,
+            "num_hidden_layers": 48,
+            "num_attention_heads": 32,
+        }
     else:
-        raise ValueError("Model not supported")
+        raise ValueError(f"Model '{model_name}' not supported")
 
+    config = PixoConfig(**kwargs)
+    
     return config
 
 
