@@ -1593,42 +1593,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         if getattr(config, "gradient_checkpointing", False):
             self.gradient_checkpointing_enable()
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize vision modules with SigLIP-style defaults while preserving text init via super()."""
-        super()._init_weights(module)
-
-        if isinstance(module, IsaacVisionEmbeddings):
-            nn.init.xavier_uniform_(module.patch_embedding.weight)
-            if module.patch_embedding.bias is not None:
-                nn.init.zeros_(module.patch_embedding.bias)
-            hidden_size = module.embed_dim
-            nn.init.normal_(module.position_embedding.weight, mean=0.0, std=1.0 / math.sqrt(hidden_size))
-            return
-
-        if isinstance(module, IsaacVisionAttention):
-            for proj in (module.q_proj, module.k_proj, module.v_proj, module.out_proj):
-                nn.init.xavier_uniform_(proj.weight)
-                if proj.bias is not None:
-                    nn.init.zeros_(proj.bias)
-            return
-
-        # Initialize only the multimodal projector linears to avoid touching text weights.
-        if isinstance(module, nn.Linear):
-            projector = getattr(self, "vision_embedding", None)
-            if projector is not None and isinstance(getattr(projector, "multimodal_projector", None), nn.Sequential):
-                if any(module is layer for layer in projector.multimodal_projector if isinstance(layer, nn.Linear)):
-                    nn.init.xavier_uniform_(module.weight)
-                    if module.bias is not None:
-                        nn.init.zeros_(module.bias)
-                    return
-
-        if isinstance(module, nn.LayerNorm):
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-            if module.weight is not None:
-                nn.init.ones_(module.weight)
-
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
@@ -1858,6 +1822,8 @@ class IsaacModel(Qwen3PreTrainedModel):
                     all_attentions.append(layer_outputs[1])
             else:
                 hidden_states = layer_outputs
+                if output_attentions:
+                    all_attentions.append(None)
 
         # Final layer norm
         hidden_states = self.text_model.norm(hidden_states)
