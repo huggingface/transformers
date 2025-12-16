@@ -187,8 +187,8 @@ def convert_pixio_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pa
 
     if push_to_hub:
         name = model_name.replace("_", "-")
-        model.push_to_hub(f"LiheYoung/{name}")
-        processor.push_to_hub(f"LiheYoung/{name}")
+        model.push_to_hub(f"facebook/{name}")
+        processor.push_to_hub(f"facebook/{name}")
 
 
 if __name__ == "__main__":
