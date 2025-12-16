@@ -1404,6 +1404,18 @@ class MimiPreTrainedModel(PreTrainedModel):
                 init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, MimiLayerScale):
             init.constant_(module.scale, self.config.layer_scale_initial_scale)
+        elif isinstance(module, MimiConv1d):
+            kernel_size = module.conv.kernel_size[0]
+            stride = module.conv.stride[0]
+            dilation = module.conv.dilation[0]
+            kernel_size = (kernel_size - 1) * dilation + 1
+            init.constant_(module.stride, stride)
+            init.constant_(module.kernel_size, kernel_size)
+            init.constant_(module.padding_total, kernel_size - stride)
+        elif isinstance(module, MimiEuclideanCodebook):
+            init.ones_(module.initialized)
+            init.ones_(module.cluster_usage)
+            init.zeros_(module.embed_sum)
 
 
 @auto_docstring(

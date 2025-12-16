@@ -444,6 +444,11 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
         "attentions": PaddleOCRAttention,
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PaddleOCRVisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+
 
 @auto_docstring
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):

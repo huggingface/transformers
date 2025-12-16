@@ -50,6 +50,7 @@ from ..sam2.modeling_sam2 import (
     Sam2FeedForward,
     Sam2ImageSegmentationOutput,
     Sam2LayerNorm,
+    Sam2PositionalEmbedding,
     Sam2Model,
     Sam2SinePositionEmbedding,
     Sam2TwoWayAttentionBlock,
@@ -1013,6 +1014,21 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
+        elif isinstance(module, Sam2VideoVisionRotaryEmbedding):
+            end_x, end_y = module.end_x, module.end_y
+            dim = module.dim
+            freqs = 1.0 / (module.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+            x_positions = flattened_indices % end_x
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, Sam2VideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
@@ -1030,6 +1046,9 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
         if dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
         end_x, end_y = config.memory_attention_rope_feat_sizes
+        self.end_x, self.end_y = end_x, end_y
+        self.dim = dim
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
         freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         # Generate 2D position indices for axial rotary embedding
@@ -1394,7 +1413,6 @@ class Sam2VideoMaskDownSampler(nn.Module):
         x = self.final_conv(x)
         return x
 
-
 class Sam2VideoMemoryEncoder(nn.Module):
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
@@ -1424,7 +1442,10 @@ class Sam2VideoMemoryEncoder(nn.Module):
         vision_pos_enc = self.position_encoding(vision_features.shape, vision_features.device, vision_features.dtype)
 
         return vision_features, vision_pos_enc
+    
 
+class Sam2VideoPositionalEmbedding(Sam2PositionalEmbedding):
+    pass
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0

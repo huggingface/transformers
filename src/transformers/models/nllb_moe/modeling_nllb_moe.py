@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -664,6 +665,12 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, NllbMoeSinusoidalPositionalEmbedding):
+            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            init.copy_(module.weights, emb_weights)
 
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):

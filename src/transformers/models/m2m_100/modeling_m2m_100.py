@@ -84,6 +84,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -514,6 +515,12 @@ class M2M100PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     # Doesn't support `compile` (dynamic control flow). Can be fixed but low usage model
     _can_compile_fullgraph = False
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, M2M100SinusoidalPositionalEmbedding)
+            emb_weights = module.make_weights(module.num_positions + module.offset, module.embedding_dim, module.padding_idx)
+            init.copy_(module.weights, emb_weights)
 
 
 class M2M100Encoder(M2M100PreTrainedModel):

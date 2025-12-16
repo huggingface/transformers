@@ -1014,6 +1014,8 @@ class SamPreTrainedModel(PreTrainedModel):
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
                 init.zeros_(module.pos_embed)
+        elif isinstance(module, SamPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class SamVisionEncoder(SamPreTrainedModel):

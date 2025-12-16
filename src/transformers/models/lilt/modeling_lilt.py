@@ -498,6 +498,11 @@ class LiltPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LiltTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+
 
 @auto_docstring
 class LiltModel(LiltPreTrainedModel):
