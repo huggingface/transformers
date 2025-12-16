@@ -1154,7 +1154,6 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -1178,7 +1177,7 @@ def eager_attention_forward(
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights.to(value.dtype), value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -2583,6 +2582,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
