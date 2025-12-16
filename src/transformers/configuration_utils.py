@@ -320,7 +320,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
-        # MoE implementation to use, if relevant (it sets it recursively on sub-configs)
+        # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._experts_implementation = kwargs.pop("experts_implementation", None)
 
         # Drop the transformers version info

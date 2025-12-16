@@ -124,7 +124,9 @@ def grouped_mm_experts_forward(
     current_states_g = current_hidden_states[perm]
 
     # Compute offsets for grouped_mm
-    num_tokens_per_expert = torch.bincount(expert_ids_g, minlength=num_experts)
+    # using histc instead of bincount to avoid cuda graph issues
+    # (grouped_mm_experts_forward still fails with cuda graphs but because of _grouped_mm internals)
+    num_tokens_per_expert = torch.histc(expert_ids_g, bins=num_experts, min=0, max=num_experts - 1).to(torch.int32)
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---

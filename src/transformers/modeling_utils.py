@@ -1312,7 +1312,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
-        # Check the MoE implementation is supported, or set it if not yet set (on the internal attr, to avoid
+        # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
             self.config._experts_implementation
@@ -2047,7 +2047,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         Args:
             experts_implementation (`str`):
-                The MoE implementation to set for this model.
+                The experts implementation to set for this model.
         """
         applicable_implementation = self._check_and_adjust_experts_implementation(experts_implementation)
 
