@@ -97,10 +97,10 @@ class KernelConfig(PushToHubMixin):
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
-    def __init__(self, kernel_mapping={}):
+    def __init__(self, kernel_mapping={}, use_local_kernel=False):
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
-        self.check_kernel_from_local = False
+        self.use_local_kernel = use_local_kernel
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
         from kernels import LayerRepository
@@ -200,9 +200,6 @@ class KernelConfig(PushToHubMixin):
                         raise ValueError(
                             f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {repo_name}"
                         )
-            if kernel is not None and kernel[0] == "/":
-                self.check_kernel_from_local = True
-
             else:
                 raise ValueError(f"Kernel mapping must follow the format: {MAPPING_FORMAT}, got: {kernel}")
 
@@ -267,7 +264,7 @@ class KernelConfig(PushToHubMixin):
 
             if isinstance(kernel, str):
                 repo_name = kernel
-                if not self.check_kernel_from_local:
+                if not self.use_local_kernel:
                     add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
                 else:
                     add_to_mapping_local(layer_name, current_device, repo_name, mode, compatible_mapping)
@@ -275,7 +272,7 @@ class KernelConfig(PushToHubMixin):
                 for device, repo_name in kernel.items():
                     if device != current_device:
                         continue
-                    if not self.check_kernel_from_local:
+                    if not self.use_local_kernel:
                         add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
                     else:
                         add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping)
