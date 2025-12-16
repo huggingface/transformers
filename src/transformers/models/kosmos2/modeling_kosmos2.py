@@ -1507,50 +1507,33 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: bool = False,
-        return_attentions: Optional[bool] = False,  # TODO: @Tom neatly deprecate this
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional embeddings or not.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
-        """
-
-        # NOTE: @Tom backwards incompatibility
-        if return_attentions:
+        if "return_attentions" in kwargs:
             warnings.warn(
                 "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"
                 " and access `projection_attentions` from the returned `ModelOutput` instead.",
                 FutureWarning,
             )
-            return_dict = True
 
-        vision_model_output = self.vision_model(
+        vision_output = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-        image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+        image_embeds = self.vision_model.model.post_layernorm(vision_output[0])
         # normalized features
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
-
-        if return_dict:
-            return BaseModelOutputWithProjectionAttentions(
-                last_hidden_state=vision_model_output.last_hidden_state,
-                pooler_output=image_embeds,
-                projection_attentions=projection_attentions,
-            )
+        vision_output.pooler_output = image_embeds
+        # NOTE: @Tom we need to add projection_attentions to the output
 
         return image_embeds
 

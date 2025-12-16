@@ -650,17 +650,16 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
-    ) -> torch.Tensor:
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[ProcessingKwargs]
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -704,14 +703,11 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
         merged_hidden_states = self.merger(hidden_states)
 
-        if return_dict:
-            return BaseModelOutputWithDeepstackFeatures(
-                last_hidden_state=hidden_states,
-                pooler_output=merged_hidden_states,
-                deepstack_features=deepstack_feature_lists,
-            )
-
-        return merged_hidden_states, deepstack_feature_lists
+        return BaseModelOutputWithDeepstackFeatures(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+            deepstack_features=deepstack_feature_lists,
+        )
 
 
 @auto_docstring(
@@ -964,12 +960,13 @@ class Qwen3VLModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -978,25 +975,24 @@ class Qwen3VLModel(Qwen2_5_VLModel):
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_output = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=return_dict)
-        if return_dict:
-            return vision_output
-
-        image_embeds, deepstack_image_embeds = vision_output
+        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
+            pixel_values, grid_thw=image_grid_thw, **kwargs
+        )
+        image_embeds = vision_output.last_hidden_state
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds, deepstack_image_embeds
+        vision_output.pooler_output = image_embeds
+
+        return vision_output
 
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -1005,11 +1001,9 @@ class Qwen3VLModel(Qwen2_5_VLModel):
                 The tensors corresponding to the input videos.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a [`BaseModelOutputWithDeepstackFeatures`] instead of a plain tuple.
         """
         # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=return_dict)
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     @check_model_inputs

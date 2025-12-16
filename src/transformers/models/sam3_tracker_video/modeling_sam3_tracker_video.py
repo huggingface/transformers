@@ -40,8 +40,8 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring
-from ...utils.generic import OutputRecorder, TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import OutputRecorder
 from ..auto import AutoModel
 from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
@@ -1867,10 +1867,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             frame_idx=frame_idx,
         )
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[
         list[torch.Tensor],
@@ -1884,8 +1884,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor`):
                 Input pixel values of shape `(batch_size, num_channels, height, width)`.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             `tuple`: A tuple containing:
@@ -1894,10 +1892,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
                 - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
         """
-        vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -1914,16 +1909,12 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        if return_dict:
-            return BaseModelOutputWithFeatureMaps(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                attentions=vision_outputs.attentions,
-                feature_maps=feature_maps,
-                feature_maps_position_embeddings=feature_maps_position_embeddings,
-            )
-
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
+        # fpn hidden states/position encoding order, still have to double-check
+        return vision_outputs
 
     def _prepare_vision_features(
         self,

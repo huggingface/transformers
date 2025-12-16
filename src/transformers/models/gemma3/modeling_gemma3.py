@@ -828,8 +828,9 @@ class Gemma3Model(Gemma3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -837,23 +838,15 @@ class Gemma3Model(Gemma3PreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        vision_outputs = self.vision_tower(pixel_values=pixel_values)
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
-        image_features = self.multi_modal_projector(last_hidden_state)
+        vision_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1014,8 +1007,8 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
-        return self.model.get_image_features(pixel_values, return_dict=return_dict)
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

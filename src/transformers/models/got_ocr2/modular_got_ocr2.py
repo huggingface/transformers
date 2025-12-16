@@ -308,33 +308,26 @@ class GotOcr2Model(LlavaModel):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
-        image_features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return image_outputs
 
     def forward(
         self,

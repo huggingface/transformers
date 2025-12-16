@@ -547,13 +547,13 @@ class InternVLModel(InternVLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        return_dict: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -563,8 +563,6 @@ class InternVLModel(InternVLPreTrainedModel):
                The tensors corresponding to the input images.
             vision_feature_layer (`int` or `list[int]`):
                 Layer index or list of layer indices to extract features from.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
@@ -580,7 +578,7 @@ class InternVLModel(InternVLPreTrainedModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
-        vision_outputs = self.vision_tower(pixel_values=pixel_values)
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         if vision_feature_layer == -1:
             vision_features = vision_outputs.last_hidden_state
         else:
@@ -604,14 +602,9 @@ class InternVLModel(InternVLPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
+        vision_outputs.pooler_output = vision_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=vision_outputs.last_hidden_state,
-                pooler_output=vision_features,
-            )
-
-        return vision_features
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -796,7 +789,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

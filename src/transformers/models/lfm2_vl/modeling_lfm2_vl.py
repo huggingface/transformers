@@ -28,7 +28,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -161,13 +161,13 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        return_dict: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -179,8 +179,6 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
                 The spatial shapes of the input images.
             pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
                 The pixel attention mask of the input images.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`list[torch.Tensor]`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
@@ -189,6 +187,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
             pixel_attention_mask=pixel_attention_mask,
+            **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
 
@@ -211,13 +210,8 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
             image_features.append(img_embedding)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        image_outputs.pooler_output = image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -334,7 +328,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

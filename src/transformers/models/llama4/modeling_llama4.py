@@ -1203,7 +1203,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_select_strategy: str,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply al projection.
@@ -1218,11 +1218,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.vision_feature_select_strategy}")
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        image_outputs = self.vision_model(pixel_values, output_hidden_states=False, **kwargs)
-        hidden_state = image_outputs.last_hidden_state
-        return hidden_state
+            raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}")
+        return self.vision_model(pixel_values, **kwargs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

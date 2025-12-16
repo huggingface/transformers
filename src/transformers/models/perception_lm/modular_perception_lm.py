@@ -21,8 +21,9 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -146,11 +147,11 @@ class PerceptionLMModel(LlavaModel):
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        return_dict: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -158,25 +159,18 @@ class PerceptionLMModel(LlavaModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_tiles, channels, height, width)`)
                The tensors corresponding to the input images.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
+        image_outputs = self.vision_tower(pixel_values.flatten(0, 1), **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
             last_hidden_state = last_hidden_state[:, 1:, :]
         image_features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.pooler_output = image_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self,

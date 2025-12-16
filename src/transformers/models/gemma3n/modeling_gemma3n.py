@@ -1900,8 +1900,11 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, return_dict: bool = False
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
@@ -1909,32 +1912,24 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
 
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True)
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
         # height == width and height * width == Gemma3nConfig.vision_soft_tokens_per_image.
-        vision_outputs = last_hidden_state.reshape(
+        last_hidden_state = last_hidden_state.reshape(
             last_hidden_state.shape[0],
             self.config.vision_config.hidden_size,
             self.config.vision_soft_tokens_per_image,
         ).permute(0, 2, 1)
         # Normalize and embed the soft tokens into language model space.
-        vision_outputs *= self.config.vision_config.hidden_size**0.5
-        image_features = self.embed_vision(inputs_embeds=vision_outputs)
+        last_hidden_state *= self.config.vision_config.hidden_size**0.5
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -2169,8 +2164,8 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
-        return self.model.get_image_features(pixel_values, return_dict=return_dict)
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

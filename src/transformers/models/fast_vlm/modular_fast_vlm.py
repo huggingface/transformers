@@ -19,7 +19,8 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING
 from ..llava.configuration_llava import LlavaConfig
 from ..llava.modeling_llava import (
@@ -162,12 +163,13 @@ class FastVlmModel(LlavaModel):
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -192,14 +194,14 @@ class FastVlmModel(LlavaModel):
             else self.config.vision_feature_select_strategy
         )
 
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = list(image_features)
+        image_outputs.pooler_output = list(image_features)
+
         return image_features
 
     def forward(self, **super_kwargs):

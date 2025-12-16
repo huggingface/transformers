@@ -34,9 +34,8 @@ from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
@@ -98,7 +97,8 @@ class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
 class Cohere2VisionModel(AyaVisionModel):
     _checkpoint_conversion_mapping = {}
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
+    @can_return_tuple
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -109,18 +109,11 @@ class Cohere2VisionModel(AyaVisionModel):
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        selected_image_feature = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
 
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.last_hidden_state
-        image_features = self.multi_modal_projector(selected_image_feature)
-
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=selected_image_feature,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return image_outputs
 
     @check_model_inputs
     @auto_docstring
@@ -172,8 +165,8 @@ class Cohere2VisionModel(AyaVisionModel):
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
-        return self.model.get_image_features(pixel_values=pixel_values, return_dict=return_dict)
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @check_model_inputs
     @auto_docstring

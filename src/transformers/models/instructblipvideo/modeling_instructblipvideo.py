@@ -1207,7 +1207,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         qformer_input_ids: torch.LongTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -1217,6 +1216,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
                 The tensors corresponding to the input images.
         """
         pass
+        # TODO: @Tom Let's fully remove if not supported
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """

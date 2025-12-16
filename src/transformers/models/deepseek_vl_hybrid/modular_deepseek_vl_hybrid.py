@@ -284,6 +284,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
         image_features = self.aligner(vision_encodings, high_res_vision_encodings)
 
+        # TODO: @Tom to revisit with the new can_return_tuple approach
+        # Presumably something like a fresh ModelOutput subclass that holds both
         if return_dict:
             return BaseModelOutputWithPooling(
                 last_hidden_state=vision_encodings,

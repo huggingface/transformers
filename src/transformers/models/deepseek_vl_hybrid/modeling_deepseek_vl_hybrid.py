@@ -269,6 +269,8 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, high_res_pixel_values: torch.FloatTensor, return_dict: bool = False
     ):
@@ -276,6 +278,8 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
         image_features = self.aligner(vision_encodings, high_res_vision_encodings)
 
+        # TODO: @Tom to revisit with the new can_return_tuple approach
+        # Presumably something like a fresh ModelOutput subclass that holds both
         if return_dict:
             return BaseModelOutputWithPooling(
                 last_hidden_state=vision_encodings,

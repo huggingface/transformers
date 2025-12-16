@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -854,7 +854,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
+    def get_image_features(self, pixel_values: torch.FloatTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer
@@ -862,15 +862,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
-            return_dict (`bool`, *optional*, default to `False`):
-                Whether to return a `ModelOutput` instead of a pooled embedding.
         """
         image_tokens = self.get_image_tokens(pixel_values)
         image_embeddings = self.get_input_embeddings()(image_tokens)
-
-        if return_dict:
-            return BaseModelOutputWithPooling(last_hidden_state=image_embeddings)
-
         return image_embeddings
 
     def get_placeholder_mask(
@@ -1029,8 +1023,8 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, return_dict: bool = False):
-        return self.model.get_image_features(pixel_values, return_dict=return_dict)
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        return self.model.get_image_features(pixel_values)
 
     @can_return_tuple
     @auto_docstring

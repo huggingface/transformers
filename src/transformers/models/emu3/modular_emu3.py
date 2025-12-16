@@ -944,6 +944,8 @@ class Emu3Model(Emu3PreTrainedModel):
         image_embeddings = self.get_input_embeddings()(image_tokens)
         image_features = torch.split(image_embeddings, split_sizes)
 
+        # TODO: @Tom to revisit with the new can_return_tuple approach.
+        # Presumably requires updating the `self.vqmodel.encode` method to return a BaseModelOutput
         if return_dict:
             return BaseModelOutputWithPooling(
                 last_hidden_state=image_embeddings,

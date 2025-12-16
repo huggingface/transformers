@@ -315,6 +315,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -323,7 +324,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
         batch_num_images: Optional[torch.LongTensor] = None,
-        return_dict: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -382,7 +383,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
@@ -402,14 +403,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             image_newline=self.image_newline,
             vision_aspect_ratio=vision_aspect_ratio,
         )
+        image_outputs.pooler_output = image_features
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_outputs.last_hidden_state,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return image_outputs
 
     def get_video_features(
         self,

@@ -1243,7 +1243,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         # step 3: use the language model, conditioned on the query outputs and the prompt
         image_features = self.language_projection(query_output)
 
-        # NOTE: @Tom backwards incompatibility
+        # NOTE: @Tom the easy solution with the new format would be to grab vision_outputs,
+        # override the pooler_output with image_features and return that, but we'd lose the
+        # query_outputs
         if return_dict:
             return BaseModelOutputWithVisionQformerOutputs(
                 last_hidden_state=vision_outputs.last_hidden_state,

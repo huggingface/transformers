@@ -351,9 +351,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         qformer_input_ids: torch.LongTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
     ):
         pass
+        # TODO: @Tom Let's fully remove if not supported
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
