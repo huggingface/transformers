@@ -17,21 +17,21 @@
 import copy
 import json
 import os
-import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
+
+from huggingface_hub import create_repo
 
 from .. import __version__
-from ..configuration_utils import PretrainedConfig
+from ..configuration_utils import PreTrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -105,8 +105,9 @@ class GenerationConfig(PushToHubMixin):
         > Parameters that control the length of the output
 
         max_length (`int`, *optional*, defaults to 20):
-            The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
-            `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
+            `max_new_tokens` is recommended for controlling how many tokens the model generates.
+            `max_length` remains for backward compatibility.
+
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
@@ -151,8 +152,6 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
-        return_legacy_cache (`bool`, *optional*, default to `True`):
-            Whether to return the legacy or new format of the cache when `DynamicCache` is used by default.
 
         > Parameters for manipulation of the model output logits
 
@@ -167,6 +166,12 @@ class GenerationConfig(PushToHubMixin):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
+        top_h (`float`, *optional*):
+            Entropy budget scaling factor, which controls how much of the distribution’s entropy is preserved when sampling.
+            Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the smallest prefix of tokens
+            is kept whose *renormalized* entropy is less than or equal to `top_h` times the entropy of the full distribution.
+            Smaller values (e.g., 0.2–0.5) lead to more focused, deterministic outputs, while values closer to 1.0 allow more
+            randomness and diversity. Typical values are in the 0.3–0.6 range.
         typical_p (`float`, *optional*, defaults to 1.0):
             Local typicality measures how similar the conditional probability of predicting a target token next is to
             the expected conditional probability of predicting a random token next, given the partial text already
@@ -349,7 +354,6 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
-        self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Parameters for manipulation of the model output logits
@@ -357,6 +361,7 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.min_p = kwargs.pop("min_p", None)
+        self.top_h = kwargs.pop("top_h", None)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", 0.0)
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
@@ -431,6 +436,13 @@ class GenerationConfig(PushToHubMixin):
         self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
+
+        # Ensure backward compatibility for models that use `forced_bos_token_id` within their config
+        if self._from_model_config and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            logger.warning_once(
+                f"Please make sure the generation config includes `forced_bos_token_id={self.bos_token_id}`. "
+            )
 
         # Additional attributes without default values
         if not self._from_model_config:
@@ -551,10 +563,13 @@ class GenerationConfig(PushToHubMixin):
                 "`model.generation_config.pad_token_id=PAD_TOKEN_ID` to avoid errors in generation"
             )
         # 1.2. Cache attributes
-        if self.cache_implementation is not None and self.cache_implementation not in ALL_CACHE_IMPLEMENTATIONS:
+        # "paged" re-routes to continuous batching and so it is a valid cache implementation. But we do not want to test
+        # it with the `generate` as the other would be, so we we cannot add it to ALL_CACHE_IMPLEMENTATIONS
+        valid_cache_implementations = ALL_CACHE_IMPLEMENTATIONS + ("paged",)
+        if self.cache_implementation is not None and self.cache_implementation not in valid_cache_implementations:
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
-                f"{ALL_CACHE_IMPLEMENTATIONS}"
+                f"{valid_cache_implementations}"
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
@@ -564,12 +579,6 @@ class GenerationConfig(PushToHubMixin):
             )
         # 1.4. Watermarking attributes
         if self.watermarking_config is not None:
-            if not (isinstance(self.watermarking_config, (WatermarkingConfig, SynthIDTextWatermarkingConfig))):
-                minor_issues["watermarking_config"] = (
-                    "`watermarking_config` as a dict is deprecated and will be removed in v4.54.0. Please construct "
-                    "`watermarking_config` object with `WatermarkingConfig` or `SynthIDTextWatermarkingConfig` class."
-                )
-                self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
         # 2. Validation of attribute combinations
@@ -587,6 +596,8 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
+            if self.top_h is not None:
+                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
             if self.typical_p is not None and self.typical_p != 1.0:
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
@@ -640,7 +651,7 @@ class GenerationConfig(PushToHubMixin):
                 "You have set `use_cache` to `False`, but {cache_arg} is set to {cache_arg_value}. {cache_arg} will "
                 "have no effect."
             )
-            for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
+            for arg_name in ("cache_implementation", "cache_config"):
                 if getattr(self, arg_name) is not None:
                     minor_issues[arg_name] = no_cache_warning.format(
                         cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)
@@ -700,8 +711,8 @@ class GenerationConfig(PushToHubMixin):
 
     def save_pretrained(
         self,
-        save_directory: Union[str, os.PathLike],
-        config_file_name: Optional[Union[str, os.PathLike]] = None,
+        save_directory: str | os.PathLike,
+        config_file_name: str | os.PathLike | None = None,
         push_to_hub: bool = False,
         **kwargs,
     ):
@@ -730,20 +741,6 @@ class GenerationConfig(PushToHubMixin):
         except ValueError as exc:
             raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
-                "Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         if os.path.isfile(save_directory):
@@ -754,12 +751,12 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
 
-        self.to_json_file(output_config_file, use_diff=True)
+        self.to_json_file(output_config_file, use_diff=True, keys_to_pop=["compile_config"])
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
@@ -774,12 +771,12 @@ class GenerationConfig(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_model_name: Union[str, os.PathLike],
-        config_file_name: Optional[Union[str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name: str | os.PathLike,
+        config_file_name: str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> "GenerationConfig":
@@ -802,9 +799,6 @@ class GenerationConfig(PushToHubMixin):
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -868,24 +862,11 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        resume_download = kwargs.pop("resume_download", None)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -899,9 +880,6 @@ class GenerationConfig(PushToHubMixin):
             # Special case when config_path is a local file
             resolved_config_file = config_path
             is_local = True
-        elif is_remote_url(config_path):
-            configuration_file = config_path
-            resolved_config_file = download_url(config_path)
         else:
             configuration_file = config_file_name
             try:
@@ -912,7 +890,6 @@ class GenerationConfig(PushToHubMixin):
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
-                    resume_download=resume_download,
                     local_files_only=local_files_only,
                     token=token,
                     user_agent=user_agent,
@@ -946,7 +923,9 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        if kwargs.get("return_unused_kwargs") is True:
+        if kwargs.get("_from_model_config", False):
+            return cls.from_model_config(config_dict)
+        elif kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
             return config, unused_kwargs
@@ -956,7 +935,7 @@ class GenerationConfig(PushToHubMixin):
             return config
 
     @classmethod
-    def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+    def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
@@ -1044,8 +1023,6 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
-        if "compile_config" in output:
-            del output["compile_config"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1053,7 +1030,9 @@ class GenerationConfig(PushToHubMixin):
         self.dict_dtype_to_str(output)
         return output
 
-    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
+    def to_json_string(
+        self, use_diff: bool = True, ignore_metadata: bool = False, keys_to_pop: list[str] | None = None
+    ) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -1063,6 +1042,8 @@ class GenerationConfig(PushToHubMixin):
                 is serialized to JSON string.
             ignore_metadata (`bool`, *optional*, defaults to `False`):
                 Whether to ignore the metadata fields present in the instance
+            keys_to_pop (`list[str]`, *optional*):
+                Keys to pop from the config dictionary before serializing
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -1071,6 +1052,10 @@ class GenerationConfig(PushToHubMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        if keys_to_pop is not None:
+            for key in keys_to_pop:
+                config_dict.pop(key, None)
 
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
@@ -1097,7 +1082,9 @@ class GenerationConfig(PushToHubMixin):
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(
+        self, json_file_path: str | os.PathLike, use_diff: bool = True, keys_to_pop: list[str] | None = None
+    ) -> None:
         """
         Save this instance to a JSON file.
 
@@ -1107,24 +1094,26 @@ class GenerationConfig(PushToHubMixin):
             use_diff (`bool`, *optional*, defaults to `True`):
                 If set to `True`, only the difference between the config instance and the default `GenerationConfig()`
                 is serialized to JSON file.
+            keys_to_pop (`list[str]`, *optional*):
+                Keys to pop from the config dictionary before serializing
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string(use_diff=use_diff))
+            writer.write(self.to_json_string(use_diff=use_diff, keys_to_pop=keys_to_pop))
 
     @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+    def from_model_config(cls, model_config: PreTrainedConfig | dict) -> "GenerationConfig":
         """
-        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+        Instantiates a [`GenerationConfig`] from a [`PreTrainedConfig`]. This function is useful to convert legacy
+        [`PreTrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
 
         Args:
-            model_config (`PretrainedConfig`):
+            model_config (`PreTrainedConfig | dict`):
                 The model config that will be used to instantiate the generation config.
 
         Returns:
             [`GenerationConfig`]: The configuration object instantiated from those parameters.
         """
-        config_dict = model_config.to_dict()
+        config_dict = model_config.to_dict() if not isinstance(model_config, dict) else model_config
         config_dict.pop("_from_model_config", None)
 
         # Removes all `None` from the model config dict -- this lets the generation config defaults to take hold
@@ -1134,14 +1123,15 @@ class GenerationConfig(PushToHubMixin):
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config (which in turn is defined from the outer attributes of model config).
-        decoder_config = model_config.get_text_config(decoder=True)
-        if decoder_config is not model_config:
-            default_generation_config = GenerationConfig()
-            decoder_config_dict = decoder_config.to_dict()
-            for attr in generation_config.to_dict():
-                is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
-                if attr in decoder_config_dict and is_unset:
-                    setattr(generation_config, attr, decoder_config_dict[attr])
+        if not isinstance(model_config, dict):
+            decoder_config = model_config.get_text_config(decoder=True)
+            if decoder_config is not model_config:
+                default_generation_config = GenerationConfig()
+                decoder_config_dict = decoder_config.to_dict()
+                for attr in generation_config.to_dict():
+                    is_unset = getattr(generation_config, attr) == getattr(default_generation_config, attr)
+                    if attr in decoder_config_dict and is_unset:
+                        setattr(generation_config, attr, decoder_config_dict[attr])
 
         # If any `output_...` flag is set to `True`, we ensure `return_dict_in_generate` is set to `True`.
         if generation_config.return_dict_in_generate is False:
@@ -1207,7 +1197,7 @@ class BaseWatermarkingConfig(ABC):
             kwargs.pop(key, None)
         return config
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -1288,11 +1278,11 @@ class WatermarkingConfig(BaseWatermarkingConfig):
 
     def __init__(
         self,
-        greenlist_ratio: Optional[float] = 0.25,
-        bias: Optional[float] = 2.0,
-        hashing_key: Optional[int] = 15485863,
-        seeding_scheme: Optional[str] = "lefthash",
-        context_width: Optional[int] = 1,
+        greenlist_ratio: float = 0.25,
+        bias: float = 2.0,
+        hashing_key: int = 15485863,
+        seeding_scheme: str = "lefthash",
+        context_width: int = 1,
     ):
         self.greenlist_ratio = greenlist_ratio
         self.bias = bias
@@ -1472,10 +1462,10 @@ class CompileConfig:
     """
 
     fullgraph: bool = False
-    dynamic: Optional[bool] = None
-    backend: Union[str, Callable] = "inductor"
+    dynamic: bool | None = None
+    backend: str | Callable = "inductor"
     mode: str = "reduce-overhead"
-    options: Optional[dict] = None
+    options: dict | None = None
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
 

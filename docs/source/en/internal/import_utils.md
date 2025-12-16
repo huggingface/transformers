@@ -22,8 +22,8 @@ worked around. We don't want for all users of `transformers` to have to install 
 we therefore mark those as soft dependencies rather than hard dependencies.
 
 The transformers toolkit is not made to error-out on import of a model that has a specific dependency; instead, an
-object for which you are lacking a dependency will error-out when calling any method on it. As an example, if 
-`torchvision` isn't installed, the fast image processors will not be available. 
+object for which you are lacking a dependency will error-out when calling any method on it. As an example, if
+`torchvision` isn't installed, the fast image processors will not be available.
 
 This object is still importable:
 
@@ -51,16 +51,11 @@ Let's see how to specify specific object dependencies.
 
 All objects under a given filename have an automatic dependency to the tool linked to the filename
 
-**TensorFlow**: All files starting with `modeling_tf_` have an automatic TensorFlow dependency.
-
-**Flax**: All files starting with `modeling_flax_` have an automatic Flax dependency
-
-**PyTorch**: All files starting with `modeling_` and not valid with the above (TensorFlow and Flax) have an automatic 
-PyTorch dependency
+**PyTorch**: All files starting with `modeling_` have an automatic PyTorch dependency
 
 **Tokenizers**: All files starting with `tokenization_` and ending with `_fast` have an automatic `tokenizers` dependency
 
-**Vision**: All files starting with `image_processing_` have an automatic dependency to the `vision` dependency group; 
+**Vision**: All files starting with `image_processing_` have an automatic dependency to the `vision` dependency group;
 at the time of writing, this only contains the `pillow` dependency.
 
 **Vision + Torch + Torchvision**: All files starting with `image_processing_` and ending with `_fast` have an automatic
@@ -71,7 +66,7 @@ All of these automatic dependencies are added on top of the explicit dependencie
 ### Explicit Object Dependencies
 
 We add a method called `requires` that is used to explicitly specify the dependencies of a given object. As an
-example, the `Trainer` class has two hard dependencies: `torch` and `accelerate`. Here is how we specify these 
+example, the `Trainer` class has two hard dependencies: `torch` and `accelerate`. Here is how we specify these
 required dependencies:
 
 ```python
@@ -102,3 +97,5 @@ You can specify the following operators: `==`, `>`, `>=`, `<`, `<=`, `!=`.
 [[autodoc]] utils.import_utils.define_import_structure
 
 [[autodoc]] utils.import_utils.requires
+
+[[autodoc]] utils.import_utils.requires_backends

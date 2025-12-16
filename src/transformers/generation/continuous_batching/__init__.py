@@ -13,8 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .cache import PagedAttentionCache
-from .classes import RequestState, RequestStatus
 from .continuous_api import ContinuousBatchingManager, ContinuousMixin
+from .requests import RequestState, RequestStatus
+from .scheduler import FIFOScheduler, PrefillFirstScheduler, Scheduler
 
 
-__all__ = ["PagedAttentionCache", "RequestState", "RequestStatus", "ContinuousMixin", "ContinuousBatchingManager"]
+__all__ = [
+    "ContinuousBatchingManager",
+    "ContinuousMixin",
+    "FIFOScheduler",
+    "PagedAttentionCache",
+    "PrefillFirstScheduler",
+    "RequestState",
+    "RequestStatus",
+    "Scheduler",
+]

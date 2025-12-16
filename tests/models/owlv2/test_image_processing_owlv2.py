@@ -99,10 +99,6 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    @unittest.skip(reason="FIXME: @yoni. It always fails: `0.12 not less than or equal to 0.03`.")
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()
-
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processor_list:
             image_processing = image_processing_class(**self.image_processor_dict)
@@ -131,7 +127,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             pixel_values = processor(image, return_tensors="pt").pixel_values
 
             mean_value = round(pixel_values.mean().item(), 4)
-            self.assertEqual(mean_value, 0.2353)
+            self.assertEqual(mean_value, -0.2303)
 
     @slow
     def test_image_processor_integration_test_resize(self):
@@ -155,7 +151,9 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**inputs)
 
-            results = processor.post_process_object_detection(outputs, threshold=0.2, target_sizes=[target_size])[0]
+            results = processor.image_processor.post_process_object_detection(
+                outputs, threshold=0.2, target_sizes=[target_size]
+            )[0]
 
             boxes = results["boxes"]
             torch.testing.assert_close(boxes, expected_boxes, atol=1e-1, rtol=1e-1)
@@ -164,7 +162,7 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             inputs = processor(text=[text, text], images=[image, image], return_tensors="pt")
             with torch.no_grad():
                 outputs = model(**inputs)
-            results = processor.post_process_object_detection(
+            results = processor.image_processor.post_process_object_detection(
                 outputs, threshold=0.2, target_sizes=[target_size, target_size]
             )
 

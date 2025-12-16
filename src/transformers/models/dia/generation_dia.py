@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -45,7 +46,7 @@ class DiaGenerationMixin(GenerationMixin):
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: torch.LongTensor = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
@@ -109,7 +110,7 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
@@ -277,8 +278,14 @@ class DiaGenerationMixin(GenerationMixin):
         )
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
+        if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Ensure that beam search is de-activated by setting `num_beams=1`."
+            )
+
         self._validate_model_kwargs(model_kwargs.copy())
-        self._validate_generation_mode(generation_mode, generation_mode_kwargs)
+        self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
         # 2. Set generation parameters if not already defined
         if synced_gpus is None:
@@ -381,26 +388,29 @@ class DiaGenerationMixin(GenerationMixin):
         # Prepare inner 2D logic in generation loop
         input_ids = input_ids.reshape(-1, input_ids.shape[-1])
 
-        # 10. go into different generation modes
-        if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. expand input_ids with `num_return_sequences` additional sequences per batch
-            if generation_config.num_return_sequences > 1:
-                raise ValueError("`num_return_sequences>1` is incompatible with Dia.")
+        model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+        # prepare model inputs
+        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
-            return self._sample(
-                input_ids,
-                logits_processor=prepared_logits_processor,
-                stopping_criteria=prepared_stopping_criteria,
-                generation_config=generation_config,
-                **generation_mode_kwargs,
-                **model_kwargs,
-            )
-        else:
-            raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling. "
-                "Ensure that beam search is de-activated by setting `num_beams=1`."
-            )
+        # 10. Prefill
+        model_inputs.update({"output_attentions": generation_config.output_attentions})
+        model_inputs.update({"output_hidden_states": generation_config.output_hidden_states})
+        outputs = self(**model_inputs, return_dict=True)
+
+        # 11. expand input_ids with `num_return_sequences` additional sequences per batch
+        if generation_config.num_return_sequences > 1:
+            raise ValueError("`num_return_sequences>1` is incompatible with Dia.")
+
+        # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
+        return self._sample(
+            input_ids,
+            logits_processor=prepared_logits_processor,
+            stopping_criteria=prepared_stopping_criteria,
+            generation_config=generation_config,
+            prefill_outputs=outputs,
+            **generation_mode_kwargs,
+            **model_kwargs,
+        )
 
     @torch.no_grad()
     def generate(

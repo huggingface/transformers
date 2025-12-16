@@ -177,12 +177,6 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    @unittest.skip(
-        reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU."
-    )
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()
-
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_normalize"))
@@ -375,12 +369,6 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
     @unittest.skip(reason="Kosmos2_5ImageProcessor does not support 4 channels yet")
     def test_can_compile_fast_image_processor(self):
         return super().test_can_compile_fast_image_processor()
-
-    @unittest.skip(
-        reason="Kosmos2_5ImageProcessor already uses many torch operations. Fast image processor only works faster with sufficiently large batch size on GPU."
-    )
-    def test_fast_is_faster_than_slow(self):
-        super().test_fast_is_faster_than_slow()
 
     def test_image_processor_properties(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)

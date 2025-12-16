@@ -24,7 +24,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
@@ -87,14 +87,7 @@ def get_image_prompt_string(
     )
 
 
-class Idefics3ImagesKwargs(ImagesKwargs, total=False):
-    return_row_col_info: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-
-
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Idefics3ImagesKwargs
-
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -106,9 +99,6 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
             "return_row_col_info": True,
         },
     }
-
-
-Idefics3ProcessorKwargs.__annotations__["images_kwargs"] = Idefics3ImagesKwargs  # python 3.8 compatibility
 
 
 class Idefics3Processor(ProcessorMixin):
@@ -131,18 +121,9 @@ class Idefics3Processor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Idefics3ImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
@@ -187,8 +168,6 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        audio=None,
-        videos=None,
         image_seq_len: Optional[int] = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
@@ -303,8 +282,8 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                image_rows = inputs.pop("rows", [[0] * len(text)])
-                image_cols = inputs.pop("cols", [[0] * len(text)])
+                image_rows = inputs.pop("rows", [[0] * n_images for n_images in n_images_in_text])
+                image_cols = inputs.pop("cols", [[0] * n_images for n_images in n_images_in_text])
 
                 fake_image_token = self.fake_image_token
                 image_token = self.image_token

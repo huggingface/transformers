@@ -20,18 +20,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class SamHQPromptEncoderConfig(PretrainedConfig):
+class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamHQPromptEncoderModel`].The [`SamHQPromptEncoderModel`]
     module is used to encode the input 2D points and bounding boxes. Instantiating a configuration defaults will yield a
     similar configuration to that of the SAM_HQ model. The configuration is used to store the configuration of the model.
     [Uminosachi/sam-hq](https://huggingface.co/Uminosachi/sam-hq) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model's output.Read the documentation from
-    [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model's output.Read the documentation from
+    [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -72,15 +72,15 @@ class SamHQPromptEncoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
 
-class SamHQVisionConfig(PretrainedConfig):
+class SamHQVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a SAM_HQ
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM_HQ ViT-h
     [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -190,15 +190,15 @@ class SamHQVisionConfig(PretrainedConfig):
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
 
 
-class SamHQMaskDecoderConfig(PretrainedConfig):
+class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a SAM_HQ
     mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
     will yield a similar configuration to that of the SAM_HQ-vit-h
     [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 256):
@@ -256,15 +256,15 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
         self.vit_dim = vit_dim
 
 
-class SamHQConfig(PretrainedConfig):
+class SamHQConfig(PreTrainedConfig):
     r"""
     [`SamHQConfig`] is the configuration class to store the configuration of a [`SamHQModel`]. It is used to instantiate a
     SAM-HQ model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
@@ -292,7 +292,6 @@ class SamHQConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         vision_config = vision_config if vision_config is not None else {}
         prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
         mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
@@ -308,6 +307,7 @@ class SamHQConfig(PretrainedConfig):
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 __all__ = ["SamHQVisionConfig", "SamHQMaskDecoderConfig", "SamHQPromptEncoderConfig", "SamHQConfig"]

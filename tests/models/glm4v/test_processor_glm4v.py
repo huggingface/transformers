@@ -13,13 +13,10 @@
 # limitations under the License.
 
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -37,31 +34,21 @@ if is_torch_available():
 @require_torch
 class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Glm4vProcessor
+    model_id = "THUDM/GLM-4.1V-9B-Thinking"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Glm4vProcessor.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", patch_size=4, size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18}
-        )
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
     @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        return super()._setup_from_pretrained(
+            model_id,
+            do_sample_frames=False,
+            patch_size=4,
+            size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
+            **kwargs,
+        )
 
     @require_torch
     @require_av
@@ -78,7 +65,7 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
@@ -204,31 +191,32 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": url_to_local_path(
-                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
             ),
         }
 
         # Load with `video_fps` arg
-        video_fps = 1
+        video_fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            video_fps=video_fps,
+            fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 20)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8)
 
-        # Load without any arg should load the whole video
+        # Load the whole video
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            do_sample_frames=False,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 40)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 24)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -266,13 +254,13 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 do_sample_frames=True,
             )
 
-    def test_model_input_names(self):
-        processor = self.get_processor()
+    # def test_model_input_names(self):
+    #     processor = self.get_processor()
 
-        text = self.prepare_text_inputs(modalities=["image", "video"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
-        inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
-        inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
+    #     text = self.prepare_text_inputs(modalities=["image", "video"])
+    #     image_input = self.prepare_image_inputs()
+    #     video_inputs = self.prepare_video_inputs()
+    #     inputs_dict = {"text": text, "images": image_input, "videos": video_inputs}
+    #     inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
 
-        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+    #     self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))

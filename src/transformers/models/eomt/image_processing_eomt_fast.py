@@ -18,11 +18,12 @@ import math
 from typing import Optional, Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -39,45 +40,14 @@ from ...utils import (
     TensorType,
     auto_docstring,
     filter_out_non_signature_kwargs,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
 from .image_processing_eomt import (
+    EomtImageProcessorKwargs,
     compute_segments,
     convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class EomtImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
-            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
-            Otherwise, the input images will be padded to the target size.
-    do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
-    """
-
-    do_split_image: bool
-    do_pad: bool
-    ignore_index: Optional[int] = None
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -113,9 +83,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
     do_split_image = False
     do_pad = False
     ignore_index = None
-    valid_kwargs = EomtImageProcessorFastKwargs
+    valid_kwargs = EomtImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[EomtImageProcessorFastKwargs]):
+    def __init__(self, **kwargs: Unpack[EomtImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _split_image(self, images: torch.Tensor, size: dict, image_indices: int) -> tuple[list, list]:
@@ -164,7 +134,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         segmentation_maps: Optional[list[torch.Tensor]] = None,
         instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -182,7 +152,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[EomtImageProcessorFastKwargs],
+        **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -192,8 +162,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         )
         ignore_index = kwargs.pop("ignore_index", None)
         images_kwargs = kwargs.copy()
-        processed_images, patch_offsets = self._preprocess(images, **images_kwargs)
-        outputs = BatchFeature({"pixel_values": processed_images})
+        outputs = self._preprocess(images, **images_kwargs)
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -209,15 +178,13 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT
-                    if is_torchvision_v2_available()
-                    else F.InterpolationMode.NEAREST,
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
-            processed_segmentation_maps, _ = self._preprocess(
+            processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
+            ).pixel_values
             processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
             # Convert to list of binary masks and labels
             mask_labels, class_labels = [], []
@@ -240,8 +207,8 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
             outputs["mask_labels"] = mask_labels
             outputs["class_labels"] = class_labels
 
-        if patch_offsets:
-            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
+        if outputs.patch_offsets:
+            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in outputs.patch_offsets]
 
         return outputs
 
@@ -271,7 +238,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-                resized_images_grouped[shape] = stacked_images
+            resized_images_grouped[shape] = stacked_images
         images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for batched resizing, Needed in case do_resize is False.
@@ -306,11 +273,13 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        processed_images = torch.stack(images, dim=0) if return_tensors else images
-
-        return processed_images, patch_offsets
+        return BatchFeature(
+            data={"pixel_values": processed_images, "patch_offsets": patch_offsets},
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["patch_offsets"],
+        )
 
     def merge_image_patches(
         self,
@@ -417,7 +386,19 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        if patch_offsets:
+            output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
+        else:
+            output_logits = []
+
+            for idx in range(len(segmentation_logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation_logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                output_logits.append(resized_logits[0])
 
         preds = [logit.argmax(dim=0) for logit in output_logits]
         return preds

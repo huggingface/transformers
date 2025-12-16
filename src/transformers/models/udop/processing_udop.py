@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class UdopTextKwargs(TextKwargs, total=False):
     word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Union[list[list[int]], list[list[list[int]]]]
+    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -48,7 +48,6 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
             "return_length": False,
             "verbose": True,
         },
-        "images_kwargs": {},
     }
 
 
@@ -59,7 +58,7 @@ class UdopProcessor(ProcessorMixin):
     [`UdopProcessor`] offers all the functionalities you need to prepare data for the model.
 
     It first uses [`LayoutLMv3ImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
-    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`],
+    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`],
     which turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).
@@ -70,13 +69,9 @@ class UdopProcessor(ProcessorMixin):
     Args:
         image_processor (`LayoutLMv3ImageProcessor`):
             An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
-        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
-            An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
+        tokenizer (`UdopTokenizer`):
+            An instance of [`UdopTokenizer`]. The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -85,8 +80,6 @@ class UdopProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
         """

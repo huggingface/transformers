@@ -14,6 +14,7 @@
 
 import tempfile
 import unittest
+from functools import cached_property
 
 import timeout_decorator  # noqa
 from parameterized import parameterized
@@ -27,7 +28,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -139,23 +139,12 @@ def prepare_fsmt_inputs_dict(
     config,
     input_ids,
     attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
     }
 
 
@@ -173,7 +162,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     is_encoder_decoder = True
-    test_pruning = False
+
     test_missing_keys = False
 
     def setUp(self):
@@ -259,7 +248,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -293,7 +282,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     model.base_model.decoder.output_projection.weight.data_ptr(),
                 }
             ),
-            2,
+            3,
         )
 
     @unittest.skip(reason="can't be implemented for FSMT due to dual vocab.")
@@ -306,10 +295,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="Input ids is required for FSMT.")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="model weights aren't tied in FSMT.")
-    def test_tie_model_weights(self):
         pass
 
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
@@ -429,7 +414,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         if len(prefix) > 0:
             prefix = f"{prefix}: "
@@ -545,7 +530,7 @@ class FSMTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_translation_pipeline(self, pair):
         tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, framework="pt", device=torch_device)
+        pipeline = TranslationPipeline(model, tokenizer, device=torch_device)
         output = pipeline([src_text])
         self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 

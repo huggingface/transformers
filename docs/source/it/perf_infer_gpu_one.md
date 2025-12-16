@@ -17,10 +17,6 @@ rendered properly in your Markdown viewer.
 
 Questo documento sarà presto completato con informazioni su come effetture l'inferenza su una singola GPU. Nel frattempo è possibile consultare [la guida per l'addestramento su una singola GPU](perf_train_gpu_one) e [la guida per l'inferenza su CPU](perf_infer_cpu).
 
-## `BetterTransformer` per l'inferenza più veloce
-
-Abbiamo recentemente integrato `BetterTransformer` per velocizzare l'inferenza su GPU per modelli di testo, immagini e audio. Per maggiori dettagli, consultare la documentazione su questa integrazione [qui](https://huggingface.co/docs/optimum/bettertransformer/overview).
-
 ## Integrazione di `bitsandbytes` per Int8 mixed-precision matrix decomposition
 
 <Tip>

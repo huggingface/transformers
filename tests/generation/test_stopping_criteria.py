@@ -225,7 +225,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         true_strings = ["a", "baa", "abc"]  # "abc" is a single token
         false_strings = ["abbbbbbb", "b"]  # "abbbbbbb" is split into multiple tokens
         stop_strings = ["a"]
-        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2", add_prefix_space=False)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
 
@@ -239,7 +239,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         for input_ids in false_input_ids["input_ids"]:
             self.assertFalse(criteria(input_ids.unsqueeze(0), scores))
 
-    def test_criterias_per_row(self):
+    def test_criteria_per_row(self):
         text = "They completed the challenging puzzle, revealing the hidden image at the end"
         stop_strings = ["end"]
 
@@ -261,7 +261,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         # return False when neither is satisfied
         self.assertFalse(criteria(inputs["input_ids"][:, :-1], scores))
 
-    def test_criterias_per_row_batched(self):
+    def test_criteria_per_row_batched(self):
         text = [
             "They completed the challenging puzzle, revealing the hidden image at the end",
             "Today a dragon flew over France",

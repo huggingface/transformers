@@ -83,7 +83,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = LlavaOnevisionConfig()
 
-            # Create a dummy config file with image_proceesor_type
+            # Create a dummy config file with image_processor_type
             processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(

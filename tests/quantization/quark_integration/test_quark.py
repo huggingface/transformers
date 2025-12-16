@@ -36,7 +36,7 @@ if is_quark_available():
 
 @require_quark
 class QuarkConfigTest(unittest.TestCase):
-    def test_commmon_args(self):
+    def test_common_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
 
@@ -56,6 +56,8 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am in Paris, but I am not in Paris\nToday I am")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am at the Luxembourg Congress Center\nToday I am in Paris and I")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None

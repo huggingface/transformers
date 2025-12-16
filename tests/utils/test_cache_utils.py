@@ -71,54 +71,6 @@ TEST_CACHE_IMPLEMENTATIONS = [
 class CacheTest(unittest.TestCase):
     """Cache tests that don't require loading models"""
 
-    def test_dynamic_cache_retrocompatibility(self):
-        """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
-        legacy_cache = ()
-        new_cache = DynamicCache()
-
-        # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
-            new_key = torch.rand((2, 4, 8, 16))
-            new_value = torch.rand((2, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
-            legacy_cache += ((new_key, new_value),)
-
-        # Sanity check 1: they must have the same shapes
-        self.assertTrue(len(legacy_cache), len(new_cache))
-        for layer_idx in range(10):
-            self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
-                )
-
-        # Sanity check 2: we can get the sequence length in multiple ways with DynamicCache, and they return the
-        # expected value
-        self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
-
-        # Sanity check 3: they must be equal, and both support indexing
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 1: We can convert from legacy to new with no changes
-        from_legacy = DynamicCache.from_legacy_cache(legacy_cache)
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 2: We can convert from new to legacy with no changes
-        to_legacy = new_cache.to_legacy_cache()
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
-                )
-
     def test_static_cache_mha_mqa_gqa(self):
         """
         Tests that static cache works with multi-head attention (MHA), grouped query attention (GQA), and multi-query
@@ -212,7 +164,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # Sanity check: a cache was used
         self.assertIsInstance(gen_out.past_key_values, Cache)
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -249,7 +201,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand([("quanto"), ("HQQ")])
@@ -291,7 +243,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
 
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
         # Check that something is actually quantized
@@ -312,7 +264,7 @@ class CacheIntegrationTest(unittest.TestCase):
         }
 
         gen_out = self.model.generate(**inputs, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
         # Now with extra left-padding
@@ -320,7 +272,7 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs_expanded = inputs_expanded.to(self.model.device)
         self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
 
@@ -349,12 +301,10 @@ class CacheHardIntegrationTest(unittest.TestCase):
         gen_out = model.generate(
             **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
-        score_sum = sum(
-            [score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores)]
-        )
+        score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
@@ -399,21 +349,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
@@ -477,7 +427,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
             )
-            response = tokenizer.batch_decode(outputs)[0]
+            response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
@@ -678,7 +628,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values = res.past_key_values
 
         shapes = torch.export.ShapesCollection()
-        dyn = torch.export.Dim("seq", max=512)
+        dyn = torch.export.Dim.DYNAMIC(max=512)
 
         for ix in range(len(past_key_values)):
             shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)

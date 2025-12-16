@@ -35,7 +35,7 @@ from huggingface_hub import login
 login()
 ```
 
-Start by loading the [Yelp Reviews](https://hf.co/datasets/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
+Start by loading the [Yelp Reviews](https://hf.co/datasets/Yelp/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
 
 ```py
 from datasets import load_dataset
@@ -52,6 +52,7 @@ dataset = dataset.map(tokenize, batched=True)
 
 > [!TIP]
 > Fine-tune on a smaller subset of the full dataset to reduce the time it takes. The results won't be as good compared to fine-tuning on the full dataset, but it is useful to make sure everything works as expected first before committing to training on the full dataset.
+>
 > ```py
 > small_train = dataset["train"].shuffle(seed=42).select(range(1000))
 > small_eval = dataset["test"].shuffle(seed=42).select(range(1000))
@@ -63,7 +64,7 @@ dataset = dataset.map(tokenize, batched=True)
 
 [Trainer](./trainer) is an optimized training loop for Transformers models, making it easy to start training right away without manually writing your own training code. Pick and choose from a wide range of training features in [`TrainingArguments`] such as gradient accumulation, mixed precision, and options for reporting and logging training metrics.
 
-Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)).
+Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)).
 
 ```py
 from transformers import AutoModelForSequenceClassification
@@ -110,6 +111,8 @@ training_args = TrainingArguments(
 Create a [`Trainer`] instance and pass it the model, training arguments, training and test datasets, and evaluation function. Call [`~Trainer.train`] to start training.
 
 ```py
+from transformers import Trainer
+
 trainer = Trainer(
     model=model,
     args=training_args,

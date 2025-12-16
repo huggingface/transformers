@@ -37,7 +37,7 @@ def topological_sort(dependencies: dict) -> list[list[str]]:
         leaf_nodes = {node for node in graph if len(graph[node]) == 0}
         # Add them to the list as next level
         sorting_list.append([name_mapping[node] for node in leaf_nodes])
-        # Remove the leafs from the graph (and from the deps of other nodes)
+        # Remove the leaves from the graph (and from the deps of other nodes)
         graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
 
     return sorting_list
@@ -55,8 +55,11 @@ ALL_FILE_TYPES = (
 )
 
 
-def is_model_import(module: str) -> bool:
+def is_model_import(module: str | None) -> bool:
     """Check whether `module` is a model import or not."""
+    # Happens for fully relative import, i.e. `from ... import initialization as init`
+    if module is None:
+        return False
     patterns = "|".join(ALL_FILE_TYPES)
     regex = rf"(\w+)\.(?:{patterns})_(\w+)"
     match_object = re.search(regex, module)

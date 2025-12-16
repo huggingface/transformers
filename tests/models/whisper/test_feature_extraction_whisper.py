@@ -237,6 +237,39 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.abs(diff).mean() <= 1e-4)
         self.assertTrue(np.abs(diff).max() <= 5e-3)
 
+    def test_feature_shape(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        hop_length = feature_extractor.hop_length
+        test_inputs = np.random.randn(16000)
+
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5 + 1]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 5
+        )
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 5
+        )
+        self.assertTrue(
+            feature_extractor(
+                [test_inputs[: hop_length * 5 - 1]],
+                return_attention_mask=True,
+                padding=False,
+                return_tensors="np",
+            ).attention_mask.shape[-1]
+            == 4
+        )
+
     @require_torch
     def test_double_precision_pad(self):
         import torch

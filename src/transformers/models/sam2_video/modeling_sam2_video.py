@@ -21,9 +21,9 @@
 
 import math
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -32,6 +32,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,10 +40,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-)
+from ...utils import ModelOutput, auto_docstring
 from ...utils.generic import OutputRecorder, TransformersKwargs
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
@@ -125,7 +123,7 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: torch.FloatTensor = None,
+        video: Optional[torch.FloatTensor] = None,
         video_height: Optional[int] = None,
         video_width: Optional[int] = None,
         inference_device: Union[torch.device, str] = "cpu",
@@ -134,8 +132,10 @@ class Sam2VideoInferenceSession:
         dtype: Union[torch.dtype, str] = "float32",
         max_vision_features_cache_size: int = 1,
     ):
-        # store as a list to avoid double memory allocation with torch.cat when adding new frames
-        self.processed_frames = list(video.to(video_storage_device, dtype=dtype)) if video is not None else None
+        # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
+        self.processed_frames = (
+            dict(enumerate(video.to(video_storage_device, dtype=dtype))) if video is not None else None
+        )
         self.video_height = video_height
         self.video_width = video_width
 
@@ -293,18 +293,21 @@ class Sam2VideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.squeeze(0)
 
-        if self.processed_frames is None:
-            self.processed_frames = [pixel_values]
-        else:
-            self.processed_frames.append(pixel_values)
+        if frame_idx is None:
+            frame_idx = len(self.processed_frames) if self.processed_frames is not None else 0
 
-        return self.num_frames - 1
+        if self.processed_frames is None:
+            self.processed_frames = {frame_idx: pixel_values}
+        else:
+            self.processed_frames[frame_idx] = pixel_values
+
+        return frame_idx
 
     def get_frame(self, frame_idx: int) -> torch.Tensor:
         """Get frame from video."""
@@ -478,7 +481,7 @@ class Sam2VideoAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -628,30 +631,36 @@ class Sam2VideoImageSegmentationOutput(ModelOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    iou_scores: torch.FloatTensor = None
-    pred_masks: torch.FloatTensor = None
-    object_score_logits: torch.FloatTensor = None
+    iou_scores: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
     vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
-    high_res_masks: torch.FloatTensor = None
-    object_pointer: torch.FloatTensor = None
+    high_res_masks: Optional[torch.FloatTensor] = None
+    object_pointer: Optional[torch.FloatTensor] = None
 
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
+    object_ids (`list[int]`, *optional*):
+        List of object IDs being tracked in the current frame.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
         The predicted masks stored at the model's resolution.
+    object_score_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        Logits for the object scores, indicating if objects are present.
     frame_idx (`int`):
         The frame index of the video.
     """
 
-    pred_masks: torch.FloatTensor = None
-    frame_idx: int = None
+    object_ids: Optional[list[int]] = None
+    pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
+    frame_idx: Optional[int] = None
 
 
 @auto_docstring
@@ -659,35 +668,26 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     config_class = Sam2VideoConfig
     base_model_prefix = "sam2_video"
     main_input_name = "pixel_values"
+    input_modalities = "video"
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam2VideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, Sam2VideoModel):
+        super()._init_weights(module)
+        if isinstance(module, Sam2VideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
+                init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
+                init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
+                init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.data.zero_()
+                init.zeros_(module.scale)
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
@@ -1123,7 +1123,7 @@ class Sam2VideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     fpn_hidden_states: Optional[torch.FloatTensor] = None
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1225,12 +1225,13 @@ class Sam2VideoPromptEncoder(nn.Module):
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
-        batch_size, nb_boxes = boxes.shape[:2]
-        coords = boxes.reshape(batch_size, nb_boxes, 2, 2)
-        input_shape = (self.input_image_size, self.input_image_size)
-        corner_embedding = self.shared_embedding(coords, input_shape)
+        coords = boxes.view(*boxes.shape[:2], 2, 2)
+        # add padding point for consistency with the original implementation
+        coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
+        corner_embedding = self.shared_embedding(coords, (self.input_image_size, self.input_image_size))
         corner_embedding[:, :, 0, :] += self.point_embed.weight[2]
         corner_embedding[:, :, 1, :] += self.point_embed.weight[3]
+        corner_embedding[:, :, 2, :] = self.not_a_point_embed.weight.expand_as(corner_embedding[:, :, 2, :])
         return corner_embedding
 
     def forward(
@@ -1555,11 +1556,14 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class Sam2VideoModel(Sam2VideoPreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2VideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = []
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config: Sam2VideoConfig):
         super().__init__(config)
@@ -1610,11 +1614,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -1700,6 +1699,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
+        run_mem_encoder: bool = True,
+        **kwargs,
     ) -> Sam2VideoSegmentationOutput:
         r"""
         inference_session (`Sam2VideoInferenceSession`):
@@ -1711,15 +1712,25 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             The frame to process. Provide when streaming.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
+        run_mem_encoder (`bool`, *optional*, defaults to `True`):
+            Whether to run the memory encoder on predicted masks. The memory encoder is batched across all objects for efficiency.
         """
         if frame is not None:
-            frame_idx = inference_session.add_new_frame(frame)
+            frame_idx = inference_session.add_new_frame(frame, frame_idx)
 
         if frame is not None and inference_session.get_obj_num() == 0:
             raise ValueError("No objects are provided for tracking; please add inputs first.")
 
         num_objects = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * num_objects
+        object_score_logits_per_obj = [None] * num_objects
+
+        # Collect data for batched memory encoding
+        objects_needing_memory_encoding = []
+        high_res_masks_for_memory = []
+        object_score_logits_for_memory = []
+        is_mask_from_pts_per_obj = []
+
         # Note: We avoid batched inference here because per-object inputs (clicks/masks)
         # can differ across objects.
         for obj_idx in range(num_objects):
@@ -1730,6 +1741,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             # conditioning output, reuse the cached masks instead of recomputing.
             if (not has_new_inputs) and has_cond_output:
                 pred_masks = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_conditioning_frame=True)
+                object_score_logits = inference_session.get_output(
+                    obj_idx, frame_idx, "object_score_logits", is_conditioning_frame=True
+                )
                 is_init_cond_frame = True
             else:
                 # Defaults when there are no new inputs
@@ -1755,27 +1769,52 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                     point_inputs=point_inputs,
                     mask_inputs=mask_inputs,
                     reverse=reverse,
-                    run_mem_encoder=True,
                     streaming=frame is not None,
                 )
                 inference_session.store_output(
                     obj_idx, frame_idx, output_value=current_out, is_conditioning_frame=is_init_cond_frame
                 )
                 pred_masks = current_out["pred_masks"]
+                object_score_logits = current_out["object_score_logits"]
+
+                # Collect data for batched memory encoding
+                if run_mem_encoder and self.num_maskmem > 0:
+                    objects_needing_memory_encoding.append(obj_idx)
+                    high_res_masks_for_memory.append(current_out["high_res_masks"])
+                    object_score_logits_for_memory.append(object_score_logits)
+                    is_mask_from_pts_per_obj.append(point_inputs is not None or mask_inputs is not None)
 
             pred_masks_per_obj[obj_idx] = pred_masks
+            object_score_logits_per_obj[obj_idx] = object_score_logits.squeeze(-1)
             if not is_init_cond_frame:
                 # only for tracked frames, not for initial conditioning frames
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
+
+        # Batch encode memories for all objects at once
+        self._batch_encode_memories(
+            inference_session=inference_session,
+            frame_idx=frame_idx,
+            objects_needing_memory_encoding=objects_needing_memory_encoding,
+            high_res_masks_for_memory=high_res_masks_for_memory,
+            object_score_logits_for_memory=object_score_logits_for_memory,
+            is_mask_from_pts_per_obj=is_mask_from_pts_per_obj,
+        )
 
         # Resize the output mask to the original video resolution (we directly use
         # the mask scores on GPU for output to avoid any CPU conversion in between)
         if len(pred_masks_per_obj) > 1:
             all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+            all_object_score_logits = torch.cat(object_score_logits_per_obj, dim=0)
         else:
             all_pred_masks = pred_masks_per_obj[0]
+            all_object_score_logits = object_score_logits_per_obj[0]
 
-        return Sam2VideoSegmentationOutput(pred_masks=all_pred_masks, frame_idx=frame_idx)
+        return Sam2VideoSegmentationOutput(
+            object_ids=inference_session.obj_ids.copy(),
+            pred_masks=all_pred_masks,
+            object_score_logits=all_object_score_logits,
+            frame_idx=frame_idx,
+        )
 
     def get_image_features(
         self,
@@ -2063,10 +2102,21 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         # Use -10/+20 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
         out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
         mask_inputs_float = mask_inputs.to(backbone_features[0].dtype)
+
+        # Ensure mask is at self.image_size resolution for consistency
+        if mask_inputs_float.shape[-2:] != (self.image_size, self.image_size):
+            mask_inputs_float = F.interpolate(
+                mask_inputs_float.float(),
+                size=(self.image_size, self.image_size),
+                align_corners=False,
+                mode="bilinear",
+                antialias=True,
+            ).to(mask_inputs.dtype)
+
         high_res_masks = mask_inputs_float * out_scale + out_bias
         low_res_masks = F.interpolate(
             high_res_masks.float(),
-            size=(high_res_masks.size(-2) // 4, high_res_masks.size(-1) // 4),
+            size=self.prompt_encoder.mask_input_size,
             align_corners=False,
             mode="bilinear",
             antialias=True,  # use antialias for downsampling
@@ -2092,9 +2142,241 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             pred_masks=low_res_masks,
             high_res_masks=high_res_masks,
             object_pointer=object_pointer,
-            object_score_logits=object_score_logits,
+            object_score_logits=object_score_logits.unsqueeze(-1),
             image_embeddings=high_res_features + [backbone_features],
         )
+
+    def _select_closest_cond_frames(self, frame_idx, cond_frame_outputs, max_cond_frame_num):
+        """
+        Select up to `max_cond_frame_num` conditioning frames from `cond_frame_outputs`
+        that are temporally closest to the current frame at `frame_idx`. Here, we take
+        - a) the closest conditioning frame before `frame_idx` (if any);
+        - b) the closest conditioning frame after `frame_idx` (if any);
+        - c) any other temporally closest conditioning frames until reaching a total
+            of `max_cond_frame_num` conditioning frames.
+
+        Outputs:
+        - selected_outputs: selected items (keys & values) from `cond_frame_outputs`.
+        - unselected_outputs: items (keys & values) not selected in `cond_frame_outputs`.
+        """
+        if max_cond_frame_num == -1 or len(cond_frame_outputs) <= max_cond_frame_num:
+            selected_outputs = cond_frame_outputs
+            unselected_outputs = {}
+        else:
+            selected_outputs = {}
+            # the closest conditioning frame before `frame_idx` (if any)
+            idx_before = max((t for t in cond_frame_outputs if t < frame_idx), default=None)
+            if idx_before is not None:
+                selected_outputs[idx_before] = cond_frame_outputs[idx_before]
+
+            # the closest conditioning frame after `frame_idx` (if any)
+            idx_after = min((t for t in cond_frame_outputs if t >= frame_idx), default=None)
+            if idx_after is not None:
+                selected_outputs[idx_after] = cond_frame_outputs[idx_after]
+
+            # add other temporally closest conditioning frames until reaching a total
+            # of `max_cond_frame_num` conditioning frames.
+            num_remain = max_cond_frame_num - len(selected_outputs)
+            inds_remain = sorted(
+                (t for t in cond_frame_outputs if t not in selected_outputs),
+                key=lambda x: abs(x - frame_idx),
+            )[:num_remain]
+            selected_outputs.update((t, cond_frame_outputs[t]) for t in inds_remain)
+            unselected_outputs = {t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs}
+
+        return selected_outputs, unselected_outputs
+
+    def _gather_memory_frame_outputs(
+        self,
+        inference_session: Sam2VideoInferenceSession,
+        obj_idx: int,
+        frame_idx: int,
+        track_in_reverse_time: bool = False,
+    ) -> list[tuple[int, dict]]:
+        """
+        Get memory frames from conditioning and non-conditioning outputs.
+
+        Returns:
+            List of (relative_temporal_offset, output_data) tuples.
+        """
+        temporal_positions_and_previous_outputs = []
+
+        # Add conditioning frame outputs (limited by max_cond_frame_num)
+        conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
+        if not conditioning_outputs:
+            raise ValueError(
+                "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
+            )
+        conditioning_outputs, unselected_conditioning_outputs = self._select_closest_cond_frames(
+            frame_idx, conditioning_outputs, max_cond_frame_num=self.config.max_cond_frame_num
+        )
+
+        # Store (temporal_position, output_data) tuples
+        temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
+
+        # Add non-conditioning memory frames (up to self.num_maskmem - 1)
+        # These are typically frames tracked by the model without direct user input.
+        # Frames are selected with a stride, prioritizing the most recent ones. Here we only support stride = 1 for simplicity.
+        for relative_temporal_offset in range(self.num_maskmem - 1, 0, -1):
+            # relative_temporal_offset: how many frames before (or after if reversing) the current frame
+            if not track_in_reverse_time:
+                previous_frame_idx = frame_idx - relative_temporal_offset
+            else:
+                previous_frame_idx = frame_idx + relative_temporal_offset
+
+            # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
+            output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
+                previous_frame_idx, unselected_conditioning_outputs.get(previous_frame_idx, None)
+            )
+
+            temporal_positions_and_previous_outputs.append((relative_temporal_offset, output_data))
+
+        return temporal_positions_and_previous_outputs
+
+    def _build_memory_attention_inputs(
+        self,
+        temporal_positions_and_previous_outputs: list[tuple[int, dict]],
+        device: torch.device,
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        """
+        Concatenate memory features and positional embeddings from previous frames.
+
+        Returns:
+            Tuple of (memories_to_concatenate, memory_positional_embeddings_to_concatenate).
+        """
+        memories_to_concatenate = []
+        memory_positional_embeddings_to_concatenate = []
+
+        for relative_temporal_offset, prev_output_data in temporal_positions_and_previous_outputs:
+            if prev_output_data is None:
+                continue  # Skip if no output data for this temporal position (e.g., padding frames)
+
+            # Load memory features (potentially from CPU to GPU)
+            # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
+            memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
+            memories_to_concatenate.append(memory_features)
+
+            # Spatial positional encoding (potentially from CPU to GPU)
+            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
+
+            # Add temporal positional encoding
+            # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
+            combined_memory_pos_embed = (
+                spatial_memory_pos_embed + self.memory_temporal_positional_encoding[relative_temporal_offset - 1]
+            )
+            memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
+
+        return memories_to_concatenate, memory_positional_embeddings_to_concatenate
+
+    def _get_object_pointers(
+        self,
+        inference_session: Sam2VideoInferenceSession,
+        obj_idx: int,
+        frame_idx: int,
+        num_total_frames: int,
+        device: torch.device,
+        track_in_reverse_time: bool = False,
+        streaming: bool = False,
+    ) -> tuple[list[int], list[torch.Tensor], int]:
+        """
+        Get object pointers and their positional embeddings from past frames.
+
+        Returns:
+            Tuple of (temporal_offsets, pointer_tokens, max_object_pointers_to_use).
+        """
+        temporal_position_sign_multiplier = -1 if track_in_reverse_time else 1
+
+        # Determine max object pointers to use
+        if streaming:
+            max_object_pointers_to_use = self.config.max_object_pointers_in_encoder
+        else:
+            max_object_pointers_to_use = min(num_total_frames, self.config.max_object_pointers_in_encoder)
+
+        temporal_offsets: list[int] = []
+        pointer_tokens: list[torch.Tensor] = []
+
+        # Add object pointers from selected conditioning frames
+        # Optionally, only include pointers from past frames during evaluation
+        conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
+        eligible_conditioning_outputs = conditioning_outputs
+        if not self.training:
+            eligible_conditioning_outputs = {
+                temporal_idx: out
+                for temporal_idx, out in conditioning_outputs.items()
+                if (temporal_idx >= frame_idx if track_in_reverse_time else temporal_idx <= frame_idx)
+            }
+
+        for temporal_idx, out_data in eligible_conditioning_outputs.items():
+            temporal_difference = (frame_idx - temporal_idx) * temporal_position_sign_multiplier
+            temporal_offsets.append(temporal_difference)
+            pointer_tokens.append(out_data["object_pointer"].to(device))
+
+        # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
+        for t_diff_offset in range(1, max_object_pointers_to_use):
+            ref_frame_idx = frame_idx + t_diff_offset if track_in_reverse_time else frame_idx - t_diff_offset
+            if ref_frame_idx < 0 or (
+                not streaming and num_total_frames is not None and ref_frame_idx >= num_total_frames
+            ):
+                break  # Stop if frame index is out of bounds
+
+            # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
+            out_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
+                ref_frame_idx, None
+            )
+            if out_data is not None:
+                temporal_offsets.append(t_diff_offset)
+                pointer_tokens.append(out_data["object_pointer"].to(device))
+
+        return temporal_offsets, pointer_tokens, max_object_pointers_to_use
+
+    def _process_object_pointers(
+        self,
+        temporal_offsets: list[int],
+        pointer_tokens: list[torch.Tensor],
+        max_object_pointers_to_use: int,
+        batch_size: int,
+        num_channels: int,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Process object pointers and compute their positional embeddings.
+
+        Returns:
+            Tuple of (object_pointers, object_pointers_pos_embed).
+        """
+        if not pointer_tokens:
+            return None, None
+
+        # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
+        object_pointers = torch.stack(pointer_tokens, dim=0)
+
+        if self.config.enable_temporal_pos_encoding_for_object_pointers:
+            max_temporal_diff = float(max_object_pointers_to_use - 1)
+            # Determine dimensionality for temporal positional encoding of pointers
+            pointer_tpos_dim = num_channels
+
+            # Normalize temporal differences before sine PE calculation
+            normalized_temporal_diffs = (
+                torch.tensor(temporal_offsets, device=device, dtype=torch.float32) / max_temporal_diff
+            )
+            sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
+            projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
+            object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
+        else:
+            object_pointers_pos_embed = object_pointers.new_zeros(
+                len(temporal_offsets), batch_size, self.mem_dim, dtype=object_pointers.dtype
+            )
+
+        if self.mem_dim < num_channels:
+            # If memory dimension is smaller, reshape/split pointers and repeat positional encoding
+            num_splits = num_channels // self.mem_dim
+            object_pointers = object_pointers.reshape(-1, batch_size, num_splits, self.mem_dim)
+            object_pointers = object_pointers.permute(0, 2, 1, 3).flatten(
+                0, 1
+            )  # (SeqLen_ptr*num_splits, Batch, MemDim)
+            object_pointers_pos_embed = object_pointers_pos_embed.repeat_interleave(num_splits, dim=0)
+
+        return object_pointers, object_pointers_pos_embed
 
     def _prepare_memory_conditioned_features(
         self,
@@ -2156,135 +2438,9 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             )
             return current_feature_map
 
-        num_object_pointer_tokens = 0
-        temporal_position_sign_multiplier = -1 if track_in_reverse_time else 1
-
-        # Step 1: Condition the visual features of the current frame on previous memories
-        if not is_initial_conditioning_frame:
-            # Retrieve memories encoded from previous frames
-            memories_to_concatenate = []
-            memory_positional_embeddings_to_concatenate = []
-
-            # Ensure there are conditioning frame outputs to process
-            conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
-            if not conditioning_outputs:
-                raise ValueError(
-                    "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
-                )
-
-            # Select a maximum number of temporally closest conditioning frames for cross-attention (no limit here, as is the case in the original checkpoints)
-            # Store (temporal_position, output_data) tuples
-            temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
-
-            # Add non-conditioning memory frames (up to self.num_maskmem - 1)
-            # These are typically frames tracked by the model without direct user input.
-            # Frames are selected with a stride, prioritizing the most recent ones. Here we only support stride = 1 for simplicity.
-            for relative_temporal_offset in range(self.num_maskmem - 1, 0, -1):
-                # relative_temporal_offset: how many frames before (or after if reversing) the current frame
-                if not track_in_reverse_time:
-                    previous_frame_idx = frame_idx - relative_temporal_offset
-                else:
-                    previous_frame_idx = frame_idx + relative_temporal_offset
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    previous_frame_idx, None
-                )
-
-                temporal_positions_and_previous_outputs.append((relative_temporal_offset, output_data))
-
-            for relative_temporal_offset, prev_output_data in temporal_positions_and_previous_outputs:
-                if prev_output_data is None:
-                    continue  # Skip if no output data for this temporal position (e.g., padding frames)
-
-                # Load memory features (potentially from CPU to GPU)
-                # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
-                memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
-                memories_to_concatenate.append(memory_features)
-
-                # Spatial positional encoding (potentially from CPU to GPU)
-                spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
-
-                # Add temporal positional encoding
-                # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
-                combined_memory_pos_embed = (
-                    spatial_memory_pos_embed + self.memory_temporal_positional_encoding[relative_temporal_offset - 1]
-                )
-                memory_positional_embeddings_to_concatenate.append(combined_memory_pos_embed)
-
-            # Construct the list of past object pointers to be used in attention
-            if streaming:
-                max_object_pointers_to_use = self.config.max_object_pointers_in_encoder
-            else:
-                max_object_pointers_to_use = min(num_total_frames, self.config.max_object_pointers_in_encoder)
-            temporal_diff_and_pointers = []
-
-            # Add object pointers from selected conditioning frames
-            # Optionally, only include pointers from past frames during evaluation
-            eligible_conditioning_outputs = conditioning_outputs
-            if not self.training:
-                eligible_conditioning_outputs = {
-                    temporal_idx: out
-                    for temporal_idx, out in conditioning_outputs.items()
-                    if (temporal_idx >= frame_idx if track_in_reverse_time else temporal_idx <= frame_idx)
-                }
-
-            for temporal_idx, out_data in eligible_conditioning_outputs.items():
-                temporal_difference = (frame_idx - temporal_idx) * temporal_position_sign_multiplier
-                temporal_diff_and_pointers.append((temporal_difference, out_data["object_pointer"]))
-
-            # Add object pointers from non-conditioning frames (up to max_object_pointers_to_use - 1)
-            for t_diff_offset in range(1, max_object_pointers_to_use):
-                ref_frame_idx = frame_idx + t_diff_offset if track_in_reverse_time else frame_idx - t_diff_offset
-                if ref_frame_idx < 0 or (
-                    not streaming and num_total_frames is not None and ref_frame_idx >= num_total_frames
-                ):
-                    break  # Stop if frame index is out of bounds
-
-                # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
-                out_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                    ref_frame_idx, None
-                )
-                if out_data is not None:
-                    temporal_diff_and_pointers.append((t_diff_offset, out_data["object_pointer"]))
-
-            if temporal_diff_and_pointers:
-                temporal_differences, object_pointers_list = zip(*temporal_diff_and_pointers)
-                # Stack object pointers: List of (Batch, Channels) -> (SeqLen_ptr, Batch, Channels)
-                object_pointers = torch.stack(object_pointers_list, dim=0)
-
-                if self.config.enable_temporal_pos_encoding_for_object_pointers:
-                    max_temporal_diff = float(max_object_pointers_to_use - 1)
-                    # Determine dimensionality for temporal positional encoding of pointers
-                    pointer_tpos_dim = num_channels
-
-                    # Normalize temporal differences before sine PE calculation
-                    normalized_temporal_diffs = (
-                        torch.tensor(temporal_differences, device=device, dtype=torch.float32) / max_temporal_diff
-                    )
-                    sine_pe = get_1d_sine_pe(normalized_temporal_diffs, dim=pointer_tpos_dim).to(object_pointers.dtype)
-                    projected_sine_pe = self.temporal_positional_encoding_projection_layer(sine_pe)
-                    object_pointers_pos_embed = projected_sine_pe.unsqueeze(1).expand(-1, batch_size, self.mem_dim)
-                else:
-                    object_pointers_pos_embed = object_pointers.new_zeros(
-                        len(temporal_differences), batch_size, self.mem_dim, dtype=object_pointers.dtype
-                    )
-
-                if self.mem_dim < num_channels:
-                    # If memory dimension is smaller, reshape/split pointers and repeat positional encoding
-                    num_splits = num_channels // self.mem_dim
-                    object_pointers = object_pointers.reshape(-1, batch_size, num_splits, self.mem_dim)
-                    object_pointers = object_pointers.permute(0, 2, 1, 3).flatten(
-                        0, 1
-                    )  # (SeqLen_ptr*num_splits, Batch, MemDim)
-                    object_pointers_pos_embed = object_pointers_pos_embed.repeat_interleave(num_splits, dim=0)
-
-                memories_to_concatenate.append(object_pointers)
-                memory_positional_embeddings_to_concatenate.append(object_pointers_pos_embed)
-                num_object_pointer_tokens = object_pointers.shape[0]
-        else:
+        # Step 1: Handle initial conditioning frames
+        if is_initial_conditioning_frame:
             # For initial conditioning frames, no prior memory is used directly in this block.
-            # The model might handle this with a special token or mechanism.
             # If configured, directly add a learnable "no memory" embedding.
             # current_vision_features has shape (SeqLen, Batch, Channels)
             conditioned_feature_map_flat = current_vision_features + self.no_memory_embedding
@@ -2294,11 +2450,36 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             )
             return conditioned_feature_map
 
-        # Step 2: Concatenate all retrieved memories and their positional embeddings.
+        # Step 2: Get memory frames and concatenate their features
+        temporal_positions_and_previous_outputs = self._gather_memory_frame_outputs(
+            inference_session, obj_idx, frame_idx, track_in_reverse_time
+        )
+
+        memories_to_concatenate, memory_positional_embeddings_to_concatenate = self._build_memory_attention_inputs(
+            temporal_positions_and_previous_outputs, device
+        )
+
+        # Step 3: Get and process object pointers
+        temporal_offsets, pointer_tokens, max_object_pointers_to_use = self._get_object_pointers(
+            inference_session, obj_idx, frame_idx, num_total_frames, device, track_in_reverse_time, streaming
+        )
+
+        num_object_pointer_tokens = 0
+        if pointer_tokens:
+            object_pointers, object_pointers_pos_embed = self._process_object_pointers(
+                temporal_offsets, pointer_tokens, max_object_pointers_to_use, batch_size, num_channels, device
+            )
+
+            if object_pointers is not None:
+                memories_to_concatenate.append(object_pointers)
+                memory_positional_embeddings_to_concatenate.append(object_pointers_pos_embed)
+                num_object_pointer_tokens = object_pointers.shape[0]
+
+        # Step 4: Concatenate all retrieved memories and their positional embeddings
         combined_memory = torch.cat(memories_to_concatenate, dim=0)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
-        # Step 3: Forward through the memory attention mechanism.
+        # Step 5: Forward through the memory attention mechanism
         conditioned_feature_map_flat = self.memory_attention(
             current_vision_features=current_vision_features,
             current_vision_position_embeddings=current_vision_positional_embeddings,
@@ -2333,7 +2514,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         point_inputs: Optional[torch.Tensor],
         mask_inputs: Optional[torch.Tensor],
         reverse: bool,
-        run_mem_encoder: bool,
         prev_sam_mask_logits: Optional[torch.Tensor] = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
@@ -2357,8 +2537,6 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 Mask prompt inputs for the current frame.
             reverse (`bool`, *optional*, defaults to `False`):
                 Whether to track in reverse time order.
-            run_mem_encoder (`bool`, *optional*, defaults to `True`):
-                Whether to run the memory encoder on predicted masks.
             prev_sam_mask_logits (`torch.Tensor`, *optional*):
                 Previously predicted SAM mask logits that can be fed with new clicks.
             streaming (`bool`, *optional*, defaults to `False`):
@@ -2368,9 +2546,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             `dict`: Dictionary containing the tracking results for the current frame, including:
                 - pred_masks: Predicted low-resolution masks.
                 - object_pointer: Object pointer for memory.
+                - high_res_masks: High-resolution masks for batched memory encoding.
                 - object_score_logits: Object score logits (inference only).
-                - maskmem_features: Memory features for future frames.
-                - maskmem_pos_enc: Memory positional encodings.
         """
         # Retrieve correct image features
         current_vision_feats, current_vision_pos_embeds = self._prepare_vision_features(
@@ -2423,23 +2600,11 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
                 multimask_output=multimask_output,
             )
 
-        # Finally run the memory encoder on the predicted mask to encode
-        # it into a new memory feature (which will be used to condition vision features in future frames)
-        maskmem_features = None
-        maskmem_pos_enc = None
-        if run_mem_encoder and self.num_maskmem > 0:
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=current_vision_feats[-1],
-                pred_masks_high_res=sam_outputs.high_res_masks,
-                object_score_logits=sam_outputs.object_score_logits,
-                is_mask_from_pts=(point_inputs is not None or mask_inputs is not None),
-            )
-
+        # Memory encoding is now handled in batch by the caller (forward method)
         current_out = {
             "pred_masks": sam_outputs.pred_masks,
             "object_pointer": sam_outputs.object_pointer,
-            "maskmem_features": maskmem_features if maskmem_features is not None else None,
-            "maskmem_pos_enc": maskmem_pos_enc,
+            "high_res_masks": sam_outputs.high_res_masks,  # Needed for batched memory encoding
         }
         if not self.training:
             current_out["object_score_logits"] = sam_outputs.object_score_logits
@@ -2457,6 +2622,20 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         batch_size = current_vision_feats.size(1)  # batch size on this frame
         channels = self.hidden_dim
         height, width = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
+
+        mask_input_size_h, mask_input_size_w = self.prompt_encoder.mask_input_size
+        mask_mem_size_h = mask_input_size_h * 4
+        mask_mem_size_w = mask_input_size_w * 4
+        if pred_masks_high_res.shape[2:] != (mask_mem_size_h, mask_mem_size_w):
+            # downsample the predicted high-res masks into the mask encoder input size
+            pred_masks_high_res = F.interpolate(
+                pred_masks_high_res.float(),
+                size=(mask_mem_size_h, mask_mem_size_w),
+                align_corners=False,
+                mode="bilinear",
+                antialias=True,  # use antialias for downsampling
+            ).to(pred_masks_high_res.dtype)
+
         # top-level feature, (HW)BC => BCHW
         pix_feat = current_vision_feats.permute(1, 2, 0).view(batch_size, channels, height, width)
         if is_mask_from_pts and not self.training:
@@ -2487,6 +2666,63 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
         return maskmem_features, maskmem_pos_enc
 
+    def _batch_encode_memories(
+        self,
+        inference_session: Sam2VideoInferenceSession,
+        frame_idx: int,
+        objects_needing_memory_encoding: list[int],
+        high_res_masks_for_memory: list[torch.Tensor],
+        object_score_logits_for_memory: list[torch.Tensor],
+        is_mask_from_pts_per_obj: list[bool],
+    ):
+        """
+        Batch encode memories for multiple objects at once.
+
+        Args:
+            inference_session: The video inference session object
+            frame_idx: Index of the current frame
+            objects_needing_memory_encoding: List of object indices that need memory encoding
+            high_res_masks_for_memory: List of high-resolution masks for each object
+            object_score_logits_for_memory: List of object score logits for each object
+            is_mask_from_pts_per_obj: List of booleans indicating if mask is from points for each object
+        """
+        if not objects_needing_memory_encoding:
+            return
+
+        # Get vision features once for all objects
+        current_vision_feats, _ = self._prepare_vision_features(inference_session, frame_idx, batch_size=1)
+
+        # Stack all high-res masks and object scores
+        high_res_masks_batched = torch.cat(high_res_masks_for_memory, dim=0)
+        object_score_logits_batched = torch.cat(object_score_logits_for_memory, dim=0)
+
+        # Expand vision features to match batch size
+        expanded_vision_feats = current_vision_feats[-1].expand(-1, len(objects_needing_memory_encoding), -1)
+
+        # Encode all memories in one batch call
+        maskmem_features_batched, maskmem_pos_enc_batched = self._encode_new_memory(
+            current_vision_feats=expanded_vision_feats,
+            pred_masks_high_res=high_res_masks_batched,
+            object_score_logits=object_score_logits_batched,
+            is_mask_from_pts=any(is_mask_from_pts_per_obj),
+        )
+
+        # Split and store encoded memories per object
+        for i, obj_idx in enumerate(objects_needing_memory_encoding):
+            # Extract per-object memory from batched result
+            maskmem_features = maskmem_features_batched[:, i : i + 1]
+            maskmem_pos_enc = maskmem_pos_enc_batched[:, i : i + 1]
+
+            # Update the stored output with memory features
+            output_dict = inference_session.output_dict_per_obj[obj_idx]
+            # Determine if this was a conditioning frame
+            storage_key = (
+                "cond_frame_outputs" if frame_idx in output_dict["cond_frame_outputs"] else "non_cond_frame_outputs"
+            )
+            if frame_idx in output_dict[storage_key]:
+                output_dict[storage_key][frame_idx]["maskmem_features"] = maskmem_features
+                output_dict[storage_key][frame_idx]["maskmem_pos_enc"] = maskmem_pos_enc
+
     @torch.inference_mode()
     @auto_docstring(
         custom_intro="""
@@ -2500,6 +2736,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         start_frame_idx: Optional[int] = None,
         max_frame_num_to_track: Optional[int] = None,
         reverse: bool = False,
+        show_progress_bar: bool = False,
     ) -> Iterator[Sam2VideoSegmentationOutput]:
         r"""
         inference_session (`Sam2VideoInferenceSession`):
@@ -2512,6 +2749,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             The maximum number of frames to track.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         num_frames = inference_session.num_frames
 
@@ -2541,7 +2780,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
             end_frame_idx = min(start_frame_idx + max_frame_num_to_track, num_frames - 1)
             processing_order = range(start_frame_idx, end_frame_idx + 1)
 
-        for frame_idx in tqdm(processing_order, desc="propagate in video"):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             sam2_video_output = self(inference_session, frame_idx=frame_idx, reverse=reverse)
             yield sam2_video_output
 

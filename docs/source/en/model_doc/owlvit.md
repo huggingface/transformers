@@ -81,7 +81,6 @@ A demo notebook on using OWL-ViT for zero- and one-shot (image-guided) object de
 ## OwlViTConfig
 
 [[autodoc]] OwlViTConfig
-    - from_text_vision_configs
 
 ## OwlViTTextConfig
 

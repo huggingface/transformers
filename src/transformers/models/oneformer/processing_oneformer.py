@@ -41,18 +41,9 @@ class OneFormerProcessor(ProcessorMixin):
             Sequence length for input task token.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "OneFormerImageProcessor"
-    tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
-
     def __init__(
         self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
     ):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
 

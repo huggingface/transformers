@@ -105,7 +105,6 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -183,7 +182,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             if padding:
                 padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
-        # now let's padd left and right
+        # now let's pad left and right
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
         padded_inputs["input_values"] = np.pad(
@@ -252,14 +251,16 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
+    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 

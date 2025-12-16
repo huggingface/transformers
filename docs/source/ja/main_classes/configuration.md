@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 ＃ 構成
 
-基本クラス [`PretrainedConfig`] は、設定をロード/保存するための一般的なメソッドを実装します。
+基本クラス [`PreTrainedConfig`] は、設定をロード/保存するための一般的なメソッドを実装します。
 ローカル ファイルまたはディレクトリから、またはライブラリ (ダウンロードされた) によって提供される事前トレーニング済みモデル構成から
 HuggingFace の AWS S3 リポジトリから)。
 
@@ -24,8 +24,8 @@ HuggingFace の AWS S3 リポジトリから)。
 `hidden_​​size`、`num_attention_heads`、および `num_hidden_​​layers`。テキスト モデルはさらに以下を実装します。
 `vocab_size`。
 
-## PretrainedConfig
+## PreTrainedConfig
 
-[[autodoc]] PretrainedConfig
+[[autodoc]] PreTrainedConfig
     - push_to_hub
     - all

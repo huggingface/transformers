@@ -43,24 +43,20 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] data.data_collator.DataCollatorForLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorForWholeWordMask[[transformers.DataCollatorForWholeWordMask]]
 
 [[autodoc]] data.data_collator.DataCollatorForWholeWordMask
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorForPermutationLanguageModeling[[transformers.DataCollatorForPermutationLanguageModeling]]
 
 [[autodoc]] data.data_collator.DataCollatorForPermutationLanguageModeling
     - numpy_mask_tokens
-    - tf_mask_tokens
     - torch_mask_tokens
 
 ## DataCollatorWithFlatteningtransformers.DataCollatorWithFlattening
 
 [[autodoc]] data.data_collator.DataCollatorWithFlattening
-

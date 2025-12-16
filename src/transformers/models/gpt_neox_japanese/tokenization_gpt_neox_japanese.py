@@ -23,7 +23,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils_fast import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -135,6 +135,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             do_clean_text=do_clean_text,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -318,7 +319,7 @@ class SubWordJapaneseTokenizer:
                         candidates.append((self.vocab[wd], wd, e))
             if len(candidates) > 0:
                 # the smallest token_id is adopted
-                _, wd, e = sorted(candidates, key=lambda x: x[0])[0]
+                _, wd, e = min(candidates, key=lambda x: x[0])
                 result.append(wd)
                 pos = e
             else:

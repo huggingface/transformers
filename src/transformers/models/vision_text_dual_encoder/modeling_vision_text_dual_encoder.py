@@ -47,6 +47,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    input_modalities = ("image", "text")
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -100,6 +101,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+
+        self.post_init()
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -181,6 +184,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -299,10 +303,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             text_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the text model. Can be either:
@@ -310,10 +312,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.

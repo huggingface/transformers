@@ -393,6 +393,47 @@ class Sam2VideoModelIntegrationTest(unittest.TestCase):
             rtol=1e-4,
         )
 
+    def test_inference_mask_generation_video_batched_bb(self):
+        raw_video = prepare_video()
+        inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)
+        ann_frame_idx = 0  # the frame index we interact with
+        ann_obj_ids = [2, 3]  # give a unique id to each object we interact with (it can be any integers)
+
+        self.processor.add_inputs_to_inference_session(
+            inference_session=inference_session,
+            frame_idx=ann_frame_idx,
+            obj_ids=ann_obj_ids,
+            input_boxes=[[[300, 0, 500, 400], [400, 0, 600, 400]]],
+        )
+
+        frames = []
+        for sam2_video_output in self.video_model.propagate_in_video_iterator(
+            inference_session=inference_session,
+            start_frame_idx=ann_frame_idx,
+            max_frame_num_to_track=2,
+        ):
+            video_res_masks = self.processor.post_process_masks(
+                [sam2_video_output.pred_masks], [raw_video.shape[-3:-1]], binarize=False
+            )[0]
+            print(video_res_masks.shape)
+            frames.append(video_res_masks)
+        frames = torch.stack(frames, dim=0)
+        self.assertEqual(frames.shape, (3, 2, 1, raw_video.shape[-3], raw_video.shape[-2]))
+        print(frames.shape)
+        print(frames[:3, :, :, :2, :2])
+        torch.testing.assert_close(
+            frames[:3, :, :, :2, :2],
+            torch.tensor(
+                [
+                    [[[[-13.1427, -13.1427], [-13.7753, -13.7753]]], [[[-8.4576, -8.4576], [-8.7329, -8.7329]]]],
+                    [[[[-14.9998, -14.9998], [-15.7086, -15.7086]]], [[[-9.2998, -9.2998], [-9.8947, -9.8947]]]],
+                    [[[[-15.4558, -15.4558], [-16.1649, -16.1649]]], [[[-10.4880, -10.4880], [-11.2098, -11.2098]]]],
+                ]
+            ).to(torch_device),
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
     def test_inference_propagate_video_from_mask_input(self):
         raw_video = prepare_video()
         inference_session = self.processor.init_video_session(video=raw_video, inference_device=torch_device)

@@ -22,10 +22,10 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 """
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 
 
-class TapasConfig(PretrainedConfig):
+class TapasConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TapasModel`]. It is used to instantiate a TAPAS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -33,7 +33,7 @@ class TapasConfig(PretrainedConfig):
     [google/tapas-base-finetuned-sqa](https://huggingface.co/google/tapas-base-finetuned-sqa) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    documentation from [`PreTrainedConfig`] for more information.
 
     Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original
     implementation. Original implementation available at https://github.com/google-research/tapas/tree/master.

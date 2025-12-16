@@ -18,9 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..utils import is_vision_available
-from .loss_for_object_detection import (
-    box_iou,
-)
+from .loss_for_object_detection import box_iou
 from .loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
 
 
@@ -28,21 +26,13 @@ if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
 
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
-@torch.jit.unused
 def _set_aux_loss2(
     outputs_class, outputs_coord, outputs_corners, outputs_ref, teacher_corners=None, teacher_logits=None
 ):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [
         {
             "logits": a,

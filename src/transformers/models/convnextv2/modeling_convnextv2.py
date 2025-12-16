@@ -17,9 +17,9 @@
 from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -42,11 +42,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -263,22 +258,16 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config: ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["ConvNextV2Layer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, ConvNextV2LayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, ConvNextV2GRN):
-            module.weight.data.zero_()
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, ConvNextV2GRN):
+            init.zeros_(module.weight)
+            init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -300,7 +289,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -332,6 +321,8 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
 )
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -402,9 +393,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:
