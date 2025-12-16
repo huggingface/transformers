@@ -4827,6 +4827,7 @@ class Trainer:
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
@@ -4921,6 +4922,8 @@ class Trainer:
             The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
             progress of the commit if `blocking=True`.
         """
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
+
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
