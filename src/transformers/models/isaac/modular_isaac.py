@@ -87,7 +87,7 @@ from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
 )
-from ...masking_utils import create_masks_for_generate, eager_mask, packed_sequence_mask_function, sdpa_mask
+from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -926,6 +926,8 @@ def pixel_shuffle_varlen(
 
 
 class IsaacVisionTransformer(nn.Module):
+    _supports_sdpa = True
+
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
         self.config = config
@@ -975,6 +977,8 @@ class IsaacVisionTransformer(nn.Module):
 
 class IsaacVisionEmbedding(nn.Module):
     """Vision embedding wrapper exposing tower and projector."""
+
+    _supports_sdpa = True
 
     def __init__(self, config: IsaacConfig):
         super().__init__()
@@ -1217,6 +1221,7 @@ class IsaacConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
+        output["_attn_implementation"] = self._attn_implementation
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
             output["text_config"] = self.text_config.to_dict()
@@ -1574,6 +1579,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             raise ValueError("IsaacConfig should always have vision_config")
 
         self.vision_embedding = IsaacVisionEmbedding(config)
+        self.vision_embedding._supports_sdpa = True
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
@@ -1620,6 +1626,14 @@ class IsaacModel(Qwen3PreTrainedModel):
     @property
     def norm(self) -> nn.Module:
         return self.text_model.norm
+
+    @property
+    def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
+
+    @property
+    def vision_tower(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
@@ -1827,8 +1841,6 @@ class IsaacModel(Qwen3PreTrainedModel):
                     all_attentions.append(layer_outputs[1])
             else:
                 hidden_states = layer_outputs
-                if output_attentions:
-                    all_attentions.append(None)
 
         # Final layer norm
         hidden_states = self.text_model.norm(hidden_states)

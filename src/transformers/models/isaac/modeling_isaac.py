@@ -633,6 +633,8 @@ def pixel_shuffle_varlen(
 
 
 class IsaacVisionTransformer(nn.Module):
+    _supports_sdpa = True
+
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
         self.config = config
@@ -682,6 +684,8 @@ class IsaacVisionTransformer(nn.Module):
 
 class IsaacVisionEmbedding(nn.Module):
     """Vision embedding wrapper exposing tower and projector."""
+
+    _supports_sdpa = True
 
     def __init__(self, config: IsaacConfig):
         super().__init__()
@@ -1061,6 +1065,7 @@ class IsaacModel(PreTrainedModel):
             raise ValueError("IsaacConfig should always have vision_config")
 
         self.vision_embedding = IsaacVisionEmbedding(config)
+        self.vision_embedding._supports_sdpa = True
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
@@ -1107,6 +1112,14 @@ class IsaacModel(PreTrainedModel):
     @property
     def norm(self) -> nn.Module:
         return self.text_model.norm
+
+    @property
+    def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
+
+    @property
+    def vision_tower(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
@@ -1250,6 +1263,11 @@ class IsaacModel(PreTrainedModel):
             attention_mask = torch.ones(
                 (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
             )
+
+        # Expand 2D position ids (from generic padding tests) to 3D MRoPE coords
+        if position_ids is not None and position_ids.ndim == 2:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(

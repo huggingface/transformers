@@ -184,6 +184,7 @@ class IsaacConfig(PretrainedConfig):
 
     def to_dict(self):
         output = super().to_dict()
+        output["_attn_implementation"] = self._attn_implementation
         # Ensure nested configs round-trip through dict serialization
         if hasattr(self, "text_config") and self.text_config is not None:
             output["text_config"] = self.text_config.to_dict()
