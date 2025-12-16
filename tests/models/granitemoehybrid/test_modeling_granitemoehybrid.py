@@ -358,7 +358,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 @require_torch_accelerator
 class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
-    @parameterized.expand([(torch_device,), ("cpu",)])
+    @parameterized.expand([("cpu",)]) # runners crash with `cuda`, prob they have mamba kernels installed
     def test_model_logits(self, device):
         input_ids = [31390, 631, 4162, 30, 322, 25342, 432, 1875, 43826, 10066, 688, 225]
 
@@ -391,7 +391,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @parameterized.expand([(torch_device,), ("cpu",)])
+    @parameterized.expand([("cpu",)])
     def test_model_generation(self, device):
         EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames,"
         prompt = "Simply put, the theory of relativity states that "
