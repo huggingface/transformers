@@ -63,8 +63,6 @@ class Jais2Config(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 150024):
             End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Tensor parallelism rank used during pretraining.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings.
         attention_bias (`bool`, *optional*, defaults to `True`):
@@ -75,21 +73,18 @@ class Jais2Config(PreTrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers.
         head_dim (`int`, *optional*):
             The attention head dimension.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The base period of the RoPE embeddings.
         rope_parameters (`dict`, *optional*):
             The RoPE parameters.
     """
 
     model_type = "jais2"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `Jais2Model`
+
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
@@ -115,19 +110,14 @@ class Jais2Config(PreTrainedConfig):
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 150024,
-        pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
         attention_bias: Optional[bool] = True,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = True,
         head_dim: Optional[int] = None,
-        rope_theta: Optional[float] = 500000.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
-        # If rope_parameters not provided, create default with rope_theta
-        if rope_parameters is None:
-            rope_parameters = RopeParameters(rope_theta=rope_theta)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -142,7 +132,6 @@ class Jais2Config(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

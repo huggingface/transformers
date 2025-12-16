@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-09 and added to Hugging Face Transformers on 2025-12-13.*
+*This model was released on 2025-12-09 and added to Hugging Face Transformers on 2025-12-16.*
 
 # Jais2
 

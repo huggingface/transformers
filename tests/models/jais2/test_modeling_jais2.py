@@ -116,12 +116,12 @@ class Jais2IntegrationTest(unittest.TestCase):
         model = Jais2ForCausalLM.from_pretrained(
             "inceptionai/Jais-2-8B-Chat", torch_dtype=torch.float16, device_map="auto"
         )
-        input_text = "The capital of France is"
+        input_text = "Simply put, the theory of relativity states that"
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
         model_inputs.pop("token_type_ids", None)
 
-        generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
+        generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        EXPECTED_TEXT = "The capital of France is Paris."
+        EXPECTED_TEXT = "Simply put, the theory of relativity states that the laws of physics are the same for all non-accelerating observers, and that the speed of light in a vacuum is the same for all observers,"
         self.assertEqual(generated_text, EXPECTED_TEXT)

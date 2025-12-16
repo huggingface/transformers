@@ -83,6 +83,15 @@ class Jais2Config(LlamaConfig):
 
     model_type = "jais2"
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+
     def __init__(
         self,
         vocab_size: Optional[int] = 150272,
@@ -99,20 +108,14 @@ class Jais2Config(LlamaConfig):
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = 0,
         eos_token_id: Optional[int] = 150024,
-        pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
         attention_bias: Optional[bool] = True,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = True,
         head_dim: Optional[int] = None,
-        rope_theta: Optional[float] = 500000.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
-        # If rope_parameters not provided, create default with rope_theta
-        if rope_parameters is None:
-            rope_parameters = RopeParameters(rope_theta=rope_theta)
-
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -127,7 +130,6 @@ class Jais2Config(LlamaConfig):
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            pretraining_tp=pretraining_tp,
             tie_word_embeddings=tie_word_embeddings,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
@@ -138,6 +140,7 @@ class Jais2Config(LlamaConfig):
         )
         self.layer_norm_eps = layer_norm_eps
         del self.rms_norm_eps
+        del self.pretraining_tp
 
 
 class Jais2MLP(NemotronMLP):
