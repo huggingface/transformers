@@ -1196,7 +1196,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 __all__ = [
     "LightOnOcrPreTrainedModel",
     "LightOnOcrVisionModel",
-    "LightOnOcrVisionPreTrainedModel",
     "LightOnOcrTextModel",
     "LightOnOcrTextPreTrainedModel",
     "LightOnOcrForConditionalGeneration",

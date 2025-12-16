@@ -100,8 +100,8 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
-    "LightOnOCRTextModel",
-    "LightOnOCRVisionModel",
+    "LightOnOcrTextModel",
+    "LightOnOcrVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -198,8 +198,8 @@ IGNORE_NON_TESTED = (
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
-        "LightOnOCRText",  # Building part of bigger (tested) model. Tested implicitly through LightOnOCRForConditionalGeneration.
-        "LightOnOCRVision",  # Building part of bigger (tested) model. Tested implicitly through LightOnOCRForConditionalGeneration.
+        "LightOnOcrTextModel",  # Building part of bigger (tested) model. Tested implicitly through LightOnOcrForConditionalGeneration.
+        "LightOnOcrVisionModel",  # Building part of bigger (tested) model. Tested implicitly through LightOnOcrForConditionalGeneration.
         "TimesFmModel",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
@@ -424,6 +424,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "LightOnOcrTextModel",  # Building part of a bigger model
+    "LightOnOcrVisionModel",  # Building part of a bigger model
 ]
 
 

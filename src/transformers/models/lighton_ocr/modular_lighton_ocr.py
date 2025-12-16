@@ -11,6 +11,7 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
     MultiModalData,
@@ -33,7 +34,6 @@ from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Model,
 )
-from ...modeling_rope_utils import RopeParameters
 
 
 class LightOnOcrVisionConfig(PixtralVisionConfig):
@@ -729,7 +729,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 __all__ = [
     "LightOnOcrPreTrainedModel",
     "LightOnOcrVisionModel",
-    "LightOnOcrVisionPreTrainedModel",  # noqa: F822
     "LightOnOcrTextModel",
     "LightOnOcrTextPreTrainedModel",  # noqa: F822
     "LightOnOcrForConditionalGeneration",
