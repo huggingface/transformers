@@ -71,14 +71,36 @@ def add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping):
     }
 
 
+def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping):
+    from pathlib import Path
+
+    from kernels import LocalLayerRepository
+
+    if device not in ["cuda", "rocm", "xpu", "npu"]:
+        raise ValueError(f"Only cuda, rocm, xpu and npu devices supported, got: {device}")
+    repo_layer_name = repo_name.split(":")[1]
+    repo_path = repo_name.split(":")[0]
+    repo_package_name = repo_path.split("/")[-1]
+    compatible_mapping[layer_name] = {
+        device: {
+            mode: LocalLayerRepository(
+                repo_path=Path(repo_path),
+                package_name=repo_package_name,
+                layer_name=repo_layer_name,
+            )
+        }
+    }
+
+
 class KernelConfig(PushToHubMixin):
     """
     Kernel configuration class. This class is used to configure the kernel mapping for a model.
     """
 
-    def __init__(self, kernel_mapping={}):
+    def __init__(self, kernel_mapping={}, use_local_kernel=False):
         self.kernel_mapping = kernel_mapping
         self.registered_layer_names = {}
+        self.use_local_kernel = use_local_kernel
 
     def update_kernel(self, repo_id, registered_name, layer_name, device, mode, revision=None):
         from kernels import LayerRepository
@@ -105,6 +127,7 @@ class KernelConfig(PushToHubMixin):
         2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such strings.
         3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
         4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
+        5. If a local path is detected, it should be in the format '/abs/path:layer_name'. The absolute path must include the `package_name`, like "/home/user/layer_norm".
 
         Args:
             model: The model instance whose modules are checked for registered kernel_layer_name attributes.
@@ -114,20 +137,36 @@ class KernelConfig(PushToHubMixin):
                         or if a repo_name is not a valid 'org/repo:layer_name' string.
         """
         MAPPING_FORMAT = """
+        For single device form remote
         {
             "RMSNorm":
                 "kernels-community/layer_norm:LlamaRMSNorm",
             ...
         },
-
-        or
-
+        For multiple devices form remote
         {
             "RMSNorm": {
                 "cuda":
                     "kernels-community/layer_norm:LlamaRMSNorm",
                 "rocm":
                     "kernels-community/layer_norm:LlamaRMSNorm",
+                ...
+            },
+            ...
+        }
+        For single device form local
+        {
+            "RMSNorm":
+                "/abs/path:LlamaRMSNorm",
+            ...
+        },
+        For multiple devices form local
+        {
+            "RMSNorm": {
+                "cuda":
+                    "/abs/path:LlamaRMSNorm",
+                "rocm":
+                    "/abs/path:LlamaRMSNorm",
                 ...
             },
             ...
@@ -149,7 +188,7 @@ class KernelConfig(PushToHubMixin):
             if isinstance(kernel, str):
                 if "/" not in kernel or ":" not in kernel:
                     raise ValueError(
-                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {kernel}"
+                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {kernel}"
                     )
 
             elif isinstance(kernel, dict):
@@ -159,9 +198,8 @@ class KernelConfig(PushToHubMixin):
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
-                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name'), got: {repo_name}"
+                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {repo_name}"
                         )
-
             else:
                 raise ValueError(f"Kernel mapping must follow the format: {MAPPING_FORMAT}, got: {kernel}")
 
@@ -174,18 +212,13 @@ class KernelConfig(PushToHubMixin):
                 ...
             },
 
-            or
+            or for local path:
 
             {
-                "RMSNorm": {
-                    "cuda":
-                        "kernels-community/layer_norm:LlamaRMSNorm",
-                    "rocm":
-                        "kernels-community/layer_norm:LlamaRMSNorm",
-                    ...
-                },
+                "RMSNorm":
+                    "/home/user/liger_kernels:LigerRMSNorm",
                 ...
-            }
+            },
 
         into a nested mapping:
 
@@ -195,6 +228,20 @@ class KernelConfig(PushToHubMixin):
                         Mode.INFERENCE: LayerRepository(
                             repo_id="kernels-community/layer_norm",
                             layer_name="LlamaRMSNorm",
+                        )
+                    }
+                }
+            }
+
+            or for local path:
+
+            {
+                "RMSNorm": {
+                    "cuda": {
+                        Mode.INFERENCE: LocalLayerRepository(
+                            repo_path=Path("/home/user/liger_kernels"),
+                            package_name="liger_kernels",
+                            layer_name="LigerRMSNorm",
                         )
                     }
                 }
@@ -217,11 +264,17 @@ class KernelConfig(PushToHubMixin):
 
             if isinstance(kernel, str):
                 repo_name = kernel
-                add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
+                if not self.use_local_kernel:
+                    add_to_mapping(layer_name, current_device, repo_name, mode, compatible_mapping)
+                else:
+                    add_to_mapping_local(layer_name, current_device, repo_name, mode, compatible_mapping)
             elif isinstance(kernel, dict):
                 for device, repo_name in kernel.items():
                     if device != current_device:
                         continue
-                    add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
+                    if not self.use_local_kernel:
+                        add_to_mapping(layer_name, device, repo_name, mode, compatible_mapping)
+                    else:
+                        add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping)
 
         self.kernel_mapping = compatible_mapping

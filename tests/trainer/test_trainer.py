@@ -4592,9 +4592,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         image_processor_dict = image_processor.to_dict()
         reloaded_image_processor_dict = reloaded_image_processor.to_dict()
-        # When the processor is saved in the trainer, the _processor_class gets set in the reload_image_processor dict
-        image_processor_dict.pop("_processor_class")
-        reloaded_image_processor_dict.pop("_processor_class")
         self.assertDictEqual(image_processor_dict, reloaded_image_processor_dict)
 
         # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
