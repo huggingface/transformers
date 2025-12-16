@@ -36,7 +36,6 @@ from ..qwen3.modeling_qwen3 import (
 
 class LightOnOcrVisionConfig(PixtralVisionConfig):
     model_type = "lighton_ocr_vision"
-    pass
 
 
 class LightOnOcrTextConfig(Qwen3Config):
