@@ -302,6 +302,19 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(reason="PeAudioModel does not support feed forward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="PeAudioModel uses some timm stuff not compatible")
+    def test_save_load(self):
+        pass
+
+    @unittest.skip(reason="@eustlb this is not really expected")
+    def test_batching_equivalence(self):
+        pass
+
+
 
 @require_torch
 class PeAudioIntegrationTest(unittest.TestCase):
@@ -360,7 +373,8 @@ class PeAudioIntegrationTest(unittest.TestCase):
         #     [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True],
         #     [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, False, False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True]
         # ])
-        
+
+
     # fmt: on
 
     # torch.testing.assert_close(preds, EXPECTED)

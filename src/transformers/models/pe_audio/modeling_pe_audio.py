@@ -189,7 +189,7 @@ class PeAudioContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -491,6 +491,7 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         return hidden_states
 
+from ... import initialization as init
 
 @auto_docstring
 class PeAudioPreTrainedModel(PreTrainedModel):
@@ -510,18 +511,20 @@ class PeAudioPreTrainedModel(PreTrainedModel):
         "attentions": PeAudioEncoderAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
-        if isinstance(module, PeAudioEncoderPatchEmbedder):
-            embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+        if isinstance(module, nn.Conv1d):
+            init.trunc_normal_(module.weight, std=0.02)
+            init.constant_(module.bias, 0)
+        elif isinstance(module, Snake1d):
+            init.ones_(module.alpha)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, PeAudioEncoderPatchEmbedder):
+            init.normal_(module.class_embedding, mean=0.0, std=0.02)
 
 
 @dataclass
@@ -721,17 +724,11 @@ class PeAudioModel(PeAudioPreTrainedModel):
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **{**kwargs, "return_dict": True},
+            input_values=input_values, padding_mask=padding_mask, **kwargs
         )
 
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **{**kwargs, "return_dict": True},
-            output_hidden_states=True,
-        )
+        kwargs["output_hidden_states"] = True
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.pooler_output
         audio_embeds = self.audio_head(audio_embeds)
@@ -782,17 +779,10 @@ class PeAudioFrameLevelModel(PeAudioModel):
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
-            input_values=input_values,
-            padding_mask=padding_mask,
-            **{**kwargs, "return_dict": True},
+            input_values=input_values, padding_mask=padding_mask, **kwargs
         )
-
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **{**kwargs, "return_dict": True},
-            output_hidden_states=True,
-        )
+        kwargs["output_hidden_states"] = True
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.last_hidden_state
         audio_embeds = self.audio_head(audio_embeds)

@@ -18,13 +18,14 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from ... import initialization as init
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
-from ..dac.modeling_dac import DacEncoder
+from ..dac.modeling_dac import DacEncoder, Snake1d
 from ..pe_audio_video.modeling_pe_audio_video import (
     PeAudioVideoContrastiveHead,
     PeAudioVideoEncoder,
@@ -67,6 +68,19 @@ class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
     base_model_prefix = "audio_model"
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv1d):
+            init.trunc_normal_(module.weight, std=0.02)
+            init.constant_(module.bias, 0)
+        elif isinstance(module, Snake1d):
+            init.ones_(module.alpha)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=0.02)
 
 
 @dataclass
@@ -188,14 +202,14 @@ class PeAudioModel(PeAudioPreTrainedModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
-            **{**kwargs, "return_dict": True},
+            **kwargs
         )
 
+        kwargs["output_hidden_states"] = True
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            **{**kwargs, "return_dict": True},
-            output_hidden_states=True,
+            **kwargs
         )
 
         audio_embeds = audio_outputs.pooler_output
@@ -249,14 +263,13 @@ class PeAudioFrameLevelModel(PeAudioModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values,
             padding_mask=padding_mask,
-            **{**kwargs, "return_dict": True},
+            **kwargs
         )
-
+        kwargs["output_hidden_states"] = True
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            **{**kwargs, "return_dict": True},
-            output_hidden_states=True,
+            **kwargs
         )
 
         audio_embeds = audio_outputs.last_hidden_state

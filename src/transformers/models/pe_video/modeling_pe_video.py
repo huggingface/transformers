@@ -21,7 +21,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
-
+from ... import initialization as init
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -68,7 +68,7 @@ class PeVideoContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -414,20 +414,12 @@ class PeVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PeVideoEncoderLayer,
         "attentions": PeVideoEncoderAttention,
     }
-    main_input_name = "pixel_values_videos"
+
 
     def _init_weights(self, module):
         super()._init_weights(module)
-
-        if hasattr(self.config, "initializer_range"):
-            std = self.config.initializer_range
-        else:
-            # 0.02 is the standard default value across the library
-            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-
         if isinstance(module, PeVideoEncoderPatchEmbedder):
-            embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+            init.normal_(module.class_embedding, mean=0.0, std=0.02)
 
 
 class PeVideoEncoderRotaryEmbedding(nn.Module):
@@ -601,17 +593,10 @@ class PeVideoModel(PeVideoPreTrainedModel):
         **kwargs,
     ) -> PeVideoOutput:
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(
-            pixel_values_videos=pixel_values_videos,
-            padding_mask_videos=padding_mask_videos,
-            **{**kwargs, "return_dict": True},
+            pixel_values_videos=pixel_values_videos, padding_mask_videos=padding_mask_videos, **kwargs
         )
-
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **{**kwargs, "return_dict": True},
-            output_hidden_states=True,
-        )
+        kwargs["output_hidden_states"] = True
+        text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeds = video_outputs.pooler_output
         video_embeds = self.video_head(video_embeds)
