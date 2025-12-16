@@ -363,7 +363,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sam3_video", "Sam3VideoModel"),
         ("sam3_vision_model", "Sam3VisionModel"),
         ("sam3_vit_model", "Sam3ViTModel"),
-        ("sam_audio_judge", "SamAudioJudgeModel"),
         ("sam_hq", "SamHQModel"),
         ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
