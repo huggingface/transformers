@@ -494,14 +494,23 @@ class IsaacVisionEncoder(nn.Module):
             inputs_embeds.device,
             return_mask_function=False,
         )
+
         hidden_states = inputs_embeds
+        kwargs.update(
+            {
+                "max_seqlen": max_seqlen,
+                "cu_seqlens": cu_seqlens,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+            }
+        )
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 **kwargs,
             )
-
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -1186,15 +1195,20 @@ class IsaacModel(PreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        tensor_stream (`TensorStream`, *optional*):
-            Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
-            `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
-            if they are not supplied.
-        modality_tensor (`torch.LongTensor`, *optional*):
-            Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
-            values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
-            omitted.
+        """
+        Forward pass with MRoPE position embeddings.
+
+        Computes position embeddings once and passes them through all layers.
+
+        Args:
+            tensor_stream (`TensorStream`, *optional*):
+                Packed multimodal stream of text and vision events to embed directly. Mutually exclusive with
+                `input_ids` and `inputs_embeds`. When provided, the method derives `position_ids` and `modality_tensor`
+                if they are not supplied.
+            modality_tensor (`torch.LongTensor`, *optional*):
+                Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
+                values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
+                omitted.
         """
 
         if modality_tensor is not None:
@@ -1413,6 +1427,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
+        Forward pass for conditional generation supporting both standard inputs and TensorStream.
+
         tensor_stream (`TensorStream`, *optional*):
             Packed multimodal stream (text, vision, audio tokens) that already encodes spatial metadata. When provided,
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of

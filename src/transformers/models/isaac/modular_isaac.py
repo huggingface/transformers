@@ -88,7 +88,7 @@ from ...image_utils import (
     PILImageResampling,
 )
 from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.auto.modeling_auto import AutoModel
@@ -786,16 +786,23 @@ class IsaacVisionEncoder(Siglip2Encoder):
             return_mask_function=False,
         )
 
-        return super().forward(
-            inputs_embeds,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            **kwargs,
+        hidden_states = inputs_embeds
+        kwargs.update(
+            {
+                "max_seqlen": max_seqlen,
+                "cu_seqlens": cu_seqlens,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+            }
         )
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 def create_pixel_shuffle_index_map(
