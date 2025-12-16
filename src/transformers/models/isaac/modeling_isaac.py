@@ -1176,6 +1176,7 @@ class IsaacModel(PreTrainedModel):
         tensor_stream: Optional[TensorStream] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        modality_tensor: Optional[torch.LongTensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1201,7 +1202,6 @@ class IsaacModel(PreTrainedModel):
                 omitted.
         """
 
-        modality_tensor = kwargs.pop("modality_tensor", None)
         if modality_tensor is not None:
             modality_tensor = modality_tensor.to(dtype=torch.long)
         text_value = TextType.text.value if TextType is not None else 0
