@@ -722,6 +722,7 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)
