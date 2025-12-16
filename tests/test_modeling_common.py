@@ -1108,7 +1108,7 @@ class ModelTesterMixin:
                 "The name of the buffers from each model should be the exact same",
             )
             different_buffers = []
-            for k1, v1 in buffers_from_init:
+            for k1, v1 in buffers_from_init.items():
                 v2 = buffers_from_meta_init[k1]
                 if not (v1 == v2).all():
                     different_buffers.append(k1)
