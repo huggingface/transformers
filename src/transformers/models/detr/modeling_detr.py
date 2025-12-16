@@ -753,8 +753,8 @@ class DetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetrFrozenBatchNorm2d):
             init.ones_(module.weight)
             init.zeros(module.bias)
-            module.zeros_(module.running_mean)
-            module.ones_(module.running_var)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
 
 
 class DetrEncoder(DetrPreTrainedModel):

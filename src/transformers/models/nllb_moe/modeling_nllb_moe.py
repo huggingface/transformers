@@ -67,6 +67,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)

@@ -759,14 +759,14 @@ class FlaubertModel(FlaubertPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.xlm.modeling_xlm.XLMModel.get_input_embeddings
     def get_input_embeddings(self):

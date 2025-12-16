@@ -884,13 +884,14 @@ class SeamlessM4TScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale
 
 
-# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding with M2M100->SeamlessM4T
 class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
