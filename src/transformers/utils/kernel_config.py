@@ -127,7 +127,7 @@ class KernelConfig(PushToHubMixin):
         2. Each kernel value is either a string of the form 'org/repo:layer_name' or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such strings.
         3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
         4. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
-        5. If a local path is detected, it should be in the format '/abs-path/package_name:layer_name'. The abs-path must include the `package_name`, like "/home/path/layer_norm".
+        5. If a local path is detected, it should be in the format '/abs/path:layer_name'. The absolute path must include the `package_name`, like "/home/user/layer_norm".
 
         Args:
             model: The model instance whose modules are checked for registered kernel_layer_name attributes.
@@ -157,16 +157,16 @@ class KernelConfig(PushToHubMixin):
         For single device form local
         {
             "RMSNorm":
-                "/abs-path:LlamaRMSNorm",
+                "/abs/path:LlamaRMSNorm",
             ...
         },
         For multiple devices form local
         {
             "RMSNorm": {
                 "cuda":
-                    "/abs-path:LlamaRMSNorm",
+                    "/abs/path:LlamaRMSNorm",
                 "rocm":
-                    "/abs-path:LlamaRMSNorm",
+                    "/abs/path:LlamaRMSNorm",
                 ...
             },
             ...
@@ -188,7 +188,7 @@ class KernelConfig(PushToHubMixin):
             if isinstance(kernel, str):
                 if "/" not in kernel or ":" not in kernel:
                     raise ValueError(
-                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path:layer_name'), got: {kernel}"
+                        f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {kernel}"
                     )
 
             elif isinstance(kernel, dict):
@@ -198,7 +198,7 @@ class KernelConfig(PushToHubMixin):
 
                     if not isinstance(repo_name, str) or "/" not in repo_name or ":" not in repo_name:
                         raise ValueError(
-                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs-path:layer_name'), got: {repo_name}"
+                            f"Kernel mapping for '{layer_name}' must be a valid repo name with a layer name (e.g., 'org/repo:layer_name' or '/abs/path:layer_name'), got: {repo_name}"
                         )
             if kernel is not None and kernel[0] == "/":
                 self.check_kernel_from_local = True
