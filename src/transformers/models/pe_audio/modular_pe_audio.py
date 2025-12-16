@@ -20,12 +20,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
-from ..dac.modeling_dac import DacEncoder, Snake1d, DacEncoderBlock
+from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, Snake1d
 from ..pe_audio_video.modeling_pe_audio_video import (
     PeAudioVideoContrastiveHead,
     PeAudioVideoEncoder,
@@ -35,14 +36,13 @@ from .configuration_pe_audio import PeAudioConfig, PeAudioEncoderConfig
 
 
 class PeAudioDacEncoderBlock(DacEncoderBlock):
-    def __init__(self, config: PeAudioEncoderConfig):
-        super().__init__(config)
+    def __init__(self, config: PreTrainedConfig, stride: int = 1, stride_index: int = 1):
+        super().__init__(config, stride=stride, stride_index=stride_index)
 
 
 class PeAudioDacEncoder(DacEncoder):
-    def __init__(self, config: PeAudioEncoderConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
-
 
 
 class PeAudioEncoderEmbedder(nn.Module):
@@ -72,9 +72,6 @@ class PeAudioEncoderEmbedder(nn.Module):
 
 
 class PeAudioContrastiveHead(PeAudioVideoContrastiveHead): ...
-
-
-
 
 
 class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):

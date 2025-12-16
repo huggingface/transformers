@@ -30,6 +30,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -100,7 +101,7 @@ class PeAudioDacResidualUnit(nn.Module):
 class PeAudioDacEncoderBlock(nn.Module):
     """Encoder block used in PE_AUDIO_DAC encoder."""
 
-    def __init__(self, config: PeAudioEncoderConfig):
+    def __init__(self, config: PreTrainedConfig, stride: int = 1, stride_index: int = 1):
         super().__init__()
 
         dimension = config.encoder_hidden_size * 2**stride_index
@@ -124,7 +125,7 @@ class PeAudioDacEncoderBlock(nn.Module):
 class PeAudioDacEncoder(nn.Module):
     """PE_AUDIO_DAC Encoder"""
 
-    def __init__(self, config: PeAudioEncoderConfig):
+    def __init__(self, config: PreTrainedConfig):
         super().__init__()
 
         strides = config.downsampling_ratios
