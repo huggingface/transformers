@@ -50,10 +50,8 @@ class PeAudioEncoderEmbedder(nn.Module):
         padding_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
-            hidden_states = self.dac_encoder(input_values)  # (batch_size, hidden_size, seq_len)
-            hidden_states = self.bottleneck(hidden_states)  # (batch_size, hidden_size, seq_len)
-            # TODO: we might actually be able to remove half the channels
-            hidden_states, _ = hidden_states.chunk(2, dim=1)
+            hidden_states = self.dac_encoder(input_values)
+            hidden_states = self.bottleneck(hidden_states)
 
         codec_features = hidden_states.transpose(1, 2)
         inputs_embeds = self.data_proj(codec_features)
@@ -172,7 +170,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
         self.text_model.final_norm.eps = 0.6
         self.audio_encoder = PeAudioEncoder(config.audio_config)
 
-        self.text_audio_head = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
+        self.text_audio_head = PeAudioContrastiveHead(config.text_config.hidden_size, config.text_config.hidden_size)
         self.audio_head = PeAudioContrastiveHead(config.audio_config.hidden_size, config.text_config.hidden_size)
 
         self.text_audio_logit_scale = nn.Parameter(torch.zeros(1))

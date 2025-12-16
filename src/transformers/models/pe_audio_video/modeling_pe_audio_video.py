@@ -676,8 +676,9 @@ class AudioVideoEmbeddings(ModelOutput):
 
 class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     _tied_weights_keys = {
-        r"audio_model\.text_model\.(?!rotary_emb|.*final_norm)": r"^text_model\.(?!rotary_emb|.*final_norm)",
-        r"video_model\.text_model\.(?!rotary_emb|.*final_norm)": r"^text_model\.(?!rotary_emb|.*final_norm)",
+        r"audio_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
+        r"video_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
+        r"audio_model\.audio_encoder\.(?!rotary_emb)": r"audio_video_encoder\.embedder\.audio_encoder\.(?!rotary_emb)",
         r"video_model\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)": r"audio_video_encoder\.embedder\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)",
     }
 
@@ -696,7 +697,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
 
         # audio-video
         self.audio_video_head = PeAudioVideoContrastiveHead(config.audio_video_config.hidden_size, text_hidden_size)
-        self.text_audio_video_head = nn.Linear(text_hidden_size, text_hidden_size, bias=False)
+        self.text_audio_video_head = PeAudioVideoContrastiveHead(text_hidden_size, text_hidden_size)
         self.audio_video_logit_scale = nn.Parameter(torch.zeros(1))
         self.audio_video_logit_bias = nn.Parameter(torch.zeros(1))
         self.text_audio_video_logit_scale = nn.Parameter(torch.zeros(1))
@@ -814,9 +815,9 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: torch.Tensor,
-        pixel_values_videos: torch.Tensor,
-        input_values: torch.Tensor,
+        input_ids: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         padding_mask_videos: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
