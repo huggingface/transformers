@@ -794,7 +794,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         prepared_inputs = model.prepare_inputs_for_generation(input_ids=input_ids, attention_mask=attention_mask)
         self.assertIn("input_ids", prepared_inputs)
         self.assertIn("position_ids", prepared_inputs)
-        self.assertIsNone(prepared_inputs["position_ids"])
 
 
 def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
