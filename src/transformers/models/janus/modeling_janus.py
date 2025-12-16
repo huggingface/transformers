@@ -973,8 +973,6 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.eval()  # Janus's VQ model is frozen
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
-
-        # Initialize the VQVAE model.
         self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
