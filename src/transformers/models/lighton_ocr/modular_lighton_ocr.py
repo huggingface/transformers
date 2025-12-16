@@ -361,26 +361,13 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     config_class = LightOnOcrConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrPatchMerger"]
+    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrPatchMerger", "LightOnOcrVisionAttentionLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-
-# Vision model components - explicitly renamed from Pixtral
-class LightOnOcrVisionPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOcrVisionConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _supports_attention_backend = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _no_split_modules = ["LightOnOcrVisionAttentionLayer"]
 
 
 # Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
@@ -696,7 +683,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 __all__ = [
     "LightOnOcrPreTrainedModel",
     "LightOnOcrVisionModel",
-    "LightOnOcrVisionPreTrainedModel",
+    "LightOnOcrVisionPreTrainedModel",  # noqa: F822
     "LightOnOcrTextModel",
     "LightOnOcrTextPreTrainedModel",  # noqa: F822
     "LightOnOcrForConditionalGeneration",
