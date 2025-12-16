@@ -34,6 +34,7 @@ from transformers.modeling_outputs import (
     Seq2SeqModelOutput,
 )
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -251,7 +252,7 @@ class UdopPatchEmbeddings(nn.Module):
 class UdopPreTrainedModel(PreTrainedModel):
     config: UdopConfig
     base_model_prefix = "transformer"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
@@ -262,55 +263,52 @@ class UdopPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
-            module.weight.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=factor)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=factor)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.Conv2d):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.copy_(
-                nn.init.trunc_normal_(module.weight.to(torch.float32), mean=0.0, std=factor).to(module.weight.dtype)
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, RelativePositionBiasBase):
             factor = self.config.initializer_factor
             d_model = self.config.d_model
-            module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+            init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, UdopModel):
-            module.shared.weight.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopForConditionalGeneration):
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, UdopDenseActDense):
-            module.wi.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.zero_()
-            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, UdopDenseGatedActDense):
-            module.wi_0.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.zero_()
-            module.wi_1.weight.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.zero_()
-            module.wo.weight.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, UdopAttention):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
 
     # Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel._shift_right with ProphetNet->Udop
     def _shift_right(self, input_ids):
@@ -1062,7 +1060,6 @@ class UdopStack(UdopPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.embed_patches = UdopPatchEmbeddings(config)
         self.is_decoder = config.is_decoder
-        self._max_length = config.max_length
         self.num_layers = config.num_layers
 
         self.block = nn.ModuleList(
@@ -1077,6 +1074,7 @@ class UdopStack(UdopPreTrainedModel):
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
+        self.post_init()
 
     @staticmethod
     def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
@@ -1107,6 +1105,7 @@ class UdopStack(UdopPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1457,9 +1456,6 @@ class UdopModel(UdopPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1479,6 +1475,7 @@ class UdopModel(UdopPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
@@ -1637,9 +1634,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1660,6 +1654,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> tuple[Tensor, ...]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
@@ -1817,9 +1812,6 @@ class UdopEncoderModel(UdopPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1832,6 +1824,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

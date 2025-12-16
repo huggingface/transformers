@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 from torchvision.transforms.v2 import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -220,18 +221,18 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.text_config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.text_config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridLayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, DeepseekVLHybridModel):
-            module.high_res_vision_alpha.zero_()
+            init.zeros_(module.high_res_vision_alpha)
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
@@ -887,9 +888,6 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             )
             high_res_processed_images_grouped[shape] = stacked_high_res_images
         high_res_processed_images = reorder_images(high_res_processed_images_grouped, grouped_high_res_images_index)
-        high_res_processed_images = (
-            torch.stack(high_res_processed_images, dim=0) if return_tensors else high_res_processed_images
-        )
 
         resized_images_grouped = {}
         for shape, stacked_high_res_padded_images in high_res_padded_images.items():
@@ -913,7 +911,6 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
             )
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_resized_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(
             data={"pixel_values": processed_images, "high_res_pixel_values": high_res_processed_images},

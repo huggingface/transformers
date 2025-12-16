@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...activations import get_activation
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
@@ -47,6 +48,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from .configuration_falcon import FalconConfig
 
 
@@ -159,7 +161,7 @@ class FalconRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -512,6 +514,7 @@ class FalconFlashAttention2(FalconAttention):
         device_type = query_layer.device.type if query_layer.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -672,26 +675,16 @@ class FalconPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-
     _can_compile_fullgraph = True
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, FalconLinear)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+        super()._init_weights(module)
+        if isinstance(module, FalconLinear):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+                init.zeros_(module.bias)
 
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
@@ -747,6 +740,7 @@ class FalconModel(FalconPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1127,6 +1121,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1251,6 +1246,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -1328,6 +1324,7 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):

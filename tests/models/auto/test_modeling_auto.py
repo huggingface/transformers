@@ -555,6 +555,7 @@ class AutoModelTest(unittest.TestCase):
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
 
+    @unittest.skip("@Cyril: add the post_init() on the hub repo")
     def test_model_with_dotted_name_and_relative_imports(self):
         """
         Test for issue #40496: AutoModel.from_pretrained() doesn't work for models with '.' in their name

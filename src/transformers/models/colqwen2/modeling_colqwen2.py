@@ -26,6 +26,7 @@ from torch import nn
 
 from transformers import AutoModelForImageTextToText
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
@@ -40,7 +41,7 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -55,13 +56,14 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 @dataclass
@@ -139,6 +141,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -169,10 +172,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )

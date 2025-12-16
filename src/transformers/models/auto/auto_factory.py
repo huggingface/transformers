@@ -288,8 +288,9 @@ class _BaseAutoModelClass:
         if is_peft_available():
             if adapter_kwargs is None:
                 adapter_kwargs = {}
-                if token is not None:
-                    adapter_kwargs["token"] = token
+            adapter_kwargs = adapter_kwargs.copy()  # avoid mutating original
+            if token is not None:
+                adapter_kwargs["token"] = token
 
             maybe_adapter_path = find_adapter_config_file(
                 pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
@@ -542,7 +543,7 @@ def add_generation_mixin_to_remote_model(model_class):
 
 class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue]):
     """
-    " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
+    A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
     Args:
         - config_mapping: The map model type to config class

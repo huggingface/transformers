@@ -38,6 +38,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 
 
@@ -122,7 +123,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -772,7 +773,7 @@ class ChameleonImageVocabularyMapping:
 class ChameleonPreTrainedModel(PreTrainedModel):
     config: ChameleonConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
@@ -780,7 +781,6 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -809,6 +809,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
+        self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
         hidden_states = self.encoder(pixel_values)

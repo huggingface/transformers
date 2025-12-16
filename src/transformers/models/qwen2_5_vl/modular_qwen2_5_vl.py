@@ -179,6 +179,7 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -205,6 +206,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             spatial_merge_size=config.spatial_merge_size,
         )
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -343,7 +346,7 @@ class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
 
 class Qwen2_5_VLModel(Qwen2VLModel):
     config: Qwen2_5_VLConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -594,7 +597,8 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            if self.rope_deltas is None or cache_position is None or cache_position[0] == 0:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if self.rope_deltas is None or past_key_values_length == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -607,10 +611,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 batch_size, seq_length, _ = inputs_embeds.shape
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
-                if cache_position is not None:
-                    delta = (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                else:
-                    delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
+                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=1)
                 position_ids = position_ids + delta.to(position_ids.device)
 

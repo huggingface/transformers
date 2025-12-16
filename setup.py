@@ -36,35 +36,7 @@ To create the package for pypi.
 5. On the release branch, add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin v<RELEASE>-release
 
-6. Build both the sources and the wheel. Do not change anything in setup.py between
-   creating the wheel and the source distribution (obviously).
-
-   Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
-   message, you need to fix things before going further.
-
-   You should now have a /dist directory with both .whl and .tar.gz source versions.
-
-7. Check that everything looks correct by uploading the package to the pypi test server:
-
-   twine upload dist/* -r testpypi
-   (pypi suggest using twine as other methods upload files via plaintext.)
-   You may have to specify the repository url, use the following command then:
-   twine upload dist/* -r testpypi --repository-url=https://test.pypi.org/legacy/
-
-   Check that you can install it in a virtualenv by running:
-   pip install -i https://test.pypi.org/simple/ transformers
-
-   Check you can run the following commands:
-   python -c "from transformers import pipeline; classifier = pipeline('text-classification'); print(classifier('What a nice release'))"
-   python -c "from transformers import *"
-   python utils/check_build.py --check_lib
-
-   If making a patch release, double check the bug you are patching is indeed resolved.
-
-8. Upload the final version to actual pypi:
-   twine upload dist/* -r pypi
-
-9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+6. Have a core maintainer review and approve the deployment to pypi.
 """
 
 import re
@@ -99,7 +71,6 @@ _deps = [
     "blobfile",
     "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
-    "dataclasses",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
     "diffusers",
@@ -113,7 +84,7 @@ _deps = [
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "hf_xet",
-    "huggingface-hub>=1.0.0,<2.0",
+    "huggingface-hub>=1.2.1,<2.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -132,6 +103,7 @@ _deps = [
     "pandas<2.3.0",  # `datasets` requires `pandas` while `pandas==2.3.0` has issues with CircleCI on 2025/06/05
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
+    "peft>=0.18.0",
     "phonemizer",
     "protobuf",
     "psutil",
@@ -168,7 +140,7 @@ _deps = [
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
-    "timm<=1.0.19,!=1.0.18",
+    "timm>=1.0.20",
     "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
@@ -275,7 +247,7 @@ extras["hub-kernels"] = deps_list("kernels")
 
 extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette") + extras["torch"]
+extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",

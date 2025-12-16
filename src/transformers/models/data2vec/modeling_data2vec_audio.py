@@ -29,6 +29,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -485,26 +486,26 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         if isinstance(module, Data2VecAudioFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, Data2VecAudioPositionalConvLayer):
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
             if module.weight is not None:
-                module.weight.fill_(1.0)
+                init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
@@ -753,6 +754,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Data2VecAudioBaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -855,6 +857,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -966,6 +969,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1043,7 +1047,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.num_labels = config.num_labels
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_encoder(self):
         """
@@ -1069,6 +1073,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -1199,7 +1204,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
 
         self.objective = AMSoftmaxLoss(config.xvector_output_dim, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     def freeze_feature_encoder(self):
         """
@@ -1240,6 +1245,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, XVectorOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

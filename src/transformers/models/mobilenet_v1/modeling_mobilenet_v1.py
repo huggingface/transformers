@@ -128,20 +128,9 @@ class MobileNetV1PreTrainedModel(PreTrainedModel):
     config: MobileNetV1Config
     base_model_prefix = "mobilenet_v1"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = []
-
-    @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.BatchNorm2d):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -206,6 +195,7 @@ class MobileNetV1Model(MobileNetV1PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -271,6 +261,7 @@ class MobileNetV1ForImageClassification(MobileNetV1PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

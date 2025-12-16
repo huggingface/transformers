@@ -418,7 +418,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -456,6 +456,8 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
             bias=False,
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
+
+        self.post_init()
 
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
@@ -517,12 +519,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -688,27 +684,8 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Not needed for Ovis2")
 
     @can_return_tuple
     @auto_docstring

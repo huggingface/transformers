@@ -170,8 +170,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
             audio_inputs["input_features_mask"] = padding_mask
 
             # Compute sequence lengths token counting
-            audio_lenghts = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            conv_output_lengths = (audio_lenghts - 1) // 2 + 1  # After conv2 downsampling
+            audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
+            conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
             audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
 
             # expand audio tokens in text

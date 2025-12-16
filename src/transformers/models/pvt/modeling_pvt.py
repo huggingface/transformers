@@ -25,6 +25,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -418,7 +419,7 @@ class PvtPreTrainedModel(PreTrainedModel):
     config: PvtConfig
     base_model_prefix = "pvt"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = []
 
     @torch.no_grad()
@@ -426,30 +427,16 @@ class PvtPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            nn.init.trunc_normal_(module.weight, mean=0.0, std=std)
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, PvtPatchEmbeddings):
-            module.position_embeddings.copy_(
-                nn.init.trunc_normal_(
-                    module.position_embeddings,
-                    mean=0.0,
-                    std=std,
-                )
-            )
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=std)
             if module.cls_token is not None:
-                module.cls_token.copy_(
-                    nn.init.trunc_normal_(
-                        module.cls_token,
-                        mean=0.0,
-                        std=std,
-                    )
-                )
+                init.trunc_normal_(module.cls_token, mean=0.0, std=std)
 
 
 @auto_docstring
@@ -471,6 +458,7 @@ class PvtModel(PvtPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -525,6 +513,7 @@ class PvtForImageClassification(PvtPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

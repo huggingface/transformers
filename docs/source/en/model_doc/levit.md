@@ -56,7 +56,7 @@ This model was contributed by [anugunj](https://huggingface.co/anugunj). The ori
   one takes the average prediction between both heads as final prediction. (2) is also called "fine-tuning with distillation",
   because one relies on a teacher that has already been fine-tuned on the downstream dataset. In terms of models, (1) corresponds
   to [`LevitForImageClassification`] and (2) corresponds to [`LevitForImageClassificationWithTeacher`].
-- All released checkpoints were pre-trained and fine-tuned on  [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k)
+- All released checkpoints were pre-trained and fine-tuned on  [ImageNet-1k](https://huggingface.co/datasets/ILSVRC/imagenet-1k)
   (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes). only. No external data was used. This is in
   contrast with the original ViT model, which used external data like the JFT-300M dataset/Imagenet-21k for
   pre-training.

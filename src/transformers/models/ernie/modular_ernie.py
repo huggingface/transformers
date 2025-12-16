@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
@@ -106,6 +107,9 @@ class ErnieEmbeddings(BertEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        # .to is better than using _no_split_modules on ErnieEmbeddings as it's the first module and >1/2 the model size
+        inputs_embeds = inputs_embeds.to(token_type_embeddings.device)
         embeddings = inputs_embeds + token_type_embeddings
 
         position_embeddings = self.position_embeddings(position_ids)
@@ -165,21 +169,9 @@ class ErniePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, ErnieLMPredictionHead):
-            module.bias.zero_()
+        super()._init_weights(module)
+        if isinstance(module, ErnieLMPredictionHead):
+            init.zeros_(module.bias)
 
 
 class ErnieModel(BertModel):
@@ -198,7 +190,7 @@ class ErnieModel(BertModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

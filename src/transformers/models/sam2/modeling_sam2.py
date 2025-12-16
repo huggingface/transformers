@@ -32,6 +32,7 @@ from torch import Tensor
 
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -142,7 +143,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         _, num_channels, height, width = pixel_values.shape
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).permute(0, 2, 3, 1)
         return embeddings
 
 
@@ -220,7 +221,7 @@ class Sam2VisionNeck(nn.Module):
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
             lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -551,33 +552,22 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, Sam2LayerNorm)):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
+        super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):
             if module.pos_embed is not None:
-                module.pos_embed.zero_()
+                init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
-                module.pos_embed_window.zero_()
+                init.zeros_(module.pos_embed_window)
         if isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.zero_()
+                init.zeros_(module.no_memory_embedding)
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):
@@ -610,6 +600,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
                 self.blocks.append(block)
                 total_block_idx += 1
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.patch_embed
 
@@ -621,7 +613,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -673,7 +665,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1278,7 +1270,7 @@ class Sam2MaskDecoder(nn.Module):
     """
 )
 class Sam2Model(Sam2PreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
@@ -1383,7 +1375,7 @@ class Sam2Model(Sam2PreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1472,7 +1464,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

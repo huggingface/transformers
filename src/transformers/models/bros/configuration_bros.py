@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class BrosConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BrosModel`] or a [`TFBrosModel`]. It is used to
+    This is the configuration class to store the configuration of a [`BrosModel`]. It is used to
     instantiate a Bros model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Bros
     [jinho8345/bros-base-uncased](https://huggingface.co/jinho8345/bros-base-uncased) architecture.
@@ -34,7 +34,7 @@ class BrosConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Bros model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BrosModel`] or [`TFBrosModel`].
+            `inputs_ids` passed when calling [`BrosModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -54,7 +54,7 @@ class BrosConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BrosModel`] or [`TFBrosModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`BrosModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):

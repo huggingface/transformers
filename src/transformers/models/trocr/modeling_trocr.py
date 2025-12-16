@@ -406,18 +406,6 @@ class TrOCRPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TrOCRDecoderLayer"]
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-
 
 class TrOCRDecoder(TrOCRPreTrainedModel):
     """
@@ -471,6 +459,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -647,6 +636,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = TrOCRDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -683,12 +673,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output_projection = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -704,6 +688,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

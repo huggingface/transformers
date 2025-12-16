@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -177,13 +176,17 @@ class Glm4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_flash_attn
-    @require_torch_large_gpu
+    @require_torch_large_accelerator
     @pytest.mark.flash_attn_test
     def test_model_9b_flash_attn(self):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): [],
                 ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+                ("xpu", None): [
                     "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
                     "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],

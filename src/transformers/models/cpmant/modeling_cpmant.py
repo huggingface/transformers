@@ -22,6 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -528,21 +529,11 @@ class CpmAntPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.init_std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
-        elif isinstance(module, CpmAntLayerNorm):
-            module.weight.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, CpmAntLayerNorm):
+            init.ones_(module.weight)
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
-            module.relative_attention_bias.normal_(mean=0.0, std=self.config.init_std)
+            init.normal_(module.relative_attention_bias, mean=0.0, std=self.config.init_std)
 
 
 @auto_docstring

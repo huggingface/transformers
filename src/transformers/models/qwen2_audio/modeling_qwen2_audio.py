@@ -250,34 +250,12 @@ class Qwen2AudioEncoderLayer(GradientCheckpointingLayer):
 class Qwen2AudioPreTrainedModel(PreTrainedModel):
     config: Qwen2AudioConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        # important: this ported version of Qwen2Audio isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.audio_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.fill_(1.0)
-            module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -345,6 +323,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -707,6 +686,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Qwen2AudioCausalLMOutputWithPast]:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):

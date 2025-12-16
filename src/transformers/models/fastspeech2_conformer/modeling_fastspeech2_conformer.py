@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -513,7 +514,7 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time)`): Attention mask.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
@@ -529,7 +530,10 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
         # Apply padding mask before convolution
         if attention_mask is not None:
-            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=2)
+            else:
+                all_masked_rows = torch.all(~(attention_mask == 0.0), dim=2)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         # 1D Depthwise Conv
@@ -995,24 +999,25 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
+            init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-key, b=key)
+                init.uniform_(module.bias, a=-key, b=key)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_()
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
+            init.normal_(module.weight)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, FastSpeech2ConformerAttention):
-            nn.init.xavier_uniform_(module.pos_bias_u)
-            nn.init.xavier_uniform_(module.pos_bias_v)
+            init.xavier_uniform_(module.pos_bias_u)
+            init.xavier_uniform_(module.pos_bias_v)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, FastSpeech2ConformerEncoder):
@@ -1116,6 +1121,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1404,14 +1410,6 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -1439,7 +1437,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         waveform.
         """
     )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         spectrogram (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
@@ -1498,6 +1496,8 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
 
         self.config = config
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
@@ -1513,6 +1513,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

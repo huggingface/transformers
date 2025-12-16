@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin
@@ -33,6 +34,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast,
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.generic import maybe_autocast
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
@@ -326,7 +328,7 @@ class MoshiRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -600,6 +602,7 @@ class MoshiFlashAttention2(MoshiAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -817,7 +820,7 @@ class MoshiDecoderLayer(GradientCheckpointingLayer):
 class MoshiPreTrainedModel(PreTrainedModel):
     config: MoshiConfig
     base_model_prefix = "model"
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoshiDecoderLayer", "MimiTransformerLayer"]
     _supports_flash_attn = True
@@ -827,20 +830,9 @@ class MoshiPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-
-        if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, MoshiFlexibleLinear):
-            module.weight.normal_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, MoshiRMSNorm):
-            module.weight.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, MoshiFlexibleLinear):
+            init.normal_(module.weight)
 
 
 class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
@@ -877,6 +869,8 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         self.gradient_checkpointing = False
         self.config = config
 
+        self.post_init()
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -891,6 +885,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         position_ids: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         """
         Args:
@@ -966,7 +961,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             )
             use_cache = False
 
-        if use_cache and past_key_values is None and not self.training:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
@@ -1237,6 +1232,7 @@ class MoshiModel(MoshiPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1473,7 +1469,7 @@ class MoshiModel(MoshiPreTrainedModel):
     """
 )
 class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
     def __init__(self, config):
@@ -1591,7 +1587,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
 )
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     config: MoshiConfig
-    output_modalities = ["audio", "text"]
+    output_modalities = ("audio", "text")
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1610,9 +1606,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
 
         self.num_codebooks = config.num_codebooks
         self.post_init()
-
-    def get_audio_encoder(self):
-        return self.audio_encoder
 
     def get_depth_decoder(self):
         return self.depth_decoder

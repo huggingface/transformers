@@ -512,24 +512,9 @@ class ViltEncoder(nn.Module):
 class ViltPreTrainedModel(PreTrainedModel):
     config: ViltConfig
     base_model_prefix = "vilt"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
 
 
 @auto_docstring
@@ -571,6 +556,7 @@ class ViltModel(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BaseModelOutputWithPooling, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -723,6 +709,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -890,6 +877,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -994,6 +982,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -1097,6 +1086,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[ViltForImagesAndTextClassificationOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -1225,6 +1215,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[TokenClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):

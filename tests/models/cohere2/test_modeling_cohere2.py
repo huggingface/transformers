@@ -34,8 +34,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.cohere.test_modeling_cohere import CohereModelTest, CohereModelTester
-from ...test_configuration_common import ConfigTester
+from ...models.cohere.test_modeling_cohere import CohereModelTester
 
 
 if is_torch_available():
@@ -46,6 +45,11 @@ if is_torch_available():
         Cohere2Model,
     )
 
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 class Cohere2ModelTester(CohereModelTester):
     config_class = Cohere2Config
@@ -55,7 +59,7 @@ class Cohere2ModelTester(CohereModelTester):
 
 
 @require_torch
-class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
+class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -67,9 +71,20 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     )
     _is_stateful = True
 
+    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
+    # This is because we are hitting edge cases with the causal_mask buffer
+    model_split_percents = [0.5, 0.7, 0.8]
+
     def setUp(self):
         self.model_tester = Cohere2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
 
 @slow
@@ -269,6 +284,3 @@ class Cohere2IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
-
-
-del CohereModelTest, CohereModelTester  # So the parent tests don't run in this file too

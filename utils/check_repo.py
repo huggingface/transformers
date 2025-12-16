@@ -31,6 +31,7 @@ python utils/check_repo.py
 It has no auto-fix mode.
 """
 
+import ast
 import os
 import re
 import types
@@ -142,13 +143,20 @@ IGNORE_NON_TESTED = (
         "BarkCausalModel",  # Building part of bigger (tested) model.
         "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
         "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+        "Sam3TrackerVideoModel",  # Partly tested in Sam3TrackerModel, not regular model.
         "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
+        "Sam3ViTModel",  # Building part of bigger (tested) model.
+        "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
@@ -212,6 +220,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/shieldgemma2/test_modeling_shieldgemma2.py",
     "models/llama4/test_modeling_llama4.py",
     "models/sam2_video/test_modeling_sam2_video.py",
+    "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
+    "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
 ]
 
@@ -376,6 +386,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "PaddleOCRVLModel",  # Building part of bigger (tested) model
+    "PaddleOCRVisionModel",  # Building part of bigger (tested) model
+    "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model
+    "PaddleOCRTextModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
@@ -1027,6 +1041,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
+    "RoFormerTokenizerFast",  # An alias
 ]
 
 
@@ -1194,6 +1209,68 @@ def check_deprecated_constant_is_up_to_date():
         raise Exception("\n".join(message))
 
 
+def check_models_have_kwargs():
+    """
+    Checks that all model classes defined in modeling files accept **kwargs in their forward pass.
+    Since we ast.parse() here, it might be a good idea to add other tests that inspect modeling code here rather than
+    repeatedly ast.parsing() in each test!
+    """
+    models_dir = Path(PATH_TO_TRANSFORMERS) / "models"
+    failing_classes = []
+    for model_dir in models_dir.iterdir():
+        if model_dir.name == "deprecated":
+            continue
+        if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
+            modeling_file = modeling_file[0]
+
+            with open(modeling_file, "r") as f:
+                tree = ast.parse(f.read())
+
+            # Map all classes in the file to their base classes
+            class_bases = {}
+            all_class_nodes = {}
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # We only care about base classes that are simple names
+                    bases = [b.id for b in node.bases if isinstance(b, ast.Name)]
+                    class_bases[node.name] = bases
+                    all_class_nodes[node.name] = node
+
+            inherits_from_pretrained = {"PreTrainedModel"}
+            # Loop over classes and mark the ones that inherit from PreTrainedModel, or from
+            # previously marked classes (which indicates indirect inheritance from PreTrainedModel)
+            # Keep going until you go through the whole list without discovering a new child class, then break
+            while True:
+                for class_name, bases in class_bases.items():
+                    if class_name in inherits_from_pretrained:
+                        continue
+                    if inherits_from_pretrained.intersection(bases):
+                        inherits_from_pretrained.add(class_name)
+                        break
+                else:
+                    break
+
+            # 2. Iterate through classes and check conditions
+            for class_name, class_def in all_class_nodes.items():
+                if class_name not in inherits_from_pretrained:
+                    continue
+
+                forward_method = next(
+                    (n for n in class_def.body if isinstance(n, ast.FunctionDef) and n.name == "forward"), None
+                )
+                if forward_method:
+                    # 3. Check for **kwargs (represented as .kwarg in AST)
+                    if forward_method.args.kwarg is None:
+                        failing_classes.append(class_name)
+
+    if failing_classes:
+        raise Exception(
+            "The following model classes do not accept **kwargs in their forward() method: \n"
+            f"{', '.join(failing_classes)}."
+        )
+
+
 def check_repo_quality():
     """Check all models are tested and documented."""
     print("Repository-wide checks:")
@@ -1216,6 +1293,8 @@ def check_repo_quality():
     check_all_auto_mappings_importable()
     print("    - checking the DEPRECATED_MODELS constant is up to date.")
     check_deprecated_constant_is_up_to_date()
+    print("    - checking all models accept **kwargs in their call.")
+    check_models_have_kwargs()
 
 
 if __name__ == "__main__":

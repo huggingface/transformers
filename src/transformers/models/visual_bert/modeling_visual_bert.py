@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, KLDivLoss, LogSoftmax
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -457,21 +458,21 @@ class VisualBertPreTrainingHeads(nn.Module):
 class VisualBertPreTrainedModel(PreTrainedModel):
     config: VisualBertConfig
     base_model_prefix = "visual_bert"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, VisualBertLMPredictionHead):
-            module.bias.zero_()
+            init.zeros_(module.bias)
 
 
 @dataclass
@@ -549,6 +550,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
@@ -734,6 +736,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         sentence_image_labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], VisualBertForPreTrainingOutput]:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
@@ -876,6 +879,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -1062,6 +1066,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
@@ -1198,6 +1203,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
@@ -1371,6 +1377,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         return_dict: Optional[bool] = None,
         region_to_phrase_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):

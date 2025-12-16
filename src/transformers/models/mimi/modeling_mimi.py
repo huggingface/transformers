@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...masking_utils import create_causal_mask
@@ -31,6 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import maybe_autocast
 from .configuration_mimi import MimiConfig
 
 
@@ -558,7 +560,7 @@ class MimiRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -805,6 +807,7 @@ class MimiFlashAttention2(MimiAttention):
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
                 target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
@@ -1377,7 +1380,7 @@ class MimiPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MimiDecoderLayer"]
+    _no_split_modules = ["MimiResidualVectorQuantizer", "MimiTransformerLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1388,19 +1391,19 @@ class MimiPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.zero_()
-            module.weight.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, MimiLayerScale):
-            module.scale.fill_(self.config.layer_scale_initial_scale)
+            init.constant_(module.scale, self.config.layer_scale_initial_scale)
 
 
 @auto_docstring(
@@ -1451,9 +1454,6 @@ class MimiModel(MimiPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def _encode_frame(
         self,
@@ -1686,6 +1686,7 @@ class MimiModel(MimiPreTrainedModel):
         encoder_past_key_values: Optional[Cache] = None,
         decoder_past_key_values: Optional[Cache] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], MimiOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
