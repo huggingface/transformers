@@ -161,7 +161,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
         ("lfm2_vl", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("lightonocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
+        ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),

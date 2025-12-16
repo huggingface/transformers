@@ -28,7 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LightOnOCRProcessor
+    from transformers import LightOnOcrProcessor
 
 if is_torch_available():
     import torch
@@ -36,16 +36,16 @@ if is_torch_available():
 
 @require_vision
 @require_torch
-class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    """Test suite for LightOnOCR processor."""
+class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    """Test suite for LightOnOcr processor."""
 
-    processor_class = LightOnOCRProcessor
+    processor_class = LightOnOcrProcessor
 
     def setUp(self):
         """Set up test fixtures."""
         self.tmpdirname = tempfile.mkdtemp()
 
-        # Create a Pixtral image processor (LightOnOCR uses Pixtral vision architecture)
+        # Create a Pixtral image processor (LightOnOcr uses Pixtral vision architecture)
         image_processor = AutoImageProcessor.from_pretrained(
             "mistral-community/pixtral-12b", size={"longest_edge": 1024}
         )
@@ -53,7 +53,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Create a tokenizer (using Qwen2 as base)
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
 
-        # Add special tokens for LightOnOCR
+        # Add special tokens for LightOnOcr
         special_tokens_dict = {
             "additional_special_tokens": [
                 "<|image_pad|>",
@@ -98,7 +98,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # Create and save processor
-        processor = LightOnOCRProcessor(
+        processor = LightOnOcrProcessor(
             image_processor=image_processor,
             tokenizer=tokenizer,
             patch_size=14,
@@ -134,7 +134,7 @@ class LightOnOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_creation(self):
         """Test that processor can be created and loaded."""
         processor = self.get_processor()
-        self.assertIsInstance(processor, LightOnOCRProcessor)
+        self.assertIsInstance(processor, LightOnOcrProcessor)
         self.assertIsNotNone(processor.tokenizer)
         self.assertIsNotNone(processor.image_processor)
 

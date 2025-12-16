@@ -40,52 +40,52 @@ if is_vision_available():
     from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
-class LightOnOCRVisionConfig(PixtralVisionConfig):
-    model_type = "lightonocr_vision"
+class LightOnOcrVisionConfig(PixtralVisionConfig):
+    model_type = "lighton_ocr_vision"
     pass
 
 
-class LightOnOCRTextConfig(Qwen3Config):
-    model_type = "lightonocr_text"
+class LightOnOcrTextConfig(Qwen3Config):
+    model_type = "lighton_ocr_text"
 
 
-class LightOnOCRConfig(PretrainedConfig):
+class LightOnOcrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightOnOCRForConditionalGeneration`]. It is used to instantiate a
-    LightOnOCR model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LightOnOcrForConditionalGeneration`]. It is used to instantiate a
+    LightOnOcr model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the LightOnOCR [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
+    a similar configuration to that of the LightOnOcr [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
 
     Args:
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size of spatial merging for image patches.
         image_token_id (`int`, *optional*, defaults to 151655):
             The id of the image token in the vocabulary.
-        vision_config (`dict` or `LightOnOCRVisionConfig`, *optional*):
+        vision_config (`dict` or `LightOnOcrVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
-        text_config (`dict` or `LightOnOCRTextConfig`, *optional*):
+        text_config (`dict` or `LightOnOcrTextConfig`, *optional*):
             Custom text configuration or dictionary with text configuration values.
 
     Example:
 
     ```python
-    >>> from transformers import LightOnOCRConfig, LightOnOCRForConditionalGeneration
+    >>> from transformers import LightOnOcrConfig, LightOnOcrForConditionalGeneration
 
-    >>> # Initializing a LightOnOCR configuration
-    >>> configuration = LightOnOCRConfig()
+    >>> # Initializing a LightOnOcr configuration
+    >>> configuration = LightOnOcrConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = LightOnOCRForConditionalGeneration(configuration)
+    >>> model = LightOnOcrForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "lightonocr"
-    sub_configs = {"text_config": LightOnOCRTextConfig, "vision_config": LightOnOCRVisionConfig}
+    model_type = "lighton_ocr"
+    sub_configs = {"text_config": LightOnOcrTextConfig, "vision_config": LightOnOcrVisionConfig}
 
     def __init__(
         self,
@@ -99,7 +99,7 @@ class LightOnOCRConfig(PretrainedConfig):
         self.image_token_id = image_token_id
 
         if vision_config is None:
-            self.vision_config = LightOnOCRVisionConfig(
+            self.vision_config = LightOnOcrVisionConfig(
                 attention_dropout=0,
                 head_dim=64,
                 hidden_act="silu",
@@ -117,10 +117,10 @@ class LightOnOCRConfig(PretrainedConfig):
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
-            self.vision_config = LightOnOCRVisionConfig(**vision_config)
+            self.vision_config = LightOnOcrVisionConfig(**vision_config)
 
         if text_config is None:
-            self.text_config = LightOnOCRTextConfig(
+            self.text_config = LightOnOcrTextConfig(
                 attention_dropout=0,
                 head_dim=128,
                 hidden_act="silu",
@@ -142,12 +142,12 @@ class LightOnOCRConfig(PretrainedConfig):
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
-            self.text_config = LightOnOCRTextConfig(**text_config)
+            self.text_config = LightOnOcrTextConfig(**text_config)
 
         super().__init__(**kwargs)
 
 
-class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
+class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -159,7 +159,7 @@ class LightOnOCRProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class LightOnOCRProcessor(ProcessorMixin):
+class LightOnOcrProcessor(ProcessorMixin):
     def __init__(
         self,
         image_processor=None,
@@ -193,12 +193,12 @@ class LightOnOCRProcessor(ProcessorMixin):
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        **kwargs: Unpack[LightOnOCRProcessorKwargs],
+        **kwargs: Unpack[LightOnOcrProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You must provide either text or images")
         output_kwargs = self._merge_kwargs(
-            LightOnOCRProcessorKwargs,
+            LightOnOcrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -266,7 +266,7 @@ class LightOnOCRProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LightOnOCRProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs = LightOnOcrProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
 
             size = images_kwargs.get("size", None) or self.image_processor.size
@@ -289,16 +289,16 @@ class LightOnOCRProcessor(ProcessorMixin):
 
 
 # Text model RMSNorm defined early for use in MultiModalProjector
-class LightOnOCRTextRMSNorm(Qwen3RMSNorm):
+class LightOnOcrTextRMSNorm(Qwen3RMSNorm):
     pass
 
 
-class LightOnOCRPatchMerger(nn.Module):
+class LightOnOcrPatchMerger(nn.Module):
     """
     Learned merging of spatial_merge_size ** 2 patches.
     """
 
-    def __init__(self, config: LightOnOCRConfig):
+    def __init__(self, config: LightOnOcrConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.vision_config.hidden_size
@@ -340,13 +340,13 @@ class LightOnOCRPatchMerger(nn.Module):
         return image_features
 
 
-class LightOnOCRVisionProjector(nn.Module):
-    def __init__(self, config: LightOnOCRConfig):
+class LightOnOcrVisionProjector(nn.Module):
+    def __init__(self, config: LightOnOcrConfig):
         super().__init__()
         self.config = config
 
-        self.norm = LightOnOCRTextRMSNorm(config.vision_config.hidden_size, eps=1e-6)
-        self.patch_merger = LightOnOCRPatchMerger(config)
+        self.norm = LightOnOcrTextRMSNorm(config.vision_config.hidden_size, eps=1e-6)
+        self.patch_merger = LightOnOcrPatchMerger(config)
         self.act = nn.GELU()
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size,
@@ -364,11 +364,11 @@ class LightOnOCRVisionProjector(nn.Module):
         return hidden_states
 
 
-class LightOnOCRPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOCRConfig
+class LightOnOcrPreTrainedModel(PreTrainedModel):
+    config_class = LightOnOcrConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOCRVisionProjector", "LightOnOCRPatchMerger"]
+    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrPatchMerger"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -378,8 +378,8 @@ class LightOnOCRPreTrainedModel(PreTrainedModel):
 
 
 # Vision model components - explicitly renamed from Pixtral
-class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOCRVisionConfig
+class LightOnOcrVisionPreTrainedModel(PreTrainedModel):
+    config_class = LightOnOcrVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -387,7 +387,7 @@ class LightOnOCRVisionPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _no_split_modules = ["LightOnOCRVisionAttentionLayer"]
+    _no_split_modules = ["LightOnOcrVisionAttentionLayer"]
 
 
 # Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
@@ -451,7 +451,7 @@ def vision_apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim
     return q_embed, k_embed
 
 
-class LightOnOCRAttention(PixtralAttention):
+class LightOnOcrAttention(PixtralAttention):
     """
     Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
     """
@@ -511,20 +511,20 @@ class LightOnOCRAttention(PixtralAttention):
 
 @auto_docstring(
     custom_intro="""
-    The vision encoder of LightOnOCR, based on Pixtral vision architecture.
+    The vision encoder of LightOnOcr, based on Pixtral vision architecture.
     """
 )
-class LightOnOCRVisionModel(PixtralVisionModel):
-    config_class = LightOnOCRVisionConfig
+class LightOnOcrVisionModel(PixtralVisionModel):
+    config_class = LightOnOcrVisionConfig
 
 
 @auto_docstring(
     custom_intro="""
-    The language model of LightOnOCR, based on Qwen3 architecture.
+    The language model of LightOnOcr, based on Qwen3 architecture.
     """
 )
-class LightOnOCRTextModel(Qwen3Model):
-    config_class = LightOnOCRTextConfig
+class LightOnOcrTextModel(Qwen3Model):
+    config_class = LightOnOcrTextConfig
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -533,20 +533,20 @@ class LightOnOCRTextModel(Qwen3Model):
         self.embed_tokens = value
 
 
-class LightOnOCRModel(LightOnOCRPreTrainedModel):
+class LightOnOcrModel(LightOnOcrPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: LightOnOCRConfig
+    config: LightOnOcrConfig
 
-    def __init__(self, config: LightOnOCRConfig):
+    def __init__(self, config: LightOnOcrConfig):
         super().__init__(config)
 
-        self.vision_encoder = LightOnOCRVisionModel._from_config(config.vision_config)
+        self.vision_encoder = LightOnOcrVisionModel._from_config(config.vision_config)
 
-        self.vision_projection = LightOnOCRVisionProjector(config)
+        self.vision_projection = LightOnOcrVisionProjector(config)
 
-        self.language_model = LightOnOCRTextModel._from_config(config.text_config)
+        self.language_model = LightOnOcrTextModel._from_config(config.text_config)
 
         self.post_init()
 
@@ -646,13 +646,13 @@ class LightOnOCRModel(LightOnOCRPreTrainedModel):
         return outputs
 
 
-class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMixin):
-    config_class = LightOnOCRConfig
+class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
+    config_class = LightOnOcrConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: LightOnOCRConfig):
+    def __init__(self, config: LightOnOcrConfig):
         super().__init__(config)
-        self.model = LightOnOCRModel(config)
+        self.model = LightOnOcrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
@@ -738,15 +738,15 @@ class LightOnOCRForConditionalGeneration(LightOnOCRPreTrainedModel, GenerationMi
 
 
 __all__ = [
-    "LightOnOCRPreTrainedModel",
-    "LightOnOCRVisionModel",
-    "LightOnOCRVisionPreTrainedModel",
-    "LightOnOCRTextModel",
-    "LightOnOCRTextPreTrainedModel",  # noqa: F822
-    "LightOnOCRForConditionalGeneration",
-    "LightOnOCRModel",
-    "LightOnOCRConfig",
-    "LightOnOCRTextConfig",
-    "LightOnOCRVisionConfig",
-    "LightOnOCRProcessor",
+    "LightOnOcrPreTrainedModel",
+    "LightOnOcrVisionModel",
+    "LightOnOcrVisionPreTrainedModel",
+    "LightOnOcrTextModel",
+    "LightOnOcrTextPreTrainedModel",  # noqa: F822
+    "LightOnOcrForConditionalGeneration",
+    "LightOnOcrModel",
+    "LightOnOcrConfig",
+    "LightOnOcrTextConfig",
+    "LightOnOcrVisionConfig",
+    "LightOnOcrProcessor",
 ]

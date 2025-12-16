@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch LightOnOCR model."""
+"""Testing suite for the PyTorch LightOnOcr model."""
 
 import copy
 import unittest
@@ -19,9 +19,9 @@ from difflib import SequenceMatcher
 
 from transformers import (
     AutoProcessor,
-    LightOnOCRConfig,
-    LightOnOCRForConditionalGeneration,
-    LightOnOCRModel,
+    LightOnOcrConfig,
+    LightOnOcrForConditionalGeneration,
+    LightOnOcrModel,
     is_torch_available,
     is_vision_available,
 )
@@ -45,7 +45,7 @@ if is_vision_available():
     from transformers.image_utils import load_image
 
 
-class LightOnOCRVisionText2TextModelTester:
+class LightOnOcrVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -53,7 +53,7 @@ class LightOnOCRVisionText2TextModelTester:
         spatial_merge_size=2,
         seq_length=7,
         text_config={
-            "model_type": "lightonocr_text",
+            "model_type": "lighton_ocr_text",
             "seq_length": 7,
             "is_training": True,
             "use_input_mask": True,
@@ -125,7 +125,7 @@ class LightOnOCRVisionText2TextModelTester:
         self.encoder_seq_length = self.seq_length
 
     def get_config(self):
-        return LightOnOCRConfig(
+        return LightOnOcrConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_index,
@@ -211,20 +211,20 @@ class LightOnOCRVisionText2TextModelTester:
 
 
 @require_torch
-class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `LightOnOCRForConditionalGeneration`.
+    Model tester for `LightOnOcrForConditionalGeneration`.
     """
 
     all_model_classes = (
         (
-            LightOnOCRModel,
-            LightOnOCRForConditionalGeneration,
+            LightOnOcrModel,
+            LightOnOcrForConditionalGeneration,
         )
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": LightOnOCRForConditionalGeneration} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-text-to-text": LightOnOcrForConditionalGeneration} if is_torch_available() else {}
 
     _is_composite = True
     test_head_masking = False
@@ -232,10 +232,10 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = LightOnOCRVisionText2TextModelTester(self)
+        self.model_tester = LightOnOcrVisionText2TextModelTester(self)
         common_properties = ["image_token_id", "spatial_merge_size"]
         self.config_tester = ConfigTester(
-            self, config_class=LightOnOCRConfig, has_text_modality=False, common_properties=common_properties
+            self, config_class=LightOnOcrConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -381,19 +381,19 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                 self.assertTrue(torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5))
 
     @unittest.skip(
-        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        "LightOnOCR uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
+        "LightOnOcr uses complex attention patterns with sliding windows, skipping gradient checkpointing test"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -446,13 +446,13 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             model = model_class(config)
 
             # Check that model has all expected components
-            if model_class == LightOnOCRForConditionalGeneration:
+            if model_class == LightOnOcrForConditionalGeneration:
                 self.assertTrue(hasattr(model, "model"))
                 self.assertTrue(hasattr(model.model, "vision_encoder"))
                 self.assertTrue(hasattr(model.model, "language_model"))
                 self.assertTrue(hasattr(model.model, "vision_projection"))
                 self.assertTrue(hasattr(model, "lm_head"))
-            elif model_class == LightOnOCRModel:
+            elif model_class == LightOnOcrModel:
                 self.assertTrue(hasattr(model, "vision_encoder"))
                 self.assertTrue(hasattr(model, "language_model"))
                 self.assertTrue(hasattr(model, "vision_projection"))
@@ -463,7 +463,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = LightOnOCRModel(config).to(torch_device)
+        model = LightOnOcrModel(config).to(torch_device)
         model.eval()
 
         # Convert image_sizes to list for vision_encoder
@@ -494,7 +494,7 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        model = LightOnOCRModel(config).to(torch_device)
+        model = LightOnOcrModel(config).to(torch_device)
         model.eval()
 
         with torch.no_grad():
@@ -514,14 +514,14 @@ class LightOnOCRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
 @slow
 @require_torch
-class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
+class LightOnOcrForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_lightonocr_ocr_integration(self):
         """
-        Integration test for LightOnOCR OCR capabilities.
+        Integration test for LightOnOcr OCR capabilities.
         Tests that the model can perform OCR on a real image and produce expected output.
 
         """
@@ -530,7 +530,7 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Load processor and model from Hub
         processor = AutoProcessor.from_pretrained(model_id)
-        model = LightOnOCRForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
+        model = LightOnOcrForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         model.eval()
 
         # Load a test OCR image
@@ -603,8 +603,8 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
             "patch_size": 14,
         }
 
-        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
-        model = LightOnOCRForConditionalGeneration(config).to(torch_device)
+        config = LightOnOcrConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
+        model = LightOnOcrForConditionalGeneration(config).to(torch_device)
         model.eval()
 
         # Create text-only input
@@ -641,8 +641,8 @@ class LightOnOCRForConditionalGenerationIntegrationTest(unittest.TestCase):
             "patch_size": 14,
         }
 
-        config = LightOnOCRConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
-        model = LightOnOCRForConditionalGeneration(config).to(torch_device)
+        config = LightOnOcrConfig(text_config=text_config, vision_config=vision_config, image_token_id=10)
+        model = LightOnOcrForConditionalGeneration(config).to(torch_device)
         model.eval()
 
         # Create inputs

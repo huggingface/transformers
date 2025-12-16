@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lightonocr import *
-    from .modeling_lightonocr import *
-    from .processing_lightonocr import *
+    from .configuration_lighton_ocr import *
+    from .modeling_lighton_ocr import *
+    from .processing_lighton_ocr import *
 else:
     import sys
 
