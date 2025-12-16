@@ -2387,11 +2387,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_keys = list(tied_keys.items())
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
-            # Usually we tie a single target to a single source, but when both are missing we may later tie
-            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
-            # a list here
-            target_param_names = [target_param_name]
-
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
                 remove_from_missing = True
@@ -2412,7 +2407,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
-                    target_param_names = [target_param_name]
                 # Both are missing -> check other keys in case more than 2 keys are tied to the same weight
                 elif not source_is_there and not target_is_there:
                     for target_backup, source_backup in tied_keys[i + 1 :]:
@@ -2421,10 +2415,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if source_backup == source_param_name:
                             target_backup_is_there = target_backup not in missing_keys
                             # If the target is present, we found the correct weight to tie into (we know the source is missing)
+                            # Note here that we do not tie the missing source right now as well, as it will be done anyway when
+                            # the pair (target_backup, source_backup) becomes the main pair (target_param_name, source_param_name)
                             if target_backup_is_there:
                                 source_param_name = target_backup
-                                # Append the source as well, since both are missing we'll tie both
-                                target_param_names.append(source_param_name)
                                 break
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
@@ -2440,19 +2434,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # Perform the actual tying
             source_param = self.get_parameter_or_buffer(source_param_name)
-            for target_param_name in target_param_names:
-                if "." in target_param_name:
-                    parent_name, name = target_param_name.rsplit(".", 1)
-                    parent = self.get_submodule(parent_name)
-                else:
-                    name = target_param_name
-                    parent = self
-                # Tie the weights
-                setattr(parent, name, source_param)
-                self._adjust_bias(parent, source_param)
-                # Remove from missing if necesary
-                if missing_keys is not None and remove_from_missing:
-                    missing_keys.discard(target_param_name)
+            if "." in target_param_name:
+                parent_name, name = target_param_name.rsplit(".", 1)
+                parent = self.get_submodule(parent_name)
+            else:
+                name = target_param_name
+                parent = self
+            # Tie the weights
+            setattr(parent, name, source_param)
+            self._adjust_bias(parent, source_param)
+            # Remove from missing if necesary
+            if missing_keys is not None and remove_from_missing:
+                missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
