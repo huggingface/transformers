@@ -1062,13 +1062,11 @@ class TrackioCallback(TrainerCallback):
         if not state.is_world_process_zero or self._trackio is None:
             return
         
-        import trackio
-        
-        trackio_version = packaging.version.parse(trackio.__version__)
+        trackio_version = packaging.version.parse(self._trackio.__version__)
         if trackio_version <= packaging.version.parse("0.12.0"):
             return
-        
-        space_url = trackio.sync(project, force=True)
+
+        space_url = self._trackio.sync(project, force=True)
         
         if getattr(model, "model_tags", None) is not None:
             model.model_tags.append(f"trackio:{space_url}")
