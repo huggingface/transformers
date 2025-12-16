@@ -20,6 +20,7 @@ import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
+from transformers.utils import is_torch_cuda_available
 
 
 MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
@@ -37,11 +38,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if is_torch_cuda_available():
+        device_map = "cuda"
+    else:
+        device_map = "cpu"
+
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         attn_implementation=args.attn,
-        device_map="auto",
+        device_map=device_map,
         dtype=torch.bfloat16,
     )
     model = model.eval()
