@@ -115,7 +115,7 @@ class PeAudioVideoEncoderPatchEmbedder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.resnet_block = PeAudioVideoResnetBlock1d(config)
-        self.class_embedding = nn.Parameter(torch.ones(1, 1, config.hidden_size))
+        self.class_embedding = nn.Parameter(torch.randn(1, 1, config.hidden_size))
 
     def forward(self, inputs_embeds, padding_mask=None):
         # Embedding step: prepend class token and run the ResNet block.
@@ -530,6 +530,19 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PeAudioVideoEncoderLayer,
         "attentions": PeAudioVideoEncoderAttention,
     }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PeAudioVideoEncoderPatchEmbedder):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 @dataclass

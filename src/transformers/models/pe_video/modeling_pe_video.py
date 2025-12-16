@@ -26,7 +26,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -415,11 +414,20 @@ class PeVideoPreTrainedModel(PreTrainedModel):
         "hidden_states": PeVideoEncoderLayer,
         "attentions": PeVideoEncoderAttention,
     }
+    main_input_name = "pixel_values_videos"
 
     def _init_weights(self, module):
         super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
         if isinstance(module, PeVideoEncoderPatchEmbedder):
-            init.normal_(module.class_embedding, mean=0.0, std=0.02)
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 class PeVideoEncoderRotaryEmbedding(nn.Module):
@@ -547,6 +555,8 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
 
 
 class PeVideoModel(PeVideoPreTrainedModel):
+    main_input_name = "input_ids"
+
     def __init__(self, config: PeVideoConfig):
         super().__init__(config)
         self.text_model = AutoModel.from_config(config.text_config)

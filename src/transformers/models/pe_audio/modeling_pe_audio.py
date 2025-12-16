@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -492,9 +493,6 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-from ... import initialization as init
-
-
 @auto_docstring
 class PeAudioPreTrainedModel(PreTrainedModel):
     config: PeAudioConfig
@@ -516,6 +514,16 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+
+        if hasattr(self.config, "initializer_range"):
+            std = self.config.initializer_range
+        else:
+            # 0.02 is the standard default value across the library
+            std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
+
+        if isinstance(module, PeAudioEncoderPatchEmbedder):
+            embed_dim = module.class_embedding.shape[-1]
+            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
         if isinstance(module, nn.Conv1d):
             init.trunc_normal_(module.weight, std=0.02)
             init.constant_(module.bias, 0)
@@ -525,8 +533,6 @@ class PeAudioPreTrainedModel(PreTrainedModel):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=0.02)
-        elif isinstance(module, PeAudioEncoderPatchEmbedder):
-            init.normal_(module.class_embedding, mean=0.0, std=0.02)
 
 
 @dataclass
