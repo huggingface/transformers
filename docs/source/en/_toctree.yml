@@ -68,6 +68,8 @@
       title: Perplexity of fixed-length models
     title: Generate API
   - sections:
+    - local: optimization_overview
+      title: Overview
     - local: attention_interface
       title: Attention backends
     - local: continuous_batching
@@ -96,6 +98,8 @@
       title: Chat basics
     - local: chat_templating
       title: Chat templates
+    - local: chat_content_patterns
+      title: Chat message patterns
     - local: chat_templating_multimodal
       title: Multimodal chat templates
     - local: chat_extras

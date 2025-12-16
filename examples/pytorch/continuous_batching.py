@@ -182,13 +182,16 @@ if __name__ == "__main__":
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
+    parser.add_argument(
+        "--input-length", type=int, default=None, help="Length of input sequences. Leave to None to mimic real eval."
+    )
     parser.add_argument("--max-new-tokens", type=int, default=512, help="Maximum number of new tokens to generate")
+    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
-    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -251,6 +254,12 @@ if __name__ == "__main__":
     else:
         possible_prefixes = [None]
 
+    tokenizer_kwargs = {"add_generation_prompt": True}
+    if args.input_length is not None:
+        tokenizer_kwargs["max_length"] = args.input_length
+        tokenizer_kwargs["truncation"] = True
+        tokenizer_kwargs["padding"] = True
+
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
         messages = []
@@ -261,7 +270,7 @@ if __name__ == "__main__":
             else:
                 question = prefix + "\n\n" + question
         messages.append({"role": "user", "content": question})
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        inputs = tokenizer.apply_chat_template(messages, **tokenizer_kwargs)
         inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
         batched_inputs.append(inputs)
 
@@ -283,6 +292,7 @@ if __name__ == "__main__":
         generation_cfg.compile_config = CompileConfig(
             fullgraph=True,
             mode="max-autotune-no-cudagraphs",
+            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
         )
 
     # If we need to compare, we need to generate the reference outputs
