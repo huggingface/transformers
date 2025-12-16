@@ -166,6 +166,9 @@ def _build_checkpoint_conversion_mapping():
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
     mapping["dots1"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
