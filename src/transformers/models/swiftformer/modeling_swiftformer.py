@@ -400,6 +400,12 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             init.constant_(module.bias, 0)
             init.constant_(module.weight, 1.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+            if getattr(module, "running_var", None) is not None:
+                init.ones_(module.running_var)
+            if getattr(module, "num_batches_tracked", None) is not None:
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
             init.ones_(module.layer_scale)
         elif isinstance(module, SwiftFormerEncoderBlock):
