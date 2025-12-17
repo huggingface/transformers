@@ -28,8 +28,8 @@ from typing import Any, Optional, Union
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation.utils import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_masks_for_generate, eager_mask, packed_sequence_mask_function, sdpa_mask
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -220,6 +220,134 @@ class IsaacVisionEmbeddings(nn.Module):
         return torch.cat(output_chunks, dim=0)
 
 
+class IsaacVisionAttention(nn.Module):
+    """Custom attention that supports variable-length sequences with flash attention."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        past_key_value: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        is_causal: bool = False,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+        # Ignore unused arguments for interface compatibility
+        _ = position_ids
+        _ = past_key_value
+        _ = is_causal
+        kwargs.pop("output_hidden_states", None)
+        kwargs.pop("return_dict", None)
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        if not queries.is_contiguous():
+            queries = queries.contiguous()
+        if not keys.is_contiguous():
+            keys = keys.contiguous()
+        if not values.is_contiguous():
+            values = values.contiguous()
+
+        L = queries.size(0)
+        if max_seqlen is not None:
+            max_q = max_k = int(max_seqlen)
+        else:
+            max_q = max_k = self._max_from_cu(cu_seqlens, L)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
+        if self.config._attn_implementation != "sdpa":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        dropout = 0.0 if not self.training else self.dropout
+        attention_kwargs: dict[str, Any] = {
+            "is_causal": False,
+            "scaling": self.scale,
+            "dropout": dropout,
+        }
+        if cu_seqlens is not None:
+            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
+            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
+        if max_seqlen is not None:
+            attention_kwargs["max_length_q"] = max_q
+            attention_kwargs["max_length_k"] = max_k
+        if output_attentions:
+            attention_kwargs["output_attentions"] = True
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            **attention_kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+
+        # Align projection inputs with parameter dtype to avoid mixed-dtype matmul errors
+        out_proj_dtype = self.out_proj.weight.dtype
+        if attn_output.dtype != out_proj_dtype:
+            attn_output = attn_output.to(out_proj_dtype)
+
+        attn_output = self.out_proj(attn_output)
+        if attn_output.dtype != hidden_states.dtype:
+            attn_output = attn_output.to(hidden_states.dtype)
+
+        return attn_output, attn_weights
+
+    @staticmethod
+    def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
+        if cu is None or cu.numel() < 2:
+            return fallback
+        return int((cu[1:] - cu[:-1]).max().item())
+
+
+class IsaacMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
 def document_mask_function_from_cu_seqlens(cu_seqlens: Optional[torch.Tensor]) -> Optional[Callable]:
     """Return a mask function that blocks cross-document attention from packed ``cu_seqlens``.
 
@@ -271,325 +399,6 @@ def ensure_document_attention_mask(
     return None
 
 
-class IsaacVisionAttention(nn.Module):
-    """Custom attention that supports variable-length sequences with flash attention."""
-
-    ATTENTION_KEY_MAP: dict[str, str] = {
-        "flash_attention_2": "isaac_flash_attention_2",
-        "flash_attention_3": "isaac_flash_attention_3",
-        "isaac_flash_attention_2": "isaac_flash_attention_2",
-        "isaac_flash_attention_3": "isaac_flash_attention_3",
-        "sdpa": "isaac_sdpa",
-        "isaac_sdpa": "isaac_sdpa",
-        "eager": "isaac_eager",
-        "isaac_eager": "isaac_eager",
-    }
-    _FLASH_IMPLS = frozenset(("isaac_flash_attention_2", "isaac_flash_attention_3"))
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self._variable_length_metadata = None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        past_key_value: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        is_causal: bool = False,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-        # Unused arguments are accepted for interface compatibility
-        _ = position_ids
-        _ = past_key_value
-        _ = is_causal
-        _ = output_attentions
-
-        kwargs.pop("output_hidden_states", None)
-        kwargs.pop("return_dict", None)
-        if kwargs:
-            unexpected = ", ".join(sorted(kwargs))
-            raise TypeError(f"Unexpected kwargs for IsaacVisionAttention.forward: {unexpected}")
-
-        cached_cu, cached_max = self._consume_variable_length_metadata()
-        if cu_seqlens is None:
-            cu_seqlens = cached_cu
-        if max_seqlen is None:
-            max_seqlen = cached_max
-
-        # Expect packed sequences with batch_size == 1
-        batch_size, L, _ = hidden_states.shape
-        if batch_size != 1:
-            raise ValueError("packed variable-length attention expects batch_size=1")
-        x = hidden_states[0]  # (L, E)
-
-        H = self.num_heads
-        D = self.head_dim
-        p_drop = self.dropout if self.training else 0.0
-
-        # Project and reshape to (L, H, D)
-        q = self.q_proj(x).view(L, H, D)
-        k = self.k_proj(x).view(L, H, D)
-        v = self.v_proj(x).view(L, H, D)
-
-        resolved_key = "isaac_sdpa"
-        if self.config._attn_implementation != "sdpa":
-            resolved_key = self.ATTENTION_KEY_MAP.get(self.config._attn_implementation, resolved_key)
-
-        attn_mask = ensure_document_attention_mask(
-            attention_mask,
-            cu_seqlens,
-            L,
-            q.dtype,
-            q.device,
-            return_mask_function=True,
-        )
-
-        attn_weights = None
-        if resolved_key in self._FLASH_IMPLS:
-            y_lhd = self._flash_attention_forward(
-                q_lhd=q,
-                k_lhd=k,
-                v_lhd=v,
-                cu_seqlens=cu_seqlens,
-                max_seqlen=max_seqlen,
-                dropout=p_drop,
-            )
-        elif resolved_key == "isaac_sdpa":
-            y_lhd = self._sdpa_attention_forward(
-                q_lhd=q,
-                k_lhd=k,
-                v_lhd=v,
-                attention_mask=attn_mask,
-                cu_seqlens=cu_seqlens,
-                dropout=p_drop,
-            )
-        elif resolved_key == "isaac_eager":
-            y_lhd, attn_weights = self._eager_attention_forward(
-                q_lhd=q,
-                k_lhd=k,
-                v_lhd=v,
-                attention_mask=attn_mask,
-                dropout=p_drop,
-            )
-        else:
-            attention_fn = ALL_ATTENTION_FUNCTIONS.get(resolved_key)
-            if attention_fn is None:
-                raise ValueError(f"Attention implementation {resolved_key} not found.")
-
-            query_states = q.transpose(0, 1).unsqueeze(0)
-            key_states = k.transpose(0, 1).unsqueeze(0)
-            value_states = v.transpose(0, 1).unsqueeze(0)
-
-            attention_kwargs: dict[str, Any] = {
-                "dropout": p_drop,
-                "scaling": self.scale,
-                "is_causal": False,
-            }
-            if cu_seqlens is not None:
-                attention_kwargs["cu_seq_lens_q"] = cu_seqlens
-                attention_kwargs["cu_seq_lens_k"] = cu_seqlens
-            if max_seqlen is not None:
-                attention_kwargs["max_length_q"] = max_seqlen
-                attention_kwargs["max_length_k"] = max_seqlen
-
-            attn_output, attn_weights = attention_fn(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attn_mask,
-                **attention_kwargs,
-            )
-
-            y_lhd = attn_output.squeeze(0).permute(1, 0, 2).contiguous()
-
-        # Merge heads and project
-        y = self.out_proj(y_lhd.reshape(L, self.embed_dim))
-        return y.unsqueeze(0), attn_weights  # (1, L, E)
-
-    def _variable_length_context(self, *, cu_seqlens=None, max_seqlen=None):
-        """Store packed-sequence metadata for the next forward call."""
-        self._variable_length_metadata = (cu_seqlens, max_seqlen)
-
-    def _consume_variable_length_metadata(self):
-        if self._variable_length_metadata is None:
-            return None, None
-        cu_seqlens, max_seqlen = self._variable_length_metadata
-        self._variable_length_metadata = None
-        return cu_seqlens, max_seqlen
-
-    @staticmethod
-    def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
-        if cu is None or cu.numel() < 2:
-            return fallback
-        return int((cu[1:] - cu[:-1]).max().item())
-
-    def _flash_attention_forward(
-        self,
-        *,
-        q_lhd: torch.Tensor,
-        k_lhd: torch.Tensor,
-        v_lhd: torch.Tensor,
-        cu_seqlens: Optional[torch.Tensor],
-        max_seqlen: Optional[int],
-        dropout: float,
-    ) -> torch.Tensor:
-        L = q_lhd.size(0)
-        if max_seqlen is not None:
-            max_q = max_k = int(max_seqlen)
-        else:
-            max_q = max_k = self._max_from_cu(cu_seqlens, L)
-
-        if not q_lhd.is_contiguous():
-            q_lhd = q_lhd.contiguous()
-        if not k_lhd.is_contiguous():
-            k_lhd = k_lhd.contiguous()
-        if not v_lhd.is_contiguous():
-            v_lhd = v_lhd.contiguous()
-
-        out_lhd, *_ = torch.ops.aten._flash_attention_forward(
-            query=q_lhd,
-            key=k_lhd,
-            value=v_lhd,
-            cum_seq_q=cu_seqlens,
-            cum_seq_k=cu_seqlens,
-            max_q=max_q,
-            max_k=max_k,
-            dropout_p=dropout,
-            is_causal=False,
-            return_debug_mask=False,
-            scale=self.scale,
-            window_size_left=-1,
-            window_size_right=-1,
-            alibi_slopes=None,
-        )
-        return out_lhd
-
-    def _sdpa_attention_forward(
-        self,
-        *,
-        q_lhd: torch.Tensor,
-        k_lhd: torch.Tensor,
-        v_lhd: torch.Tensor,
-        attention_mask: Optional[Union[torch.Tensor, Callable]],
-        cu_seqlens: Optional[torch.Tensor],
-        dropout: float,
-    ) -> torch.Tensor:
-        L = q_lhd.size(0)
-        attn_mask = attention_mask
-
-        if callable(attn_mask):
-            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
-            attn_mask = sdpa_mask(
-                batch_size=1,
-                cache_position=cache_position,
-                kv_length=L,
-                kv_offset=0,
-                mask_function=attn_mask,
-                attention_mask=None,
-                allow_is_causal_skip=False,
-                allow_is_bidirectional_skip=False,
-                allow_torch_fix=False,
-                use_vmap=False,
-            )
-            # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
-            if attn_mask is not None and attn_mask.dtype == torch.bool:
-                attn_mask = ~attn_mask
-
-        q = q_lhd.permute(1, 0, 2).unsqueeze(0)
-        k = k_lhd.permute(1, 0, 2).unsqueeze(0)
-        v = v_lhd.permute(1, 0, 2).unsqueeze(0)
-
-        if attn_mask is not None and attn_mask.dtype != q.dtype:
-            attn_mask = attn_mask.to(q.dtype)
-
-        output = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=attn_mask,
-            dropout_p=dropout,
-            scale=self.scale,
-            is_causal=False,
-        )
-        return output.squeeze(0).permute(1, 0, 2).contiguous()
-
-    def _eager_attention_forward(
-        self,
-        *,
-        q_lhd: torch.Tensor,
-        k_lhd: torch.Tensor,
-        v_lhd: torch.Tensor,
-        attention_mask: Optional[Union[torch.Tensor, Callable]],
-        dropout: float,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        L = q_lhd.size(0)
-        attn_mask = attention_mask
-        if callable(attn_mask):
-            cache_position = torch.arange(L, device=q_lhd.device, dtype=torch.long)
-            attn_mask = eager_mask(
-                batch_size=1,
-                cache_position=cache_position,
-                kv_length=L,
-                kv_offset=0,
-                mask_function=attn_mask,
-                attention_mask=None,
-                allow_is_bidirectional_skip=False,
-                use_vmap=False,
-                dtype=q_lhd.dtype,
-            )
-        if attn_mask is not None and attn_mask.dim() == 4:
-            attn_mask = attn_mask.squeeze(0).squeeze(0)
-
-        attn_weights = torch.matmul(q_lhd, k_lhd.transpose(1, 2)) * self.scale
-        if attn_mask is not None:
-            attn_weights = attn_weights + attn_mask
-
-        attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q_lhd.dtype)
-        if dropout and self.training:
-            attn_weights = F.dropout(attn_weights, p=dropout, training=True)
-
-        attn_output_lhd = torch.matmul(attn_weights, v_lhd)
-        return attn_output_lhd, attn_weights
-
-
-class IsaacMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
 class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
     """Isaac vision encoder layer with variable-length attention."""
 
@@ -619,34 +428,39 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
             Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
             buffers for packed variable-length attention.
         """
-        if cu_seqlens is not None or max_seqlen is not None:
-            self.self_attn._variable_length_context(
-                cu_seqlens=cu_seqlens,
-                max_seqlen=max_seqlen,
-            )
-
         attention_mask = ensure_document_attention_mask(
             attention_mask,
             cu_seqlens,
             hidden_states.size(1),
             hidden_states.dtype,
             hidden_states.device,
+            return_mask_function=False,
         )
-        residual = hidden_states
 
+        # Run attention directly so variable-length metadata reaches FlashAttention.
+        residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
+        attn_outputs = self.self_attn(
+            hidden_states,
             attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            output_attentions=output_attentions,
             **kwargs,
         )
-        hidden_states = residual + hidden_states
+        if isinstance(attn_outputs, tuple):
+            attn_output, attn_weights = attn_outputs
+        else:
+            attn_output, attn_weights = attn_outputs, None
+        hidden_states = residual + attn_output
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
+        if output_attentions:
+            return hidden_states, attn_weights
         return hidden_states
 
 
@@ -672,35 +486,32 @@ class IsaacVisionEncoder(nn.Module):
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        self.__variable_length_context(cu_seqlens, max_seqlen)
-
         attention_mask = ensure_document_attention_mask(
             attention_mask,
             cu_seqlens,
             inputs_embeds.size(1),
             inputs_embeds.dtype,
             inputs_embeds.device,
+            return_mask_function=False,
         )
+
         hidden_states = inputs_embeds
+        kwargs.update(
+            {
+                "max_seqlen": max_seqlen,
+                "cu_seqlens": cu_seqlens,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+            }
+        )
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 **kwargs,
             )
-
         return BaseModelOutput(last_hidden_state=hidden_states)
-
-    def __variable_length_context(self, cu_seqlens, max_seqlen) -> None:
-        if cu_seqlens is None and max_seqlen is None:
-            return
-
-        for layer in self.layers:
-            if isinstance(layer, IsaacVisionEncoderLayer):
-                layer.self_attn._variable_length_context(
-                    cu_seqlens=cu_seqlens,
-                    max_seqlen=max_seqlen,
-                )
 
 
 def create_pixel_shuffle_index_map(
@@ -831,6 +642,8 @@ def pixel_shuffle_varlen(
 
 
 class IsaacVisionTransformer(nn.Module):
+    _supports_sdpa = True
+
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
         self.config = config
@@ -880,6 +693,8 @@ class IsaacVisionTransformer(nn.Module):
 
 class IsaacVisionEmbedding(nn.Module):
     """Vision embedding wrapper exposing tower and projector."""
+
+    _supports_sdpa = True
 
     def __init__(self, config: IsaacConfig):
         super().__init__()
@@ -967,7 +782,8 @@ class IsaacRotaryEmbedding(nn.Module):
 
         with torch.no_grad():
             pos = position_ids.clone()
-            not_spatial = modality_tensor != VisionType.image.value
+            image_value = VisionType.image.value if VisionType is not None else 1
+            not_spatial = modality_tensor != image_value
             if not_spatial.any():
                 data_1d = pos[not_spatial][..., 0].unsqueeze(-1)
                 pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
@@ -1079,6 +895,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class IsaacAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1105,7 +922,6 @@ class IsaacAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         self.q_norm = IsaacRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = IsaacRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
@@ -1201,29 +1017,6 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-# ============================================================================
-# Model
-# ============================================================================
-
-
-def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
-    r"""Create 3D positional indices for token input.
-
-    Args:
-        input_ids (`torch.Tensor`):
-            Tensor of shape `(batch_size, seq_len)` containing token ids.
-
-    Returns:
-        `torch.Tensor`: Positional indices with shape `(batch_size, seq_len, 3)` where each channel duplicates the
-        1D position so it can be consumed by the 3-axis MRoPE rotary embedding.
-    """
-    batch_size, seq_length = input_ids.shape
-    position_ids = torch.arange(seq_length, device=input_ids.device)
-    position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-    position_ids = position_ids.unsqueeze(2).expand(-1, -1, 3)  # Add 3D for MRoPE
-    return position_ids
-
-
 @auto_docstring
 class IsaacModel(PreTrainedModel):
     config: IsaacConfig
@@ -1233,14 +1026,15 @@ class IsaacModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
+    _supports_flex_attn = False
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
+    # Expose tied-weights mapping even if empty for base model tests.
+    all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
@@ -1257,6 +1051,7 @@ class IsaacModel(PreTrainedModel):
             raise ValueError("IsaacConfig should always have vision_config")
 
         self.vision_embedding = IsaacVisionEmbedding(config)
+        self.vision_embedding._supports_sdpa = True
 
         # Dispatch table for TensorStream balanced embedding (text + vision)
         self.embed_fns = {
@@ -1269,11 +1064,24 @@ class IsaacModel(PreTrainedModel):
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
 
+        # Initialize weights and parallel plans (including tp_plan from the text model)
+        self.post_init()
+
+        # Respect config-specified gradient checkpointing
+        if getattr(config, "gradient_checkpointing", False):
+            self.gradient_checkpointing_enable()
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.text_model.set_input_embeddings(value)
+        vocab_size = getattr(value, "num_embeddings", None)
+        if vocab_size is not None:
+            self.config.vocab_size = vocab_size
+            if hasattr(self.config, "text_config"):
+                self.config.text_config.vocab_size = vocab_size
+            self.text_model.config.vocab_size = vocab_size
 
     @property
     def embed_tokens(self) -> nn.Module:
@@ -1290,6 +1098,14 @@ class IsaacModel(PreTrainedModel):
     @property
     def norm(self) -> nn.Module:
         return self.text_model.norm
+
+    @property
+    def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
+
+    @property
+    def vision_tower(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
@@ -1350,6 +1166,7 @@ class IsaacModel(PreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1371,47 +1188,72 @@ class IsaacModel(PreTrainedModel):
                 omitted.
         """
 
+        text_value = TextType.text.value if TextType is not None else 0
+
         # Get inputs
         if tensor_stream is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both tensor_stream and inputs_embeds")
-        elif tensor_stream is not None:
-            # Embed TensorStream directly
-            inputs_embeds = self.embed_stream(tensor_stream)
-            # Create modality tensor if not provided
-            if modality_tensor is None:
-                modality_tensor = modality_mask(tensor_stream)
-        elif input_ids is not None and inputs_embeds is not None:
+        if tensor_stream is None and input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+
+        # Resolve the input source (TensorStream takes precedence over token ids).
+        if tensor_stream is not None:
+            inputs_embeds = self.embed_stream(tensor_stream)
         elif input_ids is not None:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
-            # Create text modality tensor if not provided
-            if modality_tensor is None:
-                batch_size, seq_length = input_ids.shape
-                modality_tensor = torch.full(
-                    (batch_size, seq_length), TextType.text.value, device=input_ids.device, dtype=torch.long
-                )
         elif inputs_embeds is None:
             raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
+
+        batch_size, seq_len = inputs_embeds.shape[:2]
 
         # Ensure cache exists when requested
         if use_cache and past_key_values is None:
             cache_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
             past_key_values = DynamicCache(config=cache_config)
 
-        if cache_position is None and (past_key_values is not None or use_cache):
+        if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
-            )
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=inputs_embeds.device)
 
-        # Create default position_ids if not provided
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+
+        # Normalize modality tensor
+        if modality_tensor is None:
+            if tensor_stream is not None:
+                modality_tensor = modality_mask(tensor_stream)
+            else:
+                modality_tensor = torch.full(
+                    (batch_size, seq_len), text_value, device=inputs_embeds.device, dtype=torch.long
+                )
+        else:
+            modality_tensor = modality_tensor.to(dtype=torch.long)
+
+        if modality_tensor.shape[1] != seq_len:
+            if modality_tensor.shape[1] > seq_len:
+                modality_tensor = modality_tensor[:, :seq_len]
+            else:
+                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
+                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
+
+        # Normalize position ids
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
             else:
-                position_ids = compute_position_ids_input_ids(input_ids)
+                position_ids = cache_position.view(1, -1).expand(modality_tensor.shape[0], -1)
+
+        # Expand 2D position ids (from generic padding tests or decode cache positions) to 3D MRoPE coords
+        if position_ids.ndim == 2:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        # Align lengths so rotary embedding sees matching shapes
+        if position_ids.shape[1] != seq_len:
+            start_positions = position_ids[:, :1, 0]
+            position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
+            position_ids = position_ids + start_positions
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(
@@ -1422,38 +1264,46 @@ class IsaacModel(PreTrainedModel):
         cos = cos.to(inputs_embeds.dtype)
         sin = sin.to(inputs_embeds.dtype)
 
-        # Prepare attention mask
+        # Flash attention expects 1D position_ids; keep 3D only for rotary phases
+        decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
+        # Prepare attention mask
         if not isinstance(attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            attention_mask = create_masks_for_generate(**mask_kwargs)
+            attention_mask = create_masks_for_generate(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                position_ids=decoder_position_ids,
+            )
+
+        is_attention_mask_dict = isinstance(attention_mask, dict)
 
         # Initialize hidden states
         hidden_states = inputs_embeds
+        all_attentions = [] if output_attentions else None
 
         for decoder_layer in self.text_model.layers:
             layer_attention_mask = (
-                attention_mask[decoder_layer.attention_type] if isinstance(attention_mask, dict) else attention_mask
+                attention_mask[decoder_layer.attention_type] if is_attention_mask_dict else attention_mask
             )
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=layer_attention_mask,
-                position_ids=position_ids,
+                position_ids=decoder_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=(cos, sin),
+                output_attentions=output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
+            layer_outputs_is_tuple = isinstance(layer_outputs, tuple)
+            hidden_states = layer_outputs[0] if layer_outputs_is_tuple else layer_outputs
+            if output_attentions and layer_outputs_is_tuple:
+                all_attentions.append(layer_outputs[1])
 
         # Final layer norm
         hidden_states = self.text_model.norm(hidden_states)
@@ -1461,6 +1311,8 @@ class IsaacModel(PreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            hidden_states=(hidden_states,),
+            attentions=tuple(all_attentions) if output_attentions else None,
         )
 
 
@@ -1483,15 +1335,40 @@ class IsaacPreTrainedModel(PreTrainedModel):
     }
 
 
+# ============================================================================
+# Model
+# ============================================================================
+
+
+def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
+    r"""Create 3D positional indices for token input.
+
+    Args:
+        input_ids (`torch.Tensor`):
+            Tensor of shape `(batch_size, seq_len)` containing token ids.
+
+    Returns:
+        `torch.Tensor`: Positional indices with shape `(batch_size, seq_len, 3)` where each channel duplicates the
+        1D position so it can be consumed by the 3-axis MRoPE rotary embedding.
+    """
+    batch_size, seq_length = input_ids.shape
+    position_ids = torch.arange(seq_length, device=input_ids.device)
+    position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+    position_ids = position_ids.unsqueeze(2).expand(-1, -1, 3)  # Add 3D for MRoPE
+    return position_ids
+
+
 @auto_docstring
 class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
     """Isaac multimodal model for conditional generation."""
 
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     config_class = IsaacConfig
+    _can_compile_fullgraph = False
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
@@ -1516,6 +1393,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1536,30 +1414,47 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         if input_ids is None and inputs_embeds is None and tensor_stream is None:
             raise ValueError("Either input_ids, inputs_embeds, or tensor_stream must be provided.")
 
+        text_value = TextType.text.value if TextType is not None else 0
+
+        if tensor_stream is None:
+            if input_ids is not None:
+                batch_size, seq_len = input_ids.shape
+                input_device = input_ids.device
+            else:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+                input_device = inputs_embeds.device
+
         # Build position ids (MRoPE) if needed and tensor_stream is available
         # During decode we reuse `self.rope_deltas` computed on the initial forward pass; `rope_delta` captures how far
         # cached rotary phases have progressed so we can advance `position_ids` without rebuilding the TensorStream.
-        if position_ids is None and tensor_stream is not None:
-            position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
-        elif position_ids is None and input_ids is not None:
-            # For text inputs build position ids and modality tensor
-            position_ids = compute_position_ids_input_ids(input_ids)
-            if cache_position is not None and self.rope_deltas is not None:
-                # Combine the incremental decode step (`cache_position`) with cached offsets so hidden states continue
-                # rotating in lockstep across generation steps.
-                rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
+        if position_ids is None:
+            if tensor_stream is not None:
+                position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
+            elif input_ids is None:
+                dummy_ids = torch.zeros((batch_size, seq_len), device=input_device, dtype=torch.long)
+                position_ids = compute_position_ids_input_ids(dummy_ids)
             else:
+                position_ids = compute_position_ids_input_ids(input_ids)
+
                 rope_delta = 0
-            if cache_position is not None and not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
-                batch_size = input_ids.shape[0]
-                rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
-            position_ids = position_ids.add(rope_delta)
+                if cache_position is not None and self.rope_deltas is not None:
+                    # Combine the incremental decode step (`cache_position`) with cached offsets so hidden states continue
+                    # rotating in lockstep across generation steps.
+                    rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
+                    if not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
+                        rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
+
+                position_ids = position_ids.add(rope_delta)
+
+        if attention_mask is None and tensor_stream is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=input_device, dtype=torch.long)
 
         if tensor_stream is not None:
             modality_tensor = modality_mask(tensor_stream)
         else:
-            batch_size, seq_len = input_ids.shape
-            modality_tensor = torch.empty(batch_size, seq_len, device=position_ids.device).fill_(TextType.text.value)
+            modality_tensor = torch.full(
+                (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
+            )
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1570,6 +1465,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
@@ -1588,8 +1484,21 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=None,
+            attentions=outputs.attentions if output_attentions else None,
         )
+
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.model.set_input_embeddings(value)
+        vocab_size = getattr(value, "num_embeddings", None)
+        if vocab_size is not None:
+            self.config.vocab_size = vocab_size
+            self.model.config.vocab_size = vocab_size
+            if hasattr(self.model, "text_model"):
+                self.model.text_model.config.vocab_size = vocab_size
+            if self.lm_head.weight.shape[0] != vocab_size:
+                self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
+            if hasattr(self.model, "embed_tokens"):
+                self.lm_head.weight = self.model.text_model.embed_tokens.weight
 
     def get_rope_index(
         self,
@@ -1670,17 +1579,35 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
 
         cache_position = model_inputs.get("cache_position", cache_position)
 
-        # Handle TensorStream for first forward pass only
-        if tensor_stream is not None and (cache_position is None or cache_position[0] == 0):
+        # Handle TensorStream only for the prefill step
+        first_step = cache_position is None or cache_position[0] == 0
+        if tensor_stream is not None and first_step:
             model_inputs["tensor_stream"] = tensor_stream
-        # Let forward rebuild position_ids using cached deltas during decode
-        model_inputs["position_ids"] = None
-        # Drop tensor_stream after step 0
-        if cache_position is not None and cache_position[0] != 0:
+            # Let forward rebuild MRoPE coordinates from the TensorStream
+            model_inputs["position_ids"] = None
+        else:
             model_inputs["tensor_stream"] = None
+
+        # TensorStream decode path: preserve rotary offsets from prefill
+        if tensor_stream is not None and not first_step and self.rope_deltas is not None:
+            model_inputs["position_ids"] = None
+            return model_inputs
+
+        # For decode steps, synthesize position_ids that continue from the cache offsets
+        if model_inputs.get("position_ids") is None and cache_position is not None and not first_step:
+            batch_size = 1
+            if model_inputs.get("input_ids") is not None:
+                batch_size = model_inputs["input_ids"].shape[0]
+            elif model_inputs.get("inputs_embeds") is not None:
+                batch_size = model_inputs["inputs_embeds"].shape[0]
+            pos_ids = cache_position.view(1, -1).expand(batch_size, -1)
+            pos_ids = pos_ids.unsqueeze(-1).expand(-1, -1, 3)
+            model_inputs["position_ids"] = pos_ids
+
         return model_inputs
 
-    def can_generate(self) -> bool:
+    @classmethod
+    def can_generate(cls) -> bool:
         return True
 
 
