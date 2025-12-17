@@ -516,12 +516,6 @@ class DFinePreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             init.zeros_(module.bias)
 
-        if isinstance(module, DFineFrozenBatchNorm2d):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            module.zeros_(module.running_mean)
-            module.ones_(module.running_var)
-
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:

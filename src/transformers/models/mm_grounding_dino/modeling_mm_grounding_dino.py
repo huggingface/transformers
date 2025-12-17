@@ -122,45 +122,6 @@ class MultiScaleDeformableAttention(nn.Module):
         return output.transpose(1, 2).contiguous()
 
 
-class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
 class MMGroundingDinoLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -591,16 +552,10 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MMGroundingDinoFusionLayer):
             init.constant_(module.vision_param, 1e-4)
             init.constant_(module.text_param, 1e-4)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
-                init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             init.ones_(module.weight)
             init.zeros_(module.bias)
@@ -612,11 +567,6 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MMGroundingDinoMLPPredictionHead):
             init.constant_(module.layers[-1].weight, 0)
             init.constant_(module.layers[-1].bias, 0)
-        elif isinstance(module, MMGroundingDinoFrozenBatchNorm2d):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            module.zeros_(module.running_mean)
-            module.ones_(module.running_var)
 
         if hasattr(module, "reference_points") and not self.config.two_stage:
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
@@ -629,6 +579,45 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, MMGroundingDinoDecoder):
             module.gradient_checkpointing = value
+
+
+class MMGroundingDinoFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
 
 
 def replace_batch_norm(model):
