@@ -210,7 +210,7 @@ class PagedAttentionCache:
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
+        self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -387,6 +387,28 @@ class PagedAttentionCache:
                     allocated_blocks=cm.block_table[state.request_id],
                     prompt_ids=(state.initial_tokens + state.generated_tokens),
                 )
+
+    def copy_cache(self, source_blocks: list[int], forked_blocks: list[int]) -> None:
+        """Copy the cache from the source blocks to the forked blocks."""
+        source_blocks = torch.tensor(source_blocks, device=self.device, dtype=torch.int32)
+        forked_blocks = torch.tensor(forked_blocks, device=self.device, dtype=torch.int32)
+        for key_cache, value_cache in zip(self.key_cache, self.value_cache):
+            key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            key_cache[forked_blocks] = key_cache[source_blocks]
+            value_cache[forked_blocks] = value_cache[source_blocks]
+            # FIXME: should be one copy for al CMs with only the changing blocks
+            # FIXME: even once per fork batch
+
+    def fork_request(self, state: RequestState, new_request_id: str) -> RequestState:
+        """Fork a request into a new request. The new request is created by copying the state and updating the
+        request_id."""
+        new_state = state.fork(new_request_id)
+        for cm in self.group_cache_managers:
+            source_blocks, forked_blocks = cm.fork_blocks(state.request_id, new_state.request_id, self._block_manager)
+            self.copy_cache(source_blocks, forked_blocks)
+            # FIXME: move it to the batch level
+        return new_state
 
 
 # TODO: rework computation with the groups and their sizes

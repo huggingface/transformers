@@ -572,13 +572,20 @@ class ContinuousBatchProcessor:
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
         new_tokens = self._get_new_tokens(len(self.requests_in_batch))
-        for i, state in enumerate(self.requests_in_batch):
+        current_logits_index = 0
+        for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
-                self.metrics.record_ttft_metric(state.created_time, state.request_id)
-                state.status = RequestStatus.DECODING
-                token = new_tokens[i]
+
+                # If there are no generated tokens yet, it means prefill just ended
+                if state.generated_len() == 0:
+                    self.metrics.record_ttft_metric(state.created_time, state.request_id)
+                    state.status = RequestStatus.DECODING
+
+                token = new_tokens[current_logits_index]
                 state.tokens_to_process = [token]
+                current_logits_index += 1
+
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
@@ -593,6 +600,16 @@ class ContinuousBatchProcessor:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             else:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
+
+        # If some requests need to be forked, we do it now
+        while self.scheduler._requests_to_fork:
+            state = self.scheduler._requests_to_fork.pop()
+            num_children = state.num_children
+            state.num_children = 0
+            for i in range(num_children):
+                # FIXME: if fork cant be done, create a new pending request without forking
+                new_request = self.cache.fork_request(state, f"{state.request_id}__child#{i}")
+                self.scheduler.active_requests[new_request.request_id] = new_request
 
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
@@ -784,6 +801,7 @@ class ContinuousBatchingManager:
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
+        self.num_return_sequences = getattr(generation_config, "num_return_sequences", 1)
 
         # self.model.generation_config.top_p = None NOTE: figure out why this was here
 
@@ -935,6 +953,7 @@ class ContinuousBatchingManager:
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),
+            num_children=self.num_return_sequences - 1,
             record_timestamps=record_timestamps,
             tokens_to_process=list(input_ids),
             max_new_tokens=max_new_tokens,
@@ -1232,7 +1251,8 @@ class ContinuousMixin:
 
         # Initialize manager with the batch inputs
         results = {}
-        num_requests = len(inputs)
+        gen_cfg = self.generation_config if generation_config is None else generation_config
+        num_requests = len(inputs) * gen_cfg.num_return_sequences
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
             generation_config=generation_config,

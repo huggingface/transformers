@@ -123,6 +123,27 @@ class BlockManager:
         # In both cases, we return the allocated block ids
         return allocated_block_ids
 
+    def fork_blocks(self, source_blocks: list[int], shareable: bool, group_id: int) -> list[int] | None:
+        """Fork a given list of (source_blocks) into a new list of forked_blocks. If the blocks are (shareable), we
+        reference the existing blocks when they are complete. Otherwise, we allocate new blocks if possible. The
+        (group_id) of the layer group the blocks belong to is also needed."""
+        forked_blocks = []
+        parent_id = None
+        for block_id in source_blocks:
+            block = self._id_to_block[block_id]
+            # If the block is shareable and complete, we just reference the existing block
+            if shareable and block.is_complete:
+                forked_blocks.append(block.id)
+            # Otherwise, we allocate a new block if possible
+            else:
+                # FIXME: from this point on, the blocks should be allowed as a bunch, not 1 by 1
+                allocated_block_ids = self.get_free_blocks(1, parent_id, shareable, group_id)
+                if allocated_block_ids is None:
+                    return None
+                forked_blocks.append(allocated_block_ids[0])
+            parent_id = forked_blocks[-1]
+        return forked_blocks
+
     def increase_ref_count(self, block_id: int) -> None:
         """Increases the reference count of a given (block_id)."""
         block = self._id_to_block[block_id]
@@ -243,6 +264,24 @@ class CacheAllocator(ABC):
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
+    def fork_blocks(self, source_request_id: str, dst_request_id: str, block_manager: BlockManager) -> tuple[list[int], list[int]]:
+        """Fork the cache blocks for a given request_id into a new request_id."""
+        if source_request_id not in self.block_table:
+            raise ValueError(f"No block table found for request {source_request_id}")
+        if dst_request_id in self.block_table:
+            raise ValueError(f"Block table already exists for request {dst_request_id}")
+
+        source_blocks = self.block_table[source_request_id]
+        forked_blocks = block_manager.fork_blocks(
+            source_blocks=source_blocks,
+            shareable=self.uses_block_sharing,
+            group_id=self._index,
+        )
+        if forked_blocks is None:
+            raise ValueError(f"Failed to fork blocks for request {source_request_id}")
+
+        self.block_table[dst_request_id] = forked_blocks
+        return source_blocks, forked_blocks
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
