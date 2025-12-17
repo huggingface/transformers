@@ -81,7 +81,9 @@
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_multi
-      title: Distributed inference
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
     - local: kv_cache
       title: Cache strategies
     - local: cache_explanation
