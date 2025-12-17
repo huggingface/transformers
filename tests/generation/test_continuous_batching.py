@@ -14,8 +14,8 @@
 
 import gc
 import itertools
-import unittest
 import queue
+import unittest
 
 import torch
 from parameterized import parameterized
