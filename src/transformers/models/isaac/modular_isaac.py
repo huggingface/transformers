@@ -162,7 +162,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
             self._attn_implementation = "sdpa"
 
 
-class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
+class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
     patch_size: Optional[int]
     max_num_patches: Optional[int]
     min_num_patches: Optional[int]
