@@ -438,7 +438,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         encoding.sequence_ids(span_idx),
                         encoding.word_ids(span_idx),
                     ):
-                        if sequence_id == 1:
+                        if sequence_id == 1 and word_id is not None:
                             bbox.append(boxes[word_id])
                         elif input_id == self.tokenizer.sep_token_id:
                             bbox.append([1000] * 4)

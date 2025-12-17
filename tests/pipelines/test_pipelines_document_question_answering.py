@@ -21,7 +21,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
-from transformers.pipelines.document_question_answering import apply_tesseract
+from transformers.pipelines.document_question_answering import ModelType, apply_tesseract
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
@@ -422,3 +422,39 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
+
+
+@require_torch
+class DocumentQuestionAnsweringPipelineUnitTests(unittest.TestCase):
+    def test_preprocess_handles_none_word_ids_in_bbox_construction(self):
+        class _FakeEncoding(dict):
+            def __init__(self):
+                super().__init__({"input_ids": [[101, 200, 102]], "attention_mask": [[1, 1, 1]]})
+                self.input_ids = self["input_ids"]
+
+            def sequence_ids(self, _span_idx):
+                return [0, 1, 1]
+
+            def word_ids(self, _span_idx):
+                return [None, None, 0]
+
+        class _FakeTokenizer:
+            model_max_length = 16
+            padding_side = "right"
+            cls_token_id = 101
+            sep_token_id = 102
+
+            def __call__(self, *args, **kwargs):
+                return _FakeEncoding()
+
+        dqa = object.__new__(DocumentQuestionAnsweringPipeline)
+        object.__setattr__(dqa, "tokenizer", _FakeTokenizer())
+        object.__setattr__(dqa, "model_type", ModelType.LayoutLM)
+        object.__setattr__(dqa, "image_processor", None)
+        object.__setattr__(dqa, "feature_extractor", None)
+
+        word_boxes = [("hello", [0, 0, 10, 10])]
+        outputs = list(dqa.preprocess({"image": None, "question": "q", "word_boxes": word_boxes}))
+        self.assertEqual(len(outputs), 1)
+        self.assertIn("bbox", outputs[0])
+        self.assertEqual(tuple(outputs[0]["bbox"].shape), (1, 3, 4))
