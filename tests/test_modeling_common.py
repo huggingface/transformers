@@ -1122,7 +1122,9 @@ class ModelTesterMixin:
                     parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
                     parent = model_from_init.get_submodule(parent_name)
                 # Get the exact PreTrainedModel
-                pretrained_parent_module = next(x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__)
+                pretrained_parent_module = next(
+                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                )
                 return f"{immediate_parent_module} called from {pretrained_parent_module}\n"
 
             unique_tracebacks = "".join({get_parent_traceback(buffer) for buffer in different_buffers})

@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,6 +45,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
     Gemma3RMSNorm,
+    Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
 )
@@ -1925,9 +1926,21 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         elif isinstance(module, Gemma3nTextModel):
             init.constant_(module.per_layer_projection_scale, self.hidden_size**-0.5)
             init.constant_(module.per_layer_input_scale, 1 / math.sqrt(2.0))
+        elif isinstance(module, Gemma3nRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(self, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(self, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
         if hasattr(module, "gradient_clipping"):
             init.constant_(module.gradient_clipping, self.config.gradient_clipping)
+
+
+class Gemma3nRotaryEmbedding(Gemma3RotaryEmbedding):
+    pass
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

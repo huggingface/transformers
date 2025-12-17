@@ -390,7 +390,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -579,6 +579,14 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, Gemma3TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
+        elif isinstance(module, Gemma3RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(self, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(self, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
