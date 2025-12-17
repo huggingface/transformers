@@ -548,7 +548,7 @@ class SamMaskDecoder(nn.Module):
 class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.scale = config.hidden_size // 2
+        self.scale = config.scale
         self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):

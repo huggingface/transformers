@@ -1037,10 +1037,10 @@ class ModelTesterMixin:
             with seeded_weight_init():
                 # First, initialize the model from config -> this ensure everything is correctly initialized, even if
                 # _init_weights() does not take all weights into account correctly
-                model_from_config = model_class(copy.deepcopy(config)).eval()
+                model_from_config = model_class(copy.deepcopy(config))
                 # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
                 # by _init_weights()
-                model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={}).eval()
+                model_from_pretrained = model_class.from_pretrained(None, config=copy.deepcopy(config), state_dict={})
 
             # First, check if any parameters are still on meta -> this is usually an issue with tied weights
             params_on_meta = []
