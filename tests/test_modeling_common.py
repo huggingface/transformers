@@ -1085,6 +1085,16 @@ class ModelTesterMixin:
         """Ensure that all buffers (persistent and non-persistent) are correctly taken into account in `_init_weights`"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # Usually, buffers are not initialized randomly (it's kind of the point of having a Buffer instead of a Parameter...)
+        # However, some PositionalEmbedding modules have a `positional_embedding` buffer, initialized randomly with normal
+        # distribution and std `config.scale` - set it at 0 here to avoid randomness
+        if hasattr(config, "scale"):
+            config.scale = 0
+        for sub_key in config.sub_configs:
+            subconfig = getattr(config, sub_key)
+            if hasattr(subconfig, "scale"):
+                subconfig.scale = 0
+
         for model_class in self.all_model_classes:
             # First, initialize the model directly with `__init__`, with the context manager making sure that we do
             # not run `initialiaze_weights()`, i.e. buffers are the same as in the modules's `__init__` initial definition

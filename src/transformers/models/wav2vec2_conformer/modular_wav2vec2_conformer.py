@@ -584,9 +584,13 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
 
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 
