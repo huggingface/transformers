@@ -269,7 +269,7 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 
 
 @slow
-@require_torch_large_accelerator(memory=70)  # Tested on A100
+@require_torch_large_accelerator(memory=64)  # Tested on A100
 @require_torch
 class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
