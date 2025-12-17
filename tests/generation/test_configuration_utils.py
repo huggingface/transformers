@@ -18,6 +18,8 @@ import os
 import tempfile
 import unittest
 import warnings
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from huggingface_hub import create_pull_request
 from parameterized import parameterized
@@ -38,6 +40,7 @@ from transformers.generation import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
+    GenerationMixin,
     GenerationMode,
     MinLengthLogitsProcessor,
     MinNewTokensLengthLogitsProcessor,
@@ -166,6 +169,15 @@ class GenerationConfigTest(unittest.TestCase):
 
         logger.warning_once.cache_clear()
         with CaptureLogger(logger) as captured_logs:
+            GenerationConfig(
+                max_thinking_tokens=2,
+                begin_thinking_token_id=3,
+                end_thinking_token_id=4,
+            )
+        self.assertNotEqual(len(captured_logs.out), 0)
+
+        logger.warning_once.cache_clear()
+        with CaptureLogger(logger) as captured_logs:
             generation_config_bad_temperature = GenerationConfig(do_sample=False, temperature=0.5)  # store for later
         self.assertNotEqual(len(captured_logs.out), 0)
 
@@ -192,6 +204,16 @@ class GenerationConfigTest(unittest.TestCase):
         # Impossible sets of parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
+        with self.assertRaises(ValueError):
+            GenerationConfig(prompt_prefilled_suffix_length=-1)
+        with self.assertRaises(ValueError):
+            GenerationConfig(
+                max_thinking_tokens=2,
+                begin_thinking_token_id=3,
+                end_thinking_token_id=4,
+                max_new_tokens=5,
+                prompt_prefilled_suffix_length=None,
+            )
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
@@ -229,6 +251,55 @@ class GenerationConfigTest(unittest.TestCase):
         generation_config.do_sample = False
         with self.assertRaises(ValueError):
             generation_config.validate(strict=True)
+
+        config_missing_length = GenerationConfig(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=3,
+            end_thinking_token_id=4,
+        )
+        with self.assertRaises(ValueError):
+            config_missing_length.validate(strict=True)
+
+    def test_prompt_prefilled_suffix_length_forwarded_to_processor(self):
+        if not is_torch_available():
+            self.skipTest("Requires torch")
+
+        class DummyConfig:
+            is_encoder_decoder = False
+
+            def get_text_config(self):
+                return SimpleNamespace(vocab_size=42)
+
+        class DummyModel(GenerationMixin):
+            def __init__(self):
+                self.config = DummyConfig()
+
+        model = DummyModel()
+        generation_config = GenerationConfig(
+            max_thinking_tokens=2,
+            begin_thinking_token_id=10,
+            end_thinking_token_id=11,
+            max_new_tokens=5,
+            prompt_prefilled_suffix_length=7,
+        )
+        encoder_input_ids = torch.zeros((1, 1), dtype=torch.long, device=torch_device)
+
+        with patch("transformers.generation.utils.MaxThinkingTokensLogitsProcessor") as mock_processor:
+            mock_processor.return_value = None
+            model._get_logits_processor(
+                generation_config,
+                input_ids_seq_length=3,
+                encoder_input_ids=encoder_input_ids,
+                device=torch_device,
+            )
+
+        mock_processor.assert_called_with(
+            generation_config.max_thinking_tokens,
+            generation_config.begin_thinking_token_id,
+            generation_config.end_thinking_token_id,
+            prompt_length=3,
+            prompt_prefilled_suffix_length=generation_config.prompt_prefilled_suffix_length,
+        )
 
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
