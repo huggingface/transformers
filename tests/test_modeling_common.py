@@ -1140,7 +1140,7 @@ class ModelTesterMixin:
             unique_bad_module_traceback = "".join(unique_bad_module_traceback)
             self.assertTrue(
                 len(different_buffers) == 0,
-                f"The following weights do not properly handle their buffers in `_init_weights()`:\n{unique_bad_module_traceback}",
+                f"The following buffers are not properly handled in `_init_weights()`:\n{unique_bad_module_traceback}",
             )
 
     def test_torch_save_load(self):
