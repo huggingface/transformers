@@ -378,7 +378,9 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10")
+        processor = AutoProcessor.from_pretrained(
+            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10"
+        )
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
         video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
