@@ -40,7 +40,6 @@ if is_vision_available():
 else:
     Image = None
 
-
 if is_perceptron_available():
     from perceptron.tensorstream.ops import slice as ts_slice
     from perceptron.tensorstream.ops import tensor_stream_token_view

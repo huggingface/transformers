@@ -54,7 +54,6 @@ if is_torch_available():
     import torch.nn as nn
     import torch.nn.functional as F
 
-
 if is_perceptron_available():
     from perceptron.tensorstream.ops import (
         compute_mrope_pos_tensor,

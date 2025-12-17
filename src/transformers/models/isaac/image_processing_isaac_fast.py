@@ -41,6 +41,29 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
+# Disable as it causes issues with torch.compile
+@torch.compiler.disable
+def torch_extract_patches(image_tensor, patch_height, patch_width):
+    """
+    Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
+
+    Args:
+        image_tensor (`torch.Tensor`):
+            Image tensor of shape (batch, channels, height, width).
+        patch_height (`int`):
+            Height of patches to extract.
+        patch_width (`int`):
+            Width of patches to extract.
+    """
+    batch_size, channels, height, width = image_tensor.shape
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
+    )
+    return patches
+
+
 def get_scaled_image_size(
     scale: float,
     original_size: int,
@@ -129,33 +152,6 @@ def get_image_size_for_max_num_patches(
         target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
         target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
         return target_height, target_width
-
-
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
 
 
 def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
@@ -343,7 +339,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             nhwc_images = image_batch.permute(0, 2, 3, 1)
             nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
 
-            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            patches = torch_extract_patches(nhwc_images.permute(0, 3, 1, 2), patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (

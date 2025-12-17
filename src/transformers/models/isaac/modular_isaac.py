@@ -41,6 +41,8 @@ if is_vision_available():
 else:
     Image = None
 
+if is_torchvision_available():
+    from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
 
 if is_perceptron_available():
     from perceptron.tensorstream.ops import (
@@ -341,7 +343,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             nhwc_images = image_batch.permute(0, 2, 3, 1)
             nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
 
-            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            patches = torch_extract_patches(nhwc_images.permute(0, 3, 1, 2), patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
@@ -1068,33 +1070,6 @@ def get_image_size_for_max_num_patches(
         target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
         target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
         return target_height, target_width
-
-
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
 
 
 class IsaacConfig(PretrainedConfig):
