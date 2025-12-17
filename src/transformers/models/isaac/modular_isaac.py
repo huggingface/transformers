@@ -1848,7 +1848,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     config_class = IsaacConfig
     _can_compile_fullgraph = False
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
