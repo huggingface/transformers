@@ -180,8 +180,7 @@ class TextToAudioPipeline(Pipeline):
                 text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
             output = preprocessor(text, **kwargs, return_tensors="pt")
         model_dtype = next(self.model.parameters()).dtype
-        output = output.to(dtype=model_dtype)
-
+        output = output.to(model_dtype)
         return output
 
     def _forward(self, model_inputs, **kwargs):

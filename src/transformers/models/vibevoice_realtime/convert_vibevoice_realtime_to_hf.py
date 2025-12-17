@@ -24,7 +24,6 @@ from safetensors.torch import load_file
 from transformers import (
     Qwen2TokenizerFast,
     VibeVoiceRealTimeConfig,
-    VibeVoiceFeatureExtractor,
     VibeVoiceRealTimeForConditionalGeneration,
     VibeVoiceRealTimeProcessor,
 )
@@ -109,7 +108,6 @@ def convert_checkpoint(
         audio_config["eps"] = 1e-6
     if language_model_pretrained_name is None:
         language_model_pretrained_name = "Qwen/Qwen2.5-0.5B"
-    feature_extractor = VibeVoiceFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
     # -- Load
@@ -245,6 +243,7 @@ def convert_checkpoint(
     # https://github.com/microsoft/VibeVoice/blob/79470ff5768e17cbef6a3e1a93d1fd82ecc9a00d/demo/realtime_model_inference_from_file.py#L129
     vibevoice_model.generation_config.cfg_scale = 1.5
     vibevoice_model.generation_config.do_sample = False
+    vibevoice_model.generation_config.sampling_rate = 24000
     vibevoice_model.generation_config.noise_scheduler_class = "DPMSolverMultistepScheduler"
     vibevoice_model.generation_config.noise_scheduler_config = {
         "num_train_timesteps": 1000,
@@ -255,6 +254,7 @@ def convert_checkpoint(
     vibevoice_model.generation_config.n_diffusion_steps = 5
     # https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B/blob/main/config.json#L51
     vibevoice_model.generation_config.max_new_tokens = 8192
+    vibevoice_model.generation_config.max_length = 8192
 
     vibevoice_model.save_pretrained(output_dir)
     # -- push to hub

@@ -887,6 +887,22 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
         tts_input_ids: Optional[torch.Tensor] = None,   # should be called input_ids? namely this is encoded text
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithPast]:
+        """
+        lm_last_hidden_state (`torch.FloatTensor`, *optional*):
+            TODO
+        tts_text_masks (`torch.BoolTensor`, *optional*):
+            TODO
+        lm_input_ids (`torch.LongTensor`, *optional*):
+            TODO
+        lm_attention_mask (`torch.Tensor`, *optional*):
+            TODO
+        tts_lm_input_ids (`torch.LongTensor`, *optional*):
+            TODO
+        tts_lm_attention_mask (`torch.Tensor`, *optional*):
+            TODO
+        tts_input_ids (`torch.LongTensor`, *optional*):
+            TODO
+        """
         outputs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
