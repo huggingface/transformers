@@ -35,11 +35,7 @@ from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import (
-    is_mamba_ssm_available,
-    is_mambapy_available,
-    is_torchdynamo_compiling,
-)
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -47,14 +43,6 @@ if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
     pscan = None
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
 
 logger = logging.get_logger(__name__)
@@ -231,7 +219,27 @@ class FalconMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
+        global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
+        falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
+        selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = (
+            (
+                falcon_mamba_ssm.selective_state_update,
+                falcon_mamba_ssm.selective_scan_fn,
+                falcon_mamba_ssm.falcon_mamba_inner_fn,
+            )
+            if falcon_mamba_ssm is not None
+            else (None, None, None)
+        )
+
         self.warn_slow_implementation()
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -242,14 +250,8 @@ class FalconMambaMixer(nn.Module):
         self.rms_eps = config.mixer_rms_eps
 
     def warn_slow_implementation(self):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if not is_fast_path_available:
             if self.use_falcon_mambapy:
@@ -279,9 +281,8 @@ class FalconMambaMixer(nn.Module):
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            contextualized_states = mamba_inner_fn(
+            contextualized_states = falcon_mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -302,12 +303,6 @@ class FalconMambaMixer(nn.Module):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d")
-            causal_conv1d_update, causal_conv1d_fn = (
-                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-                if causal_conv1d is not None
-                else (None, None)
-            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -350,7 +345,7 @@ class FalconMambaMixer(nn.Module):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            if hasattr(self.config, "quantization_config"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
@@ -502,14 +497,8 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)

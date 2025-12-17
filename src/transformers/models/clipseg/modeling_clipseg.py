@@ -1121,6 +1121,8 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         decoder_config.hidden_act = "relu"
         self.layers = nn.ModuleList([CLIPSegDecoderLayer(decoder_config) for _ in range(len(config.extract_layers))])
 
+        self.post_init()
+
     def forward(
         self,
         hidden_states: tuple[torch.Tensor],

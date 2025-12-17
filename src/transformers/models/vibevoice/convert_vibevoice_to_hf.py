@@ -447,8 +447,10 @@ def convert_checkpoint(
     vibevoice_model.generation_config.n_diffusion_steps = 10
     if "7B" in checkpoint:
         vibevoice_model.generation_config.max_new_tokens = 20250
+        vibevoice_model.generation_config.max_length = 20250
     else:
         vibevoice_model.generation_config.max_new_tokens = 40500
+        vibevoice_model.generation_config.max_length = 40500
 
     vibevoice_model.save_pretrained(output_dir)
     # -- push to hub

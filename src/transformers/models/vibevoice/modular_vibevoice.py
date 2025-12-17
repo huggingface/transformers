@@ -420,7 +420,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
         r"""
         input_features (`torch.FloatTensor`, *optional*):
-                Input features for voice cloning or speech understanding.
+            Input features for voice cloning or speech understanding.
         input_features_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):

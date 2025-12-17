@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for XGLM."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -50,7 +50,7 @@ class XGLMTokenizer(TokenizersBackend):
             The unknown token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, a minimal vocabulary is created.
         merges (`list[tuple[str, str]]`, *optional*):
             Custom merge rules for BPE. If not provided, merges are generated from the vocabulary.
@@ -60,18 +60,17 @@ class XGLMTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         sep_token: str = "</s>",
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
-        vocab: Optional[dict] = None,
-        merges: Optional[list[tuple[str, str]]] = None,
         add_prefix_space: bool = True,
         **kwargs,
     ):
@@ -106,11 +105,7 @@ class XGLMTokenizer(TokenizersBackend):
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,

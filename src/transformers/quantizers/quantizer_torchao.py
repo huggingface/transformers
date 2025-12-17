@@ -134,38 +134,23 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def update_dtype(self, dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
-            if dtype is not None and dtype != torch.bfloat16:
+            if dtype != torch.bfloat16:
                 logger.warning_once(
-                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Please set the dtype to bfloat16."
-                )
-            if dtype is None:
-                logger.warning_once(
-                    "Setting dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set dtype=torch.bfloat16 to remove this warning."
+                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
                 )
                 dtype = torch.bfloat16
-        if self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
-            if dtype is None:
-                logger.info(
-                    "Setting dtype to torch.float32 for int8_dynamic_activation_int8_weight quantization as no dtype was specified in from_pretrained"
-                )
-                # we need to set the dtype, otherwise we have dtype mismatch when performing the quantized linear op
-                dtype = torch.float32
         return dtype
 
-    def get_state_dict_and_metadata(self, model, safe_serialization: bool | None = False):
+    def get_state_dict_and_metadata(self, model):
         """
-        If the model is safe serializable, we flatten the state dict of tensor subclasses so that it is compatible with
-        the safetensors format.
+        We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
-        if safe_serialization:
-            if TORCHAO_VERSION >= version.parse("0.15.0"):
-                return flatten_tensor_state_dict(model.state_dict())
-            else:
-                raise RuntimeError(
-                    f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
-                )
+        if TORCHAO_VERSION >= version.parse("0.15.0"):
+            return flatten_tensor_state_dict(model.state_dict()), {}
         else:
-            return None, {}
+            raise RuntimeError(
+                f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
+            )
 
     def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         from accelerate.utils import CustomDtype
@@ -207,11 +192,9 @@ class TorchAoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", checkpoint_files=None, **kwargs):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         if self.quantization_config.include_input_output_embeddings:
             input_emb = model.get_input_embeddings()
@@ -221,7 +204,9 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = [
                 x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
             ]
-        return
+        if checkpoint_files is not None:
+            # Torchao needs access to all metadata later
+            self.set_metadata(checkpoint_files)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if self.pre_quantized:
@@ -257,22 +242,6 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
-        """
-        Setting model attributes and/or converting model before weights loading. At this point
-        the model should be initialized on the meta device so you can freely manipulate the skeleton
-        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            kwargs (`dict`, *optional*):
-                The keyword arguments that are passed along `_process_model_before_weight_loading`.
-        """
-        super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
-        # Torchao needs access to all metadata later
-        self.set_metadata(checkpoint_files)
-
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
         if self.quantization_config.quant_type == "autoquant":
@@ -289,23 +258,14 @@ class TorchAoHfQuantizer(HfQuantizer):
             return model
         return
 
-    def is_serializable(self, safe_serialization=None) -> bool:
-        if safe_serialization:
-            _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
-            if not TORCHAO_VERSION >= version.parse("0.15.0"):
-                logger.warning(
-                    f"torchao quantized model only supports safe serialization for torchao version >= 0.15.0, please set `safe_serialization` to False for \
-                    {type(self.quantization_config.quant_type)} and {TORCHAO_VERSION}."
-                )
-            return _is_torchao_serializable
-
-        if self.offload and self.quantization_config.modules_to_not_convert is None:
+    def is_serializable(self) -> bool:
+        _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
+        if not TORCHAO_VERSION >= version.parse("0.15.0"):
             logger.warning(
-                "The model contains offloaded modules and these modules are not quantized. We don't recommend saving the model as we won't be able to reload them."
-                "If you want to specify modules to not quantize, please specify modules_to_not_convert in the quantization_config."
+                "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
+                "your version to save the quantized model"
             )
-            return False
-        return True
+        return _is_torchao_serializable
 
     def get_accelerator_warm_up_factor(self):
         """
