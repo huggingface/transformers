@@ -215,28 +215,6 @@ class PixioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Pixio does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -260,16 +238,6 @@ class PixioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    @unittest.skip(reason="Pixio does not support feedforward chunking yet")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "LiheYoung/pixio-vith16"
-        model = PixioModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats

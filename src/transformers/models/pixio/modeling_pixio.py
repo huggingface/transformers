@@ -32,7 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_int
+from ...utils import TransformersKwargs, auto_docstring, is_tracing, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import check_model_inputs
 from .configuration_pixio import PixioConfig
@@ -98,7 +98,7 @@ class PixioEmbeddings(nn.Module):
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+        images. This method is also adapted to support tracing and interpolation at torch.float32 precision.
 
         Adapted from:
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
@@ -107,7 +107,7 @@ class PixioEmbeddings(nn.Module):
         num_patches = embeddings.shape[1] - self.n_cls_tokens
         num_positions = self.position_embeddings.shape[1] - self.n_cls_tokens
 
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        if not is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
         class_pos_embed = self.position_embeddings[:, : self.n_cls_tokens]
