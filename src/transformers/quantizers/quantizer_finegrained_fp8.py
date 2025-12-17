@@ -85,13 +85,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_fp8_linear(
@@ -130,7 +129,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return config
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return True
 
     @property

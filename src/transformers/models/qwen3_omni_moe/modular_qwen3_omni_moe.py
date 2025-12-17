@@ -2337,6 +2337,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
         self.block = nn.ModuleList(block)
 
+        self.post_init()
+
     def forward(self, hidden, **kwargs):
         for block in self.block:
             hidden = block(hidden)

@@ -97,7 +97,7 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
 
 class LasrProcessor(ParakeetProcessor):
-    tokenizer_class = "ParakeetTokenizerFast"
+    pass
 
 
 class LasrEncoderConfig(ParakeetEncoderConfig):
@@ -290,6 +290,10 @@ class LasrCTCConfig(ParakeetCTCConfig):
             pad_token_id=pad_token_id,
             **kwargs,
         )
+
+    @property
+    def inputs_to_logits_ratio(self):
+        return self.encoder_config.subsampling_conv_stride**2
 
 
 class LasrEncoderSubsampling(nn.Module):
