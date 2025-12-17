@@ -767,6 +767,15 @@ class LocalColwiseParallel(ColwiseParallel):
         super().__init__(use_dtensor=False, **kwargs)
 
 
+class ColwiseParallelReplicate(ColwiseParallel):
+    """
+    Colwise parallel with output layouts replicated.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(output_layouts=Replicate(), **kwargs)
+
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Partition a compatible nn.Module in a row-wise fashion. Currently supports nn.Linear and nn.Embedding.
@@ -938,6 +947,15 @@ class LocalPackedRowwiseParallel(PackedRowwiseParallel):
 
     def __init__(self, **kwargs):
         super().__init__(use_dtensor=False, **kwargs)
+
+
+class RowwiseParallelReplicate(RowwiseParallel):
+    """
+    Rowwise parallel with input layouts replicated.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(input_layouts=Replicate(), **kwargs)
 
 
 class SequenceParallel(TensorParallelLayer):
@@ -1196,8 +1214,8 @@ class ParallelInterface(GeneralInterface):
         {
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
-            "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-            "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
+            "colwise_rep": ColwiseParallelReplicate(),
+            "rowwise_rep": RowwiseParallelReplicate(),
             "local_colwise": LocalColwiseParallel(),
             "local_rowwise": LocalRowwiseParallel(),
             "local": IsolatedParallel(),
