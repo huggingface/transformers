@@ -1714,39 +1714,21 @@ class IsaacModel(Qwen3PreTrainedModel):
                 omitted.
         """
 
-        if modality_tensor is not None:
-            modality_tensor = modality_tensor.to(dtype=torch.long)
         text_value = TextType.text.value if TextType is not None else 0
 
         # Get inputs
-
-        has_tensor_stream = tensor_stream is not None
-        has_input_ids = input_ids is not None
-        has_inputs_embeds = inputs_embeds is not None
-
-        if has_tensor_stream and has_inputs_embeds:
+        if tensor_stream is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both tensor_stream and inputs_embeds")
-        if (not has_tensor_stream) and has_input_ids and has_inputs_embeds:
+        if tensor_stream is None and input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
 
         # Resolve the input source (TensorStream takes precedence over token ids).
-        if has_tensor_stream:
-            # Embed TensorStream directly
+        if tensor_stream is not None:
             inputs_embeds = self.embed_stream(tensor_stream)
-        elif has_input_ids:
+        elif input_ids is not None:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
-        elif not has_inputs_embeds:
+        elif inputs_embeds is None:
             raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
-
-        # Default modality tensor
-        if modality_tensor is None:
-            if has_tensor_stream:
-                modality_tensor = modality_mask(tensor_stream)
-            else:
-                batch_size, seq_length = inputs_embeds.shape[:2]
-                modality_tensor = torch.full(
-                    (batch_size, seq_length), text_value, device=inputs_embeds.device, dtype=torch.long
-                )
 
         batch_size, seq_len = inputs_embeds.shape[:2]
 
@@ -1759,16 +1741,33 @@ class IsaacModel(Qwen3PreTrainedModel):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=inputs_embeds.device)
 
-        # Create default position_ids if not provided
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+
+        # Normalize modality tensor
+        if modality_tensor is None:
+            if tensor_stream is not None:
+                modality_tensor = modality_mask(tensor_stream)
+            else:
+                modality_tensor = torch.full(
+                    (batch_size, seq_len), text_value, device=inputs_embeds.device, dtype=torch.long
+                )
+        else:
+            modality_tensor = modality_tensor.to(dtype=torch.long)
+
+        if modality_tensor.shape[1] != seq_len:
+            if modality_tensor.shape[1] > seq_len:
+                modality_tensor = modality_tensor[:, :seq_len]
+            else:
+                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
+                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
+
+        # Normalize position ids
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
             else:
-                position_ids_batch_size = modality_tensor.shape[0] if modality_tensor is not None else batch_size
-                position_ids = cache_position.view(1, -1).expand(position_ids_batch_size, -1)
-
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+                position_ids = cache_position.view(1, -1).expand(modality_tensor.shape[0], -1)
 
         # Expand 2D position ids (from generic padding tests or decode cache positions) to 3D MRoPE coords
         if position_ids.ndim == 2:
@@ -1781,13 +1780,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
             position_ids = position_ids + start_positions
             position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-
-        if modality_tensor.shape[1] != seq_len:
-            if modality_tensor.shape[1] > seq_len:
-                modality_tensor = modality_tensor[:, :seq_len]
-            else:
-                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
-                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
 
         # Compute MRoPE position embeddings if we have custom rotary_emb
         cos, sin = self.rotary_emb(
@@ -1897,15 +1889,15 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         if input_ids is None and inputs_embeds is None and tensor_stream is None:
             raise ValueError("Either input_ids, inputs_embeds, or tensor_stream must be provided.")
 
-        batch_size = None
-        seq_len = None
-        input_device = None
-        if input_ids is not None:
-            batch_size, seq_len = input_ids.shape
-            input_device = input_ids.device
-        elif inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
-            input_device = inputs_embeds.device
+        text_value = TextType.text.value if TextType is not None else 0
+
+        if tensor_stream is None:
+            if input_ids is not None:
+                batch_size, seq_len = input_ids.shape
+                input_device = input_ids.device
+            else:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+                input_device = inputs_embeds.device
 
         # Build position ids (MRoPE) if needed and tensor_stream is available
         # During decode we reuse `self.rope_deltas` computed on the initial forward pass; `rope_delta` captures how far
@@ -1913,7 +1905,10 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
-            elif input_ids is not None:
+            elif input_ids is None:
+                dummy_ids = torch.zeros((batch_size, seq_len), device=input_device, dtype=torch.long)
+                position_ids = compute_position_ids_input_ids(dummy_ids)
+            else:
                 position_ids = compute_position_ids_input_ids(input_ids)
 
                 rope_delta = 0
@@ -1922,18 +1917,12 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
                     # rotating in lockstep across generation steps.
                     rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
                     if not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
-                        batch_size = input_ids.shape[0]
                         rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
 
                 position_ids = position_ids.add(rope_delta)
-            else:
-                dummy_ids = torch.zeros((batch_size, seq_len), device=input_device, dtype=torch.long)
-                position_ids = compute_position_ids_input_ids(dummy_ids)
 
-        if attention_mask is None and input_device is not None:
+        if attention_mask is None and tensor_stream is None:
             attention_mask = torch.ones((batch_size, seq_len), device=input_device, dtype=torch.long)
-
-        text_value = TextType.text.value if TextType is not None else 0
 
         if tensor_stream is not None:
             modality_tensor = modality_mask(tensor_stream)
