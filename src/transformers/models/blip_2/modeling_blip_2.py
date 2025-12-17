@@ -603,7 +603,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs_dropped = self.dropout(attention_probs)
+        attention_probs_dropped = self.dropout(attention_probs).to(value_layer.dtype)
 
         context_layer = torch.matmul(attention_probs_dropped, value_layer)
 
@@ -888,10 +888,12 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        # The Q-Former operates on embeddings provided by upstream modules (e.g. query tokens or text embeddings).
+        # It does not own input embeddings itself, so we return `None` to signal that there is nothing to update.
+        return None
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        raise NotImplementedError("Blip2QFormerModel does not own input embeddings and cannot set them.")
 
     def get_extended_attention_mask(
         self,
@@ -1946,6 +1948,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Blip2ImageTextMatchingModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

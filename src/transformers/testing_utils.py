@@ -38,6 +38,7 @@ import types
 import unittest
 from collections import UserDict, defaultdict
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import MISSING, fields
 from functools import cache, wraps
 from io import StringIO
@@ -72,13 +73,13 @@ from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
+    SAFE_WEIGHTS_INDEX_NAME,
     TRITON_MIN_VERSION,
+    WEIGHTS_INDEX_NAME,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
-    is_auto_awq_available,
-    is_auto_gptq_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -88,7 +89,6 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
-    is_eetq_available,
     is_essentia_available,
     is_faiss_available,
     is_fbgemm_gpu_available,
@@ -219,14 +219,19 @@ _COMMON_MODEL_NAMES_MAP = {
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
+
+    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
     IS_XPU_SYSTEM = getattr(torch.version, "xpu", None) is not None
+    IS_NPU_SYSTEM = getattr(torch, "npu", None) is not None
 else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
     IS_XPU_SYSTEM = False
+    IS_NPU_SYSTEM = False
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -266,6 +271,7 @@ _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=Fa
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
+_run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -314,6 +320,22 @@ def is_agent_test(test_case):
             return test_case
         else:
             return pytest.mark.is_agent_test()(test_case)
+
+
+def is_training_test(test_case):
+    """
+    Decorator marking a test as a training test. If RUN_TRAINING_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_training_tests:
+        return unittest.skip(reason="test is training test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_training_test()(test_case)
 
 
 def slow(test_case):
@@ -598,7 +620,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn2")
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
     except Exception as _:
         kernels_available = False
 
@@ -637,6 +659,9 @@ def require_read_token(test_case):
                 if getattr(attr, "__require_read_token__", False):
                     continue
                 wrapped = require_read_token(attr)
+                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
+                    # Don't accidentally bind staticmethods to `self`
+                    wrapped = staticmethod(wrapped)
                 setattr(test_case, attr_name, wrapped)
         return test_case
     else:
@@ -649,10 +674,6 @@ def require_read_token(test_case):
                 with patch("huggingface_hub.utils._headers.get_token", return_value=token):
                     return test_case(*args, **kwargs)
             else:  # Allow running locally with the default token env variable
-                # dealing with static/class methods and called by `self.xxx`
-                if "staticmethod" in inspect.getsource(test_case).strip():
-                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
-                        return test_case(*args[1:], **kwargs)
                 return test_case(*args, **kwargs)
 
         wrapper.__require_read_token__ = True
@@ -1070,17 +1091,20 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_large_accelerator(test_case, memory: float = 20):
+def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
     """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
-    if torch_device != "cuda" and torch_device != "xpu":
-        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
 
-    torch_accelerator_module = getattr(torch, torch_device)
+    def memory_decorator(tc):
+        if torch_device not in ("cuda", "xpu"):
+            return unittest.skip(f"test requires a GPU or XPU with more than {memory} GiB of memory")(tc)
 
-    return unittest.skipUnless(
-        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
-        f"test requires a GPU or XPU with more than {memory} GiB of memory",
-    )(test_case)
+        torch_accel = getattr(torch, torch_device)
+        return unittest.skipUnless(
+            torch_accel.get_device_properties(0).total_memory / 1024**3 > memory,
+            f"test requires a GPU or XPU with more than {memory} GiB of memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_accelerator(test_case):
@@ -1239,23 +1263,6 @@ def require_spqr(test_case):
     return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
-def require_eetq(test_case):
-    """
-    Decorator marking a test that requires eetq
-    """
-    eetq_available = is_eetq_available()
-    if eetq_available:
-        try:
-            import eetq  # noqa: F401
-        except ImportError as exc:
-            if "shard_checkpoint" in str(exc):
-                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
-                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
-                # TODO: Remove once eetq releases a fix and this release is used in CI
-                eetq_available = False
-    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
-
-
 def require_av(test_case):
     """
     Decorator marking a test that requires av
@@ -1291,13 +1298,11 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_gptq(test_case):
+def require_gptqmodel(test_case):
     """
-    Decorator for auto_gptq dependency
+    Decorator for gptqmodel dependency
     """
-    return unittest.skipUnless(
-        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
-    )(test_case)
+    return unittest.skipUnless(is_gptqmodel_available(), "test requires gptqmodel")(test_case)
 
 
 def require_hqq(test_case):
@@ -1305,13 +1310,6 @@ def require_hqq(test_case):
     Decorator for hqq dependency
     """
     return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
-
-
-def require_auto_awq(test_case):
-    """
-    Decorator for auto_awq dependency
-    """
-    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
 def require_auto_round(test_case):
@@ -3192,6 +3190,8 @@ def get_device_properties() -> DeviceProperties:
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
         return ("xpu", gen, None)
+    elif IS_NPU_SYSTEM:
+        return ("npu", None, None)
     else:
         return (torch_device, None, None)
 
@@ -4092,3 +4092,267 @@ def write_file(file, content):
 def read_json_file(file):
     with open(file, "r") as fh:
         return json.load(fh)
+
+
+# =============================================================================
+# Training CI Utilities - Logging and Memory Monitoring
+# =============================================================================
+
+
+# ANSI color codes for terminal output
+class Colors:
+    """ANSI color codes for terminal output formatting."""
+
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    # Foreground colors
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+
+    # Bright variants
+    BRIGHT_RED = "\033[91m"
+    BRIGHT_GREEN = "\033[92m"
+    BRIGHT_YELLOW = "\033[93m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_CYAN = "\033[96m"
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter that adds colors based on log level."""
+
+    LEVEL_COLORS = {
+        logging.DEBUG: Colors.DIM + Colors.CYAN,
+        logging.INFO: Colors.WHITE,
+        logging.WARNING: Colors.BRIGHT_YELLOW,
+        logging.ERROR: Colors.BRIGHT_RED,
+        logging.CRITICAL: Colors.BOLD + Colors.BRIGHT_RED,
+    }
+
+    # Loggers that should be dimmed (less important/verbose)
+    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
+
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
+        super().__init__(fmt, datefmt)
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Check if this logger should be dimmed
+        is_dimmed = record.name in self.DIMMED_LOGGERS
+
+        if is_dimmed:
+            # Dim the entire log line for httpx and similar
+            timestamp = self.formatTime(record, self.datefmt)
+            message = record.getMessage()
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
+
+        # Get color for this level
+        color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
+
+        # Color the level name
+        levelname = record.levelname
+        colored_levelname = f"{color}{levelname:8}{Colors.RESET}"
+
+        # Color the timestamp
+        colored_time = f"{Colors.DIM}{self.formatTime(record, self.datefmt)}{Colors.RESET}"
+
+        # Color the logger name
+        colored_name = f"{Colors.BLUE}{record.name}{Colors.RESET}"
+
+        # Get message
+        message = record.getMessage()
+
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
+
+
+_warn_once_logged: set[str] = set()
+
+
+def init_test_logger() -> logging.Logger:
+    """Initialize a test-specific logger with colored stderr handler and INFO level for tests.
+
+    Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
+    Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    """
+    logger = logging.getLogger("transformers.training_test")
+    logger.setLevel(logging.INFO)
+
+    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
+    if not logger.handlers:
+        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+        ch = logging.StreamHandler(sys.stderr)
+        ch.setLevel(logging.INFO)
+
+        # Use colored formatter if terminal supports it, plain otherwise
+        if sys.stderr.isatty():
+            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            )
+
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
+    return logger
+
+
+def warn_once(logger_instance: logging.Logger, msg: str) -> None:
+    """Log a warning message only once per unique message.
+
+    Uses a global set to track messages that have already been logged
+    to prevent duplicate warning messages from cluttering the output.
+
+    Args:
+        logger_instance: The logger instance to use for warning.
+        msg: The warning message to log.
+    """
+    if msg not in _warn_once_logged:
+        logger_instance.warning(msg)
+        _warn_once_logged.add(msg)
+
+
+# Named tuple for passing memory stats for logging
+MemoryStats = collections.namedtuple(
+    "MemoryStats",
+    [
+        "rss_gib",  # Resident Set Size in GiB
+        "rss_pct",  # RSS as percentage of total memory
+        "vms_gib",  # Virtual Memory Size in GiB
+        "peak_rss_gib",  # Peak RSS in GiB
+        "peak_rss_pct",  # Peak RSS as percentage of total memory
+        "available_gib",  # Available system memory in GiB
+        "total_gib",  # Total system memory in GiB
+    ],
+)
+
+
+class CPUMemoryMonitor:
+    """Monitor CPU memory usage for the current process."""
+
+    def __init__(self):
+        self.device_name = "CPU"
+        self._peak_rss = 0
+        self._process = None
+        self.total_memory = 0
+        self.total_memory_gib = 0
+
+        if is_psutil_available():
+            import psutil
+
+            self._process = psutil.Process(os.getpid())
+            mem_info = psutil.virtual_memory()
+            self.total_memory = mem_info.total
+            self.total_memory_gib = self._to_gib(self.total_memory)
+
+    def _to_gib(self, memory_in_bytes: int) -> float:
+        """Convert bytes to GiB."""
+        return memory_in_bytes / (1024 * 1024 * 1024)
+
+    def _to_pct(self, memory_in_bytes: int) -> float:
+        """Convert bytes to percentage of total memory."""
+        if self.total_memory == 0:
+            return 0.0
+        return 100.0 * memory_in_bytes / self.total_memory
+
+    def _update_peak(self) -> None:
+        """Update peak memory tracking."""
+        if self._process is not None:
+            current_rss = self._process.memory_info().rss
+            self._peak_rss = max(self._peak_rss, current_rss)
+
+    def get_stats(self) -> MemoryStats:
+        """Get current memory statistics."""
+        if not is_psutil_available():
+            return MemoryStats(0, 0, 0, 0, 0, 0, 0)
+
+        import psutil
+
+        self._update_peak()
+
+        mem_info = self._process.memory_info()
+        sys_mem = psutil.virtual_memory()
+
+        return MemoryStats(
+            rss_gib=self._to_gib(mem_info.rss),
+            rss_pct=self._to_pct(mem_info.rss),
+            vms_gib=self._to_gib(mem_info.vms),
+            peak_rss_gib=self._to_gib(self._peak_rss),
+            peak_rss_pct=self._to_pct(self._peak_rss),
+            available_gib=self._to_gib(sys_mem.available),
+            total_gib=self._to_gib(sys_mem.total),
+        )
+
+    def reset_peak_stats(self) -> None:
+        """Reset peak memory tracking."""
+        if self._process is not None:
+            self._peak_rss = self._process.memory_info().rss
+
+
+def build_cpu_memory_monitor(logger_instance: logging.Logger | None = None) -> CPUMemoryMonitor:
+    """Build and initialize a CPU memory monitor.
+
+    Args:
+        logger_instance: Optional logger to log initialization info. If None, no logging is done.
+
+    Returns:
+        CPUMemoryMonitor instance.
+    """
+    monitor = CPUMemoryMonitor()
+    if logger_instance is not None:
+        if is_psutil_available():
+            logger_instance.info(f"CPU memory monitor initialized: {monitor.total_memory_gib:.2f} GiB total")
+        else:
+            logger_instance.warning("psutil not available, memory monitoring disabled")
+    return monitor
+
+
+def convert_all_safetensors_to_bins(folder: str):
+    """Convert all safetensors files into torch bin files, to mimic saving with torch (since we still support loading
+    bin files, but not saving them anymore)"""
+    for file in os.listdir(folder):
+        path = os.path.join(folder, file)
+        if file.endswith(".safetensors"):
+            new_path = path.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            state_dict = load_file(path)
+            os.remove(path)
+            torch.save(state_dict, new_path)
+        # Adapt the index as well
+        elif file == SAFE_WEIGHTS_INDEX_NAME:
+            new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
+            with open(path) as f:
+                index = json.loads(f.read())
+            os.remove(path)
+            if "weight_map" in index.keys():
+                weight_map = index["weight_map"]
+                new_weight_map = {}
+                for k, v in weight_map.items():
+                    new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
+            index["weight_map"] = new_weight_map
+            with open(new_path, "w") as f:
+                f.write(json.dumps(index, indent=4))
+
+
+@contextmanager
+def force_serialization_as_bin_files():
+    """Since we don't support saving with torch `.bin` files anymore, but still support loading them, we use this context
+    to easily create the bin files and try to load them back"""
+    try:
+        # Monkey patch the method to save as bin files
+        original_save = PreTrainedModel.save_pretrained
+
+        def new_save(self, save_directory, *args, **kwargs):
+            original_save(self, save_directory, *args, **kwargs)
+            convert_all_safetensors_to_bins(save_directory)
+
+        PreTrainedModel.save_pretrained = new_save
+
+        yield
+    finally:
+        PreTrainedModel.save_pretrained = original_save

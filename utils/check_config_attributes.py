@@ -58,6 +58,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "PaddleOCRTextConfig": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -279,6 +280,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
     "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
+    "T5Gemma2TextConfig": ["tie_word_embeddings"],
+    "T5Gemma2DecoderConfig": ["tie_word_embeddings"],
     "ShieldGemma2Config": [
         "boi_token_index",
         "eoi_token_index",
