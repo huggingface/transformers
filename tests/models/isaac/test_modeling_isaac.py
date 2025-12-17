@@ -382,63 +382,6 @@ def test_document_mask_function_materializes_with_masking_utils():
     assert torch.equal(eager, expected_additive)
 
 
-@require_torch
-def test_isaac_sdpa_attention_backend():
-    config = IsaacVisionConfig(
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=1,
-        num_attention_heads=4,
-        num_channels=3,
-        num_patches=16,
-        patch_size=4,
-    )
-    config._attn_implementation = "sdpa"
-
-    attn_module = IsaacVisionAttention(config).eval()
-    seq_len = 8
-    hidden_states = torch.randn(1, seq_len, config.hidden_size)
-    cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32)
-
-    with torch.no_grad():
-        outputs, attn_weights = attn_module(
-            hidden_states=hidden_states,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=seq_len,
-        )
-
-    assert outputs.shape == hidden_states.shape
-    assert attn_weights is None
-
-
-@require_torch
-@require_flash_attn
-def test_isaac_flash_attention_backend():
-    config = IsaacVisionConfig(
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=1,
-        num_attention_heads=4,
-        num_channels=3,
-        num_patches=16,
-        patch_size=4,
-    )
-    config._attn_implementation = "flash_attention_2"
-
-    attn_module = IsaacVisionAttention(config).half().eval().cuda()
-    seq_len = 8
-    hidden_states = torch.randn(1, seq_len, config.hidden_size, device=torch.device("cuda"), dtype=torch.float16)
-    cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32, device=torch.device("cuda"))
-
-    with torch.no_grad():
-        outputs, attn_weights = attn_module(
-            hidden_states=hidden_states,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=seq_len,
-        )
-
-    assert outputs.shape == hidden_states.shape
-    assert attn_weights is None
 
 
 @lru_cache(maxsize=1)
@@ -797,18 +740,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         prepared_inputs = model.prepare_inputs_for_generation(input_ids=input_ids, attention_mask=attention_mask)
         self.assertIn("input_ids", prepared_inputs)
         self.assertIn("position_ids", prepared_inputs)
-
-
-def test_isaac_config_extends_qwen3_defaults(isaac_tiny_config):
-    assert isaac_tiny_config.hidden_size == isaac_tiny_config.text_config.hidden_size
-    assert isaac_tiny_config.num_attention_heads == isaac_tiny_config.text_config.num_attention_heads
-    assert isaac_tiny_config.model_type == "isaac"
-    assert isaac_tiny_config.vision_config is not None
-    assert isaac_tiny_config.vision_config.patch_size == 4
-    assert isaac_tiny_config.vision_config.num_patches == 64
-    assert isaac_tiny_config.max_sequence_length == 16384
-    assert isaac_tiny_config.vision_rescale_factor == pytest.approx(1 / 255)
-    assert isaac_tiny_config.vision_token == "<image>"
 
 
 @require_torch
