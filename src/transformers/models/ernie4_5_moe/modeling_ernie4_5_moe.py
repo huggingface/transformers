@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -37,7 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -135,7 +135,7 @@ class Ernie4_5_MoeRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -226,6 +226,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Ernie4_5_MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -244,7 +245,6 @@ class Ernie4_5_MoeAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
-        self.rotary_fn = apply_rotary_pos_emb
 
     def forward(
         self,
@@ -371,16 +371,16 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
             else "cpu"
         )
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight)
-            router_logits = F.softmax(router_logits, dim=1, dtype=torch.float)
-            router_top_value, router_indices = torch.topk(self.moe_statics(router_logits), self.top_k, dim=-1)
-            router_top_value = router_top_value / torch.clamp(
-                router_top_value.sum(dim=-1, keepdim=True), min=self.norm_min
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-            router_scores = router_top_value
-        router_scores = router_scores.to(hidden_states.dtype)
-        return router_logits, router_scores, router_indices
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return router_logits, selected_experts, routing_weights
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -403,7 +403,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        _, top_k_index, top_k_weights = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:

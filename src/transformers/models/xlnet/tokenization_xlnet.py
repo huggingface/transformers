@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for XLNet model."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -98,10 +98,11 @@ class XLNetTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
+    model = Unigram
 
     def __init__(
         self,
-        vocab: Optional[list] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         unk_id: int = 0,
         do_lower_case=False,
         remove_space=True,
@@ -159,13 +160,8 @@ class XLNetTokenizer(TokenizersBackend):
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
-
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             unk_id=unk_id,
             do_lower_case=do_lower_case,
             remove_space=remove_space,
