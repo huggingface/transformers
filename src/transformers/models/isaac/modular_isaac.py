@@ -162,7 +162,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
             self._attn_implementation = "sdpa"
 
 
-class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
+class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
     patch_size: Optional[int]
     max_num_patches: Optional[int]
     min_num_patches: Optional[int]
@@ -176,7 +176,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
-    valid_kwargs = IsaacImageProcessorKwargs
+    valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
@@ -205,7 +205,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        **kwargs: Unpack[IsaacImageProcessorKwargs],
+        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
     ) -> None:
         super().__init__(**kwargs)
 
