@@ -168,7 +168,8 @@ def _is_tensor_or_array_like(value):
 
     if isinstance(value, (list, tuple)):
         if len(value) == 0:
-            return False
+            # consider empty list or nested list as array-like
+            return True
         return _is_tensor_or_array_like(value[0])
 
     return False
