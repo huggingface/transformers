@@ -956,26 +956,15 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.value_proj.bias, 0.0)
             init.xavier_uniform_(module.output_proj.weight)
             init.constant_(module.output_proj.bias, 0.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
-                init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, DeformableDetrFrozenBatchNorm2d):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            init.zeros_(module.running_mean)
-            init.ones_(module.running_var)
         if hasattr(module, "reference_points") and not self.config.two_stage:
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
             init.constant_(module.reference_points.bias, 0.0)

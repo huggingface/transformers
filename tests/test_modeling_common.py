@@ -1113,9 +1113,22 @@ class ModelTesterMixin:
                 if not (v1 == v2).all():
                     different_buffers.append(k1)
 
+            def get_parent_traceback(buffer: str) -> str:
+                parent_name = buffer.rsplit(".", 1)[0] if "." in buffer else ""
+                parent = model_from_init.get_submodule(parent_name)
+                immediate_parent_module = type(parent).__name__
+                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
+                while not isinstance(parent, PreTrainedModel):
+                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
+                    parent = model_from_init.get_submodule(parent_name)
+                # Get the exact PreTrainedModel
+                pretrained_parent_module = next(x for x in type(parent).__mro__ if "PreTrainedModel" in x)
+                return f"{immediate_parent_module} called from {pretrained_parent_module}\n"
+
+            unique_tracebacks = {get_parent_traceback(buffer) for buffer in different_buffers}
             self.assertTrue(
                 len(different_buffers) == 0,
-                f"The following buffers are not properly handled by `_init_weights()`:\n{different_buffers}",
+                f"The following modules do not properly handle their buffers in `_init_weights()`:\n{unique_tracebacks}",
             )
 
     def test_torch_save_load(self):

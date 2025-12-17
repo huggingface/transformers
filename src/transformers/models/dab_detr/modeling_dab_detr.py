@@ -826,16 +826,10 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.zeros_(module.q_linear.bias)
             init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
-                init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
-                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
@@ -854,11 +848,6 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.class_embed.bias, bias_value)
         elif isinstance(module, nn.PReLU):
             module.reset_parameters()
-        elif isinstance(module, DabDetrFrozenBatchNorm2d):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            module.zeros_(module.running_mean)
-            module.ones_(module.running_var)
 
 
 # Modified from transformers.models.detr.modeling_detr.DetrEncoder with Detr->DabDetr,DETR->ConditionalDETR
