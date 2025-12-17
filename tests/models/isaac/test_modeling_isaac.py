@@ -16,7 +16,6 @@
 
 import base64
 import io
-import json
 import os
 import unittest
 from functools import lru_cache
@@ -68,7 +67,6 @@ if is_torch_available():
     import torch
 
 if is_perceptron_available():
-    from perceptron.tensorstream.ops import modality_mask, role_mask, tensor_stream_token_view
     from perceptron.tensorstream.tensorstream import TensorStream
 else:
     TensorStream = None
@@ -155,23 +153,6 @@ def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
         "sum": _rounded(flat.sum()),
         "l2_norm": _rounded(torch.linalg.vector_norm(flat, ord=2)),
     }
-
-
-def _assert_logits_statistics_close(
-    actual: dict[str, object],
-    expected: dict[str, object],
-    *,
-    rel: float = 1e-5,
-    abs_tol: float = 1e-6,
-) -> None:
-    assert actual["shape"] == expected["shape"], "Logits shape changed"
-    assert actual["numel"] == expected["numel"], "Logits numel changed"
-    for key in ("mean", "std", "min", "max", "sum", "l2_norm"):
-        assert actual[key] == pytest.approx(
-            expected[key],
-            rel=rel,
-            abs=abs_tol,
-        ), f"Logits statistic '{key}' drifted"
 
 
 @require_torch
