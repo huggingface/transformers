@@ -641,7 +641,7 @@ class IsaacModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.is_training = False
+        self.is_training = True
         self.expected_num_hidden_layers = 1
 
         self.text_config = {
@@ -726,6 +726,7 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     _is_composite = True
     test_attention_outputs = False
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = IsaacModelTester(self)

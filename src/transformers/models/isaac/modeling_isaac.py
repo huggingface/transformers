@@ -1254,7 +1254,7 @@ class IsaacModel(PreTrainedModel):
             cache_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
             past_key_values = DynamicCache(config=cache_config)
 
-        if cache_position is None and (past_key_values is not None or use_cache):
+        if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens,
