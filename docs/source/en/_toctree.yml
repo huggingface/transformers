@@ -80,18 +80,20 @@
       title: Kernels in transformers
     - local: perf_torch_compile
       title: torch.compile
+    - local: perf_infer_gpu_multi
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
+    - local: kv_cache
+      title: Cache strategies
+    - local: cache_explanation
+      title: Caching
     - local: perf_infer_gpu_one
       title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
     - local: perf_infer_cpu
       title: CPU
     - local: llm_optims
       title: Optimizing inference
-    - local: cache_explanation
-      title: Caching
-    - local: kv_cache
-      title: KV cache strategies
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
