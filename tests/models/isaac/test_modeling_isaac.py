@@ -481,12 +481,6 @@ class SimpleIsaacTokenizer(PythonBackend):
         return ()
 
 
-def _make_dummy_image(size=(32, 32), color=(255, 0, 0)):
-    if Image is None:
-        raise RuntimeError("PIL.Image is not available in this environment.")
-    return Image.new("RGB", size, color=color)
-
-
 @pytest.fixture
 def isaac_tiny_config():
     tester = IsaacModelTester(parent=None)
@@ -760,99 +754,6 @@ def test_isaac_for_conditional_generation_loss_and_generate_flag(isaac_tiny_conf
     assert outputs.loss is not None
     assert outputs.loss.ndim == 0
     assert outputs.logits.shape == (batch_size, seq_len, isaac_tiny_config.vocab_size)
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_matches_config_defaults(isaac_processor, isaac_tiny_config):
-    assert isaac_processor.vision_token == isaac_tiny_config.vision_token
-    assert isaac_processor.max_sequence_length == isaac_tiny_config.max_sequence_length
-    assert isaac_processor.config is isaac_tiny_config
-    assert isinstance(isaac_processor.image_processor, IsaacImageProcessorFast)
-    assert isaac_processor.image_processor.rescale_factor == pytest.approx(isaac_tiny_config.vision_rescale_factor)
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_text_only_round_trip(isaac_processor):
-    messages = [{"role": "user", "content": "Hello, how are you?"}]
-    prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    outputs = isaac_processor(text=prompt, images=None, return_tensors="pt")
-
-    assert "input_ids" in outputs
-    assert "tensor_stream" in outputs
-    assert isinstance(outputs["tensor_stream"], TensorStream)
-    assert outputs["input_ids"].shape[0] == 1
-
-
-@require_torch
-@require_tensorstream
-def test_isaac_processor_accepts_batchencoding_chat_template(isaac_processor):
-    messages = [{"role": "user", "content": "Hello, how are you?"}]
-    batch_encoding = isaac_processor.apply_chat_template(messages, add_generation_prompt=True)
-
-    outputs = isaac_processor(text=batch_encoding, images=None, return_tensors="pt")
-
-    assert "input_ids" in outputs
-    assert "tensor_stream" in outputs
-    assert isinstance(outputs["tensor_stream"], TensorStream)
-    assert outputs["input_ids"].shape[0] == 1
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_with_single_image(isaac_processor):
-    vision_token = isaac_processor.vision_token
-    text = f"Look at this {vision_token} and describe it."
-    image = _make_dummy_image()
-
-    outputs = isaac_processor(text=text, images=[image], return_tensors="pt")
-    assert isinstance(outputs["tensor_stream"], TensorStream)
-    assert outputs["input_ids"].ndim == 2
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_with_multiple_images(isaac_processor):
-    vision_token = isaac_processor.vision_token
-    text = f"First {vision_token} then {vision_token}"
-    images = [_make_dummy_image(color=(255, 0, 0)), _make_dummy_image(color=(0, 255, 0))]
-
-    outputs = isaac_processor(text=text, images=images, return_tensors="pt")
-    assert isinstance(outputs["tensor_stream"], TensorStream)
-    assert outputs["input_ids"].shape[0] == 1
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_error_on_image_mismatch(isaac_processor):
-    vision_token = isaac_processor.vision_token
-    text = f"{vision_token} {vision_token}"
-    image = _make_dummy_image()
-
-    with pytest.raises(ValueError, match="must match number of images"):
-        isaac_processor(text=text, images=[image], return_tensors="pt")
-
-
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_processor_consistent_tensor_stream_types(isaac_processor):
-    text_only = "Simple question?"
-    text_with_image = f"Describe this {isaac_processor.vision_token}"
-    image = _make_dummy_image()
-
-    outputs_text = isaac_processor(text=text_only, images=None, return_tensors="pt")
-    outputs_image = isaac_processor(text=text_with_image, images=[image], return_tensors="pt")
-
-    assert isinstance(outputs_text["tensor_stream"], TensorStream)
-    assert isinstance(outputs_image["tensor_stream"], TensorStream)
-    assert outputs_text["input_ids"].shape[0] == outputs_image["input_ids"].shape[0] == 1
 
 
 @require_torch
