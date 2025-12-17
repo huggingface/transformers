@@ -339,7 +339,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokens.append(token)
             if tokens:
                 # These tokens are from the special tokens map
-                self.add_tokens(tokens, special_tokens=True)
+                self.add_tokens(tokens)
 
         try:
             vocab_size = self._tokenizer.get_vocab_size()
