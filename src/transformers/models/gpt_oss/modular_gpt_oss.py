@@ -354,8 +354,7 @@ class GptOssDecoderLayer(LlamaDecoderLayer):
 class GptOssPreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _supports_sdpa = False
-    _supports_flash_attention = False
-    _supports_flex_attention = False
+    _supports_flex_attn = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
         "hidden_states": GptOssDecoderLayer,
@@ -386,7 +385,7 @@ class GptOssModel(MixtralModel):
 
         if (
             "flash" in config._attn_implementation
-            and config._attn_implementation != "kernels-community/vllm-flash-attn3"
+            and config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
         ):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "
@@ -412,7 +411,7 @@ class GptOssModel(MixtralModel):
 
         if (
             "flash" in self.config._attn_implementation
-            and self.config._attn_implementation != "kernels-community/vllm-flash-attn3"
+            and self.config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
         ):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "

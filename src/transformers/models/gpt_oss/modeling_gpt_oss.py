@@ -435,7 +435,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = True
+    _supports_flex_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -445,8 +445,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _supports_flash_attention = False
-    _supports_flex_attention = False
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -483,7 +481,7 @@ class GptOssModel(GptOssPreTrainedModel):
 
         if (
             "flash" in config._attn_implementation
-            and config._attn_implementation != "kernels-community/vllm-flash-attn3"
+            and config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
         ):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "
@@ -512,7 +510,7 @@ class GptOssModel(GptOssPreTrainedModel):
 
         if (
             "flash" in self.config._attn_implementation
-            and self.config._attn_implementation != "kernels-community/vllm-flash-attn3"
+            and self.config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
         ):
             raise ValueError(
                 f"GPT-OSS model does not support the specified "
