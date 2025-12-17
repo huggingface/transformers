@@ -79,7 +79,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # apply configs
         if ct_transform_config is not None:
             apply_transform_config(model, ct_transform_config)
-            self._update_transforms_tied_weights(model)
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
 
         # compress meta model to match compressed checkpoint
@@ -125,48 +124,3 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
-
-    def _update_transforms_tied_weights(self, model: "PreTrainedModel"):
-        """
-        This function updates the `_tied_weights_keys` and `all_tied_weights_keys`
-        attributes of the given model with transform weights.
-
-        This function is needed because transformers only knows which weights are shared
-        via the `_tied_weights_keys` attributes. These attributes are used to tie
-        weights after the model has loaded.
-
-        CompressedTensors does not enforce a particular weight is the source weight :.
-        We rely on correctness of the following mapping in PreTrainedModel.tie_weights():
-        ```
-        B -> A
-        C -> A
-        D -> A
-
-        Where any of A,B,C,D might be the loaded source weight
-        ```
-        This functionality is tested by `test_modeling_utils::BaseModelWithMultipleTiedWeights`
-
-        In the future, this function will be folded in to `apply_transform_config`
-        """
-        from compressed_tensors.transform import TransformBase
-
-        # 1. find which transform weights are shared
-        # create mapping: tensor_ptr -> key
-        weight_to_keys: dict[int, str] = defaultdict(list)
-        for name, module in model.named_modules():
-            if isinstance(module, TransformBase):
-                for param_name, param in module.named_parameters(recurse=False):
-                    param_fqn = f"{name}.{param_name}" if name else param_name
-                    weight_to_keys[id(param)].append(param_fqn)  # id is used to identify meta tensors
-
-        # 2. assign each group of shared weights to the same value
-        # create tied weights: key -> tied_keys[0]
-        transform_tied_weights_keys = {}
-        for keys in weight_to_keys.values():
-            keys = list(keys)
-            for key in keys[1:]:  # skip A -> A
-                transform_tied_weights_keys[key] = keys[0]
-
-        # 3. update tied weights attributes
-        model._tied_weights_keys.update(transform_tied_weights_keys)
-        model.all_tied_weights_keys = model._tied_weights_keys
