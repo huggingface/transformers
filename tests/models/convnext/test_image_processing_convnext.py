@@ -18,6 +18,9 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
+if is_vision_available():
+    from transformers.image_utils import PILImageResampling
+
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
@@ -120,3 +123,16 @@ class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     )
     def test_slow_fast_equivalence_batched(self):
         pass
+
+    def test_default_interpolation_is_bicubic(self):
+        """
+        Test that the default interpolation method is BICUBIC to match the original ConvNeXt implementation.
+        Reference: https://github.com/facebookresearch/ConvNeXt/blob/main/datasets.py
+        """
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class()
+            self.assertEqual(
+                image_processor.resample,
+                PILImageResampling.BICUBIC,
+                f"{image_processing_class.__name__} should default to BICUBIC interpolation to match the original ConvNeXt implementation",
+            )
