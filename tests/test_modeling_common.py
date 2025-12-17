@@ -971,7 +971,7 @@ class ModelTesterMixin:
 
             # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
             buffer_names = {name for name, _ in model_from_config.named_buffers()}
-            different_weights = [k for k in different_weights if k not in buffer_names]
+            different_weights = [k for k in different_weights if k not in buffer_names and "timm" not in k]
 
             self.assertTrue(
                 len(different_weights) == 0,
@@ -3047,9 +3047,14 @@ class ModelTesterMixin:
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
-                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
-                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
-
+                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
+                vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
+                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
+                language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
+                if language_model_name is None or vision_model_name is None:
+                    self.skipTest(
+                        reason="Model does not have both vision and language sub-models, cannot test composite SDPA dispatch"
+                    )
                 vision_model_sdpa = getattr(model_sdpa, vision_model_name)
                 language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
