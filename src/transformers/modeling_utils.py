@@ -3950,14 +3950,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-            if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
-                hf_quantizer.preprocess_model(
-                    model=model,
-                    dtype=dtype,
-                    device_map=device_map,
-                    checkpoint_files=checkpoint_files,
-                    use_kernels=use_kernels,
-                )
+        # replace module with quantized modules (does not touch weights)
+        if hf_quantizer is not None:
+            hf_quantizer.preprocess_model(
+                model=model,
+                dtype=dtype,
+                device_map=device_map,
+                checkpoint_files=checkpoint_files,
+                use_kernels=use_kernels,
+            )
 
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
