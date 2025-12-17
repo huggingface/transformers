@@ -1287,7 +1287,7 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("IsaacImageProcessorFast",)
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+    tokenizer_class = ("Qwen2Tokenizer",)
 
     def __init__(
         self,
