@@ -551,6 +551,8 @@
         title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jais2
+        title: Jais2
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
