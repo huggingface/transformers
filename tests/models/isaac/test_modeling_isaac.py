@@ -38,10 +38,7 @@ from transformers import (
 from transformers.image_utils import load_image
 from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
-from transformers.models.isaac.modeling_isaac import (
-    document_mask_function_from_cu_seqlens,
-    ensure_document_attention_mask,
-)
+from transformers.models.isaac.modeling_isaac import document_mask_function_from_cu_seqlens
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
     require_flash_attn,
@@ -165,31 +162,6 @@ class IsaacDocumentMaskingTest(unittest.TestCase):
         self.assertFalse(mask_fn(0, 0, 1, 3))
         # Same second document (indices 3 and 4)
         self.assertTrue(mask_fn(0, 0, 4, 3))
-
-    def test_ensure_document_attention_mask_prefers_callable_when_requested(self):
-        cu_seqlens = torch.tensor([0, 2, 5], dtype=torch.int32)
-        total_tokens = 5
-        dtype = torch.float32
-
-        mask_callable = ensure_document_attention_mask(
-            attention_mask=None,
-            cu_seqlens=cu_seqlens,
-            total_tokens=total_tokens,
-            dtype=dtype,
-            device=cu_seqlens.device,
-            return_mask_function=True,
-        )
-        self.assertTrue(callable(mask_callable))
-
-        additive = ensure_document_attention_mask(
-            attention_mask=None,
-            cu_seqlens=cu_seqlens,
-            total_tokens=total_tokens,
-            dtype=dtype,
-            device=cu_seqlens.device,
-            return_mask_function=False,
-        )
-        self.assertIsNone(additive)
 
     def test_document_mask_function_materializes_with_masking_utils(self):
         cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)

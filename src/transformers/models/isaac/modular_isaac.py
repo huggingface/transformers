@@ -87,10 +87,9 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import (
-    ChannelDimension,
     PILImageResampling,
 )
-from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
+from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -424,32 +423,39 @@ def document_mask_function_from_cu_seqlens(cu_seqlens: Optional[torch.Tensor]) -
     return packed_sequence_mask_function(packed_sequence_mask)
 
 
-def ensure_document_attention_mask(
-    attention_mask: Optional[torch.Tensor],
+def create_document_attention_mask(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
     cu_seqlens: Optional[torch.Tensor],
-    total_tokens: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    *,
-    return_mask_function: bool = False,
-) -> Optional[Union[torch.Tensor, Callable]]:
-    """Return the provided mask, a callable mask from ``cu_seqlens``, or ``None``.
+) -> Optional[Union[torch.Tensor, Any]]:
+    """Materialize a backend-specific block-diagonal attention mask.
 
-    ``return_mask_function=True`` yields a callable suitable for ``masking_utils``; otherwise
-    ``None`` is returned when no explicit ``attention_mask`` is provided. The legacy additive mask
-    has been removed in favor of the callable-based path.
+    This uses the standard `masking_utils` mask interface (same mechanism as Llama4),
+    so the returned object matches the selected attention backend (e.g. SDPA bool mask,
+    eager additive mask, or flex `BlockMask`).
     """
 
-    if attention_mask is not None:
-        return attention_mask
-
-    if cu_seqlens is None:
+    mask_function = document_mask_function_from_cu_seqlens(cu_seqlens)
+    if mask_function is None:
         return None
 
-    if return_mask_function:
-        return document_mask_function_from_cu_seqlens(cu_seqlens)
+    seq_len = input_embeds.shape[1]
+    cache_position = torch.arange(seq_len, device=input_embeds.device, dtype=torch.long)
 
-    return None
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
+    return mask_interface(
+        batch_size=input_embeds.shape[0],
+        cache_position=cache_position,
+        kv_length=seq_len,
+        kv_offset=0,
+        mask_function=mask_function,
+        attention_mask=None,
+        allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=False,
+        dtype=input_embeds.dtype,
+        config=config,
+        use_vmap=False,
+    )
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -699,15 +705,6 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
             Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
             buffers for packed variable-length attention.
         """
-        attention_mask = ensure_document_attention_mask(
-            attention_mask,
-            cu_seqlens,
-            hidden_states.size(1),
-            hidden_states.dtype,
-            hidden_states.device,
-            return_mask_function=False,
-        )
-
         # Run attention directly so variable-length metadata reaches FlashAttention.
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
@@ -749,16 +746,6 @@ class IsaacVisionEncoder(Siglip2Encoder):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        cu_seqlens = kwargs.get("cu_seqlens")
-        attention_mask = ensure_document_attention_mask(
-            attention_mask,
-            cu_seqlens,
-            inputs_embeds.size(1),
-            inputs_embeds.dtype,
-            inputs_embeds.device,
-            return_mask_function=False,
-        )
-
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -922,9 +909,12 @@ class IsaacVisionTransformer(nn.Module):
         cu_seqlens[1:] = seq_sizes.cumsum(0)
         max_seqlen = int(seq_sizes.max().item()) if seq_sizes.numel() > 0 else 0
 
+        attention_mask = create_document_attention_mask(self.config, hidden_states, cu_seqlens)
+
         # Pass through encoder with variable-length attention parameters
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             return_dict=True,
