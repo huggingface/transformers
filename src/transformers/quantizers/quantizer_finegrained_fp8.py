@@ -37,7 +37,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 self.quantization_config.dequantize = True
             else:
                 raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
-                
+
         if torch.cuda.is_available():
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
