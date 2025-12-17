@@ -1017,29 +1017,6 @@ class IsaacDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-# ============================================================================
-# Model
-# ============================================================================
-
-
-def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
-    r"""Create 3D positional indices for token input.
-
-    Args:
-        input_ids (`torch.Tensor`):
-            Tensor of shape `(batch_size, seq_len)` containing token ids.
-
-    Returns:
-        `torch.Tensor`: Positional indices with shape `(batch_size, seq_len, 3)` where each channel duplicates the
-        1D position so it can be consumed by the 3-axis MRoPE rotary embedding.
-    """
-    batch_size, seq_length = input_ids.shape
-    position_ids = torch.arange(seq_length, device=input_ids.device)
-    position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-    position_ids = position_ids.unsqueeze(2).expand(-1, -1, 3)  # Add 3D for MRoPE
-    return position_ids
-
-
 @auto_docstring
 class IsaacModel(PreTrainedModel):
     config: IsaacConfig
@@ -1217,37 +1194,35 @@ class IsaacModel(PreTrainedModel):
 
         # Get inputs
 
-        if tensor_stream is not None and inputs_embeds is not None:
+        has_tensor_stream = tensor_stream is not None
+        has_input_ids = input_ids is not None
+        has_inputs_embeds = inputs_embeds is not None
+
+        if has_tensor_stream and has_inputs_embeds:
             raise ValueError("You cannot specify both tensor_stream and inputs_embeds")
-        elif tensor_stream is not None:
+        if (not has_tensor_stream) and has_input_ids and has_inputs_embeds:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+
+        # Resolve the input source (TensorStream takes precedence over token ids).
+        if has_tensor_stream:
             # Embed TensorStream directly
             inputs_embeds = self.embed_stream(tensor_stream)
-            # Create modality tensor if not provided
-            if modality_tensor is None:
-                modality_tensor = modality_mask(tensor_stream)
-        elif input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
+        elif has_input_ids:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
-            # Create text modality tensor if not provided
-            if modality_tensor is None:
-                batch_size, seq_length = input_ids.shape
-                modality_tensor = torch.full(
-                    (batch_size, seq_length), text_value, device=input_ids.device, dtype=torch.long
-                )
-        elif inputs_embeds is not None:
-            # Inputs provided directly as embeddings (no input_ids/tensor_stream)
-            if modality_tensor is None:
+        elif not has_inputs_embeds:
+            raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
+
+        # Default modality tensor
+        if modality_tensor is None:
+            if has_tensor_stream:
+                modality_tensor = modality_mask(tensor_stream)
+            else:
                 batch_size, seq_length = inputs_embeds.shape[:2]
                 modality_tensor = torch.full(
                     (batch_size, seq_length), text_value, device=inputs_embeds.device, dtype=torch.long
                 )
-            if attention_mask is None:
-                attention_mask = torch.ones(
-                    (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
-                )
-        else:
-            raise ValueError("You have to specify either tensor_stream, input_ids or inputs_embeds")
+
+        batch_size, seq_len = inputs_embeds.shape[:2]
 
         # Ensure cache exists when requested
         if use_cache and past_key_values is None:
@@ -1256,39 +1231,26 @@ class IsaacModel(PreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
-            )
+            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=inputs_embeds.device)
 
         # Create default position_ids if not provided
         if position_ids is None:
             if tensor_stream is not None:
                 position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
-            elif cache_position is not None:
-                batch_size = modality_tensor.shape[0] if modality_tensor is not None else inputs_embeds.shape[0]
-                position_ids = cache_position.view(1, -1).expand(batch_size, -1)
-            elif input_ids is not None:
-                position_ids = compute_position_ids_input_ids(input_ids)
             else:
-                batch_size, seq_length = inputs_embeds.shape[:2]
-                dummy_ids = torch.zeros((batch_size, seq_length), device=inputs_embeds.device, dtype=torch.long)
-                position_ids = compute_position_ids_input_ids(dummy_ids)
+                position_ids_batch_size = modality_tensor.shape[0] if modality_tensor is not None else batch_size
+                position_ids = cache_position.view(1, -1).expand(position_ids_batch_size, -1)
 
         if attention_mask is None:
-            attention_mask = torch.ones(
-                (inputs_embeds.shape[0], inputs_embeds.shape[1]), device=inputs_embeds.device, dtype=torch.long
-            )
+            attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
 
         # Expand 2D position ids (from generic padding tests or decode cache positions) to 3D MRoPE coords
-        if position_ids is not None and position_ids.ndim == 2:
+        if position_ids.ndim == 2:
             position_ids = position_ids.to(device=inputs_embeds.device)
             position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
         # Align lengths so rotary embedding sees matching shapes
-        seq_len = inputs_embeds.shape[1]
-        if position_ids is not None and position_ids.shape[1] != seq_len:
+        if position_ids.shape[1] != seq_len:
             start_positions = position_ids[:, :1, 0]
             position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
             position_ids = position_ids + start_positions
@@ -1311,22 +1273,20 @@ class IsaacModel(PreTrainedModel):
         sin = sin.to(inputs_embeds.dtype)
 
         # Flash attention expects 1D position_ids; keep 3D only for rotary phases
-        decoder_position_ids = position_ids
-        if position_ids is not None and position_ids.ndim == 3:
-            decoder_position_ids = position_ids[..., 0]
+        decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
         # Prepare attention mask
-
         if not isinstance(attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "input_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "position_ids": decoder_position_ids,
-            }
-            attention_mask = create_masks_for_generate(**mask_kwargs)
+            attention_mask = create_masks_for_generate(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
+                past_key_values=past_key_values,
+                position_ids=decoder_position_ids,
+            )
+
+        is_attention_mask_dict = isinstance(attention_mask, dict)
 
         # Initialize hidden states
         hidden_states = inputs_embeds
@@ -1334,7 +1294,7 @@ class IsaacModel(PreTrainedModel):
 
         for decoder_layer in self.text_model.layers:
             layer_attention_mask = (
-                attention_mask[decoder_layer.attention_type] if isinstance(attention_mask, dict) else attention_mask
+                attention_mask[decoder_layer.attention_type] if is_attention_mask_dict else attention_mask
             )
             layer_outputs = decoder_layer(
                 hidden_states,
@@ -1348,12 +1308,10 @@ class IsaacModel(PreTrainedModel):
                 **kwargs,
             )
 
-            if isinstance(layer_outputs, tuple):
-                hidden_states = layer_outputs[0]
-                if output_attentions:
-                    all_attentions.append(layer_outputs[1])
-            else:
-                hidden_states = layer_outputs
+            layer_outputs_is_tuple = isinstance(layer_outputs, tuple)
+            hidden_states = layer_outputs[0] if layer_outputs_is_tuple else layer_outputs
+            if output_attentions and layer_outputs_is_tuple:
+                all_attentions.append(layer_outputs[1])
 
         # Final layer norm
         hidden_states = self.text_model.norm(hidden_states)
@@ -1383,6 +1341,29 @@ class IsaacPreTrainedModel(PreTrainedModel):
         "hidden_states": IsaacDecoderLayer,
         "attentions": IsaacAttention,
     }
+
+
+# ============================================================================
+# Model
+# ============================================================================
+
+
+def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
+    r"""Create 3D positional indices for token input.
+
+    Args:
+        input_ids (`torch.Tensor`):
+            Tensor of shape `(batch_size, seq_len)` containing token ids.
+
+    Returns:
+        `torch.Tensor`: Positional indices with shape `(batch_size, seq_len, 3)` where each channel duplicates the
+        1D position so it can be consumed by the 3-axis MRoPE rotary embedding.
+    """
+    batch_size, seq_length = input_ids.shape
+    position_ids = torch.arange(seq_length, device=input_ids.device)
+    position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+    position_ids = position_ids.unsqueeze(2).expand(-1, -1, 3)  # Add 3D for MRoPE
+    return position_ids
 
 
 @auto_docstring
@@ -1441,48 +1422,47 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         if input_ids is None and inputs_embeds is None and tensor_stream is None:
             raise ValueError("Either input_ids, inputs_embeds, or tensor_stream must be provided.")
 
+        batch_size = None
+        seq_len = None
+        input_device = None
+        if input_ids is not None:
+            batch_size, seq_len = input_ids.shape
+            input_device = input_ids.device
+        elif inputs_embeds is not None:
+            batch_size, seq_len = inputs_embeds.shape[:2]
+            input_device = inputs_embeds.device
+
         # Build position ids (MRoPE) if needed and tensor_stream is available
         # During decode we reuse `self.rope_deltas` computed on the initial forward pass; `rope_delta` captures how far
         # cached rotary phases have progressed so we can advance `position_ids` without rebuilding the TensorStream.
-        if position_ids is None and tensor_stream is not None:
-            position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
-        elif position_ids is None and input_ids is not None:
-            # For text inputs build position ids and modality tensor
-            position_ids = compute_position_ids_input_ids(input_ids)
-            if cache_position is not None and self.rope_deltas is not None:
-                # Combine the incremental decode step (`cache_position`) with cached offsets so hidden states continue
-                # rotating in lockstep across generation steps.
-                rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
-            else:
-                rope_delta = 0
-            if cache_position is not None and not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
-                batch_size = input_ids.shape[0]
-                rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
-            position_ids = position_ids.add(rope_delta)
-        elif position_ids is None and inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
-            dummy_ids = torch.zeros((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
-            position_ids = compute_position_ids_input_ids(dummy_ids)
+        if position_ids is None:
+            if tensor_stream is not None:
+                position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
+            elif input_ids is not None:
+                position_ids = compute_position_ids_input_ids(input_ids)
 
-        if attention_mask is None:
-            if input_ids is not None:
-                batch_size, seq_len = input_ids.shape
-                attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.long)
-            elif inputs_embeds is not None:
-                batch_size, seq_len = inputs_embeds.shape[:2]
-                attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+                rope_delta = 0
+                if cache_position is not None and self.rope_deltas is not None:
+                    # Combine the incremental decode step (`cache_position`) with cached offsets so hidden states continue
+                    # rotating in lockstep across generation steps.
+                    rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
+                    if not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
+                        batch_size = input_ids.shape[0]
+                        rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
+
+                position_ids = position_ids.add(rope_delta)
+            else:
+                dummy_ids = torch.zeros((batch_size, seq_len), device=input_device, dtype=torch.long)
+                position_ids = compute_position_ids_input_ids(dummy_ids)
+
+        if attention_mask is None and input_device is not None:
+            attention_mask = torch.ones((batch_size, seq_len), device=input_device, dtype=torch.long)
 
         text_value = TextType.text.value if TextType is not None else 0
 
         if tensor_stream is not None:
             modality_tensor = modality_mask(tensor_stream)
-        elif input_ids is not None:
-            batch_size, seq_len = input_ids.shape
-            modality_tensor = torch.full(
-                (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
-            )
         else:
-            batch_size, seq_len = inputs_embeds.shape[:2]
             modality_tensor = torch.full(
                 (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
             )
