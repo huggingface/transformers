@@ -440,29 +440,29 @@ Hey how are you doing"""  # noqa: W293
         if reference_tokenizer is None:
             reference_tokenizer = self.get_tokenizer()
 
-        try:
-            tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
-            if not os.path.exists(tokenizer_json_path):
-                return None
+        tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
+        if not os.path.exists(tokenizer_json_path):
+            return None
 
-            extractor = TokenizersExtractor(tokenizer_json_path)
-            vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+        extractor = TokenizersExtractor(tokenizer_json_path)
+        vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+        vocab = vocab_scores
+        if _type := getattr(self.tokenizer_class, "model", None):
+            if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
+                vocab = vocab_ids
 
-            # Convert added_tokens list to added_tokens_decoder dict format
-            # This matches the format used by from_pretrained() from tokenizer_config.json
-            tokenizer_from_extractor = self.tokenizer_class(
-                vocab=vocab_scores,
-                merges=merges,
-                do_lower_case=False,
-                keep_accents=True,
-                added_tokens_decoder=added_tokens_decoder,
-                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
-            )
+        # Convert added_tokens list to added_tokens_decoder dict format
+        # This matches the format used by from_pretrained() from tokenizer_config.jso
+        tokenizer_from_extractor = self.tokenizer_class(
+            vocab=vocab,
+            merges=merges,
+            do_lower_case=False,
+            keep_accents=True,
+            added_tokens_decoder=added_tokens_decoder,
+            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
+        )
 
-            return tokenizer_from_extractor
-        except (TypeError, Exception):
-            # fail and raise the error
-            raise
+        return tokenizer_from_extractor
 
     def get_extracted_tokenizer_from_sentencepiece(self, reference_tokenizer=None):
         """
@@ -799,7 +799,8 @@ Hey how are you doing"""  # noqa: W293
     def _run_integration_checks(self, tokenizer, tokenizer_type):
         # Test 1: Tokens match expected
         tokens = tokenizer.tokenize(self.integration_test_input_string)
-        self.assertEqual(
+        self.maxDiff = None
+        self.assertListEqual(
             tokens,
             self.integration_expected_tokens,
             f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",

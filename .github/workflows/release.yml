@@ -1,0 +1,60 @@
+name: Release
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - 'v*-release'
+
+jobs:
+  build_and_test:
+    name: build release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - run: pip install setuptools
+      - run: pip install -e .
+      - run: make build-release
+
+      - run: pip uninstall -y transformers
+      - run: pip install dist/*.whl
+
+      - run: python -c "from transformers import *"
+
+      - run: pip install -e .[torch]
+      - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            dist/**
+            build/**
+
+  upload_package:
+    needs: build_and_test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment: pypi-release
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: .
+
+      - name: Publish package distributions to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
