@@ -236,19 +236,12 @@ def convert_checkpoint(
         raise ValueError(f"missing keys found: {missing}")
     print("Full model checkpoint loaded successfully.")
 
-    # Calculate speech token IDs from tokenizer for generation config
-    speech_start_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
-    speech_end_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
-    speech_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
+    # Custom pad token for VibeVoice: https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/modular/modular_vibevoice_text_tokenizer.py#L181
+    pad_token_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
 
     # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.speech_start_id = speech_start_id
-    vibevoice_model.generation_config.speech_end_id = speech_end_id
-    vibevoice_model.generation_config.speech_diffusion_id = speech_diffusion_id
-    vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
-    vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
-    vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id
+    vibevoice_model.generation_config.pad_token_id = pad_token_id
     # https://github.com/microsoft/VibeVoice/blob/79470ff5768e17cbef6a3e1a93d1fd82ecc9a00d/demo/realtime_model_inference_from_file.py#L129
     vibevoice_model.generation_config.cfg_scale = 1.5
     vibevoice_model.generation_config.do_sample = False
@@ -295,8 +288,8 @@ python src/transformers/models/vibevoice_realtime/convert_vibevoice_realtime_to_
     --processor_config /raid/eric/vibevoice_0.5b/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-0.5B
 
-# -- voice embeddings should be added to the hub (not done automatically)
-https://github.com/microsoft/VibeVoice/tree/main/demo/voices/streaming_model
+# -- converted voice embeddings should be added to the hub (not done automatically)
+by running this script: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-convert_realtime_presets-py
 """
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
