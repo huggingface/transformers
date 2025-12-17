@@ -2067,7 +2067,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.warning_once(
                 f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
                 "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
-                "support those features."
+                "support those features, or set `_input_embed_layer` to the attribute name that holds the embeddings."
             )
 
     def disable_input_require_grads(self):

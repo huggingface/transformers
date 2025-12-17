@@ -994,7 +994,9 @@ class ModelTesterMixin:
             grad_after_gc = embedding_param.grad
             self.assertIsNotNone(
                 grad_after_gc,
-                f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled.",
+                f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled. "
+                "This typically means the model is not exposing its embeddings via `get_input_embeddings()` or "
+                "a properly configured `_input_embed_layer` attribute.",
             )
             self.assertTrue(
                 torch.isfinite(grad_after_gc).all(),
