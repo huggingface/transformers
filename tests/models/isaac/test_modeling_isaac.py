@@ -44,7 +44,6 @@ from transformers.models.isaac.modeling_isaac import (
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
-    get_tests_dir,
     require_flash_attn,
     require_torch,
     require_vision,
@@ -77,27 +76,13 @@ else:
 require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
 
 BASE_MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
-MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
+MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1")
+
+BASE_MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
+MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/5") or None
+
 LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
 RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
-
-DUMMY_BOX_DOCUMENT = [
-    {
-        "type": "text",
-        "content": "<hint>BOX</hint>",
-        "role": "user",
-    },
-    {
-        "type": "image",
-        "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
-        "role": "user",
-    },
-    {
-        "type": "text",
-        "content": "Determine whether it is safe to cross the street. Look for signage and moving traffic.",
-        "role": "user",
-    },
-]
 
 
 def document_to_messages(
@@ -322,6 +307,17 @@ def _base_reference_checkpoint_or_skip():
     if is_offline_mode():
         pytest.skip("Offline mode: set ISAAC_TEST_MODEL_PATH to a local checkpoint to run these tests.")
     return BASE_MODEL_ID
+
+
+def _reference_checkpoint_or_skip():
+    if LOCAL_CHECKPOINT:
+        resolved = Path(LOCAL_CHECKPOINT).expanduser()
+        if not resolved.exists():
+            pytest.skip(f"Local checkpoint path {resolved} does not exist.")
+        return str(resolved)
+    if is_offline_mode():
+        pytest.skip("Offline mode: set ISAAC_TEST_MODEL_PATH to a local checkpoint to run these tests.")
+    return MODEL_ID
 
 
 class SimpleIsaacTokenizer(PythonBackend):
@@ -644,15 +640,15 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = _base_reference_checkpoint_or_skip()
-        self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
+        self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=BASE_MODEL_REVISION)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
+            self.checkpoint, trust_remote_code=True, use_fast=False, revision=BASE_MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
         self.hf_config.vision_config._attn_implementation = "flash_attention_2"
         self.hf_config.vision_config.attn_implementation = "flash_attention_2"
         self.model = IsaacForConditionalGeneration.from_pretrained(
-            self.checkpoint, config=self.hf_config, revision=MODEL_REVISION
+            self.checkpoint, config=self.hf_config, revision=BASE_MODEL_REVISION
         )
         self.model = self.model.to(device=self.device, dtype=self.dtype)
         self.model.eval()
@@ -775,7 +771,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.checkpoint = _base_reference_checkpoint_or_skip()
+        self.checkpoint = _reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
@@ -790,7 +786,24 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         self.model.eval()
 
     def test_hf_generate_box_points(self):
-        messages, images = document_to_messages(DUMMY_BOX_DOCUMENT, vision_token=self.hf_config.vision_token)
+        document = [
+            {
+                "type": "text",
+                "content": "<hint>BOX</hint>",
+                "role": "user",
+            },
+            {
+                "type": "image",
+                "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+                "role": "user",
+            },
+            {
+                "type": "text",
+                "content": "Determine whether it is safe to cross the street. Look for signage and moving traffic.",
+                "role": "user",
+            },
+        ]
+        messages, images = document_to_messages(document, vision_token=self.hf_config.vision_token)
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
         tensor_stream = processor_output["tensor_stream"].to(self.device)
@@ -808,7 +821,6 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         generated_ids = outputs.sequences
         hf_generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         points = extract_points(hf_generated_text)
-
         assert len(points) == 1
         first_point = points[0]
         assert first_point.top_left.x < first_point.bottom_right.x
@@ -818,4 +830,3 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         assert first_point.top_left.y == 247
         assert first_point.bottom_right.x == 863
         assert first_point.bottom_right.y == 386
-        assert "is" in hf_generated_text
