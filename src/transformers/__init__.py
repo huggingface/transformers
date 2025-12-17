@@ -36,6 +36,7 @@ from .utils import (
     is_librosa_available,
     is_mistral_common_available,
     is_mlx_available,
+    is_numba_available,
     is_pretty_midi_available,
 )
 

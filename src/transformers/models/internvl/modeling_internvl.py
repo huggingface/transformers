@@ -209,10 +209,9 @@ class InternVLVisionPatchEmbeddings(nn.Module):
             )
 
         embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
-        patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 # Based on timm implementation, which can be found here:
@@ -291,7 +290,7 @@ class InternVLVisionEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -308,7 +307,7 @@ class InternVLVisionEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 class InternVLVisionMLP(nn.Module):
@@ -455,7 +454,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
