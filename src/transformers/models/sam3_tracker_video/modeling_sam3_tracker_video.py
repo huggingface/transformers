@@ -1567,8 +1567,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
-    _tied_weights_keys = {}
-    _keys_to_ignore_on_load_missing = []
     _checkpoint_conversion_mapping = {
         r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
