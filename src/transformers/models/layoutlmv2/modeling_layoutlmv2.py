@@ -476,6 +476,12 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, LayoutLMv2Model):
             if hasattr(module, "visual_segment_embedding"):
                 init.normal_(module.visual_segment_embedding, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, detectron2.layers.FrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
 
 def my_convert_sync_batchnorm(module, process_group=None):

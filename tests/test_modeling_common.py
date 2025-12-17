@@ -1128,20 +1128,24 @@ class ModelTesterMixin:
             unique_bad_module_traceback = set()
             for buffer in different_buffers.copy():
                 parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else ("", buffer)
-                print(parent_name)
                 parent = model_from_init.get_submodule(parent_name)
                 immediate_parent_class = type(parent).__name__
                 # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
                 while not isinstance(parent, PreTrainedModel):
                     parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
                     parent = model_from_init.get_submodule(parent_name)
-                # Get the exact PreTrainedModel
+                # Get the exact XXXPreTrainedModel
                 pretrained_parent_class = next(
                     x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
                 )
+                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
+                if pretrained_parent_class == "PreTrainedModel":
+                    pretrained_parent_class = type(parent).__name__
 
                 # We cannot control timm model weights initialization, so skip in this case
-                if pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer:
+                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
+                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
+                ):
                     different_buffers.discard(buffer)
                     continue
 
