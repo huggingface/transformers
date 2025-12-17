@@ -242,44 +242,96 @@ def tokenizer(isaac_reference_checkpoint):
 
 
 @require_torch
-def test_document_mask_function_from_cu_seqlens():
-    cu_seqlens = torch.tensor([0, 3, 5], dtype=torch.int32)
-    mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
+class IsaacDocumentMaskingTest(unittest.TestCase):
+    def test_document_mask_function_from_cu_seqlens(self):
+        cu_seqlens = torch.tensor([0, 3, 5], dtype=torch.int32)
+        mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
 
-    assert mask_fn is not None
-    # Same document (indices 1 and 2)
-    assert mask_fn(0, 0, 1, 2)
-    # Cross-document (index 1 in first doc, 3 in second doc)
-    assert not mask_fn(0, 0, 1, 3)
-    # Same second document (indices 3 and 4)
-    assert mask_fn(0, 0, 4, 3)
+        self.assertIsNotNone(mask_fn)
+        # Same document (indices 1 and 2)
+        self.assertTrue(mask_fn(0, 0, 1, 2))
+        # Cross-document (index 1 in first doc, 3 in second doc)
+        self.assertFalse(mask_fn(0, 0, 1, 3))
+        # Same second document (indices 3 and 4)
+        self.assertTrue(mask_fn(0, 0, 4, 3))
 
+    def test_ensure_document_attention_mask_prefers_callable_when_requested(self):
+        cu_seqlens = torch.tensor([0, 2, 5], dtype=torch.int32)
+        total_tokens = 5
+        dtype = torch.float32
 
-@require_torch
-def test_ensure_document_attention_mask_prefers_callable_when_requested():
-    cu_seqlens = torch.tensor([0, 2, 5], dtype=torch.int32)
-    total_tokens = 5
-    dtype = torch.float32
+        mask_callable = ensure_document_attention_mask(
+            attention_mask=None,
+            cu_seqlens=cu_seqlens,
+            total_tokens=total_tokens,
+            dtype=dtype,
+            device=cu_seqlens.device,
+            return_mask_function=True,
+        )
+        self.assertTrue(callable(mask_callable))
 
-    mask_callable = ensure_document_attention_mask(
-        attention_mask=None,
-        cu_seqlens=cu_seqlens,
-        total_tokens=total_tokens,
-        dtype=dtype,
-        device=cu_seqlens.device,
-        return_mask_function=True,
-    )
-    assert callable(mask_callable)
+        additive = ensure_document_attention_mask(
+            attention_mask=None,
+            cu_seqlens=cu_seqlens,
+            total_tokens=total_tokens,
+            dtype=dtype,
+            device=cu_seqlens.device,
+            return_mask_function=False,
+        )
+        self.assertIsNone(additive)
 
-    additive = ensure_document_attention_mask(
-        attention_mask=None,
-        cu_seqlens=cu_seqlens,
-        total_tokens=total_tokens,
-        dtype=dtype,
-        device=cu_seqlens.device,
-        return_mask_function=False,
-    )
-    assert additive is None
+    def test_document_mask_function_materializes_with_masking_utils(self):
+        cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)
+        total_tokens = 4
+        mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
+
+        cache_position = torch.arange(total_tokens, device=cu_seqlens.device, dtype=torch.long)
+        expected_bool = torch.tensor(
+            [
+                [
+                    [
+                        [True, True, False, False],
+                        [True, True, False, False],
+                        [False, False, True, True],
+                        [False, False, True, True],
+                    ]
+                ]
+            ],
+            device=cu_seqlens.device,
+        )
+
+        sdpa = sdpa_mask(
+            batch_size=1,
+            cache_position=cache_position,
+            kv_length=total_tokens,
+            kv_offset=0,
+            mask_function=mask_fn,
+            attention_mask=None,
+            allow_is_causal_skip=False,
+            allow_is_bidirectional_skip=False,
+            allow_torch_fix=False,
+            use_vmap=False,
+        )
+        # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
+        self.assertTrue(torch.equal(sdpa, expected_bool))
+
+        eager = eager_mask(
+            batch_size=1,
+            cache_position=cache_position,
+            kv_length=total_tokens,
+            kv_offset=0,
+            mask_function=mask_fn,
+            attention_mask=None,
+            allow_is_bidirectional_skip=False,
+            use_vmap=False,
+            dtype=torch.float32,
+        )
+        expected_additive = torch.where(
+            expected_bool,
+            torch.tensor(0.0, device=cu_seqlens.device, dtype=torch.float32),
+            torch.tensor(torch.finfo(torch.float32).min, device=cu_seqlens.device, dtype=torch.float32),
+        )
+        self.assertTrue(torch.equal(eager, expected_additive))
 
 
 def create_isaac_processor(
@@ -325,62 +377,6 @@ def create_isaac_processor(
         tokenizer=tokenizer,
         **processor_params,
     )
-
-
-@require_torch
-def test_document_mask_function_materializes_with_masking_utils():
-    cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)
-    total_tokens = 4
-    mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
-
-    cache_position = torch.arange(total_tokens, device=cu_seqlens.device, dtype=torch.long)
-    expected_bool = torch.tensor(
-        [
-            [
-                [
-                    [True, True, False, False],
-                    [True, True, False, False],
-                    [False, False, True, True],
-                    [False, False, True, True],
-                ]
-            ]
-        ],
-        device=cu_seqlens.device,
-    )
-
-    sdpa = sdpa_mask(
-        batch_size=1,
-        cache_position=cache_position,
-        kv_length=total_tokens,
-        kv_offset=0,
-        mask_function=mask_fn,
-        attention_mask=None,
-        allow_is_causal_skip=False,
-        allow_is_bidirectional_skip=False,
-        allow_torch_fix=False,
-        use_vmap=False,
-    )
-    # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
-    assert torch.equal(sdpa, expected_bool)
-
-    eager = eager_mask(
-        batch_size=1,
-        cache_position=cache_position,
-        kv_length=total_tokens,
-        kv_offset=0,
-        mask_function=mask_fn,
-        attention_mask=None,
-        allow_is_bidirectional_skip=False,
-        use_vmap=False,
-        dtype=torch.float32,
-    )
-    expected_additive = torch.where(
-        expected_bool,
-        torch.tensor(0.0, device=cu_seqlens.device, dtype=torch.float32),
-        torch.tensor(torch.finfo(torch.float32).min, device=cu_seqlens.device, dtype=torch.float32),
-    )
-    assert torch.equal(eager, expected_additive)
-
 
 
 
