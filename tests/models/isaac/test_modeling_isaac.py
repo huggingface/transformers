@@ -755,153 +755,6 @@ def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config)
     assert decoded_prompt.strip() != ""
 
 
-def test_hf_generate_something():
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    os.environ["PYTHONHASHSEED"] = "0"
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    seed = 123
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.use_deterministic_algorithms(True, warn_only=False)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cuda.matmul.allow_tf32 = False
-    torch.backends.cudnn.allow_tf32 = False
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
-    torch.set_float32_matmul_precision("highest")
-    # Configuration
-    MAX_NEW_TOKENS = 10
-    DTYPE = torch.bfloat16
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    genesis_hf_checkpoint = "/home/phil/backup/genesis/genesis_isaac_base_hf_converted_checkpoint/"
-
-    hf_config = IsaacConfig.from_pretrained(genesis_hf_checkpoint)
-    # messages, images = document_to_messages(document, vision_token=hf_config.vision_token)
-    messages = [{"role": "user", "content": "Describe this image:"}, {"role": "user", "content": "<image>"}]
-    images = []
-    image_bytes = base64.b64decode(RED_DOT_B64)
-    pil_image = Image.open(io.BytesIO(image_bytes))
-    images.append(pil_image)
-    print("----------")
-    print(messages)
-    print("----------")
-
-    tokenizer = AutoTokenizer.from_pretrained(genesis_hf_checkpoint, trust_remote_code=True, use_fast=False)
-    genesis_processor = create_isaac_processor(tokenizer, hf_config)
-    # Apply chat template with roles (add_generation_prompt=True to match DocumentProcessor)
-    # Added strip because our generation events don't add new line
-    text = genesis_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
-    processor_output = genesis_processor(text=text, images=images, return_tensors="pt")
-    tensor_stream = processor_output["tensor_stream"].to(device)
-
-    # Process document to TensorStream
-    hf_config.vision_config._attn_implementation = "flash_attention_2"
-    hf_config.vision_config.attn_implementation = "flash_attention_2"
-    hf_model = IsaacForConditionalGeneration.from_pretrained(genesis_hf_checkpoint, config=hf_config)
-    hf_model = hf_model.to(device=device, dtype=DTYPE)
-    hf_model.eval()
-
-    # Load HF tokenizer
-
-    # Validate that weights are identical between models
-
-    with torch.inference_mode():
-        print("\n1️⃣ Running HuggingFace model.generate()...")
-        # Generate with HF model using the training tensor stream converted to Open variant
-        hf_output = hf_model.generate(
-            tensor_stream=tensor_stream,
-            max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=False,  # Deterministic generation
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_logits=True,
-        )
-
-        hf_generated_ids = hf_output.sequences
-        hf_generated_text = tokenizer.decode(hf_generated_ids[0], skip_special_tokens=True)
-        print(f"   HF Generated: '{hf_generated_text}'")
-        assert "is" in hf_generated_text
-        hf_logits = torch.cat(hf_output.logits, dim=0)
-        logit_stats = compute_logits_statistics(hf_logits)
-        print("-------------")
-        print(logit_stats)
-        print("-------------")
-
-
-@require_torch
-@require_vision
-@slow
-@require_tensorstream
-def test_hf_generate_vs_training_generate_logits(isaac_reference_model, isaac_reference_processor):
-    device = "cuda"
-    dtype = torch.bfloat16
-    isaac_reference_model = isaac_reference_model.to(device=device, dtype=dtype)
-    isaac_reference_model.eval()
-    golden = _load_generation_golden()
-    if not golden:
-        pytest.skip(f"Missing generation golden file at {GENERATION_GOLDEN_FILE}.")
-
-    image = _load_red_dot_image()
-    if image is None:
-        pytest.skip("PIL.Image is required for Isaac generation tests.")
-
-    messages = [
-        {
-            "role": "user",
-            "content": "Describe this image:",
-        },
-        {
-            "role": "user",
-            "content": "<image>",
-        },
-    ]
-    prompt = isaac_reference_processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    ).strip()
-    batch = isaac_reference_processor(text=prompt, images=[image], return_tensors="pt")
-
-    input_ids = batch["input_ids"]
-    tensor_stream = batch["tensor_stream"]
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    isaac_reference_model.to(device)
-    input_ids = input_ids.to(device)
-    if tensor_stream is not None and hasattr(tensor_stream, "to"):
-        tensor_stream = tensor_stream.to(device)
-
-    torch.manual_seed(0)
-    with torch.no_grad():
-        outputs = isaac_reference_model.generate(
-            input_ids=input_ids,
-            tensor_stream=tensor_stream,
-            max_new_tokens=10,
-            do_sample=False,
-            pad_token_id=isaac_reference_processor.tokenizer.eos_token_id,
-            eos_token_id=isaac_reference_processor.tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_logits=True,
-        )
-
-    logits = torch.cat(outputs.logits, dim=0).to(torch.float32).cpu()
-    logits_stats = compute_logits_statistics(logits)
-    generated_ids = outputs.sequences[0].tolist()
-
-    assert generated_ids == golden["token_ids"], "Generated token ids changed"
-    if "logits_statistics" in golden:
-        _assert_logits_statistics_close(logits_stats, golden["logits_statistics"])
-    else:
-        pytest.fail(
-            "Golden file missing both logits_statistics and logits_hash. "
-            f"Regenerate {GENERATION_GOLDEN_FILE} via scripts/update_isaac_hashes.py."
-        )
-
-    isaac_reference_model.to("cpu")
-
-
 @require_torch
 @require_vision
 @slow
@@ -990,3 +843,45 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         generated_text = self._generate_from_messages(messages, images, num_tokens=256)
         expected_response = "\nNo, it is not safe to cross the street at this moment. The traffic light for pedestrians is red, indicating that it is not safe to cross."
         assert generated_text == expected_response
+
+    def test_logit_equivalence(self):
+        image = _load_red_dot_image()
+        if image is None:
+            pytest.skip("PIL.Image is required for Isaac generation tests.")
+        image_bytes = base64.b64decode(RED_DOT_B64)
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        images = []
+        images.append(pil_image)
+        num_tokens = 10
+
+        messages = [
+            {"role": "user", "content": "Describe this image:"},
+            {"role": "user", "content": "<image>"},
+        ]
+        prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        tensor_stream = processor_output["tensor_stream"].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                tensor_stream=tensor_stream,
+                max_new_tokens=num_tokens or self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+        hf_logits = torch.cat(outputs.logits, dim=0)
+        logit_stats = compute_logits_statistics(hf_logits)
+        expected_logit_stats = {
+            "shape": [10, 151936],
+            "numel": 1519360,
+            "mean": 0.0879677375,
+            "std": 2.8382794404,
+            "min": -12.125,
+            "max": 31.0,
+            "sum": 133654.661714755,
+            "l2_norm": 3500.2090570868,
+        }
+        assert logit_stats == expected_logit_stats
