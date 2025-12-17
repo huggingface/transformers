@@ -280,6 +280,8 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
+            _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+
             def __init__(self, config):
                 super().__init__(config)
                 self.transformer = AutoModel.from_pretrained(GPT2_TINY, config=config)
