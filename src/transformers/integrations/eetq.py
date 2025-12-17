@@ -97,7 +97,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = N
             Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
     """
-    from kernels import get_kernel
+    from .hub_kernels import get_kernel
 
     global eetq_kernels_hub
     eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq")
