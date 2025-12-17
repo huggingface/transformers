@@ -132,6 +132,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def get_input_embeddings(self):
+        # TIMM backbones operate directly on images and do not expose token embeddings.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -146,13 +153,6 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.features_only = extra_init_kwargs.get("features_only", False)
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
-
-    def get_input_embeddings(self):
-        # Vision backbones from timm do not expose token embeddings, so there is nothing to return.
-        return None
-
-    def set_input_embeddings(self, value):
-        raise NotImplementedError("TimmWrapperModel does not own token embeddings and cannot set them.")
 
     @auto_docstring
     def forward(
