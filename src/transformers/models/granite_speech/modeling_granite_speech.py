@@ -322,6 +322,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
 
         self.post_init()
 
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
