@@ -88,9 +88,6 @@ prompt = processor.apply_chat_template(
 # IsaacProcessor builds TensorStream events internally when both text and images are provided.
 batch = processor(text=prompt, images=images, return_tensors="pt")
 
-tensor_stream = batch.pop("tensor_stream").to(model.device)
-inputs = {name: tensor.to(model.device) for name, tensor in batch.items()}
-
 with torch.inference_mode():
     generated = model.generate(
         **inputs,
