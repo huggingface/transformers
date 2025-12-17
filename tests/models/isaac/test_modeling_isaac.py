@@ -400,18 +400,6 @@ def _load_generation_golden():
         return json.load(fh)
 
 
-def safe_decode(tokenizer, token_ids):
-    if isinstance(token_ids, torch.Tensor):
-        token_ids = token_ids.tolist()
-    try:
-        text = tokenizer.decode(token_ids, skip_special_tokens=True)
-    except Exception:
-        tokens = tokenizer.convert_ids_to_tokens(token_ids, skip_special_tokens=True)
-        tokens = [tok for tok in tokens if tok is not None]
-        text = tokenizer.convert_tokens_to_string(tokens)
-    return text.strip() if isinstance(text, str) else text
-
-
 @lru_cache(maxsize=1)
 def _load_red_dot_image():
     if Image is None:
