@@ -759,13 +759,9 @@ class IsaacVisionEncoder(Siglip2Encoder):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        cu_seqlens = kwargs.get("cu_seqlens")
         attention_mask = ensure_document_attention_mask(
             attention_mask,
             cu_seqlens,
@@ -776,15 +772,6 @@ class IsaacVisionEncoder(Siglip2Encoder):
         )
 
         hidden_states = inputs_embeds
-        kwargs.update(
-            {
-                "max_seqlen": max_seqlen,
-                "cu_seqlens": cu_seqlens,
-                "output_attentions": output_attentions,
-                "output_hidden_states": output_hidden_states,
-                "return_dict": return_dict,
-            }
-        )
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
