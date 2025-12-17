@@ -441,6 +441,15 @@ else:
         "convert_and_export_with_cache",
     ]
 
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "WeightConverter",
+    ]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
@@ -494,6 +503,13 @@ if TYPE_CHECKING:
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
+    from .core_model_loading import Chunk as Chunk
+    from .core_model_loading import Concatenate as Concatenate
+    from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import MergeModulelist as MergeModulelist
+    from .core_model_loading import PermuteForRope as PermuteForRope
+    from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
     from .data import DataProcessor as DataProcessor

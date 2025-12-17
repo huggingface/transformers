@@ -9,6 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
+    - local: weightconverter
+      title: Dynamic weight loading
     - local: models
       title: Loading models
     - local: custom_models
