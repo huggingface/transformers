@@ -154,32 +154,6 @@ def document_to_messages(
     return messages, images
 
 
-def _tensor_to_bytes(tensor):
-    cpu_tensor = tensor.detach().cpu().contiguous()
-    if cpu_tensor.is_floating_point():
-        cpu_tensor = cpu_tensor.to(dtype=torch.float32)
-    return cpu_tensor.numpy().tobytes()
-
-
-def _iter_filtered_items(state_dict, include=None, exclude=None):
-    for name, tensor in state_dict.items():
-        if include and not any(token in name for token in include):
-            continue
-        if exclude and any(token in name for token in exclude):
-            continue
-        yield name, tensor
-
-
-def _hash_state_dict(state_dict, *, include=None, exclude=None):
-    hasher = hashlib.sha256()
-    items = sorted(_iter_filtered_items(state_dict, include=include, exclude=exclude), key=lambda kv: kv[0])
-    for name, tensor in items:
-        hasher.update(name.encode("utf-8"))
-        hasher.update(b"\0")
-        hasher.update(_tensor_to_bytes(tensor))
-    return hasher.hexdigest()
-
-
 def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
     """
     Summarize logits with simple statistics that are stable across minor
@@ -377,7 +351,6 @@ def create_isaac_processor(
         tokenizer=tokenizer,
         **processor_params,
     )
-
 
 
 @lru_cache(maxsize=1)
