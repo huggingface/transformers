@@ -1101,12 +1101,13 @@ class ModelTesterMixin:
             buffers_from_init = dict(model_from_init.named_buffers())
             buffers_from_meta_init = dict(model_from_meta_init.named_buffers())
 
-            # Buffers are not random usually, so everything must match exactly
             self.assertEqual(
                 sorted(buffers_from_init.keys()),
                 sorted(buffers_from_meta_init.keys()),
                 "The name of the buffers from each model should be the exact same",
             )
+
+            # Buffers are not random usually, so everything must match exactly
             different_buffers = set()
             for k1, v1 in buffers_from_init.items():
                 v2 = buffers_from_meta_init[k1]
@@ -1116,7 +1117,8 @@ class ModelTesterMixin:
             # Find the parent structure of the buffers that are different
             unique_bad_module_traceback = set()
             for buffer in different_buffers.copy():
-                parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else "", buffer
+                parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else ("", buffer)
+                print(parent_name)
                 parent = model_from_init.get_submodule(parent_name)
                 immediate_parent_class = type(parent).__name__
                 # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
@@ -1134,7 +1136,9 @@ class ModelTesterMixin:
                     continue
 
                 # Add it to the traceback
-                traceback = f"{buf_name} in module {immediate_parent_class} called from {pretrained_parent_class}\n"
+                traceback = (
+                    f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
+                )
                 unique_bad_module_traceback.add(traceback)
 
             unique_bad_module_traceback = "".join(unique_bad_module_traceback)

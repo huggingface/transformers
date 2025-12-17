@@ -789,8 +789,8 @@ class T5Gemma2PreTrainedModel(Gemma3PreTrainedModel):
                 if module.rope_type[layer_type] != "default":
                     rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
-                init.copy_(getattr(self, f"{layer_type}_inv_freq"), curr_inv_freq)
-                init.copy_(getattr(self, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
     def prepare_decoder_input_ids_from_labels(self, input_ids):
         """
