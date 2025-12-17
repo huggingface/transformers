@@ -1220,13 +1220,13 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             with torch.no_grad():
                 conditional_embeddings = self.clip.get_text_features(
                     input_ids, attention_mask=attention_mask, position_ids=position_ids
-                )
+                ).pooler_output
         elif conditional_pixel_values is not None:
             # compute conditional embeddings from images
             if len(conditional_pixel_values) != batch_size:
                 raise ValueError("Make sure to pass as many prompt images as there are query images")
             with torch.no_grad():
-                conditional_embeddings = self.clip.get_image_features(conditional_pixel_values)
+                conditional_embeddings = self.clip.get_image_features(conditional_pixel_values).pooler_output
         else:
             raise ValueError(
                 "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"

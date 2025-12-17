@@ -2357,7 +2357,7 @@ class Gemma3nModel(PaliGemmaModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -2366,7 +2366,7 @@ class Gemma3nModel(PaliGemmaModel):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_features = self.get_audio_features(input_features, ~input_features_mask)
+            audio_features = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
             audio_features = audio_features.pooler_output
             audio_mask = audio_features.audio_mel_mask
 

@@ -946,6 +946,23 @@ class JanusVQVAEDecoder(nn.Module):
         return hidden_state
 
 
+@dataclass
+@auto_docstring
+class JanusVQVAEModelOutput(BaseModelOutputWithPooling):
+    r"""
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+        Indices of the image tokens predicted by the VQ-VAE model.
+    quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        Quantized last hidden state from the VQ-VAE model.
+    embedding_loss (`torch.FloatTensor`):
+        The embedding loss computed during quantization.
+    """
+
+    quantized_last_hidden_state: Optional[torch.FloatTensor] = None
+    image_tokens: Optional[torch.FloatTensor] = None
+    embedding_loss: Optional[torch.FloatTensor] = None
+
+
 @auto_docstring(
     custom_intro="""
     The VQ-VAE model used in Janus for encoding/decoding images into discrete tokens.
@@ -977,11 +994,17 @@ class JanusVQVAE(JanusPreTrainedModel):
         # Initialize the VQVAE model.
         self.post_init()
 
-    def encode(self, pixel_values: torch.LongTensor):
+    @check_model_inputs(tie_last_hidden_states=False)
+    def encode(self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]) -> JanusVQVAEModelOutput:
         hidden_states = self.encoder(pixel_values)
-        hidden_states = self.quant_conv(hidden_states)
-        quant, emb_loss, indices = self.quantize(hidden_states)
-        return quant, emb_loss, indices
+        conv_hidden_states = self.quant_conv(hidden_states)
+        quantized_last_hidden_state, emb_loss, indices = self.quantize(conv_hidden_states)
+        return JanusVQVAEModelOutput(
+            last_hidden_state=hidden_states,
+            quantized_last_hidden_state=quantized_last_hidden_state,
+            image_tokens=indices,
+            embedding_loss=emb_loss,
+        )
 
     def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         """
@@ -1010,10 +1033,10 @@ class JanusVQVAE(JanusPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
-        quant, embedding_loss, indices = self.encode(pixel_values)
-        decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        encode_outputs = self.encode(pixel_values, return_dict=True, **kwargs)
+        decoded_pixel_values = self.decode(encode_outputs.image_tokens.view(batch_size, -1))
 
-        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
+        return JanusVQVAEOutput(decoded_pixel_values, encode_outputs.embedding_loss)
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -1138,7 +1161,7 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(

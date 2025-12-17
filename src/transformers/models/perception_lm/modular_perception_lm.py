@@ -246,7 +246,7 @@ class PerceptionLMModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values)
+            image_features = self.get_image_features(pixel_values=pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -255,7 +255,7 @@ class PerceptionLMModel(LlavaModel):
 
         video_features = None
         if pixel_values_videos is not None:
-            video_features = self.get_image_features(pixel_values=pixel_values_videos)
+            video_features = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True).pooler_output
             video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features

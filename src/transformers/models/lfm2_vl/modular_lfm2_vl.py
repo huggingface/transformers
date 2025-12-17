@@ -202,7 +202,8 @@ class Lfm2VlModel(LlavaModel):
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,

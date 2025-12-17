@@ -1535,7 +1535,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         vision_output.pooler_output = image_embeds
         # NOTE: @Tom we need to add projection_attentions to the output
 
-        return image_embeds
+        return vision_output
 
     @can_return_tuple
     @auto_docstring

@@ -200,7 +200,8 @@ class Mistral3Model(LlavaModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

@@ -1295,9 +1295,8 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 

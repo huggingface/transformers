@@ -402,7 +402,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             if input_features.dtype != self.dtype:
                 input_features = input_features.to(self.dtype)
             # Get the audio features from the encoder / projector
-            audio_embeds = self.get_audio_features(input_features)
+            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
 
             # Merge the audio features into the LLM embeddings
             inputs_embeds = self.get_merged_audio_embeddings(

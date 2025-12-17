@@ -956,7 +956,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -1052,8 +1052,8 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

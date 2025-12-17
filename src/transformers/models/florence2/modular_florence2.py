@@ -1574,7 +1574,7 @@ class Florence2Model(LlavaModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values)
+                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1763,7 +1763,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

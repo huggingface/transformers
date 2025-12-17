@@ -1615,7 +1615,7 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer
+            input_features=input_features, is_longer=is_longer, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)

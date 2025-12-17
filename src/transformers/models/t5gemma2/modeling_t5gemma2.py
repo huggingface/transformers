@@ -851,7 +851,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ):
         """Convert pixel images to image features and merge into input embeds."""
-        image_features = self.get_image_features(pixel_values)
+        image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
         image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
         image_mask = self.get_image_placeholder_mask(

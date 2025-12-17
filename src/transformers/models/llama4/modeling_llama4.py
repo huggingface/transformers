@@ -1317,7 +1317,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
 
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat).to(

@@ -569,7 +569,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 image_sizes,
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -581,7 +582,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 pixel_values_videos,
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)

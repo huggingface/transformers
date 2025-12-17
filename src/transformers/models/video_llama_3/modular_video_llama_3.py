@@ -680,7 +680,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         image_embeds = None
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes)
+            image_embeds = self.get_image_features(
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
+            ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -689,7 +691,9 @@ class VideoLlama3Model(Qwen2VLModel):
 
         video_embeds = None
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes)
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
+            ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
                 video_embeds = video_embeds[video_compression_mask.to(video_embeds.device)]

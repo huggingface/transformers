@@ -1001,7 +1001,8 @@ class AriaModel(AriaPreTrainedModel):
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

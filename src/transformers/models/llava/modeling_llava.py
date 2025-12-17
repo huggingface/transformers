@@ -201,7 +201,7 @@ class LlavaModel(LlavaPreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature)
 
-        if "image_sizes" in kwargs:
+        if kwargs.get("image_sizes") is not None:
             split_sizes = [
                 (height // self.vision_tower.patch_size) * (width // self.vision_tower.patch_size)
                 for height, width in kwargs["image_sizes"]
@@ -274,7 +274,8 @@ class LlavaModel(LlavaPreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

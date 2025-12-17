@@ -22,10 +22,11 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
@@ -46,24 +47,13 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 
 
 @dataclass
-class BaseModelOutputWithVisualIndicatorFeatures(ModelOutput):
+@auto_docstring
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
-            Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
     visual_indicator_features: Optional[torch.FloatTensor] = None
 
 
@@ -199,8 +189,9 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor, return_dict: bool = False, **kwargs
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
@@ -234,13 +225,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         elif self.config.tokenize_function == "softmax":
             prob_token = nn.functional.softmax(logits, dim=-1)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
-                pooler_output=prob_token,
-            )
-
-        return prob_token
+        return BaseModelOutputWithVisualIndicatorFeatures(
+            last_hidden_state=last_hidden_state,
+            pooler_output=prob_token,
+        )
 
 
 class Ovis2Model(LlavaModel):
@@ -281,9 +269,8 @@ class Ovis2Model(LlavaModel):
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
         image_outputs.pooler_output = image_features
-        # NOTE: @Tom let's readd visual_indicator_features to the output
+        image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
         return image_outputs
 

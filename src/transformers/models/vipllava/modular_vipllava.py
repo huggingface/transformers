@@ -150,8 +150,8 @@ class VipLlavaModel(LlavaModel):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
-            )
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

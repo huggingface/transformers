@@ -551,7 +551,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 batch_num_images=batch_num_images,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
@@ -565,7 +566,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_newline = (
                 self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
             )

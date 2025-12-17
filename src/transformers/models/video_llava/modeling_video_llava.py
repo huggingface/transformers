@@ -364,7 +364,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
                 pixel_values_images,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -373,8 +374,8 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
-                pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer
-            )
+                pixel_values_videos=pixel_values_videos, vision_feature_layer=vision_feature_layer, return_dict=True
+            ).pooler_output
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features

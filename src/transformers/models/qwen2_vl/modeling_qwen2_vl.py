@@ -44,7 +44,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..qwen2.modeling_qwen2 import (
     Qwen2RMSNorm,
 )
@@ -728,19 +728,17 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        return_dict: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
-        return_dict (`bool`, *optional*, defaults to `False`):
-            Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
         """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
@@ -767,13 +765,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
 
         merged_hidden_states = self.merger(hidden_states)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=hidden_states,
-                pooler_output=merged_hidden_states,
-            )
-
-        return self.merger(hidden_states)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @auto_docstring
@@ -1231,7 +1226,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1239,7 +1234,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

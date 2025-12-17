@@ -208,7 +208,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(
