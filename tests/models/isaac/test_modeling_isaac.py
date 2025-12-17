@@ -393,73 +393,6 @@ class SimpleIsaacTokenizer(PythonBackend):
         return ()
 
 
-@pytest.fixture
-def isaac_tiny_config():
-    tester = IsaacModelTester(parent=None)
-    return tester.get_config()
-
-
-@pytest.fixture
-def isaac_tokenizer():
-    return SimpleIsaacTokenizer()
-
-
-@pytest.fixture
-def isaac_processor(isaac_tokenizer, isaac_tiny_config):
-    vision_config = isaac_tiny_config.vision_config
-    image_processor = IsaacImageProcessorFast(
-        patch_size=vision_config.patch_size,
-        max_num_patches=vision_config.num_patches,
-        pixel_shuffle_scale=vision_config.pixel_shuffle_scale_factor,
-        rescale_factor=isaac_tiny_config.vision_rescale_factor,
-    )
-    return IsaacProcessor(
-        image_processor=image_processor,
-        tokenizer=isaac_tokenizer,
-        config=isaac_tiny_config,
-    )
-
-
-@pytest.fixture(scope="session")
-def isaac_reference_checkpoint():
-    return _reference_checkpoint_or_skip()
-
-
-@pytest.fixture(scope="session")
-def isaac_config(isaac_reference_checkpoint):
-    """Load IsaacConfig from the converted checkpoint."""
-    # Load the config directly from the converted checkpoint
-    config = _hf_from_pretrained(IsaacConfig, isaac_reference_checkpoint)
-    # Most tests assume flash attention in vision unless they explicitly override it.
-    config.vision_attn_implementation = "flash_attention_2"
-    return config
-
-
-@pytest.fixture(scope="session")
-def isaac_reference_model(isaac_reference_checkpoint, isaac_config):
-    model_config = IsaacConfig.from_dict(isaac_config.to_dict())
-    model_config.vision_config._attn_implementation = "flash_attention_2"
-    model = _hf_from_pretrained(
-        IsaacForConditionalGeneration,
-        isaac_reference_checkpoint,
-        config=model_config,
-        attn_implementation="sdpa",
-    )
-    return model
-
-
-@pytest.fixture(scope="session")
-def isaac_reference_processor(isaac_reference_checkpoint):
-    try:
-        processor = _hf_from_pretrained(AutoProcessor, isaac_reference_checkpoint)
-    except (OSError, ValueError) as error:
-        raise RuntimeError(f"Unable to load reference Isaac processor from {isaac_reference_checkpoint}") from error
-    print(f"[Isaac tests] Loaded processor type: {type(processor)} from {isaac_reference_checkpoint}")
-    if not isinstance(processor, IsaacProcessor):
-        pytest.skip("Loaded processor is not an IsaacProcessor instance.")
-    return processor
-
-
 class IsaacModelTester:
     def __init__(
         self,
@@ -635,67 +568,77 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertIn("input_ids", prepared_inputs)
         self.assertIn("position_ids", prepared_inputs)
 
+    @require_tensorstream
+    def test_isaac_for_conditional_generation_initialization(self):
+        config = self.model_tester.get_config()
+        model = IsaacForConditionalGeneration(config)
+        model.to(torch_device)
 
-@require_torch
-@require_tensorstream
-def test_isaac_for_conditional_generation_initialization(isaac_tiny_config):
-    model = IsaacForConditionalGeneration(isaac_tiny_config)
-    model.to(torch_device)
-    assert hasattr(model, "model")
-    assert hasattr(model, "lm_head")
-    assert hasattr(model.model, "vision_embedding")
-    assert hasattr(model.model, "embed_fns")
+        self.assertTrue(hasattr(model, "model"))
+        self.assertTrue(hasattr(model, "lm_head"))
+        self.assertTrue(hasattr(model.model, "vision_embedding"))
+        self.assertTrue(hasattr(model.model, "embed_fns"))
 
-    input_ids = torch.randint(0, isaac_tiny_config.vocab_size, (1, 10), device=torch_device, dtype=torch.long)
-    with torch.no_grad():
-        outputs = model(input_ids=input_ids, return_dict=True)
-    assert outputs.logits.shape == (1, 10, isaac_tiny_config.vocab_size)
+        input_ids = torch.randint(0, config.vocab_size, (1, 10), device=torch_device, dtype=torch.long)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, return_dict=True)
+        self.assertEqual(outputs.logits.shape, (1, 10, config.vocab_size))
 
+    @require_tensorstream
+    def test_isaac_for_conditional_generation_loss_and_generate_flag(self):
+        config = self.model_tester.get_config()
+        model = IsaacForConditionalGeneration(config).to(torch_device)
+        self.assertTrue(model.can_generate())
 
-@require_torch
-@require_tensorstream
-def test_isaac_for_conditional_generation_loss_and_generate_flag(isaac_tiny_config):
-    model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
-    assert model.can_generate()
+        batch_size, seq_len = 1, 8
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=torch_device)
+        labels = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, labels=labels, return_dict=True)
+        self.assertIsNotNone(outputs.loss)
+        self.assertEqual(outputs.loss.ndim, 0)
+        self.assertEqual(outputs.logits.shape, (batch_size, seq_len, config.vocab_size))
 
-    batch_size, seq_len = 1, 8
-    input_ids = torch.randint(0, isaac_tiny_config.vocab_size, (batch_size, seq_len), device=torch_device)
-    labels = torch.randint(0, isaac_tiny_config.vocab_size, (batch_size, seq_len), device=torch_device)
-    with torch.no_grad():
-        outputs = model(input_ids=input_ids, labels=labels, return_dict=True)
-    assert outputs.loss is not None
-    assert outputs.loss.ndim == 0
-    assert outputs.logits.shape == (batch_size, seq_len, isaac_tiny_config.vocab_size)
+    @require_vision
+    @require_tensorstream
+    def test_isaac_generation_with_tensor_stream(self):
+        config = self.model_tester.get_config()
+        tokenizer = SimpleIsaacTokenizer()
+        image_processor = IsaacImageProcessorFast(
+            patch_size=config.vision_config.patch_size,
+            max_num_patches=config.vision_config.num_patches,
+            pixel_shuffle_scale=config.vision_config.pixel_shuffle_scale_factor,
+            rescale_factor=config.vision_rescale_factor,
+        )
+        processor = IsaacProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            config=config,
+        )
 
+        model = IsaacForConditionalGeneration(config).to(torch_device)
+        model.eval()
 
-@require_torch
-@require_vision
-@require_tensorstream
-def test_isaac_generation_with_tensor_stream(isaac_processor, isaac_tiny_config):
-    model = IsaacForConditionalGeneration(isaac_tiny_config).to(torch_device)
-    model.eval()
+        messages = [{"role": "user", "content": "Hello there!"}]
+        prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        processed = processor(text=prompt, images=None, return_tensors="pt")
 
-    messages = [{"role": "user", "content": "Hello there!"}]
-    prompt = isaac_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    processed = isaac_processor(text=prompt, images=None, return_tensors="pt")
+        input_ids = processed["input_ids"].to(torch_device)
+        tensor_stream = processed["tensor_stream"].to(torch_device)
+        generated = model.generate(
+            input_ids=input_ids,
+            tensor_stream=tensor_stream,
+            max_new_tokens=5,
+            do_sample=False,
+            pad_token_id=processor.tokenizer.pad_token_id,
+            eos_token_id=processor.tokenizer.eos_token_id,
+        )
 
-    input_ids = processed["input_ids"].to(torch_device)
-    tensor_stream = processed["tensor_stream"]
-    tensor_stream = tensor_stream.to(torch_device)
-    generated = model.generate(
-        input_ids=input_ids,
-        tensor_stream=tensor_stream,
-        max_new_tokens=5,
-        do_sample=False,
-        pad_token_id=isaac_processor.tokenizer.pad_token_id,
-        eos_token_id=isaac_processor.tokenizer.eos_token_id,
-    )
-
-    assert generated.shape[0] == 1
-    assert generated.shape[1] >= input_ids.shape[1]
-    decoded_prompt = isaac_processor.tokenizer.decode(generated[0], skip_special_tokens=True)
-    assert isinstance(decoded_prompt, str)
-    assert decoded_prompt.strip() != ""
+        self.assertEqual(generated.shape[0], 1)
+        self.assertGreaterEqual(generated.shape[1], input_ids.shape[1])
+        decoded_prompt = processor.tokenizer.decode(generated[0], skip_special_tokens=True)
+        self.assertIsInstance(decoded_prompt, str)
+        self.assertNotEqual(decoded_prompt.strip(), "")
 
 
 @require_torch
