@@ -15,11 +15,7 @@
 """Testing suite for the Isaac model."""
 
 import base64
-import hashlib
 import io
-import random
-import numpy as np
-import json
 import os
 import unittest
 from functools import lru_cache
@@ -94,21 +90,6 @@ HASH_FILTERS = {
     "vision_modules": {"include": {"vision_embedding"}, "exclude": None},
 }
 RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
-
-
-def tensor_stream_snapshot(ts: TensorStream) -> dict[str, object]:
-    """Summarize TensorStream tokens/modalities using public utilities."""
-
-    token_view = tensor_stream_token_view(ts).cpu().tolist()
-    modality = modality_mask(ts).cpu().tolist()
-    roles = role_mask(ts).cpu().tolist()
-
-    return {
-        "shape": list(ts.shape),
-        "token_view": token_view,
-        "modality_mask": modality,
-        "role_mask": roles,
-    }
 
 
 def document_to_messages(
@@ -193,26 +174,6 @@ def _assert_logits_statistics_close(
             rel=rel,
             abs=abs_tol,
         ), f"Logits statistic '{key}' drifted"
-
-
-def _hf_from_pretrained(cls, pretrained_id, **kwargs):
-    """
-    Wrapper around `cls.from_pretrained` that automatically injects
-    the test revision (if any) from MODEL_REVISION.
-    """
-    if MODEL_REVISION is not None:
-        kwargs.setdefault("revision", MODEL_REVISION)
-    return cls.from_pretrained(pretrained_id, **kwargs)
-
-
-@pytest.fixture(scope="session")
-def tokenizer(isaac_reference_checkpoint):
-    """Load the tokenizer from the converted Perceptron HF checkpoint."""
-    return _hf_from_pretrained(
-        AutoTokenizer,
-        isaac_reference_checkpoint,
-        trust_remote_code=True,
-    )
 
 
 @require_torch
@@ -351,22 +312,6 @@ def create_isaac_processor(
         tokenizer=tokenizer,
         **processor_params,
     )
-
-
-@lru_cache(maxsize=1)
-def _load_expected_hashes():
-    if not HASH_FILE.exists():
-        return None
-    with HASH_FILE.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
-
-
-@lru_cache(maxsize=1)
-def _load_generation_golden():
-    if not GENERATION_GOLDEN_FILE.exists():
-        return None
-    with GENERATION_GOLDEN_FILE.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
 
 
 @lru_cache(maxsize=1)
