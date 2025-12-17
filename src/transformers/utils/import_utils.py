@@ -105,6 +105,7 @@ TORCHAO_MIN_VERSION = "0.4.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.9.0"
+COMPRESSED_TENSORS_MIN_VERSION = "0.11.0"
 
 
 @lru_cache
@@ -1027,9 +1028,9 @@ def is_qutlass_available():
 
 
 @lru_cache
-def is_compressed_tensors_available() -> bool:
+def is_compressed_tensors_available(min_version: str = COMPRESSED_TENSORS_MIN_VERSION) -> bool:
     is_available, ct_version = _is_package_available("compressed_tensors", return_version=True)
-    return is_available and version.parse(ct_version) >= version.parse("0.11.0")
+    return is_available and version.parse(ct_version) >= version.parse(min_version)
 
 
 @lru_cache

@@ -1094,16 +1094,16 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     This is a wrapper class that handles compressed-tensors quantization config options.
     It is a wrapper around `compressed_tensors.QuantizationConfig`
     Args:
-            config_groups (`dict[str, typing.Union[ForwardRef('QuantizationScheme'), list[str]]] | None`, *optional*): <fill_docstring>
-            format (`str`, *optional*, defaults to `"dense"`): <fill_docstring>
-            quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`): <fill_docstring>
-            kv_cache_scheme (`Optional`, *optional*): <fill_docstring>
-            global_compression_ratio (`float | None`, *optional*): <fill_docstring>
-            ignore (`list[str] | None`, *optional*): <fill_docstring>
-            sparsity_config (`dict[str, typing.Any] | None`, *optional*): <fill_docstring>
-            transform_config (`Optional`, *optional*): <fill_docstring>
-            quant_method (`str`, *optional*, defaults to `"compressed-tensors"`): <fill_docstring>
-            run_compressed (`bool`, *optional*, defaults to `True`): <fill_docstring>
+            config_groups (`dict[str, typing.Union[ForwardRef('QuantizationScheme'), list[str]]] | None`, *optional*): dictionary mapping group name to a quantization scheme definition
+            format (`str`, *optional*, defaults to `"dense"`): format the model is represented as. Set `run_compressed` True to execute model as the
+            quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`): status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
+            kv_cache_scheme (`Optional`, *optional*): specifies quantization of the kv cache. If None, kv cache is not quantized.
+            global_compression_ratio (`float | None`, *optional*): 0-1 float percentage of model compression
+            ignore (`list[str] | None`, *optional*): layer names or types to not quantize, supports regex prefixed by 're:'
+            sparsity_config (`dict[str, typing.Any] | None`, *optional*): configuration for sparsity compression
+            transform_config (`Optional`, *optional*): configuration for (hadamard) transforms
+            quant_method (`str`, *optional*, defaults to `"compressed-tensors"`): do not override, should be compressed-tensors
+            run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to emulate compressed model execution if True, otherwise use default submodule
     """
 
     def __init__(
@@ -1115,7 +1115,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         global_compression_ratio: float | None = None,
         ignore: list[str] | None = None,
         sparsity_config: dict[str, Any] | None = None,
-        transform_config: Optional[dict[str, Any]] = None,
+        transform_config: dict[str, Any] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
