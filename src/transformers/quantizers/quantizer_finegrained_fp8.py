@@ -29,24 +29,24 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
-        if self.pre_quantized:
-            if not torch.cuda.is_available() and not is_torch_xpu_available():
+        if not torch.cuda.is_available() and not is_torch_xpu_available():
+            if self.pre_quantized:
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
                 self.quantization_config.dequantize = True
-            elif torch.cuda.is_available():
-                compute_capability = torch.cuda.get_device_capability()
-                major, minor = compute_capability
-                if (major < 8) or (major == 8 and minor < 9):
-                    logger.warning_once(
-                        "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                        f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16 "
-                    )
-                    self.quantization_config.dequantize = True
-        else:
-            if not torch.cuda.is_available() and not is_torch_xpu_available():
+            else:
                 raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
+                
+        if torch.cuda.is_available():
+            compute_capability = torch.cuda.get_device_capability()
+            major, minor = compute_capability
+            if (major < 8) or (major == 8 and minor < 9):
+                logger.warning_once(
+                    "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
+                    f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16 "
+                )
+                self.quantization_config.dequantize = True
 
         if self.quantization_config.dequantize:
             return
