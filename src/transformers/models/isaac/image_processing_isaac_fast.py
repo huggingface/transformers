@@ -32,7 +32,9 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.import_utils import is_torch_available
+from ...utils.import_utils import (
+    is_torch_available,
+)
 from .modeling_isaac import IsaacImageProcessorFastKwargs
 
 

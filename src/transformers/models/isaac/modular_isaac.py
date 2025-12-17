@@ -26,6 +26,7 @@ from ...utils.import_utils import (
     is_perceptron_available,
     is_torch_available,
     is_torchdynamo_compiling,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -1560,19 +1561,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.text_model.embed_tokens = value
 
     @property
-    def layers(self) -> nn.ModuleList:
-        return self.text_model.layers
-
-    @property
-    def norm(self) -> nn.Module:
-        return self.text_model.norm
-
-    @property
     def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
-    @property
-    def vision_tower(self) -> nn.Module:
         return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:

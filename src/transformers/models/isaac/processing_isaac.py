@@ -27,7 +27,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
 from ...utils import TensorType
-from ...utils.import_utils import is_perceptron_available, is_torch_available, is_vision_available
+from ...utils.import_utils import (
+    is_perceptron_available,
+    is_torch_available,
+    is_vision_available,
+)
 from .configuration_isaac import IsaacConfig
 
 
