@@ -67,9 +67,11 @@ if is_torch_available():
     import torch
 
 if is_perceptron_available():
+    from perceptron.pointing.parser import extract_points
     from perceptron.tensorstream.tensorstream import TensorStream
 else:
     TensorStream = None
+    extract_points = None
 
 
 require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
@@ -86,6 +88,24 @@ HASH_FILTERS = {
     "vision_modules": {"include": {"vision_embedding"}, "exclude": None},
 }
 RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
+
+DUMMY_BOX_DOCUMENT = [
+    {
+        "type": "text",
+        "content": "<hint>BOX</hint>",
+        "role": "user",
+    },
+    {
+        "type": "image",
+        "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+        "role": "user",
+    },
+    {
+        "type": "text",
+        "content": "Determine whether it is safe to cross the street. Look for signage and moving traffic.",
+        "role": "user",
+    },
+]
 
 
 def document_to_messages(
@@ -752,3 +772,60 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             "l2_norm": 3500.2090570868,
         }
         assert logit_stats == expected_logit_stats
+
+
+@require_torch
+@require_vision
+@slow
+@require_tensorstream
+@require_flash_attn
+class IsaacBoxPointingIntegrationTest(unittest.TestCase):
+    max_new_tokens = 256
+    dtype = torch.bfloat16
+
+    def setUp(self):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.checkpoint = _reference_checkpoint_or_skip()
+        self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
+        )
+        self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
+        self.hf_config.vision_config._attn_implementation = "flash_attention_2"
+        self.hf_config.vision_config.attn_implementation = "flash_attention_2"
+        self.model = IsaacForConditionalGeneration.from_pretrained(
+            self.checkpoint, config=self.hf_config, revision=MODEL_REVISION
+        )
+        self.model = self.model.to(device=self.device, dtype=self.dtype)
+        self.model.eval()
+
+    def test_hf_generate_box_points(self):
+        messages, images = document_to_messages(DUMMY_BOX_DOCUMENT, vision_token=self.hf_config.vision_token)
+        prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        tensor_stream = processor_output["tensor_stream"].to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                tensor_stream=tensor_stream,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+            )
+
+        generated_ids = outputs.sequences
+        hf_generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        points = extract_points(hf_generated_text)
+
+        assert len(points) == 1
+        first_point = points[0]
+        assert first_point.top_left.x < first_point.bottom_right.x
+        assert first_point.top_left.y < first_point.bottom_right.y
+        assert first_point.mention == "traffic light"
+        assert first_point.top_left.x == 808
+        assert first_point.top_left.y == 247
+        assert first_point.bottom_right.x == 863
+        assert first_point.bottom_right.y == 386
+        assert "is" in hf_generated_text
