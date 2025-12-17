@@ -20,7 +20,7 @@ import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
-from transformers.utils import is_torch_cuda_available
+from transformers.utils import is_torch_accelerator_available
 
 
 MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
@@ -38,10 +38,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if is_torch_cuda_available():
-        device_map = "cuda"
-    else:
-        device_map = "cpu"
+    device_map = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+    device_map = "cpu" if device_map is None else device_map
 
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
