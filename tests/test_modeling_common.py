@@ -300,10 +300,14 @@ def _test_eager_matches_sdpa_inference(
                 if key in inputs_dict:
                     processed_inputs[key] = inputs_dict[key]
 
-            # Preserve any remaining inputs from inputs_dict for multi-modal models
+            # Preserve remaining inputs that the model actually accepts
+            model_signature = inspect.signature(model_class.forward).parameters
+
             for key, value in inputs_dict.items():
                 if key not in processed_inputs:
-                    processed_inputs[key] = value
+                    # Only add if the model accepts this parameter
+                    if key in model_signature or "kwargs" in model_signature:
+                        processed_inputs[key] = value
 
             for key, value in processed_inputs.items():
                 if torch.is_floating_point(value):
