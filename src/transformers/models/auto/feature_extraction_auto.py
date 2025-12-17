@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
+        ("audioflamingo3", "WhisperFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
@@ -49,6 +50,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("lasr_ctc", "LasrFeatureExtractor"),
+        ("lasr_encoder", "LasrFeatureExtractor"),
         ("markuplm", "MarkupLMFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
@@ -57,6 +60,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
+        ("pe_audio", "PeAudioFeatureExtractor"),
+        ("pe_audio_video", "PeAudioFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),

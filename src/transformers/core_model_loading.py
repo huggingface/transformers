@@ -20,7 +20,7 @@ import os
 import re
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import MutableMapping, MutableSet
+from collections.abc import Callable, MutableMapping, MutableSet
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -327,10 +327,6 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def reset(self) -> None:
-        """Clean-up the collected tensors to make sure we don't keep references to past tensors in memory."""
-        self.collected_tensors = defaultdict(list)
-
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
@@ -375,6 +371,32 @@ class WeightTransform:
 
         return reverse_transform
 
+    def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
+        """
+        Materialize all the tensors that were saved in `self.collected_tensors`. This function removes them from the
+        internal attribute to avoid keeping them in memory during the different `self.convert` operations, and return
+        a new dictionary (otherwise we use more memory than needed during loading).
+
+        We basically have 3 cases here:
+        - async loading (default): the tensors are Future instances that we need to wait for
+        - sync loading: the tensors are Callable, we need to call the Callable to actually load them from disk
+        - saving: the tensors are already torch.Tensor instances (the existing model weights)
+        """
+        collected_tensors = {}
+        for key in set(self.collected_tensors.keys()):
+            # Remove from internal attribute
+            tensors = self.collected_tensors.pop(key)
+            # Async loading
+            if isinstance(tensors[0], Future):
+                tensors = [future.result() for future in tensors]
+            # Sync loading
+            elif callable(tensors[0]):
+                tensors = [func() for func in tensors]
+            # Add them to the new dictionary
+            collected_tensors[key] = tensors
+
+        return collected_tensors
+
 
 @dataclass(slots=True)
 class WeightRenaming(WeightTransform):
@@ -387,21 +409,21 @@ class WeightRenaming(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
-        misc: Optional[MutableMapping[str, str]] = None,
+        conversion_errors: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect the tensor if using threading
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
-            )
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
+        collected_tensors = self.materialize_tensors()
 
         # Perform renaming op (for a simple WeightRenaming, `self.source_patterns` and `self.target_patterns` can
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
         target_key = self.target_patterns[0]
-        collected_tensors = {target_key: self.collected_tensors[self.source_patterns[0]]}
+        collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (self.collected_tensors, layer_name), self.quantization_operation):
+            with log_conversion_errors(
+                layer_name, conversion_errors, (len(collected_tensors), layer_name), self.quantization_operation
+            ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -412,7 +434,7 @@ class WeightRenaming(WeightTransform):
                     missing_keys=missing_keys,
                 )
 
-        return collected_tensors, misc
+        return collected_tensors, conversion_errors
 
 
 @dataclass(slots=True)
@@ -435,17 +457,14 @@ class WeightConverter(WeightTransform):
         config=None,
         hf_quantizer=None,
         missing_keys: Optional[MutableSet[str]] = None,
-        misc: Optional[MutableMapping[str, str]] = None,
+        conversion_errors: Optional[MutableMapping[str, str]] = None,
     ):
-        # Collect all tensors if using threading
-        for pattern, futures in self.collected_tensors.items():
-            self.collected_tensors[pattern] = (
-                futures if isinstance(futures[0], torch.Tensor) else [future.result() for future in futures]
-            )
+        # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
+        # attribute during the whole process
+        collected_tensors = self.materialize_tensors()
 
-        collected_tensors = self.collected_tensors
         for op in self.operations:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), op):
+            with log_conversion_errors(layer_name, conversion_errors, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -472,7 +491,9 @@ class WeightConverter(WeightTransform):
             pass
 
         if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_to_misc(layer_name, misc, (collected_tensors, layer_name), self.quantization_operation):
+            with log_conversion_errors(
+                layer_name, conversion_errors, (len(collected_tensors), layer_name), self.quantization_operation
+            ):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
@@ -482,7 +503,7 @@ class WeightConverter(WeightTransform):
                     model=model,
                     missing_keys=missing_keys,
                 )
-        return collected_tensors, misc
+        return collected_tensors, conversion_errors
 
 
 # For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
@@ -501,19 +522,26 @@ def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Te
 
 def spawn_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
-) -> Future | torch.Tensor:
-    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or immediately otherwise."""
-    if thread_pool is not None:
-        return thread_pool.submit(_materialize_copy, tensor, device, dtype)
-    else:
+) -> Future | Callable:
+    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
+    load the tensor synchronously when called."""
+
+    def _job():
         return _materialize_copy(tensor, device, dtype)
+
+    if thread_pool is not None:
+        return thread_pool.submit(_job)
+    else:
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def spawn_tp_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
-) -> Future | torch.Tensor:
+) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    immediately otherwise."""
+    return a Callable that will load the tensor synchronously when called."""
 
     def _job():
         return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
@@ -521,7 +549,9 @@ def spawn_tp_materialize(
     if thread_pool is not None:
         return thread_pool.submit(_job)
     else:
-        return _job()
+        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
+        # memory during Conversion
+        return _job
 
 
 def dot_natural_key(s: str):
@@ -534,13 +564,14 @@ def dot_natural_key(s: str):
 
 
 @contextmanager
-def log_to_misc(
+def log_conversion_errors(
     first_target_key: str,
-    misc: MutableMapping[str, str],
+    conversion_errors: MutableMapping[str, str],
     extras: Any = None,
     op: Union[list[ConversionOps], ConversionOps, None] = None,
 ):
-    # A simple helper to handle errors with contextual messages.
+    """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
+    that will be catched later to skip the parameters that raised the original Exception."""
     try:
         yield
     except Exception as e:
@@ -557,19 +588,21 @@ def log_to_misc(
 
         op_name = _format_op_name(op)
         if isinstance(extras, tuple) and len(extras) == 2:
-            values, target_keys = extras
+            length, target_keys = extras
             descriptor = f"{op_name} " if op_name else ""
-            misc[first_target_key] = (
-                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {len(values)}"
+            conversion_errors[first_target_key] = (
+                f"{e}\nError: {descriptor}on tensors destined for {target_keys}. Ckpt contains: {length}"
             )
         elif isinstance(extras, str):
             suffix = f" via {op_name}" if op_name else ""
-            misc[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
+            conversion_errors[first_target_key] = f"{e}\nError{suffix} when processing parameter {extras}"
         elif extras is None and op_name:
-            misc[first_target_key] = f"{op_name}: {e}"
+            conversion_errors[first_target_key] = f"{op_name}: {e}"
         else:
-            misc[first_target_key] = f"{extras} |Error: {e}"
-        raise SkipLayer()
+            conversion_errors[first_target_key] = f"{extras} |Error: {e}"
+
+        # Raise a specific Exception that we can catch easily
+        raise SkipParameters()
 
 
 def set_param_for_module(
@@ -578,44 +611,42 @@ def set_param_for_module(
     param_value: torch.Tensor,
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
-    misc: MutableMapping[str, Any],
     unexpected_keys: MutableSet[str],
     distributed_operation: Optional[TensorParallelLayer],
     hf_quantizer: HfQuantizer,
 ):
-    with log_to_misc(target_name, misc, target_name):
-        module_path, _, param_name = target_name.rpartition(".")
-        module_obj = model.get_submodule(module_path) if module_path else model
+    module_path, _, param_name = target_name.rpartition(".")
+    module_obj = model.get_submodule(module_path) if module_path else model
 
-        ref = getattr(module_obj, param_name)
-        if ref is None:
-            unexpected_keys.add(target_name)
+    ref = getattr(module_obj, param_name)
+    if ref is None:
+        unexpected_keys.add(target_name)
+    else:
+        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
+        if not isinstance(param_value, torch.nn.Parameter):
+            if distributed_operation is not None:
+                param_value = DTensor.from_local(
+                    param_value,
+                    distributed_operation.device_mesh,
+                    getattr(distributed_operation, "shard", Replicate()),
+                    run_check=False,
+                    shape=ref.size(),
+                    stride=ref.stride(),
+                )
+                if not use_dtensor:
+                    # we convert to local
+                    param_value = param_value.to_local()
+            if param_name not in module_obj._buffers:
+                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
+        # Remove from missing keys (it's either mismatched, or all good)
+        missing_keys.discard(target_name)
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
+            mismatch_keys.add((target_name, param_value.shape, ref.shape))
         else:
-            use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
-            if not isinstance(param_value, torch.nn.Parameter):
-                if distributed_operation is not None:
-                    param_value = DTensor.from_local(
-                        param_value,
-                        distributed_operation.device_mesh,
-                        getattr(distributed_operation, "shard", Replicate()),
-                        run_check=False,
-                        shape=ref.size(),
-                        stride=ref.stride(),
-                    )
-                    if not use_dtensor:
-                        # we convert to local
-                        param_value = param_value.to_local()
-                if param_name not in module_obj._buffers:
-                    param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
-
-            # Remove from missing keys (it's either mismatched, or all good)
-            missing_keys.discard(target_name)
-            if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
-                mismatch_keys.add((target_name, param_value.shape, ref.shape))
-            else:
-                # super important otherwise _init_weight will re-init the param
-                param_value._is_hf_initialized = True
-                setattr(module_obj, param_name, param_value)
+            # super important otherwise _init_weight will re-init the param
+            param_value._is_hf_initialized = True
+            setattr(module_obj, param_name, param_value)
 
 
 def offload_and_maybe_resave_param(
@@ -637,8 +668,9 @@ def offload_and_maybe_resave_param(
     return disk_offload_index
 
 
-class SkipLayer(Exception):
-    """Control-flow sentinel: abort processing of the current layer only."""
+class SkipParameters(Exception):
+    """Control-flow sentinel: abort processing of the current parameters only (that were supposed to be created
+    by a WeightConverter)."""
 
     pass
 
@@ -792,15 +824,16 @@ def convert_and_load_state_dict_in_model(
     meta_model_state_dict = model.state_dict()
     missing_keys = set(meta_model_state_dict.keys())
 
-    misc = {}
+    conversion_errors = {}
     mismatch_keys = set()
     unexpected_keys = set()
 
-    # We use threading by default, if not explicitly deactivated via env variable
-    if not is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD"):
-        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
-    else:
+    # We use threading by default, if not explicitly deactivated via env variable. If we have to offload,
+    # we cannot use it either to control the memory as we are under memory constraints, so we need to be sequential
+    if is_env_variable_true("HF_DEACTIVATE_ASYNC_LOAD") or "disk" in device_map.values():
         thread_pool = None
+    else:
+        thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
@@ -852,7 +885,7 @@ def convert_and_load_state_dict_in_model(
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[matched_dtype_pattern.group()]
+                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
@@ -898,13 +931,13 @@ def convert_and_load_state_dict_in_model(
                 pbar.set_postfix({"Materializing param": first_param_name})
                 pbar.refresh()
                 try:
-                    realized_value, misc = mapping.convert(
+                    realized_value, conversion_errors = mapping.convert(
                         first_param_name,
                         model=model,
                         config=model.config,
                         hf_quantizer=hf_quantizer,
                         missing_keys=missing_keys,
-                        misc=misc,
+                        conversion_errors=conversion_errors,
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
@@ -922,16 +955,15 @@ def convert_and_load_state_dict_in_model(
                                 param,
                                 mismatch_keys,
                                 missing_keys,
-                                misc,
                                 unexpected_keys,
                                 mapping.distributed_operation,
                                 hf_quantizer,
                             )
 
-                    # Cleanup the tensors that were gathered internally in the mapping
-                    mapping.reset()
+                    # Cleanup all the tensors that were gathered before next iteration
+                    del realized_value
 
-                except SkipLayer:
+                except SkipParameters:
                     continue
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
@@ -942,7 +974,7 @@ def convert_and_load_state_dict_in_model(
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
     model._weight_conversions = weight_mapping
-    return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, misc
+    return missing_keys, unexpected_keys, mismatch_keys, disk_offload_index, conversion_errors
 
 
 def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
@@ -989,7 +1021,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     new_state_dict = {}
     for first_param_name, reversed_converter in conversion_mapping.items():
         # Apply the reverse converter
-        realized_value, misc = reversed_converter.convert(first_param_name, model=model, config=model.config)
+        realized_value, _ = reversed_converter.convert(first_param_name, model=model, config=model.config)
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             new_state_dict[target_name] = param

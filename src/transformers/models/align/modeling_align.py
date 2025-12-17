@@ -977,6 +977,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _input_embed_layer = "convolution"
+    _no_split_modules = ["AlignVisionBlock"]
 
     def __init__(self, config: AlignVisionConfig):
         super().__init__(config)

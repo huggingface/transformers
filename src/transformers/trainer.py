@@ -2801,7 +2801,7 @@ class Trainer:
                 )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
-                if self.args.save_safetensors and os.path.isfile(safe_weights_file):
+                if os.path.isfile(safe_weights_file):
                     state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
                 else:
                     check_torch_load_is_safe()
@@ -2841,9 +2841,7 @@ class Trainer:
                 logger.warning(f"Could not load adapter model, make sure to have PEFT >= {MIN_PEFT_VERSION} installed")
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(
-                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=self.args.save_safetensors
-            )
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled())
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
@@ -2926,7 +2924,7 @@ class Trainer:
                         has_been_loaded = False
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
-                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                    if os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
                         check_torch_load_is_safe()
@@ -3945,6 +3943,9 @@ class Trainer:
         # Both standard transformer models and Liger-patched models handle shift_labels correctly,
         # so we can directly use the computed loss from the model output.
         # See: https://huggingface.co/docs/accelerate/en/concept_guides/sequence_parallelism
+        if "labels" not in inputs and "shift_labels" in inputs:
+            # DeepSpeed SP Dataloader removes "labels" but we need it, otherwise, we won't compute the loss.
+            inputs["labels"] = inputs["shift_labels"]
         outputs = model(**inputs)
         loss = outputs.loss
 
@@ -4020,7 +4021,16 @@ class Trainer:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
-                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                )
+                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
+                if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
+                    # When using PEFT with DeepSpeed ZeRO Stage 3,
+                    # we do not need to load the frozen parameters
+                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
+                else:
+                    state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
             except ValueError:
@@ -4080,12 +4090,7 @@ class Trainer:
                 model = model.module.module
                 unwrapped_model = self.accelerator.unwrap_model(model)
                 if isinstance(unwrapped_model, supported_classes):
-                    unwrapped_model.save_pretrained(
-                        output_dir,
-                        state_dict=full_state_dict,
-                        save_function=xm.save,
-                        safe_serialization=self.args.save_safetensors,
-                    )
+                    unwrapped_model.save_pretrained(output_dir, state_dict=full_state_dict)
                 else:
                     logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                     xm.save(full_state_dict, os.path.join(output_dir, WEIGHTS_NAME))
@@ -4095,8 +4100,6 @@ class Trainer:
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
-                    save_function=xm.save,
-                    safe_serialization=self.args.save_safetensors,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
@@ -4106,8 +4109,6 @@ class Trainer:
             model.save_pretrained(
                 output_dir,
                 is_main_process=self.args.should_save,
-                save_function=xm.save,
-                safe_serialization=self.args.save_safetensors,
                 state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
             )
         if self.processing_class is not None and self.args.should_save:
@@ -4128,20 +4129,15 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+                    output_dir, state_dict=state_dict
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                if self.args.save_safetensors:
-                    safetensors.torch.save_file(
-                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
-                    )
-                else:
-                    torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                safetensors.torch.save_file(
+                    state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                )
         else:
-            self.model.save_pretrained(
-                output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
-            )
+            self.model.save_pretrained(output_dir, state_dict=state_dict)
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
@@ -4840,6 +4836,7 @@ class Trainer:
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
@@ -4934,6 +4931,8 @@ class Trainer:
             The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
             progress of the commit if `blocking=True`.
         """
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
+
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
@@ -5087,14 +5086,14 @@ class Trainer:
         self.is_tp_enabled = False
         if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
             self.is_tp_enabled = True
-            if self.args.parallelism_config is not None:
-                if is_accelerate_available("1.10.1"):
-                    if self.args.parallelism_config is not None:
+            if self.args.parallelism_config is None:
+                if is_accelerate_available("1.12.0"):
+                    if self.args.parallelism_config is None:
                         from accelerate import ParallelismConfig
 
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
-                    raise ValueError("Requires accelerate>1.10.1 to use Tensor Parallelism.")
+                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments

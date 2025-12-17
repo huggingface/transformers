@@ -32,6 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -39,7 +40,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel
 from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
 
@@ -918,6 +919,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         self.conformer = nn.ModuleList(
             [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
         )
+        self.post_init()
 
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs
@@ -1225,6 +1227,7 @@ def apply_rotary_pos_emb(
     return (x * cos) + (rotate_half(x) * sin)
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma3nTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1251,7 +1254,6 @@ class Gemma3nTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.rotary_fn = apply_rotary_pos_emb
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
 
@@ -1524,7 +1526,7 @@ class Gemma3nRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * attention_scaling

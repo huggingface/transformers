@@ -67,6 +67,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
+    "lasr": "LasrCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
