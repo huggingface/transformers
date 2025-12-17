@@ -997,12 +997,19 @@ class ContinuousBatchingManager:
     def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
         """Iterate over results matching a specific request id as they become available."""
         request_cancelled = False
-        while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
-            result = self.get_result(request_id=request_id, timeout=0.1)
+        while not request_cancelled:
+            thread_alive = self._generation_thread is not None and self._generation_thread.is_alive()
+            timeout = 0.1 if thread_alive else 0
+
+            result = self.get_result(request_id=request_id, timeout=timeout)
             if result is not None:
                 yield result
+                if result.status in {RequestStatus.FINISHED, RequestStatus.FAILED}:
+                    return
             if self.batch_processor is not None:
                 request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+            if not thread_alive and result is None:
+                return
 
     @traced
     def _generation_step(self) -> None:

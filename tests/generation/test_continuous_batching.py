@@ -15,6 +15,7 @@
 import gc
 import itertools
 import unittest
+import queue
 
 import torch
 from parameterized import parameterized
@@ -28,7 +29,8 @@ from transformers import (
     LogitsProcessorList,
 )
 from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
-from transformers.generation.continuous_batching.continuous_api import build_attention_mask
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchingManager, build_attention_mask
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -68,6 +70,25 @@ def flush_memory(flush_compile: bool = True) -> None:
 
 
 class ContinuousBatchingNonGenerationTest(unittest.TestCase):
+    def test_request_id_iter_stops_on_terminal_status(self) -> None:
+        class _AliveThread:
+            def is_alive(self):
+                return True
+
+        manager = object.__new__(ContinuousBatchingManager)
+        manager.output_queue = queue.Queue()
+        manager._generation_thread = _AliveThread()
+        manager.batch_processor = None
+
+        request_id = "req_test"
+        manager.output_queue.put(GenerationOutput(request_id=request_id, status=RequestStatus.FINISHED))
+
+        it = manager.request_id_iter(request_id)
+        out = next(it)
+        self.assertEqual(out.status, RequestStatus.FINISHED)
+        with self.assertRaises(StopIteration):
+            next(it)
+
     @parameterized.expand(
         [
             (None, None, "0"),
