@@ -621,10 +621,6 @@ class IsaacVisionAttention(Siglip2Attention):
         max_seqlen: Optional[int] = None,
         **kwargs,
     ):
-        # Ignore unused arguments for interface compatibility
-        _ = position_ids
-        _ = past_key_value
-        _ = is_causal
         kwargs.pop("output_hidden_states", None)
         kwargs.pop("return_dict", None)
 
