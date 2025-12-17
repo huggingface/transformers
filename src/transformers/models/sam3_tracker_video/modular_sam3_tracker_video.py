@@ -486,8 +486,6 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         "tracker_neck.": "vision_encoder.neck.",
     }
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
-    _tied_weights_keys = {}
-    _keys_to_ignore_on_load_missing = []
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""
