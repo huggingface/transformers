@@ -76,17 +76,9 @@ else:
 
 require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
 
-MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
+BASE_MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
 MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
 LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
-FIXTURES_DIR = Path(get_tests_dir("fixtures/isaac"))
-HASH_FILE = FIXTURES_DIR / "isaac_checkpoint_hashes.json"
-GENERATION_GOLDEN_FILE = FIXTURES_DIR / "isaac_generation_golden.json"
-HASH_FILTERS = {
-    "full_model": {"include": None, "exclude": None},
-    "core_model": {"include": None, "exclude": {"vision_embedding", "audio_embedding", "inv_freq"}},
-    "vision_modules": {"include": {"vision_embedding"}, "exclude": None},
-}
 RED_DOT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
 
 DUMMY_BOX_DOCUMENT = [
@@ -321,9 +313,7 @@ def _load_red_dot_image():
     return Image.open(io.BytesIO(data)).convert("RGB")
 
 
-def _reference_checkpoint_or_skip():
-    if TensorStream is None:
-        pytest.skip("TensorStream dependency is required for Isaac integration tests.")
+def _base_reference_checkpoint_or_skip():
     if LOCAL_CHECKPOINT:
         resolved = Path(LOCAL_CHECKPOINT).expanduser()
         if not resolved.exists():
@@ -331,7 +321,7 @@ def _reference_checkpoint_or_skip():
         return str(resolved)
     if is_offline_mode():
         pytest.skip("Offline mode: set ISAAC_TEST_MODEL_PATH to a local checkpoint to run these tests.")
-    return MODEL_ID
+    return BASE_MODEL_ID
 
 
 class SimpleIsaacTokenizer(PythonBackend):
@@ -653,7 +643,7 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.checkpoint = _reference_checkpoint_or_skip()
+        self.checkpoint = _base_reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
@@ -785,7 +775,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.checkpoint = _reference_checkpoint_or_skip()
+        self.checkpoint = _base_reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
