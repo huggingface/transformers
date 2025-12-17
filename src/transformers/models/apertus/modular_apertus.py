@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...activations import ACT2CLS
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -192,9 +193,11 @@ class ApertusConfig(PreTrainedConfig):
 
 class ApertusMLP(NemotronMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if config.hidden_act == "xielu":
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
 
 class ApertusRMSNorm(LlamaRMSNorm):
