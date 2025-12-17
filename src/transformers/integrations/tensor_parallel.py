@@ -775,6 +775,7 @@ class ColwiseParallelReplicate(ColwiseParallel):
     def __init__(self, **kwargs):
         super().__init__(output_layouts=Replicate(), **kwargs)
 
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Partition a compatible nn.Module in a row-wise fashion. Currently supports nn.Linear and nn.Embedding.
@@ -946,6 +947,7 @@ class LocalPackedRowwiseParallel(PackedRowwiseParallel):
 
     def __init__(self, **kwargs):
         super().__init__(use_dtensor=False, **kwargs)
+
 
 class RowwiseParallelReplicate(RowwiseParallel):
     """
