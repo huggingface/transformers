@@ -127,7 +127,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map="auto",
         )
 
     def tearDown(self):

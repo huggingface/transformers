@@ -134,22 +134,11 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def update_dtype(self, dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
-            if dtype is not None and dtype != torch.bfloat16:
+            if dtype != torch.bfloat16:
                 logger.warning_once(
-                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Please set the dtype to bfloat16."
-                )
-            if dtype is None:
-                logger.warning_once(
-                    "Setting dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set dtype=torch.bfloat16 to remove this warning."
+                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
                 )
                 dtype = torch.bfloat16
-        if self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
-            if dtype is None:
-                logger.info(
-                    "Setting dtype to torch.float32 for int8_dynamic_activation_int8_weight quantization as no dtype was specified in from_pretrained"
-                )
-                # we need to set the dtype, otherwise we have dtype mismatch when performing the quantized linear op
-                dtype = torch.float32
         return dtype
 
     def get_state_dict_and_metadata(self, model):
@@ -203,11 +192,9 @@ class TorchAoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", checkpoint_files=None, **kwargs):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         if self.quantization_config.include_input_output_embeddings:
             input_emb = model.get_input_embeddings()
@@ -217,7 +204,9 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = [
                 x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
             ]
-        return
+        if checkpoint_files is not None:
+            # Torchao needs access to all metadata later
+            self.set_metadata(checkpoint_files)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         if self.pre_quantized:
@@ -252,22 +241,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                     return True
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
-
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
-        """
-        Setting model attributes and/or converting model before weights loading. At this point
-        the model should be initialized on the meta device so you can freely manipulate the skeleton
-        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            kwargs (`dict`, *optional*):
-                The keyword arguments that are passed along `_process_model_before_weight_loading`.
-        """
-        super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
-        # Torchao needs access to all metadata later
-        self.set_metadata(checkpoint_files)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""

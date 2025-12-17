@@ -84,19 +84,11 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
                 )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
+        if dtype != torch.bfloat16:
+            logger.warning_once(
+                f"Setting dtype to {dtype}, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
+            )
             dtype = torch.bfloat16
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.bloat16` due to "
-                "requirements of `fbgemm-gpu` to enable model loading in fp8. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.bfloat16 to remove this warning.",
-                dtype,
-            )
-        elif dtype == torch.float16:
-            raise ValueError(
-                "You cannot use FP8 with dtype=torch.float16. We recommend you passing dtype=torch.bfloat16"
-            )
         return dtype
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
@@ -119,13 +111,12 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_fbgemm_fp8_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_fbgemm_fp8_linear(

@@ -126,7 +126,10 @@ class Bnb4BitTest(Base4bitTest):
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_4bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
         )
 
     def tearDown(self):
@@ -238,7 +241,6 @@ class Bnb4BitTest(Base4bitTest):
         Test that loading the model and unquantize it produce correct results
         """
         bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-
         model_4bit = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=bnb_config, device_map="auto"
         )

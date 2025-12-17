@@ -65,7 +65,9 @@ class BitNetTest(unittest.TestCase):
         Load the model
         """
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        cls.quantized_model = AutoModelForCausalLM.from_pretrained(cls.model_name, device_map=torch_device)
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name, dtype=torch.bfloat16, device_map=torch_device
+        )
 
     def tearDown(self):
         gc.collect()
@@ -92,16 +94,15 @@ class BitNetTest(unittest.TestCase):
             if isinstance(module, BitLinear):
                 nb_bitnet_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_bitnet_linear)
+        self.assertEqual(nb_linears, nb_bitnet_linear)
 
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
         """
         input_text = "What are we having for dinner?"
-        expected_output = "What are we having for dinner? What are we going to do for fun this weekend?"
+        expected_output = "What are we having for dinner? What are we going to do for fun? What are"
         input_ids = self.tokenizer(input_text, return_tensors="pt").to(torch_device)
-
         output = self.quantized_model.generate(**input_ids, max_new_tokens=11, do_sample=False)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
 
