@@ -25,7 +25,7 @@ from typing import Any, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
-from ...image_utils import ChannelDimension, PILImageResampling
+from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -178,26 +178,17 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
-    size: Optional[SizeDict] = None
-    default_to_square: Optional[bool] = None
     do_center_crop = False
-    crop_size: Optional[SizeDict] = None
     patch_size: Optional[int] = 16
     max_num_patches: Optional[int] = 256
     min_num_patches: Optional[int] = None
     pixel_shuffle_scale: Optional[int] = 1
     do_pad = False
-    pad_size: Optional[SizeDict] = None
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = list(VISION_MEAN)
     image_std = list(VISION_STD)
     do_convert_rgb = True
-    return_tensors = None
-    data_format = ChannelDimension.FIRST
-    input_data_format = None
-    device = None
     disable_grouping = False
     size_divisor: Optional[int] = None
 
