@@ -85,8 +85,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   patch_features = last_hidden_states[:, model.config.n_cls_tokens:, :].unflatten(1, (num_patches_height, num_patches_width))
   ```
 
-- Use [torch.jit.trace](https://pytorch.org/docs/stable/generated/torch.jit.trace.html) to speedup inference.
-  However, it will produce some mismatched elements. The difference between the original and traced model is 1e-4.
+- Use [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) to speedup inference.
 
   ```py
   import torch
@@ -100,18 +99,11 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
   model = AutoModel.from_pretrained('facebook/pixio-vith16')
 
+  compiled_model = torch.compile(model)
+
   inputs = processor(images=image, return_tensors="pt")
-  outputs = model(**inputs)
-  last_hidden_states = outputs.last_hidden_state 
-
-  # We have to force return_dict=False for tracing
-  model.config.return_dict = False
-
-  with torch.no_grad():
-      traced_model = torch.jit.trace(model, [inputs.pixel_values])
-      traced_outputs = traced_model(inputs.pixel_values)
-
-  print((last_hidden_states - traced_outputs.last_hidden_state).abs().max())
+  outputs = compiled_model(**inputs)
+  last_hidden_states = outputs.last_hidden_state
   ```
 
 ## PixioConfig
