@@ -477,17 +477,11 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "visual_segment_embedding"):
                 init.normal_(module.visual_segment_embedding, mean=0.0, std=self.config.initializer_range)
         # We check the existence of each one since detectron2 seems to do weird things
-        elif "BatchNorm" in module.__class__.__name__:
-            if getattr(module, "weight", None) is not None:
-                init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
-                init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
-                init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, detectron2.layers.FrozenBatchNorm2d):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.constant_(module.running_var, 1.0 - module.eps)
 
 
 def my_convert_sync_batchnorm(module, process_group=None):
