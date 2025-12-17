@@ -274,14 +274,12 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     model = None
     model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
-    # TODO: remove after uploading
-    local_path = "/raid/anton/code/forks/transformers/AntonV/ErnieVL"
 
+    # TODO: remove revision when PR on the hub is merged
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.config = AutoConfig.from_pretrained(self.local_path)
-        self.processor = AutoProcessor.from_pretrained(self.local_path)
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/10")
         self.message = [
             {
                 "role": "user",
@@ -313,10 +311,10 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     def load_model(self, dtype, attn_implementation="sdpa"):
         return AutoModelForImageTextToText.from_pretrained(
             self.model_id,
-            config=self.config,
             device_map="auto",
             dtype=dtype,
             attn_implementation=attn_implementation,
+            revision="refs/pr/10",
         )
 
     def test_small_model_integration_test(self):
@@ -381,7 +379,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         )
 
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained(self.local_path, max_image_size={"longest_edge": 50176})
+        processor = AutoProcessor.from_pretrained(self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10")
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
         video_urls = ["https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"]
