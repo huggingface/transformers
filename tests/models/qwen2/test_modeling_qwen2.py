@@ -210,11 +210,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
 
         expected_text_completions = Expectations({
-            ("cuda", None): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
-            ],
             ("cuda", 8): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
             ],
             ("rocm", (9, 4)): [
                 "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"

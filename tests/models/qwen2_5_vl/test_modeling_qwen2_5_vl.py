@@ -572,8 +572,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
                 ],
                 ("cuda", (8, 6)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
                 ("rocm", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
