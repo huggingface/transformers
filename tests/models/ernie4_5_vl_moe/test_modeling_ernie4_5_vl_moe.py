@@ -16,7 +16,6 @@
 import unittest
 
 from transformers import (
-    AutoConfig,
     AutoModelForImageTextToText,
     AutoProcessor,
     Ernie4_5_VL_MoeConfig,
