@@ -254,10 +254,7 @@ class IsaacVisionAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        past_key_value: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        is_causal: bool = False,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         **kwargs,
@@ -290,15 +287,12 @@ class IsaacVisionAttention(nn.Module):
             "is_causal": False,
             "scaling": self.scale,
             "dropout": dropout,
+            "cu_seq_lens_q": cu_seqlens,
+            "cu_seq_lens_k": cu_seqlens,
+            "max_length_q": max_q,
+            "max_length_k": max_k,
+            "output_attentions": output_attentions,
         }
-        if cu_seqlens is not None:
-            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
-            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
-        if max_seqlen is not None:
-            attention_kwargs["max_length_q"] = max_q
-            attention_kwargs["max_length_k"] = max_k
-        if output_attentions:
-            attention_kwargs["output_attentions"] = True
 
         attn_output, attn_weights = attention_interface(
             self,
