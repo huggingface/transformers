@@ -38,8 +38,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    device_map = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-    device_map = "cpu" if device_map is None else device_map
+    device = torch.accelerator.current_accelerator() if is_torch_accelerator_available() else "cuda"
+    device_map = "cpu" if device is None else device.type
 
     # Prepare model
     model = AutoModelForCausalLM.from_pretrained(
