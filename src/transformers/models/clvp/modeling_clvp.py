@@ -238,7 +238,7 @@ class ClvpRMSNorm(nn.Module):
 class ClvpRotaryPositionalEmbedding(nn.Module):
     """
     Rotary Position Embedding Class for CLVP. It was proposed in the paper 'ROFORMER: ENHANCED TRANSFORMER WITH ROTARY
-    POSITION EMBEDDING', Please see https://huggingface.co/papers/2104.09864v1.pdf .
+    POSITION EMBEDDING', Please see https://huggingface.co/papers/2104.09864.
     """
 
     def __init__(self, config):
