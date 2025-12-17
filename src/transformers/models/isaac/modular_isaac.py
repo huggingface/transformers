@@ -898,15 +898,15 @@ def pixel_shuffle_varlen(
     Raises:
         ValueError: If more than one batch item is provided.
     """
-    keep_batch_dim = x.dim() == 3
-    if keep_batch_dim:
+    return_with_batch_dim = x.dim() == 3
+    if return_with_batch_dim:
         if x.size(0) != 1:
             raise AssertionError("Packed sequence is expected to have batch_size == 1")
-        x_ = x.squeeze(0)  # (seq, embed)
+        embeddings = x.squeeze(0)  # (seq, embed)
     else:
-        x_ = x  # (seq, embed)
+        embeddings = x  # (seq, embed)
 
-    embed_dim = x_.size(-1)
+    embed_dim = embeddings.size(-1)
     scale_factor = int(scale_factor)
 
     # Calculate seq_sizes from token_grids
@@ -917,17 +917,17 @@ def pixel_shuffle_varlen(
         seq_sizes=seq_sizes,
         token_grids=token_grids,
         scale_factor=scale_factor,
-        device=x_.device,
+        device=embeddings.device,
     )  # (new_seq, scale_factor**2)
 
     # Gather → (new_seq, scale_factor**2, embed_dim)
-    gathered = x_[gather_idx]  # fancy indexing keeps gradient
+    gathered = embeddings[gather_idx]  # fancy indexing keeps gradient
 
     # Merge the scale_factor**2 group dimension into channels to finish the shuffle
     out = gathered.reshape(gathered.size(0), embed_dim * scale_factor * scale_factor)
 
     # Restore batch dimension if needed
-    if keep_batch_dim:
+    if return_with_batch_dim:
         out = out.unsqueeze(0)
     return out
 
