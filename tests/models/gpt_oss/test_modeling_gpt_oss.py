@@ -81,7 +81,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
             model = GptOssModel(config)
 
         config._attn_implementation = "kernels-community/vllm-flash-attn3"
-        model = GptOssModel(config).to(torch_device)
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
 
         model.eval()
         with torch.no_grad():
