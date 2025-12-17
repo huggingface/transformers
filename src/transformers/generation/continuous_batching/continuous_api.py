@@ -576,7 +576,6 @@ class ContinuousBatchProcessor:
         for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
-
                 # If there are no generated tokens yet, it means prefill just ended
                 if state.generated_len() == 0:
                     self.metrics.record_ttft_metric(state.created_time, state.request_id)

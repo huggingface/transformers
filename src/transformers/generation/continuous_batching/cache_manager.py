@@ -264,7 +264,9 @@ class CacheAllocator(ABC):
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
-    def fork_blocks(self, source_request_id: str, dst_request_id: str, block_manager: BlockManager) -> tuple[list[int], list[int]]:
+    def fork_blocks(
+        self, source_request_id: str, dst_request_id: str, block_manager: BlockManager
+    ) -> tuple[list[int], list[int]]:
         """Fork the cache blocks for a given request_id into a new request_id."""
         if source_request_id not in self.block_table:
             raise ValueError(f"No block table found for request {source_request_id}")
@@ -282,6 +284,7 @@ class CacheAllocator(ABC):
 
         self.block_table[dst_request_id] = forked_blocks
         return source_blocks, forked_blocks
+
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
