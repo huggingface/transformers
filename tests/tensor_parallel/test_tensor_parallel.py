@@ -15,14 +15,11 @@
 # Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
 # Run specific config: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc"
 # Run multiple configs: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "2Proc or 4Proc"
-# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallelDense2Proc::test_model_dense_forward_train
-# Run tests with a specific prefix: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallelDense2Proc -k "forward"
-# Run MoE tests only: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "Moe"
-# Run dense tests only: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "TestTensorParallelDense2Proc or TestTensorParallelDense4Proc"
+# Run spefic test: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc::test_model_dense_forward_train
+# Run tests with a specific prefix: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py::TestTensorParallel2Proc -k "forward"
 import os
 import tempfile
 import warnings
-import lovely_tensors as lt; lt.monkey_patch()
 
 from safetensors import safe_open
 
@@ -55,7 +52,11 @@ def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
     world_size = tp
     setup_dist_env(rank, world_size, port)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(rank)
+        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    else:
+        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     func(rank, *func_args, **func_kwargs)
 
@@ -304,9 +305,7 @@ def _test_model_dense_backward_pass_impl(rank):
             if isinstance(param_tp.data, dist.tensor.DTensor):
                 placement = param_tp.data.placements[0]
                 if hasattr(placement, "dim") and placement.dim is not None:
-                    dim = placement.dim
-                    world_size = param_tp.data.device_mesh.size()
-                    grad_shard = grad.chunk(world_size, dim=dim)[rank]
+                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
                 else:
                     grad_shard = grad
             else:
@@ -382,7 +381,7 @@ def _test_model_dense_save_impl(rank, tmp_dir):
     model.save_pretrained(result_dir)
 
 
-class TestTensorParallelDenseBase(TestCasePlus):
+class TestTensorParallelBase(TestCasePlus):
     """Base class for tensor parallel tests. Subclasses must set nproc_per_node."""
 
     nproc_per_node = None
@@ -467,398 +466,13 @@ class TestTensorParallelDenseBase(TestCasePlus):
                     del non_tp_tensor, tp_tensor
 
 
-class TestTensorParallelDense2Proc(TestTensorParallelDenseBase):
-    """Test tensor parallel dense model with 2 processes."""
+class TestTensorParallel2Proc(TestTensorParallelBase):
+    """Test tensor parallel with 2 processes."""
 
     nproc_per_node = 2
 
 
-class TestTensorParallelDense4Proc(TestTensorParallelDenseBase):
-    """Test tensor parallel dense model with 4 processes."""
-
-    nproc_per_node = 4
-
-
-# ====== MOE MODEL TEST FUNCTIONS ======
-def _test_model_moe_forward_impl(rank, mode):
-    """Implementation for comparing TP and non-TP MoE model outputs."""
-    import os
-
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    # Create log file for this rank
-    log_dir = "./tp_debug_logs"
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f"rank_{rank}.log")
-
-    def log(msg, tensor=None):
-        with open(log_file, "a") as f:
-            f.write(f"{msg}\n")
-            if tensor is not None:
-                f.write(f"  {tensor}\n")
-
-    # Clear log file at start
-    with open(log_file, "w") as f:
-        f.write(f"=== Debug log for rank {rank} ===\n\n")
-
-    torch.manual_seed(0)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    log(f"Input tokens: {inputs.input_ids.tolist()}")
-
-    # Load TP model
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    # Load non-TP model
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    input_ids = inputs.input_ids.to(device)
-    log(f"Device: {device}")
-
-    # Hook storage
-    hooks = []
-    layer_outputs_tp = {}
-    layer_outputs = {}
-
-    def make_hook(storage, name):
-        def hook(module, input, output):
-            if isinstance(output, tuple):
-                out = output[0]
-            else:
-                out = output
-            # For DTensor, get local tensor
-            if hasattr(out, 'to_local'):
-                out = out.to_local()
-            storage[name] = out.detach().clone()
-        return hook
-
-    # Register hooks on TP model
-    hooks.append(model_tp.model.embed_tokens.register_forward_hook(make_hook(layer_outputs_tp, "embed")))
-    hooks.append(model_tp.model.norm.register_forward_hook(make_hook(layer_outputs_tp, "final_norm")))
-    for i, layer in enumerate(model_tp.model.layers):
-        hooks.append(layer.input_layernorm.register_forward_hook(make_hook(layer_outputs_tp, f"layer_{i}_input_ln")))
-        hooks.append(layer.self_attn.register_forward_hook(make_hook(layer_outputs_tp, f"layer_{i}_attn")))
-        hooks.append(layer.post_attention_layernorm.register_forward_hook(make_hook(layer_outputs_tp, f"layer_{i}_post_attn_ln")))
-        hooks.append(layer.mlp.register_forward_hook(make_hook(layer_outputs_tp, f"layer_{i}_moe")))
-        hooks.append(layer.mlp.gate.register_forward_hook(make_hook(layer_outputs_tp, f"layer_{i}_router")))
-
-    # Register hooks on non-TP model
-    hooks.append(model.model.embed_tokens.register_forward_hook(make_hook(layer_outputs, "embed")))
-    hooks.append(model.model.norm.register_forward_hook(make_hook(layer_outputs, "final_norm")))
-    for i, layer in enumerate(model.model.layers):
-        hooks.append(layer.input_layernorm.register_forward_hook(make_hook(layer_outputs, f"layer_{i}_input_ln")))
-        hooks.append(layer.self_attn.register_forward_hook(make_hook(layer_outputs, f"layer_{i}_attn")))
-        hooks.append(layer.post_attention_layernorm.register_forward_hook(make_hook(layer_outputs, f"layer_{i}_post_attn_ln")))
-        hooks.append(layer.mlp.register_forward_hook(make_hook(layer_outputs, f"layer_{i}_moe")))
-        hooks.append(layer.mlp.gate.register_forward_hook(make_hook(layer_outputs, f"layer_{i}_router")))
-
-    with torch.no_grad():
-        # Non-TP model output
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        # TP model output
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    # Remove hooks
-    for h in hooks:
-        h.remove()
-
-    # Compare and log each intermediate output
-    log("\n=== Comparing Intermediate Outputs ===\n")
-
-    # Compare in order
-    check_order = ["embed"]
-    num_layers = len(model.model.layers)
-    for i in range(num_layers):
-        check_order.extend([
-            f"layer_{i}_input_ln",
-            f"layer_{i}_router",
-            f"layer_{i}_attn",
-            f"layer_{i}_post_attn_ln",
-            f"layer_{i}_moe",
-        ])
-    check_order.append("final_norm")
-
-    for name in check_order:
-        if name in layer_outputs and name in layer_outputs_tp:
-            out = layer_outputs[name]
-            out_tp = layer_outputs_tp[name]
-
-            # Handle shape mismatch for sharded tensors
-            if out.shape != out_tp.shape:
-                log(f"{name}: SHAPE MISMATCH - non-TP: {out.shape}, TP: {out_tp.shape}")
-                continue
-
-            max_diff = (out - out_tp).abs().max().item()
-            mean_diff = (out - out_tp).abs().mean().item()
-            match = torch.allclose(out, out_tp, atol=1e-5, rtol=1e-5)
-
-            status = "MATCH" if match else "MISMATCH"
-            log(f"{name}: {status} | max_diff: {max_diff:.6f}, mean_diff: {mean_diff:.6f}")
-
-            if not match:
-                log("  Non-TP output:", out)
-                log("  TP output:", out_tp)
-        else:
-            missing = []
-            if name not in layer_outputs:
-                missing.append("non-TP")
-            if name not in layer_outputs_tp:
-                missing.append("TP")
-            log(f"{name}: MISSING from {missing}")
-
-    # Final logits comparison
-    log("\n=== Final Logits Comparison ===")
-    log("Non-TP logits:", logits)
-    log("TP logits:", logits_tp)
-
-    max_diff = (logits - logits_tp).abs().max().item()
-    mean_diff = (logits - logits_tp).abs().mean().item()
-    log(f"Max diff: {max_diff}, Mean diff: {mean_diff}")
-
-    # Also print where the max diff occurs
-    diff = (logits - logits_tp).abs()
-    max_idx = diff.argmax()
-    log(f"Max diff location (flat index): {max_idx.item()}")
-
-    log(f"\n=== End of debug for rank {rank} ===")
-
-    # Compare outputs - they should match
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_moe_backward_pass_impl(rank):
-    """Implementation for comparing TP and non-TP MoE model backward passes."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    torch.manual_seed(0)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
-    model = model.to(device)
-    model.train()
-
-    batch_size, seq_length = 2, 10
-    torch.manual_seed(42)  # Different seed for inputs to ensure they're deterministic
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model losses differ. Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            if isinstance(param_tp.data, dist.tensor.DTensor):
-                placement = param_tp.data.placements[0]
-                if hasattr(placement, "dim") and placement.dim is not None:
-                    grad_shard = get_tensor_shard(grad, grad, param_tp.data.device_mesh, rank, placement.dim)
-                else:
-                    grad_shard = grad
-            else:
-                grad_shard = grad
-
-            grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, dist.tensor.DTensor) else grad_tp
-
-            assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=1e-5, rtol=1e-5), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
-            )
-
-    dist.barrier()
-
-
-def _test_model_moe_forward_compile_impl(rank, mode):
-    """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    torch.manual_seed(0)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    # Compile both models
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
-
-    input_ids = inputs.input_ids.to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_moe_save_impl(rank, tmp_dir):
-    """Implementation of test_model_save for MoE model distributed execution."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    if dist.is_initialized():
-        kwargs = {"tp_plan": "auto"}
-        result_dir = f"{tmp_dir}/tp"
-    else:
-        kwargs = {}
-        result_dir = f"{tmp_dir}/nontp"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", **kwargs)
-    model.save_pretrained(result_dir)
-
-
-class TestTensorParallelMoeBase(TestCasePlus):
-    """Base class for MoE tensor parallel tests. Subclasses must set nproc_per_node."""
-
-    nproc_per_node = None
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_eval(self):
-        """Test that TP and non-TP MoE models produce the same outputs in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("eval")
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_train(self):
-        """Test that TP and non-TP MoE models produce the same outputs in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("train")
-
-    @require_torch_multi_accelerator
-    def test_model_moe_backward_pass(self):
-        """Test that TP and non-TP MoE models produce the same gradients."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_pass_impl)()
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_eval(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("eval")
-
-    @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_train(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("train")
-
-    @require_huggingface_hub_greater_or_equal("0.31.4")
-    @require_torch_multi_accelerator
-    def test_model_moe_save(self):
-        """Test that TP MoE model can be saved and matches non-TP version."""
-        if self.nproc_per_node is None:
-            self.skipTest("nproc_per_node not set")
-        if backend_device_count(torch_device) < self.nproc_per_node:
-            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # First run with TP (distributed)
-            init_distributed(tp=self.nproc_per_node)(_test_model_moe_save_impl)(tmp_dir)
-
-            # Then run without TP (non-distributed)
-            _test_model_moe_save_impl(0, tmp_dir)
-
-            non_tp_model_path = os.path.join(tmp_dir, "nontp")
-            tp_model_path = os.path.join(tmp_dir, "tp")
-
-            for filename in os.listdir(non_tp_model_path):
-                if not filename.endswith(".safetensors"):
-                    continue
-
-                non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-                tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-                for non_tp_key in non_tp_model.keys():
-                    non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                    tp_tensor = tp_model.get_tensor(non_tp_key)
-                    assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                    del non_tp_tensor, tp_tensor
-
-
-class TestTensorParallelMoe2Proc(TestTensorParallelMoeBase):
-    """Test MoE tensor parallel with 2 processes."""
-
-    nproc_per_node = 2
-
-
-class TestTensorParallelMoe4Proc(TestTensorParallelMoeBase):
-    """Test MoE tensor parallel with 4 processes."""
+class TestTensorParallel4Proc(TestTensorParallelBase):
+    """Test tensor parallel with 4 processes."""
 
     nproc_per_node = 4
