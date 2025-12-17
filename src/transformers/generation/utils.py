@@ -407,6 +407,7 @@ class GenerationMixin(ContinuousMixin):
                     **repo_loading_kwargs,
                 )
             except OSError:
+                # `self` already has a generation config created from model config so we can simply raise a warning
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
