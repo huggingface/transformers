@@ -389,9 +389,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 (batch_size, 1), self.config.speech_start_id, dtype=torch.long, device=input_ids.device
             ),
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
-            "max_new_tokens": generation_config.max_new_tokens or 100,
+            "max_new_tokens": generation_config.max_new_tokens,
         }
-        # negative_generation_config = GenerationConfig()
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
             generation_config, True, **negative_kwargs
         )
