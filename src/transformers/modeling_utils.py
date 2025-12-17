@@ -2206,16 +2206,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
-            if getattr(module, "bias", None) is not None:
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
-                # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-                if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                    init.zeros_(module.weight[module.padding_idx])
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2227,10 +2225,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or "RMSNorm" in module.__class__.__name__
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
+            if getattr(module, "weight", None) is not None:
                 init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
+            if getattr(module, "bias", None) is not None:
                 init.zeros_(module.bias)
+            # And the potential buffers for the BatchNorms
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+            if getattr(module, "running_var", None) is not None:
+                init.ones_(module.running_var)
+            if getattr(module, "num_batches_tracked", None) is not None:
+                init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
             rope_fn = (
