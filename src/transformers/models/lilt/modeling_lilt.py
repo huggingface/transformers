@@ -279,11 +279,9 @@ class LiltSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (
-            ((context_layer, layout_context_layer), attention_probs)
-            if output_attentions
-            else ((context_layer, layout_context_layer),)
-        )
+        outputs = (context_layer, layout_context_layer)
+        if output_attentions:
+            outputs = outputs + (attention_probs,)
 
         return outputs
 
@@ -327,9 +325,9 @@ class LiltAttention(nn.Module):
             attention_mask,
             output_attentions,
         )
-        attention_output = self.output(self_outputs[0][0], hidden_states)
-        layout_attention_output = self.layout_output(self_outputs[0][1], layout_inputs)
-        outputs = ((attention_output, layout_attention_output),) + self_outputs[1:]  # add attentions if we output them
+        attention_output = self.output(self_outputs[0], hidden_states)
+        layout_attention_output = self.layout_output(self_outputs[1], layout_inputs)
+        outputs = (attention_output, layout_attention_output) + self_outputs[2:]  # add attentions if we output them
         return outputs
 
 
@@ -395,10 +393,10 @@ class LiltLayer(GradientCheckpointingLayer):
             attention_mask,
             output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0][0]
-        layout_attention_output = self_attention_outputs[0][1]
+        attention_output = self_attention_outputs[0]
+        layout_attention_output = self_attention_outputs[1]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[2:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -406,7 +404,7 @@ class LiltLayer(GradientCheckpointingLayer):
         layout_layer_output = apply_chunking_to_forward(
             self.layout_feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layout_attention_output
         )
-        outputs = ((layer_output, layout_layer_output),) + outputs
+        outputs = (layer_output, layout_layer_output) + outputs
 
         return outputs
 
@@ -451,11 +449,11 @@ class LiltEncoder(nn.Module):
                 output_attentions,
             )
 
-            hidden_states = layer_outputs[0][0]
-            layout_inputs = layer_outputs[0][1]
+            hidden_states = layer_outputs[0]
+            layout_inputs = layer_outputs[1]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
