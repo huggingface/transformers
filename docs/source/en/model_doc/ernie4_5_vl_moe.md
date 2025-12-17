@@ -32,11 +32,16 @@ The Ernie 4.5 VL MoE model was released in the [Ernie 4.5 Model Family](https://
 This family of models contains multiple different architectures and model sizes. The Vision-Language series in specific is
 composed of a novel multimodal heterogeneous structure, sharing paremeters across modalities and dedicating parameters
 to specific modalities. This becomes especially apparent in the Mixture of Expert (MoE) which is composed of
+
 - Dedicated Text Experts
 - Dedicated Vision Experts
 - Shared Experts
 
-This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. TODO image of the moe?
+This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. An more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/AntonV/doc-images/resolve/main/Ernie4_5_VL_Moe.png"/>
+</div>
 
 Other models from the family can be found at [Ernie 4.5](./ernie4_5) and at [Ernie 4.5 MoE](./ernie4_5_moe.md).
 
@@ -49,15 +54,15 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```py
-import torch
 from transformers import pipeline
+
 pipe = pipeline(
     task="image-text-to-text",
     model="baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    device=0,
-    dtype="auto"
+    device_map="auto",
+    revision="refs/pr/10",
 )
-self.message = [
+message = [
     {
         "role": "user",
         "content": [
@@ -69,23 +74,27 @@ self.message = [
         ],
     }
 ]
-pipe(text=messages, max_new_tokens=20, return_full_text=False)
+print(pipe(text=message, max_new_tokens=20, return_full_text=False))
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
-    device_map="auto",  # Use tp_plan="auto" instead to enable Multi-GPU inference!
+    device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
+    revision="refs/pr/10",
 )
-processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT")
-self.message = [
+processor = AutoProcessor.from_pretrained(
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT",
+    # use_fast=False,  # closer to the original implementation for less speed
+    revision="refs/pr/10",
+)
+message = [
     {
         "role": "user",
         "content": [
@@ -99,7 +108,7 @@ self.message = [
 ]
 
 inputs = processor.apply_chat_template(
-    messages,
+    message,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -123,30 +132,30 @@ Using Ernie 4.5 VL MoE with video input is similar to using it with image input.
 The model can process video data and generate text based on the content of the video.
 
 ```python
-import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
     dtype="auto",
-    device_map="auto",  # Use tp_plan="auto" instead to enable Multi-GPU inference!
+    device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
+    revision="refs/pr/10",
 )
-processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT")
-self.message = [
+processor = AutoProcessor.from_pretrained("baidu/ERNIE-4.5-VL-28B-A3B-PT", revision="refs/pr/10")
+message = [
     {
         "role": "user",
         "content": [
             {"type": "text", "text": "Please describe what you can see during this video."},
             {
                 "type": "video",
-                "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
             },
         ],
     }
 ]
 
 inputs = processor.apply_chat_template(
-    messages,
+    message,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
