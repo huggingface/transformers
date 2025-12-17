@@ -1313,6 +1313,8 @@ def _process_parameter_type(param):
             subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
         out_str.append(subtype)
 
+    if param.default is not inspect.Parameter.empty:
+        optional = True
     if not out_str:
         return "", optional
     elif len(out_str) == 1:
