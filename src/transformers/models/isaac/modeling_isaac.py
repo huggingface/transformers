@@ -28,6 +28,7 @@ from typing import Any, Optional, Union
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation.utils import GenerationMixin
+from ...image_processing_utils_fast import ImagesKwargs
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -70,6 +71,13 @@ else:
     VisionType = None
     create_stream = None
     group_streams = None
+
+
+class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
+    patch_size: Optional[int]
+    max_num_patches: Optional[int]
+    min_num_patches: Optional[int]
+    pixel_shuffle_scale: Optional[int]
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -256,10 +264,6 @@ class IsaacVisionAttention(nn.Module):
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-        # Ignore unused arguments for interface compatibility
-        _ = position_ids
-        _ = past_key_value
-        _ = is_causal
         kwargs.pop("output_hidden_states", None)
         kwargs.pop("return_dict", None)
 
@@ -271,13 +275,6 @@ class IsaacVisionAttention(nn.Module):
         queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        if not queries.is_contiguous():
-            queries = queries.contiguous()
-        if not keys.is_contiguous():
-            keys = keys.contiguous()
-        if not values.is_contiguous():
-            values = values.contiguous()
 
         L = queries.size(0)
         if max_seqlen is not None:
@@ -479,13 +476,9 @@ class IsaacVisionEncoder(nn.Module):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        cu_seqlens = kwargs.get("cu_seqlens")
         attention_mask = ensure_document_attention_mask(
             attention_mask,
             cu_seqlens,
@@ -496,15 +489,6 @@ class IsaacVisionEncoder(nn.Module):
         )
 
         hidden_states = inputs_embeds
-        kwargs.update(
-            {
-                "max_seqlen": max_seqlen,
-                "cu_seqlens": cu_seqlens,
-                "output_attentions": output_attentions,
-                "output_hidden_states": output_hidden_states,
-                "return_dict": return_dict,
-            }
-        )
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
@@ -607,15 +591,15 @@ def pixel_shuffle_varlen(
     Raises:
         ValueError: If more than one batch item is provided.
     """
-    keep_batch_dim = x.dim() == 3
-    if keep_batch_dim:
+    return_with_batch_dim = x.dim() == 3
+    if return_with_batch_dim:
         if x.size(0) != 1:
             raise AssertionError("Packed sequence is expected to have batch_size == 1")
-        x_ = x.squeeze(0)  # (seq, embed)
+        embeddings = x.squeeze(0)  # (seq, embed)
     else:
-        x_ = x  # (seq, embed)
+        embeddings = x  # (seq, embed)
 
-    embed_dim = x_.size(-1)
+    embed_dim = embeddings.size(-1)
     scale_factor = int(scale_factor)
 
     # Calculate seq_sizes from token_grids
@@ -626,17 +610,17 @@ def pixel_shuffle_varlen(
         seq_sizes=seq_sizes,
         token_grids=token_grids,
         scale_factor=scale_factor,
-        device=x_.device,
+        device=embeddings.device,
     )  # (new_seq, scale_factor**2)
 
     # Gather → (new_seq, scale_factor**2, embed_dim)
-    gathered = x_[gather_idx]  # fancy indexing keeps gradient
+    gathered = embeddings[gather_idx]  # fancy indexing keeps gradient
 
     # Merge the scale_factor**2 group dimension into channels to finish the shuffle
     out = gathered.reshape(gathered.size(0), embed_dim * scale_factor * scale_factor)
 
     # Restore batch dimension if needed
-    if keep_batch_dim:
+    if return_with_batch_dim:
         out = out.unsqueeze(0)
     return out
 
@@ -1261,8 +1245,6 @@ class IsaacModel(PreTrainedModel):
             modality_tensor,
             hidden_states=inputs_embeds,
         )
-        cos = cos.to(inputs_embeds.dtype)
-        sin = sin.to(inputs_embeds.dtype)
 
         # Flash attention expects 1D position_ids; keep 3D only for rotary phases
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids

@@ -33,7 +33,7 @@ from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.import_utils import is_torch_available
-from .image_processing_isaac import IsaacImageProcessorKwargs
+from .modeling_isaac import IsaacImageProcessorFastKwargs
 
 
 if is_torch_available():
@@ -178,7 +178,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
-    valid_kwargs = IsaacImageProcessorKwargs
+    valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
@@ -207,7 +207,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        **kwargs: Unpack[IsaacImageProcessorKwargs],
+        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
     ) -> None:
         super().__init__(**kwargs)
 

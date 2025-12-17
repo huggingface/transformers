@@ -115,7 +115,7 @@ class IsaacConfig(PretrainedConfig):
         # Keep rope parameters alias in sync with upstream expectations
         self._rope_parameters = self._rope_scaling
 
-        # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
+        # Mirror frequently accessed Qwen3 attributes at the composite config level
         self.vocab_size = self.text_config.vocab_size
         self.hidden_size = self.text_config.hidden_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
