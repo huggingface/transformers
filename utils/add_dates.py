@@ -3,6 +3,8 @@ import os
 import re
 import subprocess
 from datetime import date, datetime
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
 
@@ -10,6 +12,8 @@ from huggingface_hub import paper_info
 ROOT = os.getcwd().split("utils")[0]
 DOCS_PATH = os.path.join(ROOT, "docs/source/en/model_doc")
 MODELS_PATH = os.path.join(ROOT, "src/transformers/models")
+GITHUB_REPO_URL = "https://github.com/huggingface/transformers"
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/huggingface/transformers/main"
 
 COPYRIGHT_DISCLAIMER = """<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
@@ -31,6 +35,53 @@ ARXIV_PAPERS_NOT_IN_HF_PAPERS = {
     "gemma3n.md": "2506.06644",
     "xmod.md": "2205.06266",
 }
+
+
+def check_file_exists_on_github(file_path: str) -> bool:
+    """Check if a file exists on the main branch of the GitHub repository.
+
+    Args:
+        file_path: Relative path from repository root
+
+    Returns:
+        True if file exists on GitHub main branch (or if check failed), False only if confirmed 404
+
+    Note:
+        On network errors or other issues, returns True (assumes file exists) with a warning.
+        This prevents the script from failing due to temporary network issues.
+    """
+    # Convert absolute path to relative path from repository root if needed
+    if file_path.startswith(ROOT):
+        file_path = file_path[len(ROOT) :].lstrip("/")
+
+    # Construct the raw GitHub URL for the file
+    url = f"{GITHUB_RAW_URL}/{file_path}"
+
+    try:
+        # Make a HEAD request to check if file exists (more efficient than GET)
+        request = Request(url, method="HEAD")
+        request.add_header("User-Agent", "transformers-add-dates-script")
+
+        with urlopen(request, timeout=10) as response:
+            return response.status == 200
+    except HTTPError as e:
+        if e.code == 404:
+            # File doesn't exist on GitHub
+            return False
+        # Fall through to generic exception handler for other HTTP errors
+        print(
+            f"Warning: Could not verify file existence on GitHub (HTTP {e.code}): {url}\n"
+            f"Assuming file exists and continuing with local git history."
+        )
+        return True
+    except Exception as e:
+        # Handle all other errors (network issues, timeouts, etc.)
+        print(
+            f"Warning: Could not verify file existence on GitHub: {url}\n"
+            f"Error: {e}\n"
+            f"Assuming file exists and continuing with local git history."
+        )
+        return True
 
 
 def get_modified_cards() -> list[str]:
@@ -105,15 +156,15 @@ def get_first_commit_date(model_name: str | None) -> str:
     if not os.path.exists(file_path):
         file_path = os.path.join(DOCS_PATH, f"{model_name}.md")
 
-    # Check if file exists in upstream/main
-    result_main = subprocess.check_output(
-        ["git", "ls-tree", "upstream/main", "--", file_path], text=True, stderr=subprocess.DEVNULL
-    )
-    if not result_main:
-        # File does not exist in upstream/main (new model), use today's date
+    # Check if file exists on GitHub main branch
+    file_exists_on_github = check_file_exists_on_github(file_path)
+
+    if not file_exists_on_github:
+        # File does not exist on GitHub main branch (new model), use today's date
+        print(f"Model {model_name} not found on GitHub main branch, using today's date")
         final_date = date.today().isoformat()
     else:
-        # File exists in upstream/main, get the first commit date
+        # File exists on GitHub main branch, get the first commit date from local git history
         final_date = subprocess.check_output(
             ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", file_path], text=True
         )
@@ -292,7 +343,7 @@ def insert_dates(model_card_list: list[str]):
             if existing_release_date not in (r"{release_date}", "None"):
                 release_date = existing_release_date
 
-            if existing_hf_date != hf_commit_date or existing_release_date != release_date:
+            if _dates_differ_significantly(existing_hf_date, hf_commit_date) or existing_release_date != release_date:
                 old_line = match.group(0)
                 new_line = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
                 content = content.replace(old_line, new_line)

@@ -44,7 +44,7 @@ from transformers.testing_utils import (
 
 if is_tokenizers_available():
     import tokenizers
-    from tokenizers import Tokenizer
+    from tokenizers import AddedToken, Tokenizer
     from tokenizers.models import WordPiece
 
 
@@ -330,3 +330,23 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+
+    @require_tokenizers
+    def test_special_tokens_overwrite(self):
+        text_with_nonspecial_tokens = "there are 2 cats"  # '2' is originally special
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/Ernie4_5_Tokenizer")
+        # Overwrite special tokens 0-9 to non-special
+        tokenizer.add_tokens([AddedToken(f"{i}", normalized=False, special=False) for i in range(10)])
+        self.assertTrue(
+            tokenizer.decode(tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            == text_with_nonspecial_tokens
+        )
+
+        # Checking if this carries over even after saving and relaoding
+        tokenizer.save_pretrained("/tmp/ernie_tokenizer")
+        new_tokenizer = AutoTokenizer.from_pretrained("/tmp/ernie_tokenizer")
+        self.assertTrue(
+            new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            == text_with_nonspecial_tokens
+        )
