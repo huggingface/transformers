@@ -477,7 +477,7 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
             if hasattr(module, "visual_segment_embedding"):
                 init.normal_(module.visual_segment_embedding, mean=0.0, std=self.config.initializer_range)
         # We check the existence of each one since detectron2 seems to do weird things
-        elif isinstance(module, detectron2.layers.FrozenBatchNorm2d):
+        elif "BatchNorm" in module.__class__.__name__:
             if getattr(module, "weight", None) is not None:
                 init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
