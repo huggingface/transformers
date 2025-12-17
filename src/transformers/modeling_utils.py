@@ -792,6 +792,7 @@ def _get_dtype(
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> tuple[PreTrainedConfig, torch.dtype]:
     """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
@@ -839,6 +840,9 @@ def _get_dtype(
     else:
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
+
+    if hf_quantizer is not None:
+        hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
@@ -1433,7 +1437,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def pp_plan(self, plan: dict[str, tuple[str, str]]):
         self._pp_plan = plan
 
-    def dequantize(self):
+    def dequantize(self, dtype=None):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
         dequantization.
@@ -1443,7 +1447,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hf_quantizer is None:
             raise ValueError("You need to first quantize your model in order to dequantize it")
 
-        return hf_quantizer.dequantize(self)
+        return hf_quantizer.dequantize(self, dtype=dtype)
 
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
@@ -2387,11 +2391,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_keys = list(tied_keys.items())
         for i, (target_param_name, source_param_name) in enumerate(tied_keys):
-            # Usually we tie a single target to a single source, but when both are missing we may later tie
-            # both the source and target to a third "backup" parameter that is present in the checkpoint, so we use
-            # a list here
-            target_param_names = [target_param_name]
-
             # This is `from_pretrained` -> let's check symmetrically in case the source key is not present
             if missing_keys is not None:
                 remove_from_missing = True
@@ -2412,7 +2411,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
-                    target_param_names = [target_param_name]
                 # Both are missing -> check other keys in case more than 2 keys are tied to the same weight
                 elif not source_is_there and not target_is_there:
                     for target_backup, source_backup in tied_keys[i + 1 :]:
@@ -2421,10 +2419,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         if source_backup == source_param_name:
                             target_backup_is_there = target_backup not in missing_keys
                             # If the target is present, we found the correct weight to tie into (we know the source is missing)
+                            # Note here that we do not tie the missing source right now as well, as it will be done anyway when
+                            # the pair (target_backup, source_backup) becomes the main pair (target_param_name, source_param_name)
                             if target_backup_is_there:
                                 source_param_name = target_backup
-                                # Append the source as well, since both are missing we'll tie both
-                                target_param_names.append(source_param_name)
                                 break
                     # If we did not break from the loop, it was impossible to find a source key -> let's raise
                     else:
@@ -2440,19 +2438,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # Perform the actual tying
             source_param = self.get_parameter_or_buffer(source_param_name)
-            for target_param_name in target_param_names:
-                if "." in target_param_name:
-                    parent_name, name = target_param_name.rsplit(".", 1)
-                    parent = self.get_submodule(parent_name)
-                else:
-                    name = target_param_name
-                    parent = self
-                # Tie the weights
-                setattr(parent, name, source_param)
-                self._adjust_bias(parent, source_param)
-                # Remove from missing if necesary
-                if missing_keys is not None and remove_from_missing:
-                    missing_keys.discard(target_param_name)
+            if "." in target_param_name:
+                parent_name, name = target_param_name.rsplit(".", 1)
+                parent = self.get_submodule(parent_name)
+            else:
+                name = target_param_name
+                parent = self
+            # Tie the weights
+            setattr(parent, name, source_param)
+            self._adjust_bias(parent, source_param)
+            # Remove from missing if necesary
+            if missing_keys is not None and remove_from_missing:
+                missing_keys.discard(target_param_name)
 
     def _adjust_bias(self, output_embeddings, input_embeddings):
         if getattr(output_embeddings, "bias", None) is not None and hasattr(output_embeddings, "weight"):
@@ -3540,7 +3537,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 # This is a context manager to override the default kernel mapping
                 # We are calling kernelize inside this context manager using the use_kernels setter
-                with use_kernel_mapping(kernel_config.kernel_mapping):
+                # Param inherit_mapping should be False to avoid still loading kernel from remote
+                inherit_mapping = not kernel_config.use_local_kernel
+                with use_kernel_mapping(kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
                     self.use_kernels = True
             # We use the default kernel mapping in .integrations.hub_kernels
             else:
@@ -3880,8 +3879,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        hf_quantizer, config, dtype, device_map = get_hf_quantizer(
-            config, quantization_config, dtype, device_map, weights_only, user_agent
+        hf_quantizer, config, device_map = get_hf_quantizer(
+            config, quantization_config, device_map, weights_only, user_agent
         )
 
         if gguf_file:
@@ -3928,7 +3927,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ]
 
         # Find the correct dtype based on current state
-        config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
+        config, dtype = _get_dtype(
+            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+        )
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
@@ -3937,21 +3938,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+            if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
+                hf_quantizer.preprocess_model(
+                    model=model,
+                    dtype=dtype,
+                    device_map=device_map,
+                    checkpoint_files=checkpoint_files,
+                    use_kernels=use_kernels,
+                )
+
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
-
-        # make sure we use the model's config since the __init__ call might have copied it
-        config = model.config
-
-        if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
-            hf_quantizer.preprocess_model(
-                model=model,
-                device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
-                config=config,
-                checkpoint_files=checkpoint_files,
-                use_kernels=use_kernels,
-            )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -3999,7 +3996,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
+            hf_quantizer.postprocess_model(
+                model
+            )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
