@@ -153,7 +153,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         image_outputs.pooler_output = list(image_features)
 
-        return image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -192,7 +192,6 @@ class FastVlmModel(FastVlmPreTrainedModel):
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmModelOutputWithPast]:
         r"""
@@ -222,7 +221,6 @@ class FastVlmModel(FastVlmPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
                 return_dict=True,
             ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -332,7 +330,6 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmCausalLMOutputWithPast]:
         r"""
@@ -399,7 +396,6 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             cache_position=cache_position,
-            image_sizes=image_sizes,
             **kwargs,
         )
 
