@@ -633,13 +633,6 @@ class IsaacVisionAttention(Siglip2Attention):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if not queries.is_contiguous():
-            queries = queries.contiguous()
-        if not keys.is_contiguous():
-            keys = keys.contiguous()
-        if not values.is_contiguous():
-            values = values.contiguous()
-
         L = queries.size(0)
         if max_seqlen is not None:
             max_q = max_k = int(max_seqlen)
