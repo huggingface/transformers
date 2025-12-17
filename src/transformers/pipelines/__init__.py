@@ -700,12 +700,14 @@ def pipeline(
 
     code_revision = kwargs.pop("code_revision", None)
     commit_hash = kwargs.pop("_commit_hash", None)
+    local_files_only = kwargs.get("local_files_only", False)
 
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
+        "local_files_only": local_files_only,
     }
 
     if task is None and model is None:
