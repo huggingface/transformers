@@ -1114,7 +1114,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
         run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
-            emulate compressed model execution if True, otherwise use default submodule"""
+            emulate compressed model execution if True, otherwise use default submodule
+    """
 
     def __init__(
         self,
