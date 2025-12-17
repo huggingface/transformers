@@ -1416,6 +1416,15 @@ class MimiPreTrainedModel(PreTrainedModel):
             init.ones_(module.initialized)
             init.ones_(module.cluster_usage)
             init.zeros_(module.embed_sum)
+        elif isinstance(module, MimiRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 @auto_docstring(

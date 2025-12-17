@@ -2232,9 +2232,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # And the potential buffers for the BatchNorms
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
                 init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
                 init.zeros_(module.num_batches_tracked)
         # This matches all the usual RotaryEmbeddings modules
         elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):

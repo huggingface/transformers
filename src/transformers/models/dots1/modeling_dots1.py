@@ -476,11 +476,10 @@ class Dots1PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Dots1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Dots1NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Dots1TopkRouter):
-            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

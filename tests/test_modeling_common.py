@@ -1107,30 +1107,40 @@ class ModelTesterMixin:
                 sorted(buffers_from_meta_init.keys()),
                 "The name of the buffers from each model should be the exact same",
             )
-            different_buffers = []
+            different_buffers = set()
             for k1, v1 in buffers_from_init.items():
                 v2 = buffers_from_meta_init[k1]
                 if not (v1 == v2).all():
-                    different_buffers.append(k1)
+                    different_buffers.add(k1)
 
-            def get_parent_traceback(buffer: str) -> str:
-                parent_name = buffer.rsplit(".", 1)[0] if "." in buffer else ""
+            # Find the parent structure of the buffers that are different
+            unique_bad_module_traceback = set()
+            for buffer in different_buffers.copy():
+                parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else "", buffer
                 parent = model_from_init.get_submodule(parent_name)
-                immediate_parent_module = type(parent).__name__
+                immediate_parent_class = type(parent).__name__
                 # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
                 while not isinstance(parent, PreTrainedModel):
                     parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
                     parent = model_from_init.get_submodule(parent_name)
                 # Get the exact PreTrainedModel
-                pretrained_parent_module = next(
+                pretrained_parent_class = next(
                     x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
                 )
-                return f"{immediate_parent_module} called from {pretrained_parent_module}\n"
 
-            unique_tracebacks = "".join({get_parent_traceback(buffer) for buffer in different_buffers})
+                # We cannot control timm model weights initialization, so skip in this case
+                if pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer:
+                    different_buffers.discard(buffer)
+                    continue
+
+                # Add it to the traceback
+                traceback = f"{buf_name} in module {immediate_parent_class} called from {pretrained_parent_class}\n"
+                unique_bad_module_traceback.add(traceback)
+
+            unique_bad_module_traceback = "".join(unique_bad_module_traceback)
             self.assertTrue(
                 len(different_buffers) == 0,
-                f"The following modules do not properly handle their buffers in `_init_weights()`:\n{unique_tracebacks}",
+                f"The following weights do not properly handle their buffers in `_init_weights()`:\n{unique_bad_module_traceback}",
             )
 
     def test_torch_save_load(self):

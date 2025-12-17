@@ -846,9 +846,7 @@ class AlignPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
                 init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
                 init.zeros_(module.num_batches_tracked)
         elif isinstance(module, AlignTextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))

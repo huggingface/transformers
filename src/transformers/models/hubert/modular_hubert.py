@@ -147,9 +147,7 @@ class HubertPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
-            if getattr(module, "running_var", None) is not None:
                 init.ones_(module.running_var)
-            if getattr(module, "num_batches_tracked", None) is not None:
                 init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():

@@ -840,6 +840,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, IdeficsVisionEmbeddings):
             init.normal_(module.class_embedding)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
                 init.zeros_(module.alpha_cross_attn)
