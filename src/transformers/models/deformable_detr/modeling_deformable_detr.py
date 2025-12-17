@@ -968,8 +968,8 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DeformableDetrFrozenBatchNorm2d):
             init.ones_(module.weight)
             init.zeros_(module.bias)
-            module.zeros_(module.running_mean)
-            module.ones_(module.running_var)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
         if hasattr(module, "reference_points") and not self.config.two_stage:
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
             init.constant_(module.reference_points.bias, 0.0)

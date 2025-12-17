@@ -920,7 +920,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
             if module.pretrained_window_size[0] > 0:
                 relative_coords_table[:, :, :, 0] /= module.pretrained_window_size[0] - 1
                 relative_coords_table[:, :, :, 1] /= module.pretrained_window_size[1] - 1
-            elif module.window_size > 1:
+            elif module.window_size[0] > 1:
                 relative_coords_table[:, :, :, 0] /= module.window_size[0] - 1
                 relative_coords_table[:, :, :, 1] /= module.window_size[1] - 1
             relative_coords_table *= 8  # normalize to -8, 8
