@@ -2044,7 +2044,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
                 continue
 
-            input_embeddings = module.get_input_embeddings()
+            try:
+                input_embeddings = module.get_input_embeddings()
+            except NotImplementedError:
+                # handle submodules such as siglip which don't have this implemented
+                input_embeddings = None
 
             if input_embeddings is None:
                 continue
