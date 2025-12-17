@@ -22,6 +22,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -67,6 +68,7 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @require_kernels
     @require_flash_attn
+    @pytest.mark.flash_attn_test
     @require_torch_gpu
     def test_initialization_raises_error_for_flash_attn(self):
         """
