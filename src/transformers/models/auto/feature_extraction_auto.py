@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
+        ("audioflamingo3", "WhisperFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
@@ -59,6 +60,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
+        ("pe_audio", "PeAudioFeatureExtractor"),
+        ("pe_audio_video", "PeAudioFeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
@@ -345,13 +348,13 @@ class AutoFeatureExtractor:
             )
             _ = kwargs.pop("code_revision", None)
             feature_extractor_class.register_for_auto_class()
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif feature_extractor_class is not None:
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
             feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
