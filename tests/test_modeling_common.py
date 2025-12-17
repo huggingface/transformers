@@ -1053,7 +1053,6 @@ class ModelTesterMixin:
                 f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
             )
 
-            # Everything must be exactly the same as we set the same seed for each init
             from_pretrained_state_dict = model_from_pretrained.state_dict()
             from_config_state_dict = model_from_config.state_dict()
             self.assertEqual(
@@ -1061,7 +1060,9 @@ class ModelTesterMixin:
                 sorted(from_config_state_dict.keys()),
                 "The keys from each model should be the exact same",
             )
-            different_weights = []
+
+            # Everything must be exactly the same as we set the same seed for each init
+            different_weights = set()
             for k1, v1 in from_config_state_dict.items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
@@ -1070,15 +1071,46 @@ class ModelTesterMixin:
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
-                    different_weights.append(k1)
+                    different_weights.add(k1)
 
             # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
             buffer_names = {name for name, _ in model_from_config.named_buffers()}
-            different_weights = [k for k in different_weights if k not in buffer_names and "timm" not in k]
+            different_weights = {k for k in different_weights if k not in buffer_names}
+
+            # Find the parent structure of the buffers that are different
+            unique_bad_module_traceback = set()
+            for weight in different_weights.copy():
+                parent_name, weight_name = weight.rsplit(".", 1) if "." in weight else ("", weight)
+                parent = model_from_config.get_submodule(parent_name)
+                immediate_parent_class = type(parent).__name__
+                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
+                while not isinstance(parent, PreTrainedModel):
+                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
+                    parent = model_from_config.get_submodule(parent_name)
+                # Get the exact XXXPreTrainedModel
+                pretrained_parent_class = next(
+                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                )
+                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
+                if pretrained_parent_class == "PreTrainedModel":
+                    pretrained_parent_class = type(parent).__name__
+
+                # We cannot control timm model weights initialization, so skip in this case
+                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in weight) or (
+                    pretrained_parent_class == "TimmBackbone" and "_backbone." in weight
+                ):
+                    different_weights.discard(weight)
+                    continue
+
+                # Add it to the traceback
+                traceback = (
+                    f"`{weight_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
+                )
+                unique_bad_module_traceback.add(traceback)
 
             self.assertTrue(
                 len(different_weights) == 0,
-                f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+                f"The following weights are not properly handled in `_init_weights()`:\n{unique_bad_module_traceback}",
             )
 
     def test_init_weights_can_init_buffers(self):
