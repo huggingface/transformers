@@ -819,6 +819,8 @@
         title: MobileViT
       - local: model_doc/mobilevitv2
         title: MobileViTV2
+      - local: model_doc/pixio
+        title: Pixio
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/prompt_depth_anything
