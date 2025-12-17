@@ -16,6 +16,7 @@
 
 import base64
 import io
+import json
 import os
 import unittest
 from functools import lru_cache
@@ -28,7 +29,6 @@ from tests.generation.test_utils import GenerationTesterMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_pipeline_mixin import PipelineTesterMixin
 from transformers import (
-    AutoProcessor,
     AutoTokenizer,
     IsaacConfig,
     IsaacForConditionalGeneration,
@@ -38,10 +38,8 @@ from transformers import (
 )
 from transformers.image_utils import load_image
 from transformers.masking_utils import eager_mask, sdpa_mask
-from transformers.models.isaac.configuration_isaac import IsaacVisionConfig
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
-    IsaacVisionAttention,
     document_mask_function_from_cu_seqlens,
     ensure_document_attention_mask,
 )
