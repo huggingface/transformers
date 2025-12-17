@@ -3950,9 +3950,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
-        # replace module with quantized modules (does not touch weights)
-        if hf_quantizer is not None:
-            with local_torch_dtype(dtype, cls.__name__):
+            if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
                 hf_quantizer.preprocess_model(
                     model=model,
                     dtype=dtype,
