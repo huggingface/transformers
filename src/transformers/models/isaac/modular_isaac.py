@@ -716,10 +716,7 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
             output_attentions=output_attentions,
             **kwargs,
         )
-        if isinstance(attn_outputs, tuple):
-            attn_output, attn_weights = attn_outputs
-        else:
-            attn_output, attn_weights = attn_outputs, None
+        attn_output, attn_weights = attn_outputs
         hidden_states = residual + attn_output
 
         residual = hidden_states
