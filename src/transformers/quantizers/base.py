@@ -31,16 +31,6 @@ else:
 logger = logging.get_logger(__file__)
 
 
-def _assign_original_dtype(module, original_dtype):
-    # not very nice in a recursive function but it avoids a circular import
-    from ..modeling_utils import PreTrainedModel
-
-    for child in module.children():
-        if isinstance(child, PreTrainedModel):
-            child.config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(child, original_dtype)
-
-
 def get_keys_to_not_convert(model) -> list:
     r"""
     Function to automatically detect keys to not convert for usage like quantization. For example for CausalLM modules
@@ -176,7 +166,7 @@ class HfQuantizer(ABC):
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
 
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
+    def preprocess_model(self, model: "PreTrainedModel", dtype=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
         the model should be initialized on the meta device so you can freely manipulate the skeleton
@@ -193,14 +183,6 @@ class HfQuantizer(ABC):
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
-
-        # We store the original dtype for quantized models as we cannot easily retrieve it
-        # once the weights have been quantized
-        # Note that once you have loaded a quantized model, you can't change its dtype so this will
-        # remain a single source of truth
-        original_dtype = dtype if dtype is not None else torch.get_default_dtype()
-        config._pre_quantization_dtype = original_dtype
-        _assign_original_dtype(model, original_dtype)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -231,18 +213,20 @@ class HfQuantizer(ABC):
             del model.hf_quantizer
         if hasattr(model.config, "quantization_config"):
             del model.config.quantization_config
-        if hasattr(model.config, "_pre_quantization_dtype"):
-            del model.config._pre_quantization_dtype
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
 
-    def dequantize(self, model):
+    def dequantize(self, model, dtype=None):
         """
         Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
         Note not all quantization schemes support this.
         """
-        model = self._dequantize(model)
+        if dtype is None:
+            # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
+            # or we need to upcast everything to the same dtype
+            dtype = model.config.dtype
+        model = self._dequantize(model, dtype=dtype)
         self.remove_quantization_config(model)
 
         return model
@@ -258,7 +242,7 @@ class HfQuantizer(ABC):
         # weight loading)
         return 4
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         raise NotImplementedError(
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
