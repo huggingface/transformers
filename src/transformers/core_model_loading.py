@@ -624,7 +624,7 @@ def set_param_for_module(
         return
 
     # case where we use local_rowise/colwise
-    is_local_tensor = getattr(distributed_operation, "use_dtensor", True) == False
+    is_local_tensor = not getattr(distributed_operation, "use_dtensor", True)
     if distributed_operation is not None:
         param_value = DTensor.from_local(
             param_value,
@@ -640,7 +640,7 @@ def set_param_for_module(
     if ref is not None and ref.shape != param_value.shape and hf_quantizer is None:
         mismatch_keys.add((target_name, param_value.shape, ref.shape))
         return
-    
+
     # super important otherwise _init_weight will re-init the param
     param_value._is_hf_initialized = True
     # local_rowise/colwise case
@@ -651,6 +651,7 @@ def set_param_for_module(
         param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
     setattr(module_obj, param_name, param_value)
+
 
 def offload_and_maybe_resave_param(
     target_name: str,
