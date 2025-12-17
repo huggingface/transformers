@@ -1776,8 +1776,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             modality_tensor,
             hidden_states=inputs_embeds,
         )
-        cos = cos.to(inputs_embeds.dtype)
-        sin = sin.to(inputs_embeds.dtype)
 
         # Flash attention expects 1D position_ids; keep 3D only for rotary phases
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
