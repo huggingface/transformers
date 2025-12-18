@@ -676,7 +676,7 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # Load config early to prioritize TOKENIZER_MAPPING over tokenizer_config
+        # Load config to prioritize TOKENIZER_MAPPING
         if not isinstance(config, PreTrainedConfig):
             if gguf_file:
                 gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
@@ -693,7 +693,6 @@ class AutoTokenizer:
         if type(config_for_lookup) in TOKENIZER_MAPPING:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
             
-            # Resolve tokenizer class from tuple or string
             if isinstance(tokenizer_class, tuple):
                 tokenizer_class = tokenizer_class[1] or tokenizer_class[0]
             if isinstance(tokenizer_class, str):
