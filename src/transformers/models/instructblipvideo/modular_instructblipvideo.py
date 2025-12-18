@@ -22,6 +22,7 @@ from transformers.models.instructblip.configuration_instructblip import (
     InstructBlipVisionConfig,
 )
 from transformers.models.instructblip.modeling_instructblip import (
+    BaseModelOutputWithQformerOutputs,
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
     InstructBlipModel,
@@ -35,7 +36,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -285,13 +286,14 @@ class InstructBlipVideoModel(InstructBlipModel):
 
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.LongTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -305,10 +307,11 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         batch_size, frames, channel, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithQformerOutputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
+            **kwargs,
         )
         image_embeds = vision_outputs[0]
 
@@ -325,38 +328,29 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-        query_outputs = self.qformer(
+        qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
             attention_mask=qformer_attention_mask,
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
             return_dict=True,
+            **kwargs,
         )
-        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+        vision_outputs.qformer_outputs = qformer_outputs
+        query_output = qformer_outputs[0][:, : query_tokens.size(1), :]
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
+        video_features = self.language_projection(query_output)
 
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
-        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
-        # NOTE: @Tom the easy solution with the new format would be to grab vision_outputs,
-        # override the pooler_output with language_model_inputs and return that, but we'd lose the
-        # query_outputs
-        if return_dict:
-            return language_model_inputs, vision_outputs, query_outputs
-        return language_model_inputs
+        video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        vision_outputs.pooler_output = video_features
 
-    # Model supports only videos
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        qformer_input_ids: torch.LongTensor,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-    ):
-        pass
-        # TODO: @Tom Let's fully remove if not supported
+        return vision_outputs
+
+    def get_image_features(**super_kwargs):
+        raise AttributeError("No need to inherit as this architecture only supports videos.")
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
@@ -456,15 +450,19 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        language_model_inputs, vision_outputs, query_outputs = self.get_video_features(
+        # NOTE: @Tom this is not particularly clean, e.g. having to manually remove qformer outputs from vision outputs
+        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
+            **kwargs,
         )
-        vision_outputs = vision_outputs.to_tuple() if not return_dict else vision_outputs
-        query_outputs = query_outputs.to_tuple() if not return_dict else query_outputs
+        language_model_inputs = video_features.pooler_output
+        qformer_outputs = video_features.qformer_outputs
+        vision_outputs = video_features
+        vision_outputs.qformer_outputs = None  # to avoid redundancy in the output
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -513,7 +511,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             loss=loss,
             logits=logits,
             vision_outputs=vision_outputs,
-            qformer_outputs=query_outputs,
+            qformer_outputs=qformer_outputs,
             language_model_outputs=outputs,
         )
 
@@ -556,13 +554,14 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        language_model_inputs, vision_outputs, query_outputs = self.get_video_features(
+        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        language_model_inputs = video_features.pooler_output
 
         if inputs_embeds is None:
             if input_ids is None:

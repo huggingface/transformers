@@ -56,6 +56,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
+class BaseModelOutputWithQformerOutputs(BaseModelOutputWithPooling):
+    """
+    qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+        Outputs of the Q-Former (Querying Transformer).
+    """
+
+    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`Blip2ForConditionalGeneration`].
@@ -492,7 +503,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithQformerOutputs]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -509,7 +520,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithQformerOutputs(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
         )
@@ -1607,11 +1618,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -1622,10 +1634,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         """
         # step 1: forward the images through the vision encoder,
         # to get image embeddings of shape (batch_size, seq_len, hidden_size)
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithQformerOutputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
+            **kwargs,
         )
         image_embeds = vision_outputs[0]
 
@@ -1633,23 +1646,24 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_outputs = self.qformer(
+        qformer_outputs = self.qformer(
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
             return_dict=True,
         )
-        query_output = query_outputs[0]
+        vision_outputs.qformer_outputs = qformer_outputs
+        query_output = qformer_outputs[0]
 
         # Qformer is kept in fp32, we downcast the output back if needed
         if query_output.dtype != image_embeds.dtype:
             query_output = query_output.to(image_embeds.dtype)
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
-        if return_dict:
-            return language_model_inputs, vision_outputs, query_outputs
-        return language_model_inputs
+        image_features = self.language_projection(query_output)
+        vision_outputs.pooler_output = image_features
+
+        return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
@@ -1754,9 +1768,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         two
         ```"""
 
-        language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
+        image_features: BaseModelOutputWithQformerOutputs = self.get_image_features(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
         )
+        language_model_inputs = image_features.pooler_output
+        qformer_outputs = image_features.qformer_outputs
+        vision_outputs = image_features
+        vision_outputs.qformer_outputs = None  # to avoid redundancy in the output
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1806,7 +1825,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             vision_outputs=vision_outputs,
-            qformer_outputs=query_outputs,
+            qformer_outputs=qformer_outputs,
             language_model_outputs=outputs,
         )
 
