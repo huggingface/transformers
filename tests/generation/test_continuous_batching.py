@@ -27,7 +27,11 @@ from transformers import (
     GenerationConfig,
     LogitsProcessorList,
 )
-from transformers.generation.continuous_batching.cache import group_layers_by_attn_type
+from transformers.generation.continuous_batching.cache import (
+    FullAttentionCacheAllocator,
+    SlidingAttentionCacheAllocator,
+    group_layers_by_attn_type,
+)
 from transformers.generation.continuous_batching.continuous_api import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
@@ -182,7 +186,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     def _test_continuous_batching_parity(
         self,
         model_id: str,
-        allow_prefix_sharing: bool,
+        allow_block_sharing: bool,
         attn_implementation: str,
         use_cuda_graph: bool,
         use_compile: bool,
@@ -225,7 +229,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
-            inputs=input_ids, generation_config=model.generation_config, allow_prefix_sharing=allow_prefix_sharing
+            inputs=input_ids, generation_config=model.generation_config, allow_block_sharing=allow_block_sharing
         )
 
         # Prepare non-continuous batching inputs
@@ -269,7 +273,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             if continuous_batching_output != generate_output:
                 decoded_continuous_batching_output = tokenizer.decode(continuous_batching_output)
                 decoded_generate_output = tokenizer.decode(generate_output)
-                msg = f"Test failed for {model_id = } {allow_prefix_sharing = }, {attn_implementation = }, {use_cuda_graph = }, {use_compile = }\n"
+                msg = f"Test failed for {model_id = } {allow_block_sharing = }, {attn_implementation = }, {use_cuda_graph = }, {use_compile = }\n"
                 msg += f"User message              : {repr(user_message)}\n"
                 msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
                 msg += f"Generate output           : {repr(decoded_generate_output)}"
@@ -292,14 +296,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     @slow
     def test_continuous_batching_config_combinations(
         self,
-        allow_prefix_sharing: bool,
+        allow_block_sharing: bool,
         attn_implementation: str,
         use_cuda_graph: bool,
         use_compile: bool,
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(
-            model_id, allow_prefix_sharing, attn_implementation, use_cuda_graph, use_compile
+            model_id, allow_block_sharing, attn_implementation, use_cuda_graph, use_compile
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -389,11 +393,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    @require_torch_accelerator
-    def test_prefix_sharing(self) -> None:
-        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        max_new_tokens = 32
-
+    def _test_block_sharing(
+        self, model_id: str, expected_layer_types: dict[str, int], input_msg: str, expected_output_tokens: list[int]
+    ) -> None:
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
@@ -402,8 +404,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             manager.logit_processor = LogitsProcessorList()
 
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
-            messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
-
+            messages = [{"content": input_msg, "role": "user"}]
             inputs = tokenizer.apply_chat_template(
                 messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
             )
@@ -411,43 +412,95 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
             self.assertLess(len(inputs), 64, f"Input length is {len(inputs)} instead of less than 64")
 
-            # First request, which populates the cache with a complete block
-            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens)
+            # First request, which populates the cache w/ 2 complete blocks for each full attention layer group
+            request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_no_reuse = next(manager.request_id_iter(request_id))
+
+            num_fa = expected_layer_types["full_attention"]
+            num_sw = expected_layer_types["sliding_window"]
 
             hash_table = manager.batch_processor.cache._block_manager._hash_to_id
             self.assertEqual(
                 len(hash_table),
-                2,
-                f"There should be 2 blocks, one for the prefill and one for the decode, but {len(hash_table) = }",
+                2 * num_fa,  # 2 = 1 for prefill + 1 for decode
+                f"There should be {2 * num_fa} blocks, 2 for each full attention layer group, but {len(hash_table) = }",
             )
             total_prefix_length = manager.batch_processor.cache._total_prefix_length
             self.assertEqual(
                 total_prefix_length, 0, f"Expected total prefix length to be 0, got {total_prefix_length}"
             )
 
-            # Second request, which should reuse the same block
-            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens)
+            # Assert the number of layer groups and their types are the expected ones
+            layer_groups = manager.batch_processor.cache.group_cache_managers
+            self.assertEqual(
+                len(layer_groups),
+                num_fa + num_sw,
+                f"There should be {num_fa + num_sw} layer groups, but {len(layer_groups) = }",
+            )
+
+            layer_group_types = {"full_attention": 0, "sliding_window": 0}
+            for cm in layer_groups:
+                if isinstance(cm, FullAttentionCacheAllocator):
+                    layer_group_types["full_attention"] += 1
+                elif isinstance(cm, SlidingAttentionCacheAllocator):
+                    layer_group_types["sliding_window"] += 1
+                else:
+                    raise ValueError(f"Invalid layer group type: {type(cm)}")
+
+            self.assertEqual(
+                layer_group_types,
+                expected_layer_types,
+                f"The expected layer group types are\n{expected_layer_types}\nbut got\n{layer_group_types}",
+            )
+
+            # Second request, which should reuse the same blocks for the full attention layer groups
+            request_id = manager.add_request(inputs, max_new_tokens=32)
             chunk_with_reuse = next(manager.request_id_iter(request_id))
 
             # There should only still be two blocks in the hash table because of block reuse
             self.assertEqual(
                 len(hash_table),
-                2,
+                2 * num_fa,
                 f"Because of block reuse, there should still be two blocks in the hash table, but {len(hash_table) = }",
             )
 
-            # Check that the whole prefill was matched
+            # Check that the whole prefill was matched if there are only full attention layers
+            if expected_layer_types["sliding_window"] == 0:
+                expected_total_prefix_length = 32
+            else:
+                expected_total_prefix_length = 0
             total_prefix_length = manager.batch_processor.cache._total_prefix_length
             self.assertEqual(
-                total_prefix_length, 32, f"Expected total prefix length to be 32, got {total_prefix_length}"
+                total_prefix_length,
+                expected_total_prefix_length,
+                f"Expected total prefix length to be {expected_total_prefix_length}, but got {total_prefix_length = }",
             )
 
         # Check the outputs were the same
         self.assertEqual(chunk_no_reuse.generated_tokens, chunk_with_reuse.generated_tokens)
 
         # As an additional sanity check, we also compare to the generated tokens when prefix sharing is disabled
+        print(f"{chunk_no_reuse.generated_tokens = } {expected_output_tokens = }")
+        self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
+
+    @require_torch_accelerator
+    def test_prefix_sharing(self) -> None:
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        num_layer_groups = {"full_attention": 1, "sliding_window": 0}
+        input_msg = "What is the Transformers library known for?"
         expected_generated_tokens = Expectations({
-            ("rocm", (9, 4)): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904],
+            (None, None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904]
         }).get_expectation()  # fmt: skip
-        self.assertEqual(chunk_no_reuse.generated_tokens, expected_generated_tokens)
+
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+
+    @require_torch_accelerator
+    def test_block_sharing_with_hybrid_model(self) -> None:
+        model_id = "google/gemma-3-1b-it"
+        num_layer_groups = {"full_attention": 2, "sliding_window": 11}
+        input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
+        expected_generated_tokens = Expectations({
+            (None, None): [19058, 236764, 1531, 236789, 236751, 2541, 1679, 1144, 506, 128282, 9427, 563, 3224, 573, 236764, 10916, 528, 506, 4403, 529, 3788, 12498, 11362, 236761, 1030, 236789, 236751, 496, 808, 120749, 236829, 532]
+        }).get_expectation()  # fmt: skip
+
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)

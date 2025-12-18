@@ -121,7 +121,7 @@ class PagedAttentionCache:
         device: torch.device,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -132,7 +132,8 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
-            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers.
+            allow_block_sharing: A flag to allow block sharing. If the model has some full attention layers, then prefix
+                sharing is enabled as well.
         """
         self.config = config
         self.dtype = dtype
@@ -220,19 +221,20 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
+        self.allow_block_sharing = allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
-                cm = FullAttentionCacheAllocator(i, self.block_size)
+                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
-        # We only use prefix sharing if the whole model has only full attention layers
-        self.use_prefix_sharing = allow_prefix_sharing and group_types == ["full_attention"]
-        self._block_manager = BlockManager(num_blocks, self.block_size, self.use_prefix_sharing)
+        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
+        self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
+        self._block_manager = BlockManager(num_blocks, self.block_size)
         self.blocks_to_complete: dict[str, int] = {}
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
@@ -352,7 +354,8 @@ class PagedAttentionCache:
         allocated_blocks = []
         for b in range(len(prompt_ids) // self.block_size):
             tokens = prompt_ids[b * self.block_size : (b + 1) * self.block_size]
-            current_hash = self._block_manager.compute_hash(current_hash, tokens)
+            # Prefix sharing is only supported when there is only one full attention layer group, so group_id=0.
+            current_hash = self._block_manager.compute_hash(current_hash, tokens, group_id=0)
             block_id = self._block_manager._hash_to_id.get(current_hash)
             if block_id is not None:
                 allocated_blocks.append(block_id)
@@ -369,18 +372,21 @@ class PagedAttentionCache:
         self._total_prefix_length += prefix_length
         return prefix_length
 
-    def mark_blocks_as_complete(self, state: RequestState) -> None:
-        """Marks the blocks that have been computed in the forward pass as complete. If prefix sharing is off, this is
-        a no-op."""
-        num_complete_blocks = 0 if not self.use_prefix_sharing else self.blocks_to_complete.pop(state.request_id)
+    def mark_shareable_blocks_as_complete(self, state: RequestState) -> None:
+        """Marks the blocks allocated to a request (state) as complete if they are shareable and they have been computed
+        in the forward pass. A complete block is a block where the KV cache has been fully computed: if the block has
+        enough space to hold the cache for N tokens, the block is marked as complete when the cache data is present for
+        the N tokens. If block sharing is off, this is a no-op."""
+        num_complete_blocks = 0 if not self.allow_block_sharing else self.blocks_to_complete.pop(state.request_id)
         if num_complete_blocks == 0:
             return None
-        cm = self.group_cache_managers[0]  # if prefix sharing is on, there is only one group
-        self._block_manager.mark_blocks_as_complete(
-            num_complete_blocks=num_complete_blocks,
-            allocated_blocks=cm.block_table[state.request_id],
-            prompt_ids=(state.initial_tokens + state.generated_tokens),
-        )
+        for cm in self.group_cache_managers:
+            if cm.uses_block_sharing:
+                self._block_manager.mark_shareable_blocks_as_complete(
+                    num_complete_blocks=num_complete_blocks,
+                    allocated_blocks=cm.block_table[state.request_id],
+                    prompt_ids=(state.initial_tokens + state.generated_tokens),
+                )
 
 
 # TODO: rework computation with the groups and their sizes
