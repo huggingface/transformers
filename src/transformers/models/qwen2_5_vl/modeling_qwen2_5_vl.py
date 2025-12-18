@@ -304,6 +304,44 @@ class Qwen2_5_VLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        """
+        Safely initialize weights. Skips non-floating tensors (e.g., int8 quantized weights)
+        to prevent RuntimeError from normal_() on integer dtypes.
+        """
+        try:
+            # ✅ Skip quantized or non-floating modules immediately
+            if hasattr(module, "weight") and module.weight is not None:
+                if not torch.is_floating_point(module.weight):
+                    import logging
+                    logging.getLogger(__name__).debug(
+                        f"Skipping weight init for {module.__class__.__name__} (dtype={module.weight.dtype})"
+                    )
+                    return
+
+            # === Safe initialization for floating-point modules ===
+            if isinstance(module, nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+
+            elif isinstance(module, nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                if getattr(module, "padding_idx", None) is not None:
+                    module.weight.data[module.padding_idx].zero_()
+
+            elif isinstance(module, (nn.LayerNorm, nn.modules.normalization.LayerNorm)):
+                if module.bias is not None:
+                    module.bias.data.zero_()
+                if hasattr(module, "weight") and torch.is_floating_point(module.weight):
+                    module.weight.data.fill_(1.0)
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"Skipping initialization for {module.__class__.__name__}: {e}"
+            )
+            return
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
@@ -1494,9 +1532,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if logits_to_keep is None or logits_to_keep == 0:
+            #Keep all logits
+            logits = self.lm_head(hidden_states)
+        else:
+            slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
