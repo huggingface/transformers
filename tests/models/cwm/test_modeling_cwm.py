@@ -16,7 +16,9 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -95,6 +97,7 @@ class CwmIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_deterministic_for_xpu
     def test_cwm_integration(self):
         from transformers import AutoTokenizer
 
@@ -119,11 +122,18 @@ class CwmIntegrationTest(unittest.TestCase):
             out = model(**inputs)
 
         # fmt: off
-        expected_logits = torch.tensor(
-            [0.5625, 2.9531, 9.1875, 0.5039, -0.3262, 2.2344, 3.0312, 1.5312, 0.5664, 1.5625, 2.7656, 3.4219, 2.0312, 2.1719, 1.5391, 2.5469, 2.8281, 1.8125, 1.7109, 1.3906, 1.0391, 0.1621, 0.4277, 0.1455, -0.1230, 0.8477, 2.2344, 5.2188, 1.2969, 1.5547, 0.8516, 0.7148],
-            dtype=torch.bfloat16,
-        ).to(model.device)
+        expected_logits = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [0.5625, 2.9531, 9.1875, 0.5039, -0.3262, 2.2344, 3.0312, 1.5312, 0.5664, 1.5625, 2.7656, 3.4219, 2.0312, 2.1719, 1.5391, 2.5469, 2.8281, 1.8125, 1.7109, 1.3906, 1.0391, 0.1621, 0.4277, 0.1455, -0.1230, 0.8477, 2.2344, 5.2188, 1.2969, 1.5547, 0.8516, 0.7148]
+                ),
+                ("xpu", None): torch.Tensor(
+                    [0.5625, 2.9688, 9.1875, 0.4766, -0.3574, 2.2344, 3.0156, 1.4922, 0.5625, 1.5547, 2.7656, 3.4062, 2.0156, 2.1719, 1.5469, 2.5156, 2.8125, 1.7891, 1.7031, 1.3828, 1.0312, 0.1602, 0.4277, 0.1328, -0.1348, 0.8281, 2.2188, 5.2812, 1.2734, 1.5312, 0.8398, 0.7070]
+                ),
+            }
+        )
         # fmt: on
+        expected_logits = expected_logits.get_expectation().to(model.device, torch.bfloat16)
 
         torch.testing.assert_close(out.logits[0, -1, :32], expected_logits, atol=1e-2, rtol=1e-2)
 
@@ -133,6 +143,7 @@ class CwmIntegrationTest(unittest.TestCase):
         self.assertFalse(torch.isinf(out.logits).any())
 
     @slow
+    @require_deterministic_for_xpu
     def test_cwm_sliding_window_long_sequence(self):
         from transformers import AutoTokenizer
 
@@ -157,11 +168,18 @@ class CwmIntegrationTest(unittest.TestCase):
             out = model(**inputs)
 
         # fmt: off
-        expected_logits = torch.tensor(
-            [5.2812, 6.4688, 12.8125, 4.6875, 5.2500, 4.2500, 6.9688, 4.9375, 2.7656, 6.5938, 4.9688, 1.1016, 5.9375, 3.7500, 3.1094, 5.5312, 6.1250, 4.7500, 4.5312, 2.8281, 4.0625, 3.3125, 3.9219, 3.3906, 3.1406, 3.6719, 3.2031, 7.0938, 4.8750, 6.0000, 2.7188, 6.2500],
-            dtype=torch.bfloat16,
-        ).to(model.device)
+        expected_logits = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [5.2812, 6.4688, 12.8125, 4.6875, 5.2500, 4.2500, 6.9688, 4.9375, 2.7656, 6.5938, 4.9688, 1.1016, 5.9375, 3.7500, 3.1094, 5.5312, 6.1250, 4.7500, 4.5312, 2.8281, 4.0625, 3.3125, 3.9219, 3.3906, 3.1406, 3.6719, 3.2031, 7.0938, 4.8750, 6.0000, 2.7188, 6.2500]
+                ),
+                ("xpu", None): torch.Tensor(
+                    [5.2500, 6.4688, 12.8125, 4.6562, 5.2812, 4.2812, 7.0000, 4.9062, 2.7344, 6.5938, 4.9062, 1.1094, 5.9375, 3.7188, 3.0469, 5.5000, 6.0938, 4.7188, 4.5000, 2.7344, 4.0312, 3.2812, 3.8750, 3.3438, 3.1094, 3.6406, 3.2031, 7.1250, 4.8750, 6.0000, 2.7031, 6.2188]
+                ),
+            }
+        )
         # fmt: on
+        expected_logits = expected_logits.get_expectation().to(model.device, torch.bfloat16)
 
         torch.testing.assert_close(out.logits[0, -1, :32], expected_logits, atol=1e-2, rtol=1e-2)
 

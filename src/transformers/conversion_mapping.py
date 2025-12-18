@@ -70,8 +70,53 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
             ),
             WeightConverter(
-                source_patterns=["mlp.experts.*.down_proj.weight"],
+                source_patterns="mlp.experts.*.down_proj.weight",
                 target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "phimoe": [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.w1.weight",
+                    "mlp.experts.*.w3.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.w2.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "lfm2_moe": [
+            WeightConverter(
+                source_patterns=[
+                    "feed_forward.experts.*.w1.weight",
+                    "feed_forward.experts.*.w3.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="feed_forward.experts.*.w2.weight",
+                target_patterns="feed_forward.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "jamba": [
+            WeightConverter(
+                source_patterns=[
+                    "feed_forward.experts.*.gate_proj.weight",
+                    "feed_forward.experts.*.up_proj.weight",
+                ],
+                target_patterns="feed_forward.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="feed_forward.experts.*.down_proj.weight",
+                target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
@@ -117,22 +162,24 @@ def _build_checkpoint_conversion_mapping():
             ),
         ]
 
-    mapping["phimoe"] = mapping["mixtral"].copy()
     mapping["deepseek_v2"] = mapping["qwen2_moe"].copy()
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
-    mapping["dot1"] = mapping["qwen2_moe"].copy()
-    mapping["ernie_4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["dots1"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
-    mapping["jamba"] = mapping["qwen2_moe"].copy()
-    mapping["lfm2_moe"] = mapping["mixtral"].copy()
-    mapping["long_cat_flash"] = mapping["qwen2_moe"].copy()
+    mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
+    mapping["olmoe"] = mapping["qwen2_moe"].copy()
 
     return mapping
 
@@ -142,8 +189,20 @@ _checkpoint_conversion_mapping_cache = None
 
 def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
-    _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+
+
+def register_checkpoint_conversion_mapping(
+    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False
+) -> None:
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if model_type in _checkpoint_conversion_mapping_cache and not overwrite:
+        raise ValueError(f"Model type {model_type} already exists in the checkpoint conversion mapping.")
+    _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
@@ -169,6 +228,7 @@ VLMS = [
     "sam3",
     "sam3_tracker",
     "sam3_tracker_video",
+    "paddleocrvl",
 ]
 
 
@@ -184,7 +244,7 @@ def get_model_conversion_mapping(
     """
     weight_conversions = []
 
-    # Load models with key mapping
+    # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
     elif any(

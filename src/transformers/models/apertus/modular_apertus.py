@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ...activations import ACT2CLS
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -119,10 +120,10 @@ class ApertusConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 12000000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
@@ -192,9 +193,11 @@ class ApertusConfig(PreTrainedConfig):
 
 class ApertusMLP(NemotronMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if config.hidden_act == "xielu":
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
 
 class ApertusRMSNorm(LlamaRMSNorm):

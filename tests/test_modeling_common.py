@@ -52,7 +52,7 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_utils import _get_tied_weight_keys
+from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -80,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -448,7 +449,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device == "hpu":
+            elif torch_device in ["hpu", "npu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -906,6 +907,113 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    def test_enable_input_require_grads(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            if not hasattr(model, "get_input_embeddings"):
+                continue
+            try:
+                model.enable_input_require_grads()
+            except NotImplementedError as error:
+                self.fail(f"enable_input_require_grads raised NotImplementedError for {model_class.__name__}: {error}")
+            finally:
+                model.disable_input_require_grads()
+
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        has_verified_model = False
+
+        for model_class in self.all_model_classes:
+            if not getattr(model_class, "supports_gradient_checkpointing", False):
+                continue
+
+            model = model_class(copy.deepcopy(config))
+            try:
+                embeddings_module = model.get_input_embeddings()
+            except NotImplementedError:
+                continue
+            if embeddings_module is None:
+                continue
+
+            embedding_param = getattr(embeddings_module, "weight", None)
+            if embedding_param is None and isinstance(embeddings_module, (tuple, list)):
+                for candidate in embeddings_module:
+                    if hasattr(candidate, "weight"):
+                        embedding_param = candidate.weight
+                        break
+            if embedding_param is None or not isinstance(embedding_param, torch.Tensor):
+                continue
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            model.to(torch_device)
+            model.train()
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            baseline_grad = embedding_param.grad
+            if (
+                baseline_grad is None
+                or baseline_grad.abs().sum().item() == 0
+                or not torch.isfinite(baseline_grad).all()
+            ):
+                model.zero_grad(set_to_none=True)
+                continue
+
+            model.zero_grad(set_to_none=True)
+            model.gradient_checkpointing_enable()
+            model.enable_input_require_grads()
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            grad_after_gc = embedding_param.grad
+            self.assertIsNotNone(
+                grad_after_gc,
+                f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled. "
+                "This typically means the model is not exposing its embeddings via `get_input_embeddings()` or "
+                "a properly configured `_input_embed_layer` attribute.",
+            )
+            self.assertTrue(
+                torch.isfinite(grad_after_gc).all(),
+                f"{model_class.__name__} produced non-finite gradients with gradient checkpointing enabled.",
+            )
+            self.assertGreater(
+                grad_after_gc.abs().sum().item(),
+                0,
+                f"{model_class.__name__} should keep non-zero embedding gradients with gradient checkpointing enabled.",
+            )
+            has_verified_model = True
+
+        if not has_verified_model:
+            self.skipTest(
+                reason="No model with a differentiable loss was available to verify enable_input_require_grads with gradient checkpointing."
+            )
+
     def test_can_init_all_missing_weights(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -970,7 +1078,7 @@ class ModelTesterMixin:
 
             # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
             buffer_names = {name for name, _ in model_from_config.named_buffers()}
-            different_weights = [k for k in different_weights if k not in buffer_names]
+            different_weights = [k for k in different_weights if k not in buffer_names and "timm" not in k]
 
             self.assertTrue(
                 len(different_weights) == 0,
@@ -1308,6 +1416,10 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
+                if (
+                    self._is_composite and k == "vision_config"
+                ):  # skip because it's not needed and causes errors e.g with Timm
+                    continue
                 if getattr(config, k) is not None:
                     getattr(config, k).output_attentions = True
 
@@ -1467,6 +1579,10 @@ class ModelTesterMixin:
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
+            if (
+                self._is_composite and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
 
@@ -1987,7 +2103,7 @@ class ModelTesterMixin:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
-                    model_tied.save_pretrained(d, safe_serialization=True)
+                    model_tied.save_pretrained(d)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
                 with self.subTest(model_class):
@@ -2333,6 +2449,7 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
+            torch.cuda.synchronize()  # otherwise the transfer might not be complete
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -2371,7 +2488,10 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
 
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
@@ -2423,7 +2543,9 @@ class ModelTesterMixin:
                 max_memory = {0: max_size, "cpu": max_size}
 
                 # This doesn't error out as it's in safetensors and doesn't need an offload folder
-                new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
                 torch.manual_seed(0)
@@ -2735,12 +2857,6 @@ class ModelTesterMixin:
             if getattr(config, "sliding_window", None):
                 config.sliding_window = 2
 
-                if torch_device == "xpu" and (
-                    attn_implementation == "kernels-community/flash-attn2"
-                    or attn_implementation == "flash_attention_2"
-                ):
-                    self.skipTest("XPU does not support sliding window attention with Flash-Attention-2 currently.")
-
             model = model_class(config)
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
@@ -3038,9 +3154,14 @@ class ModelTesterMixin:
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
-                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
-                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
-
+                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
+                vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
+                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
+                language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
+                if language_model_name is None or vision_model_name is None:
+                    self.skipTest(
+                        reason="Model does not have both vision and language sub-models, cannot test composite SDPA dispatch"
+                    )
                 vision_model_sdpa = getattr(model_sdpa, vision_model_name)
                 language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
@@ -3234,6 +3355,20 @@ class ModelTesterMixin:
             self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
         dtype = torch.bfloat16
+
+        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
+            # Allow kernels fallbacks for flash attention tests.
+            requested = attention_implementation
+            base = requested.removeprefix("paged|")
+            prefix = "paged|" if requested.startswith("paged|") else ""
+
+            expected = {requested}
+            if base in FLASH_ATTN_KERNEL_FALLBACK:
+                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
+            return expected
+
+        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3266,7 +3401,7 @@ class ModelTesterMixin:
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
-                            self.assertTrue(sub_config._attn_implementation == attn_implementation)
+                            self.assertIn(sub_config._attn_implementation, expected_attn_implementations)
 
                     has_fa = False
                     for name, submodule in model_fa.named_modules():
@@ -3274,7 +3409,7 @@ class ModelTesterMixin:
                         if (
                             "Attention" in class_name
                             and getattr(submodule, "config", None)
-                            and submodule.config._attn_implementation == attn_implementation
+                            and submodule.config._attn_implementation in expected_attn_implementations
                         ):
                             has_fa = True
                             break
@@ -3307,6 +3442,11 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
@@ -3350,7 +3490,7 @@ class ModelTesterMixin:
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     @slow
@@ -3367,13 +3507,18 @@ class ModelTesterMixin:
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
+
         torch.compiler.reset()
         dtype = torch.float16
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
+        if not cls._supports_flash_attn:
+            self.skipTest(f"{cls.__name__} does not support Flash Attention 2")
 
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -3401,6 +3546,12 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
+
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
@@ -4009,12 +4160,14 @@ class ModelTesterMixin:
                 for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
                     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
                     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+
                     for (k1, v1), (k2, v2) in zip(
                         model_torch_dtype.named_parameters(), model_dtype.named_parameters()
                     ):
-                        self.assertEqual(k1, k2)
-                        self.assertEqual(v1.dtype, v2.dtype)
-                    torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+                        with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
+                            self.assertEqual(k1, k2)
+                            self.assertEqual(v1.dtype, v2.dtype)
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
     def test_tp_plan_matches_params(self):
         """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
@@ -4058,7 +4211,6 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    @unittest.skip("Some models have wrong mappings....")
     def test_reverse_loading_mapping(self):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
@@ -4073,7 +4225,7 @@ class ModelTesterMixin:
 
         #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
         # lest one MoE layer here to check the mapping
-        config_to_set = config.get_text_config()
+        config_to_set = config.get_text_config(decoder=True)
         config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
         config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
         config_to_set.mlp_only_layers = [0]  # same but for qwens
@@ -4137,7 +4289,6 @@ class ModelTesterMixin:
                     # Make sure both saved state_dict are identical
                     self.assertTrue(compare_state_dicts(state_dict_saved_from_init, state_dict_saved_from_pretrained))
 
-    @unittest.skip("Some models have wrong mappings....")
     def test_can_load_from_already_mapped_keys(self):
         """Test that we can correctly reload a model if we chose `save_original_format=False` in `save_pretrained`,
         i.e. we do not reapply weight conversions when reloading if it was saved correctly already.

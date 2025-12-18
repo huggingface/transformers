@@ -532,3 +532,19 @@ class Sam3VideoModelIntegrationTest(unittest.TestCase):
         # All prompts in prompt_to_obj_ids should be from our original prompts
         for prompt in prompt_to_obj_ids.keys():
             self.assertIn(prompt, prompts)
+
+    def test_custom_image_size(self):
+        """Test that custom image size can be set and propagates correctly to detector and tracker configs."""
+        from transformers import Sam3VideoConfig
+
+        config = Sam3VideoConfig.from_pretrained("facebook/sam3")
+        config.image_size = 560
+
+        self.assertEqual(config.image_size, 560)
+        self.assertEqual(config.detector_config.image_size, 560)
+        self.assertEqual(config.tracker_config.image_size, 560)
+        self.assertEqual(config.detector_config.vision_config.image_size, 560)
+        self.assertEqual(config.detector_config.vision_config.backbone_config.image_size, 560)
+
+        model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(torch_device).eval()
+        self.assertEqual(model.config.image_size, 560)
