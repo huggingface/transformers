@@ -273,11 +273,16 @@ class IsaacVisionAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        L = queries.size(0)
+        lengths = None
+        if cu_seqlens is not None and cu_seqlens.numel() >= 2:
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+
         if max_seqlen is not None:
             max_q = max_k = int(max_seqlen)
+        elif lengths is not None and lengths.numel() > 0:
+            max_q = max_k = lengths.max()
         else:
-            max_q = max_k = self._max_from_cu(cu_seqlens, L)
+            max_q = max_k = seq_length
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
         if self.config._attn_implementation != "sdpa":
@@ -316,12 +321,6 @@ class IsaacVisionAttention(nn.Module):
             attn_output = attn_output.to(hidden_states.dtype)
 
         return attn_output, attn_weights
-
-    @staticmethod
-    def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
-        if cu is None or cu.numel() < 2:
-            return fallback
-        return int((cu[1:] - cu[:-1]).max().item())
 
 
 class IsaacMLP(nn.Module):
