@@ -234,8 +234,6 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
             padding_mask=padding_mask,
         )
         video_hidden_state = self.video_norm(video_hidden_state)
-        # Ensure both tensors are on the same device for model parallelism
-        video_hidden_state = video_hidden_state.to(audio_hidden_state.device)
         inputs_embeds = torch.cat([audio_hidden_state, video_hidden_state], dim=-1)
         inputs_embeds = self.concat_modality_proj(inputs_embeds)
         inputs_embeds = self.data_proj(inputs_embeds)
@@ -520,10 +518,7 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
     config: PeAudioVideoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "PeAudioVideoEncoderLayer",
-        "TimmWrapperForImageClassification",
-    ]
+    _no_split_modules = ["PeAudioVideoEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

@@ -258,6 +258,10 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load(self):
         pass
 
+    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
+    def test_model_parallelism(self):
+        pass
+
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_batching_equivalence(self):
         pass
