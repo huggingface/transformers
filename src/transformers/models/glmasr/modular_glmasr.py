@@ -34,7 +34,6 @@ from ..voxtral.modeling_voxtral import (
     VoxtralEncoder,
     VoxtralEncoderLayer,
     VoxtralForConditionalGeneration,
-    VoxtralMultiModalProjector,
     VoxtralPreTrainedModel,
     eager_attention_forward,
 )
@@ -460,12 +459,12 @@ class GlmasrEncoder(VoxtralEncoder):
         )
 
 
-class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
+class GlmasrMultiModalProjector(nn.Module):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(config.audio_config.d_model * 4, config.text_config.hidden_size * 2, bias=True)
+        self.linear_1 = nn.Linear(config.audio_config.hidden_size * 4, config.text_config.hidden_size * 2)
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
 
     def forward(self, audio_features):
         hidden_states = self.linear_1(audio_features)
