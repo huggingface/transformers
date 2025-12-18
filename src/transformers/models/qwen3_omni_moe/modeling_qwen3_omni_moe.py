@@ -48,7 +48,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs, maybe_autocast
 from .configuration_qwen3_omni_moe import (
@@ -1217,7 +1217,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[ProcessingKwargs]
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Args:
