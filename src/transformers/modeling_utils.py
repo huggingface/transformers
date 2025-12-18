@@ -4416,7 +4416,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_buffers():
-            if key in self._non_persistent_buffers_set:
+            parent, buf_name = key.rsplit(".", 1) if "." in key else ("", key)
+            parent = self.get_submodule(parent)
+            if buf_name in parent._non_persistent_buffers_set:
                 value = torch.empty_like(buffer, dtype=dtype, device="cpu")
                 _load_parameter_into_model(self, key, value)
 
