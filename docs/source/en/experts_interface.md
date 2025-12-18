@@ -62,7 +62,6 @@ experts_implementation_per_backbone = {
 }
 
 model = AutoModelForImageTextToText.from_pretrained(
-
     "Qwen/Qwen3-VL-Moe",
     experts_implementation=experts_implementation_per_backbone,
 )
