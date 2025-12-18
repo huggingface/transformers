@@ -938,9 +938,9 @@ class Emu3Model(Emu3PreTrainedModel):
             image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
                 The sizes of the images in the batch, being (height, width) for each image.
         """
-        image_tokens_list: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
         bpe_tokens_list = [
-            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list.image_tokens
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
         ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
@@ -962,7 +962,11 @@ class Emu3Model(Emu3PreTrainedModel):
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes
         ]
-        image_embeddings = self.get_input_embeddings()(vqmodel_outputs.image_tokens)
+        bpe_tokens_list = [
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
+        ]
+        bpe_tokens = torch.cat(bpe_tokens_list)
+        image_embeddings = self.get_input_embeddings()(bpe_tokens)
         image_features = torch.split(image_embeddings, split_sizes)
         vqmodel_outputs.pooler_output = image_features
 

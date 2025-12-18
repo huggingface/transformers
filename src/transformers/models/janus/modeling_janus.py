@@ -420,6 +420,17 @@ class JanusVisionEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithQformerOutputs(BaseModelOutputWithPooling):
+    """
+    qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+        Outputs of the Q-Former (Querying Transformer).
+    """
+
+    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
+
+
 class JanusAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -570,7 +581,7 @@ class JanusVisionModel(JanusPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithQformerOutputs]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -587,7 +598,7 @@ class JanusVisionModel(JanusPreTrainedModel):
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithQformerOutputs(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
         )
@@ -950,10 +961,10 @@ class JanusVQVAEDecoder(nn.Module):
 @auto_docstring
 class JanusVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
-        Indices of the image tokens predicted by the VQ-VAE model.
     quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+        Indices of the image tokens predicted by the VQ-VAE model.
     embedding_loss (`torch.FloatTensor`):
         The embedding loss computed during quantization.
     """
