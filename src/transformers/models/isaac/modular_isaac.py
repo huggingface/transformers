@@ -103,7 +103,7 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -708,15 +708,13 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
         # Run attention directly so variable-length metadata reaches FlashAttention.
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
-        attn_outputs = self.self_attn(
+        attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attn_output, attn_weights = attn_outputs
         hidden_states = residual + attn_output
 
         residual = hidden_states
@@ -724,8 +722,6 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if output_attentions:
-            return hidden_states, attn_weights
         return hidden_states
 
 
@@ -1483,6 +1479,7 @@ class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
     _supports_flex_attn = False
+    _can_record_outputs = {"attentions": OutputRecorder(IsaacVisionAttention, index=1)}
     # Expose tied-weights mapping even if empty for base model tests.
     all_tied_weights_keys: dict[str, str] = {}
 
