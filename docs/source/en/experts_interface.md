@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Experts Matrix Multiplication Backends
+# Experts backends
 
 All Mixture-of-Experts (MoE) implementations perform the same high-level computation: for each token, a router selects $k$ experts, then the token hidden state is projected through the selected experts' parameters and aggregated with routing weights. The difference between experts backends is *how* those expert matrix multiplications / projections are executed.
 
