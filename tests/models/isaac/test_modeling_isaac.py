@@ -504,6 +504,33 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
 
     @require_tensorstream
+    def test_modality_tensor_requires_matching_shape(self):
+        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
+        model = IsaacModel(config).to(torch_device)
+        model.eval()
+
+        modality_tensor = torch.zeros(
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+            device=torch_device,
+            dtype=torch.long,
+        )
+        with torch.no_grad():
+            result = model(input_ids=input_ids, attention_mask=attention_mask, modality_tensor=modality_tensor)
+
+        self.assertEqual(
+            result.last_hidden_state.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
+        )
+
+        bad_modality_tensor = torch.zeros(
+            (self.model_tester.batch_size, self.model_tester.seq_length + 1),
+            device=torch_device,
+            dtype=torch.long,
+        )
+        with self.assertRaisesRegex(ValueError, "modality_tensor must have shape"):
+            model(input_ids=input_ids, attention_mask=attention_mask, modality_tensor=bad_modality_tensor)
+
+    @require_tensorstream
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         model = IsaacForConditionalGeneration(config)

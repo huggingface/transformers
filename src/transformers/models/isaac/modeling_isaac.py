@@ -936,14 +936,13 @@ class IsaacModel(PreTrainedModel):
                     (batch_size, seq_len), text_value, device=inputs_embeds.device, dtype=torch.long
                 )
         else:
-            modality_tensor = modality_tensor.to(dtype=torch.long)
-
-        if modality_tensor.shape[1] != seq_len:
-            if modality_tensor.shape[1] > seq_len:
-                modality_tensor = modality_tensor[:, :seq_len]
-            else:
-                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
-                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
+            modality_tensor = modality_tensor.to(device=inputs_embeds.device, dtype=torch.long)
+            expected_shape = (batch_size, seq_len)
+            if modality_tensor.shape != torch.Size(expected_shape):
+                raise ValueError(
+                    f"modality_tensor must have shape (batch_size, seq_len) {expected_shape}, "
+                    f"but got {tuple(modality_tensor.shape)}"
+                )
 
         if position_ids is None:
             if tensor_stream is not None:
