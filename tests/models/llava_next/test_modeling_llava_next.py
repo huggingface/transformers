@@ -13,13 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import copy
 import unittest
 
 import pytest
 import requests
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -142,67 +140,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 
     model_tester_class = LlavaNextVisionText2TextModelTester
     test_resize_embeddings = False
-
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # remove one image but leave the image token in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:1]
-            image_sizes = curr_input_dict["image_sizes"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
-
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
-
-    @parameterized.expand(
-        [
-            (-1,),
-            ([-1],),
-            ([-1, -2],),
-        ],
-    )
-    def test_vision_feature_layers(self, vision_feature_layer):
-        """
-        Test that we can use either one vision feature layer, or a list of
-        vision feature layers.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layer = vision_feature_layer
-
-        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
-        hidden_size = config.vision_config.hidden_size
-        expected_features = hidden_size * num_feature_layers
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            # We should have the right number of input features,
-            # and should be able to run a forward pass without exploding
-            base_model = getattr(model, "model", model)
-            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
-            model(**input_dict)
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
