@@ -43,7 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
@@ -408,8 +408,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> torch.Tensor:
         """
         Args:
@@ -417,8 +418,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -470,13 +469,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         reverse_indices = torch.argsort(window_index)
         merged_hidden_states = merged_hidden_states[reverse_indices, :]
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=hidden_states,
-                pooler_output=merged_hidden_states,
-            )
-
-        return hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @dataclass

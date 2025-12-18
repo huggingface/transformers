@@ -53,6 +53,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...utils.generic import check_model_inputs
 from ...video_utils import VideoInput
 
 
@@ -280,8 +281,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, return_dict: bool = False, **kwargs
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> torch.Tensor:
         """
         Args:
@@ -289,8 +291,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            return_dict (`bool`, *optional*, defaults to `False`):
-                Whether to return a `ModelOutput` instead of exclusively the merged hidden states.
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -342,13 +342,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         reverse_indices = torch.argsort(window_index)
         merged_hidden_states = merged_hidden_states[reverse_indices, :]
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=hidden_states,
-                pooler_output=merged_hidden_states,
-            )
-
-        return hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 class Qwen2_5_VLModelOutputWithPast(Qwen2VLModelOutputWithPast):
