@@ -25,7 +25,7 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -4415,12 +4415,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             value = torch.empty_like(param, dtype=dtype, device="cpu")
             _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
-        for key, buffer in self.named_buffers():
-            parent, buf_name = key.rsplit(".", 1) if "." in key else ("", key)
-            parent = self.get_submodule(parent)
-            if buf_name in parent._non_persistent_buffers_set:
-                value = torch.empty_like(buffer, dtype=dtype, device="cpu")
-                _load_parameter_into_model(self, key, value)
+        for key, buffer in self.named_non_persistent_buffers():
+            value = torch.empty_like(buffer, dtype=dtype, device="cpu")
+            _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4507,6 +4504,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return module.get_extra_state()
 
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+
+    def named_non_persistent_buffers(
+        self, recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[tuple[str, torch.Tensor]]:
+        """Similar to `named_buffers`, but only yield non-persistent ones. It is handy as it's not perfectly straightforward
+        to know if they are persistent or not"""
+        for name, tensor in self.named_buffers(recurse=recurse, remove_duplicate=remove_duplicate):
+            # We have to grab the parent here, as the attribute `_non_persistent_buffers_set` is on the immediate
+            # parent only
+            parent, buf_name = name.rsplit(".", 1) if "." in name else ("", name)
+            parent = self.get_submodule(parent)
+            if buf_name in parent._non_persistent_buffers_set:
+                yield name, tensor
 
     def train(self, mode: bool = True):
         out = super().train(mode)
