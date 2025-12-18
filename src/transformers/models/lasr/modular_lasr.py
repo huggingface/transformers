@@ -422,6 +422,7 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
 
 
 class LasrPreTrainedModel(ParakeetPreTrainedModel):
+    # Disable flex attention as 'BlockMask' object has no attribute 'dtype'
     _supports_flex_attn = False
 
     def _init_weights(self, module):
