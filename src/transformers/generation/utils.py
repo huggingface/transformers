@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 import torch.distributed as dist
-from packaging import version
 from torch import nn
 
 from ..cache_utils import (
@@ -1722,8 +1721,8 @@ class GenerationMixin(ContinuousMixin):
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
 
-        # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
-        # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
+        # If both `inputs_embeds` and `input_ids` are passed, we correct length with `inputs_tensor.shape`
+        # We need to get max_length = inputs_embeds_len + max_new_tokens
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
@@ -1731,11 +1730,10 @@ class GenerationMixin(ContinuousMixin):
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
-                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-                if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+            generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1760,7 +1758,6 @@ class GenerationMixin(ContinuousMixin):
     def _prepare_generation_config(
         self,
         generation_config: GenerationConfig | None,
-        use_model_defaults: bool | None = None,
         **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
@@ -1768,93 +1765,43 @@ class GenerationMixin(ContinuousMixin):
         function handles retrocompatibility with respect to configuration files.
         """
         # parameterization priority:
-        # kwargs > non-global default values in `generation_config` > `model.generation_config` > GenerationConfig()
+        # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
+        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
-        using_model_generation_config = False
         if generation_config is None:
-            # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
-            # the following conditions must be met
-            # 1) the generation config must have been created from the model config (`_from_model_config` field);
-            # 2) the generation config must have seen no modification since its creation (the hash is the same);
-            # 3) there are non-default generation parameters in the model config.
-            # 4) the user must have set new generation parameters in the model config.
-            if (
-                self.generation_config._from_model_config  # 1)
-                and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
-                and len(self.config._get_non_default_generation_parameters()) > 0  # 3)
-            ):
-                new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:  # 4)
-                    raise ValueError(
-                        "You have modified the pretrained model configuration to control generation."
-                        " This strategy to control generation is not supported anymore. "
-                        " Please use and modify the model generation configuration (see"
-                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
-                    )
-
-            generation_config = self.generation_config
-            using_model_generation_config = True
-
-            # Related to #40039: prior to this PR, models with sliding window attention were forced to have
-            # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
-            # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
-            # (if we're inside this branch, then it is because we're using default values from the Hub)
-            if generation_config.cache_implementation == "hybrid":
-                generation_config.cache_implementation = None
+            # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
+            if len(self.config._get_generation_parameters()) > 0:
+                raise ValueError(
+                    "You have modified the pretrained model configuration to control generation "
+                    f"We detected the following values set - {self.config._get_generation_parameters()}. "
+                    "This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
+                    "(see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                )
+            generation_config = GenerationConfig()
 
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
-        if not using_model_generation_config:
-            # If `generation_config` is provided:
-            # - `use_model_defaults`: let's fallback ALL default values to the model's generation config
-            # - otherwise: legacy behavior, let's just make sure we have the tokens defined
-            model_base_version = version.parse(version.parse(self.generation_config.transformers_version).base_version)
-            if use_model_defaults is True or (
-                use_model_defaults is None and model_base_version >= version.parse("4.50.0")
-            ):
-                modified_values = {}
-                global_default_generation_config = GenerationConfig()
-                model_generation_config = self.generation_config
-                # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
-                for key, model_gen_config_value in model_generation_config.__dict__.items():
-                    if key.startswith("_") or key == "transformers_version":  # metadata
-                        continue
-                    # Don't set `cache_implementation = 'hybrid'` from the model defaults, see #40135
-                    if key == "cache_implementation" and model_generation_config.cache_implementation == "hybrid":
-                        continue
-                    global_default_value = getattr(global_default_generation_config, key, None)
-                    custom_gen_config_value = getattr(generation_config, key, None)
-                    if (
-                        custom_gen_config_value == global_default_value
-                        and model_gen_config_value != global_default_value
-                    ):
-                        modified_values[key] = model_gen_config_value
-                        setattr(generation_config, key, model_gen_config_value)
-                # edge case: we may set `temperature=0.0` and `do_sample=False`, but the model defaults to
-                # `do_sample=True`
-                if generation_config.temperature == 0.0:
-                    generation_config.do_sample = False
-                if use_model_defaults is None and len(modified_values) > 0:
-                    logger.warning_once(
-                        f"`generation_config` default values have been modified to match model-specific defaults: "
-                        f"{modified_values}. If this is not desired, please set these values explicitly."
-                    )
-            else:
-                if generation_config.bos_token_id is None:
-                    generation_config.bos_token_id = self.generation_config.bos_token_id
-                if generation_config.eos_token_id is None:
-                    generation_config.eos_token_id = self.generation_config.eos_token_id
-                if generation_config.pad_token_id is None:
-                    generation_config.pad_token_id = self.generation_config.pad_token_id
-                if generation_config.decoder_start_token_id is None:
-                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
+        # First set values from the loaded `self.generation_config`, then set default values (BC)
+        # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
+        # to `generate()`. Thus the `defaults_only=True` is used
+        global_defaults = self.generation_config._get_default_generation_params()
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**global_defaults, defaults_only=True)
 
-        # Finally, apply any passed kwargs
+        # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
-        # And keep in model_kwargs variable output controls
+
+        # Related to #40039: prior to this PR, models with sliding window attention were forced to have
+        # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
+        # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
+        # (if we're inside this branch, then it is because we're using default values from the Hub)
+        if generation_config.cache_implementation == "hybrid":
+            generation_config.cache_implementation = None
+
+        # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
@@ -2294,7 +2241,6 @@ class GenerationMixin(ContinuousMixin):
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
-        use_model_defaults: bool | None = None,
         custom_generate: str | Callable | None = None,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
@@ -2360,11 +2306,6 @@ class GenerationMixin(ContinuousMixin):
                 size. This is an experimental feature, subject to breaking API changes in future versions.
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
-            use_model_defaults (`bool`, *optional*):
-                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
-                generation configuration (`model.generation_config`), as opposed to the global defaults
-                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
-                `True`.
             custom_generate (`str` or `Callable`, *optional*):
                 One of the following:
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
@@ -2474,7 +2415,7 @@ class GenerationMixin(ContinuousMixin):
             # switch to CB
             outputs = self.generate_batch(
                 inputs=inputs,
-                generation_config=self._prepare_generation_config(generation_config, use_model_defaults, **kwargs)[0],
+                generation_config=self._prepare_generation_config(generation_config, **kwargs)[0],
                 **kwargs,
             )
             sequences = [
@@ -2495,9 +2436,15 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
+        # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
+        has_default_max_length = kwargs.get("max_length") is None and (
+            generation_config is None or generation_config.max_length is None
         )
+        has_default_min_length = kwargs.get("min_length") is None and (
+            generation_config is None or generation_config.min_length is None
+        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+
         generation_mode = generation_config.get_generation_mode(assistant_model)
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
@@ -2523,7 +2470,6 @@ class GenerationMixin(ContinuousMixin):
                 assistant_model=assistant_model,
                 negative_prompt_ids=negative_prompt_ids,
                 negative_prompt_attention_mask=negative_prompt_attention_mask,
-                use_model_defaults=use_model_defaults,
                 custom_generate=deprecated_mode_repo,
                 trust_remote_code=trust_remote_code,
                 **generation_mode_kwargs,
@@ -2614,8 +2560,6 @@ class GenerationMixin(ContinuousMixin):
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
             has_default_max_length=has_default_max_length,

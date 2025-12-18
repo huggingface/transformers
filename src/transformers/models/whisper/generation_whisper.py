@@ -658,6 +658,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
         # 1. prepare generation config
+        generation_config = self.generation_config if generation_config is None else generation_config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables

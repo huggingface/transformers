@@ -308,6 +308,7 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
@@ -879,6 +880,7 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
@@ -992,6 +994,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
@@ -1105,6 +1108,7 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
