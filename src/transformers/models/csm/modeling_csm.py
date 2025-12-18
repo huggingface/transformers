@@ -136,7 +136,7 @@ class CsmRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -421,6 +421,8 @@ class CsmPreTrainedModel(PreTrainedModel):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
                 init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, CsmBackboneModelEmbeddings):
+            init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.vocab_size)
 
 
 @auto_docstring

@@ -255,7 +255,7 @@ def _compute_dynamic_ntk_parameters(
 
 def _compute_yarn_parameters(
     config: "PreTrainedConfig",
-    device: "torch.device",
+    device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
@@ -393,7 +393,7 @@ def _compute_yarn_parameters(
 
 def _compute_longrope_parameters(
     config: "PreTrainedConfig",
-    device: "torch.device",
+    device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:
@@ -483,7 +483,7 @@ def _compute_longrope_parameters(
 
 def _compute_llama3_parameters(
     config: "PreTrainedConfig",
-    device: "torch.device",
+    device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     layer_type: Optional[str] = None,
 ) -> tuple["torch.Tensor", float]:

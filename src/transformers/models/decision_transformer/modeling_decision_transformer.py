@@ -94,7 +94,6 @@ class DecisionTransformerGPT2Attention(nn.Module):
             ),
             persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -385,6 +384,14 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
                 if "c_proj" in name and "weight" in name:
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
+        elif isinstance(module, DecisionTransformerGPT2Attention):
+            max_positions = module.config.max_position_embeddings
+            init.copy_(
+                module.bias,
+                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                    1, 1, max_positions, max_positions
+                ),
+            )
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):

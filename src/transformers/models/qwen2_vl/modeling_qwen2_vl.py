@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -125,7 +126,7 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -246,6 +247,8 @@ class VisionRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
+        self.dim = dim
+        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -664,6 +667,12 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring

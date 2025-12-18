@@ -290,6 +290,7 @@ class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -414,6 +415,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
+        self.max_len = max_len
         self.alpha = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, emb):
@@ -1184,6 +1186,14 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             init.constant_(module.conv.bias, 0)
         elif isinstance(module, SpeechT5ScaledPositionalEncoding):
             init.ones_(module.alpha)
+            dim, max_len = module.dim, module.max_len
+            pe = torch.zeros(max_len, dim)
+            position = torch.arange(0, max_len).unsqueeze(1)
+            div_term = torch.exp(torch.arange(0, dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / dim))
+            pe[:, 0::2] = torch.sin(position.float() * div_term)
+            pe[:, 1::2] = torch.cos(position.float() * div_term)
+            pe = pe.unsqueeze(0)
+            init.copy_(module.pe, pe)
         elif isinstance(module, SpeechT5FeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
@@ -1195,6 +1205,10 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
@@ -1205,6 +1219,14 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, SpeechT5SinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+        elif isinstance(module, SpeechT5HifiGan):
+            init.zeros_(module.mean)
+            init.ones_(module.scale)
 
         if hasattr(module, "masked_spec_embed"):
             init.uniform_(module.masked_spec_embed)
@@ -3007,6 +3029,12 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, SpeechT5HifiGan):
+            init.zeros_(module.mean)
+            init.ones_(module.scale)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

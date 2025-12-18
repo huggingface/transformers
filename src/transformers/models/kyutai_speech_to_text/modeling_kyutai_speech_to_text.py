@@ -112,6 +112,11 @@ class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
             init.normal_(module.weight)
+        if isinstance(module, KyutaiSpeechToTextEmbeddings):
+            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
+            audio_tokens_offsets += module.config.vocab_size
+            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
+            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache:
@@ -202,6 +207,7 @@ class KyutaiSpeechToTextConv1dPaddingCache:
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -277,7 +283,7 @@ class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(

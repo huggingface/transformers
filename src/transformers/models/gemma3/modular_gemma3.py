@@ -352,6 +352,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.scalar_embed_scale = embed_scale
         self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
@@ -389,7 +390,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -576,6 +577,16 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
             init.zeros_(module.weight)
+        elif isinstance(module, Gemma3TextScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
+        elif isinstance(module, Gemma3RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:

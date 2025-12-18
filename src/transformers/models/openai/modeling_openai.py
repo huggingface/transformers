@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
@@ -46,6 +47,7 @@ ACT_FNS = {"relu": nn.ReLU(), "silu": silu, "gelu": gelu_new, "swish": silu}
 class Attention(nn.Module):
     def __init__(self, nx, n_positions, config, scale=False):
         super().__init__()
+        self.n_positions = n_positions
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
@@ -258,6 +260,16 @@ class OpenAIGPTSequenceSummary(nn.Module):
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config: OpenAIGPTConfig
     base_model_prefix = "transformer"
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Attention):
+            n_positions = module.n_positions
+            init.copy_(
+                module.bias, torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+            )
+        elif isinstance(module, OpenAIGPTModel):
+            init.copy_(module.position_ids, torch.arange(module.config.n_positions))
 
 
 @dataclass

@@ -51,15 +51,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-        # This describes the additional items that are saved on the state dict (on the params themselves)
-        self.bnb_keys = [
-            f"quant_state.bitsandbytes__{self.quantization_config.bnb_4bit_quant_type}",
-            "absmax",
-            "quant_map",
-        ]
-        if self.quantization_config.bnb_4bit_use_double_quant:
-            self.bnb_keys.extend(["nested_absmax", "nested_quant_map"])
-
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
             raise ImportError(
@@ -87,35 +78,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     "for more details. "
                 )
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            # 4 bit
+            return 0.5
 
-        if target_dtype != torch.int8:
-            logger.info("target_dtype {target_dtype} is replaced by `CustomDtype.INT4` for 4-bit BnB quantization")
-        return CustomDtype.INT4
+        return super().param_element_size(model, param_name, param)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
-        # TODO: maybe remove
-        # # They are on the params themselves, so we cannot easily extract the module from the name
-        if any(param_name.endswith(x) for x in self.bnb_keys):
-            return True
         module, name = get_module_from_name(model, param_name)
         return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
-
-    def get_param_name(self, param_name: str) -> str:
-        """
-        Get the right param_name in order to get the module associated with the param.
-        This is useful for quantized stats lile absmax or quant_map as we need to update the param_name to get the module as they are stored in ...weight.absmax.
-        """
-        if self.pre_quantized:
-            # We need to get the param name of quantized weights and not its components. Otherwise, we won't be able to get the nn.Module associated.
-            if any(param_name.endswith(x) for x in self.bnb_keys):
-                param_name = (
-                    param_name.rsplit(".", 1)[0] if "quant_state." not in param_name else param_name.rsplit(".", 2)[0]
-                )
-        return param_name
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization

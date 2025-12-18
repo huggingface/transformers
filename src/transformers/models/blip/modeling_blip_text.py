@@ -21,6 +21,7 @@ import torch
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -503,6 +504,11 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     config: BlipTextConfig
     base_model_prefix = "bert"
     _no_split_modules = []
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BlipTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/3a29b7410476bf5f2ba0955827390eb6ea1f4f9d/models/med.py#L571

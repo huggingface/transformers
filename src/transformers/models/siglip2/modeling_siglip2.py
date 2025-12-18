@@ -215,6 +215,46 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2TextEmbeddings(nn.Module):
+    def __init__(self, config: Siglip2TextConfig):
+        super().__init__()
+        embed_dim = config.hidden_size
+
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embedding(input_ids)
+
+        position_embeddings = self.position_embedding(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+
+        return embeddings
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -412,6 +452,8 @@ class Siglip2PreTrainedModel(PreTrainedModel):
                 else self.config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, Siglip2Attention):
@@ -447,6 +489,8 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, Siglip2TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class Siglip2Encoder(nn.Module):
@@ -550,46 +594,6 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-class Siglip2TextEmbeddings(nn.Module):
-    def __init__(self, config: Siglip2TextConfig):
-        super().__init__()
-        embed_dim = config.hidden_size
-
-        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
-        self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-    ) -> torch.Tensor:
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-        max_position_embedding = self.position_embedding.weight.shape[0]
-
-        if seq_length > max_position_embedding:
-            raise ValueError(
-                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
-                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
-            )
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
-
-        if inputs_embeds is None:
-            inputs_embeds = self.token_embedding(input_ids)
-
-        position_embeddings = self.position_embedding(position_ids)
-        embeddings = inputs_embeds + position_embeddings
-
-        return embeddings
 
 
 class Siglip2TextTransformer(Siglip2PreTrainedModel):

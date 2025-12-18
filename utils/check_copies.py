@@ -810,8 +810,11 @@ def is_copy_consistent(
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
         if diff_index is not None:
-            # switch to the index in the original `observed_code` (i.e. before removing empty lines)
-            diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            try:
+                # switch to the index in the original `observed_code` (i.e. before removing empty lines)
+                diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            except KeyError:
+                raise RuntimeError(f"{filename}:L{start_index}: Error in the format")
             diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 # `theoretical_code_to_write` is a single string but may have several lines.

@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarkupLM model."""
 
-import os
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -517,10 +516,8 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MarkupLMLMPredictionHead):
             init.zeros_(module.bias)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif isinstance(module, MarkupLMEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring

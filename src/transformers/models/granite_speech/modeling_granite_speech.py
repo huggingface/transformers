@@ -293,6 +293,12 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GraniteSpeechEncoderProjector):
             init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
 
 
 @auto_docstring(

@@ -20,6 +20,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -70,11 +71,11 @@ class GPTNeoSelfAttention(nn.Module):
         # local causal self attention is a sliding window where each token can only attend to the previous
         # window_size tokens. This is implemented by updating the causal mask such that for each token
         # all other tokens are masked except the previous window_size tokens.
+        self.attention_type = attention_type
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
         self.register_buffer("bias", bias, persistent=False)
-        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
 
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))
@@ -381,6 +382,17 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _can_compile_fullgraph = False  # TODO: needs a hybrid cache
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, GPTNeoSelfAttention):
+            max_positions = module.config.max_position_embeddings
+            bias = torch.tril(torch.ones((max_positions, max_positions), dtype=bool)).view(
+                1, 1, max_positions, max_positions
+            )
+            if module.attention_type == "local":
+                bias = torch.bitwise_xor(bias, torch.tril(bias, -module.config.window_size))
+            init.copy_(module.bias, bias)
 
 
 @auto_docstring

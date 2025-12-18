@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
@@ -564,7 +565,11 @@ class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
 
 
 class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            n_points_scale = [1 / n for n in module.n_points_list for _ in range(n)]
+            init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
 class RTDetrV2Decoder(RTDetrDecoder):

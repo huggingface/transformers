@@ -80,7 +80,7 @@ class Dots1RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -476,6 +476,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Dots1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Dots1NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)

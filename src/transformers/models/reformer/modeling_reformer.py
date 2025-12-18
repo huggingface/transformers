@@ -1851,6 +1851,14 @@ class ReformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 init.normal_(weight, std=self.config.axial_norm_std)
+        elif isinstance(module, LSHSelfAttention):
+            init.constant_(module.self_mask_value_float16, -1e3)
+            init.constant_(module.self_mask_value_float32, -1e5)
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
+        elif isinstance(module, LocalSelfAttention):
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
 
 
 @dataclass

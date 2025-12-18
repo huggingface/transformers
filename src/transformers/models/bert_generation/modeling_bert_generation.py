@@ -463,6 +463,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, BertGenerationOnlyLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, BertGenerationEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring(

@@ -259,7 +259,7 @@ class FP8QuantizerTest(unittest.TestCase):
         self.assertEqual(quantized_model.config.quantization_config.weight_block_size, (32, 32))
 
     @require_torch_multi_accelerator
-    def test_quantized_model_multi_accelerator(self):
+    def test_quantized_model_multi_accelerators(self):
         """
         Simple test that checks if the quantized model is working properly with multiple accelerators
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUs; or set ZE_AFFINITY_MASK=0,1 if you
@@ -267,8 +267,13 @@ class FP8QuantizerTest(unittest.TestCase):
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
         quantization_config = FineGrainedFP8Config()
+        # need to empty cache or set max_memory, otherwise we will use the reserved memory that was not allocated when computing max-memory
+        # this will lead to put the entire model to device 0.
         quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", quantization_config=quantization_config
+            self.model_name,
+            device_map="auto",
+            quantization_config=quantization_config,
+            max_memory={0: "1GB", 1: "10GB"},
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
@@ -282,8 +287,11 @@ class FP8QuantizerTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-
-            model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
+            # need to empty cache or set max_memory, otherwise we will use the reserved memory that was not allocated when computing max-memory
+            # this will lead to put the entire model to device 0.
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, device_map="auto", max_memory={0: "1GB", 1: "10GB"}
+            )
             self.assertTrue(set(model.hf_device_map.values()) == {0, 1})
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
@@ -314,6 +322,54 @@ class FP8QuantizerTest(unittest.TestCase):
             quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
             output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map.
+        Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
+        """
+        from transformers.integrations import FP8Linear
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
+
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(FineGrainedFP8Config(), pre_quantized=False)
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
+
+        for name, module in model.named_modules():
+            if isinstance(module, FP8Linear):
+                # from 16 bits to 8 bits
+                assert int(model_size[f"{name}.weight"] // 2) == int(quantized_model_size[f"{name}.weight"])
+
+        # check that we get the same value, as we use `compute_module_sizes` in `get_total_byte_count`
+        assert total_byte_count == model_size[""]
+        assert quantized_total_byte_count == quantized_model_size[""]
+
+        # we should at least have 1.5 times memory reduction in total
+        assert model_size[""] > quantized_model_size[""] * 1.5
 
 
 @require_torch_accelerator

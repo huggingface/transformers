@@ -28,6 +28,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
@@ -57,6 +58,11 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, JanusVisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass

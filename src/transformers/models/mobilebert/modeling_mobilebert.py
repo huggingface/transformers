@@ -556,6 +556,8 @@ class MobileBertPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, MobileBertLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, MobileBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass

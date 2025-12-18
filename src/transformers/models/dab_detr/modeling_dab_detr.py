@@ -826,7 +826,7 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             init.zeros_(module.q_linear.bias)
             init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
             init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)

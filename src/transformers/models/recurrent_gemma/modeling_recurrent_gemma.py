@@ -80,7 +80,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     # Ignore copy
@@ -611,10 +611,11 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, RecurrentGemmaRMSNorm):
             init.zeros_(module.weight)
+        elif isinstance(module, RecurrentGemmaModel):
+            init.constant_(module.normalizer, module.config.hidden_size**0.5)
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers

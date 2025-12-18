@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -482,6 +482,14 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             init.ones_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, ModernBertDecoderRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
     def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
         raise AttributeError("No need to inherit!")

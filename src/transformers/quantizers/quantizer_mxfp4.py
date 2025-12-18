@@ -202,19 +202,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 )
         return config
 
-    def get_param_name(self, param_name: str) -> str:
-        if self.quantization_config.dequantize:
-            if "_blocks" in param_name:
-                return param_name.replace("_blocks", "")
-            elif "_scales" in param_name:
-                return param_name.replace("_scales", "")
-        elif not self.pre_quantized:
-            if param_name.endswith("gate_up_proj"):
-                return param_name.replace("gate_up_proj", "gate_up_proj_blocks")
-            if param_name.endswith("down_proj"):
-                return param_name.replace("down_proj", "down_proj_blocks")
-        return param_name
-
     def get_state_dict_and_metadata(self, model):
         from ..integrations import Mxfp4GptOssExperts
 

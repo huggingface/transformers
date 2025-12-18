@@ -82,7 +82,7 @@ class LongcatFlashRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -563,6 +563,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         if isinstance(module, LongcatFlashExperts):
             if module.gate_up_proj is not None:
                 init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

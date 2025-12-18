@@ -29,6 +29,7 @@ from transformers.models.sam2.modeling_sam2 import (
 )
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -375,24 +376,17 @@ class EdgeTamVideoVisionEncoderOutput(Sam2VideoVisionEncoderOutput):
 class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
     def __init__(self, config: EdgeTamVideoConfig, end_x: Optional[int] = None, end_y: Optional[int] = None):
         nn.Module.__init__()
-        dim = config.memory_attention_hidden_size // (
+        self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
         # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
+        if self.dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        end_x, end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
 
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = flattened_indices % end_x
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
+        inv_freq = self.create_inv_freq()
         self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
         self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
 
@@ -662,7 +656,12 @@ class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
 
 
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights()
+        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
+            inv_freq = module.create_inv_freq()
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):

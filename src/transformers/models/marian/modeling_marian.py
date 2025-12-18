@@ -451,6 +451,8 @@ class MarianPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MarianSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
+        elif isinstance(module, MarianMTModel):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):

@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+from transformers.utils.generic import OutputRecorder
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -39,6 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, auto_docstring
+from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_edgetam import (
     EdgeTamConfig,
@@ -50,7 +51,7 @@ from .configuration_edgetam import (
 
 # fix this in modular
 if True:
-    from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
+    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamLayerNorm(nn.LayerNorm):
@@ -315,6 +316,8 @@ class EdgeTamPreTrainedModel(PreTrainedModel):
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif hasattr(module, "positional_embedding"):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding

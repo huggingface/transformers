@@ -412,6 +412,8 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, SqueezeBertLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, SqueezeBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring

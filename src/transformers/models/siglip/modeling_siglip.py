@@ -430,6 +430,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
                 else self.config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, SiglipAttention):
@@ -465,6 +467,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, SiglipTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip

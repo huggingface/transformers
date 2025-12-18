@@ -103,7 +103,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     # Ignore copy
@@ -684,9 +684,22 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, EfficientLoFTRRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     # Copied from transformers.models.superpoint.modeling_superpoint.SuperPointPreTrainedModel.extract_one_channel_pixel_values with SuperPoint->EfficientLoFTR
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:

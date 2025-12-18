@@ -1010,6 +1010,10 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1409,6 +1413,12 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FastSpeech2ConformerHifiGan):
+            init.zeros_(module.mean)
+            init.ones_(module.scale)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
