@@ -117,11 +117,16 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
-        self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
-        self.assistant_confidence_threshold = assistant_model.generation_config.assistant_confidence_threshold
+
+        # Prepare the generation config by updating with default values if not already set by users
+        self.assistant_generation_config = copy.deepcopy(assistant_model.generation_config)
+        global_defaults = self.assistant_generation_config._get_default_generation_params()
+        self.assistant_generation_config.update(**global_defaults, defaults_only=True)
+        self.num_assistant_tokens = self.assistant_generation_config.num_assistant_tokens
+        self.assistant_confidence_threshold = self.assistant_generation_config.assistant_confidence_threshold
 
         # Set eos in assistant same as in target model
-        self.assistant_model.generation_config.eos_token_id = generation_config.eos_token_id
+        self.assistant_generation_config.eos_token_id = generation_config.eos_token_id
 
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
@@ -138,10 +143,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # If the assistant is an encoder-decoder model, assume the encoder is different on the assistant.
         if assistant_model.config.is_encoder_decoder:
             inputs_tensor, model_input_name, assistant_kwargs = assistant_model._prepare_model_inputs(
-                inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_kwargs
+                inputs_tensor, self.assistant_generation_config.bos_token_id, assistant_kwargs
             )
             assistant_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                inputs_tensor, assistant_kwargs, model_input_name, assistant_model.generation_config
+                inputs_tensor, assistant_kwargs, model_input_name, self.assistant_generation_config
             )
         elif "encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["encoder_outputs"]
@@ -189,7 +194,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             self.probs = []
@@ -236,7 +241,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
         # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
         # cost of forecasting incorrect assistant tokens.
-        if self.assistant_model.generation_config.num_assistant_tokens_schedule in {
+        if self.assistant_generation_config.num_assistant_tokens_schedule in {
             "heuristic",
             "heuristic_transient",
         }:
@@ -250,7 +255,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             # update self.matches
@@ -276,7 +281,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 optimal_threshold_index = np.argmin(costs)
                 best_threshold = thresholds[optimal_threshold_index]
 
-                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
+                self.assistant_generation_config.assistant_confidence_threshold = best_threshold
 
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
@@ -320,7 +325,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         if (
             is_sklearn_available()
-            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and self.assistant_generation_config.assistant_confidence_threshold
             and type(self) is AssistedCandidateGenerator
         ):
             scores_tensor = torch.cat(assistant_output.scores, dim=0)
@@ -383,8 +388,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_target_ids_len: int | None = None
         self.prev_assistant_ids = None
-        self.target_lookbehind = assistant_model.generation_config.target_lookbehind
-        self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
+        self.target_lookbehind = self.assistant_generation_config.target_lookbehind
+        self.assistant_lookbehind = self.assistant_generation_config.assistant_lookbehind
 
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):

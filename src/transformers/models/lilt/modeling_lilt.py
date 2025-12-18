@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -497,6 +498,11 @@ class LiltPreTrainedModel(PreTrainedModel):
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
     _no_split_modules = []
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LiltTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring

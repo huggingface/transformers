@@ -257,13 +257,13 @@ class ConfigTestUtils(unittest.TestCase):
             with self.assertRaises(ValueError):
                 config.save_pretrained(tmp_dir)
 
-    def test_get_non_default_generation_parameters(self):
+    def test_get_generation_parameters(self):
         config = BertConfig()
-        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
+        self.assertFalse(len(config._get_generation_parameters()) > 0)
         config.min_length = 3
-        self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
-        config.min_length = 0  # `min_length = 0` is a default generation kwarg
-        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
+        self.assertTrue(len(config._get_generation_parameters()) > 0)
+        config.min_length = 0
+        self.assertTrue(len(config._get_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""

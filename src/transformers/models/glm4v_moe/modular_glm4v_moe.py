@@ -18,6 +18,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
@@ -46,6 +47,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
+    Glm4vVisionRotaryEmbedding,
     rotate_half,
 )
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -479,8 +481,18 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
         "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Glm4vMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
+    pass
+
+
+class Glm4vMoeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
     pass
 
 
