@@ -33,7 +33,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available() and not is_torch_xpu_available():
-            if self.pre_quantized and not self.quantization_config.dequantize:
+            if self.pre_quantized:
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
@@ -46,10 +46,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if (major < 8) or (major == 8 and minor < 9):
-                raise ValueError(
+                logger.warning_once(
                     "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                    f", actual = `{major}.{minor}`"
+                    f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16 "
                 )
+                self.quantization_config.dequantize = True
+                return
 
         device_map = kwargs.get("device_map")
         if device_map is None:
