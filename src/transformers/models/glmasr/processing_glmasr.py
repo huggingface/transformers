@@ -34,11 +34,7 @@ class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
             "padding": False,
         },
         "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "pad_to_multiple_of": 480000,
-            "max_source_positions": 3000,
+            "max_source_positions": 1500,
         },
     }
 
