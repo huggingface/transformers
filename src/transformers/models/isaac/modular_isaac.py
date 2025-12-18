@@ -1187,7 +1187,7 @@ def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) ->
 class IsaacProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("IsaacImageProcessorFast",)
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+    tokenizer_class = ("Qwen2Tokenizer",)
 
     def __init__(
         self,
@@ -1514,6 +1514,14 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     @property
     def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
+
+    @property
+    def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
+
+    @property
+    def vision_tower(self) -> nn.Module:
         return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
