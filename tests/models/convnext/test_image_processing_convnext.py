@@ -23,7 +23,6 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 if is_vision_available():
     from transformers import ConvNextImageProcessor
-    from transformers.image_utils import PILImageResampling
 
     if is_torchvision_available():
         from transformers import ConvNextImageProcessorFast
@@ -115,22 +114,3 @@ class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
-
-    @unittest.skip(
-        "Skipping as ConvNextImageProcessor uses center_crop and center_crop functions are not equivalent for fast and slow processors"
-    )
-    def test_slow_fast_equivalence_batched(self):
-        pass
-
-    def test_default_interpolation_is_bicubic(self):
-        """
-        Test that the default interpolation method is BICUBIC to match the original ConvNeXt implementation.
-        Reference: https://github.com/facebookresearch/ConvNeXt/blob/main/datasets.py
-        """
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class()
-            self.assertEqual(
-                image_processor.resample,
-                PILImageResampling.BICUBIC,
-                f"{image_processing_class.__name__} should default to BICUBIC interpolation to match the original ConvNeXt implementation",
-            )

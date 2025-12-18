@@ -26,7 +26,6 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
-from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -145,10 +144,8 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     model.eval()
 
     # Check outputs on an image, prepared by ConvNextImageProcessor
-    # Use BICUBIC interpolation to match the original ConvNeXt implementation
-    # See: https://github.com/facebookresearch/ConvNeXt/blob/main/datasets.py
     size = 224 if "224" in checkpoint_url else 384
-    image_processor = ConvNextImageProcessor(size=size, resample=PILImageResampling.BICUBIC)
+    image_processor = ConvNextImageProcessor(size=size)
     pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
 
     logits = model(pixel_values).logits
