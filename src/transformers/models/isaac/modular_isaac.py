@@ -732,6 +732,7 @@ class IsaacVisionEncoder(Siglip2Encoder):
         self.layers = nn.ModuleList([IsaacVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         inputs_embeds,
@@ -907,7 +908,6 @@ class IsaacVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            return_dict=True,
         )
         hidden_states = encoder_outputs.last_hidden_state
 
