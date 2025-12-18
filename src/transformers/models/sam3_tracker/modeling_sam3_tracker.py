@@ -128,6 +128,8 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif isinstance(module, Sam3TrackerPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam3TrackerPositionalEmbedding(nn.Module):

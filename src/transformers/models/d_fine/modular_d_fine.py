@@ -33,6 +33,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderOutput,
     RTDetrEncoder,
     RTDetrForObjectDetection,
+    RTDetrFrozenBatchNorm2d,
     RTDetrHybridEncoder,
     RTDetrMLPPredictionHead,
     RTDetrModel,
@@ -628,6 +629,9 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -638,6 +642,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -849,6 +857,10 @@ class DFineDecoder(RTDetrDecoder):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+
+class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
+    pass
 
 
 class DFineModel(RTDetrModel):
