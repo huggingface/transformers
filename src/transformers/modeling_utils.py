@@ -4399,21 +4399,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            # We only do it for the parameters, as the buffers are not initialized on the meta device by default
             for key, param in self.named_parameters():
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
                 _load_parameter_into_model(self, key, value)
+            for key, buffer in self.named_buffers():
+                value = torch.empty_like(buffer, dtype=dtype, device="cpu")
+                _load_parameter_into_model(self, key, value)
             return
 
-        model_state_dict = self.state_dict()
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
-            param = model_state_dict[key]
-            # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
-            if param.device == torch.device("meta"):
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+            param = self.get_parameter_or_buffer(key)
+            value = torch.empty_like(param, dtype=dtype, device="cpu")
+            _load_parameter_into_model(self, key, value)
+        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
+        for key, buffer in self.named_buffers():
+            if key in self._non_persistent_buffers_set:
+                value = torch.empty_like(buffer, dtype=dtype, device="cpu")
                 _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
