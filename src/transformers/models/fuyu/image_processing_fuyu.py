@@ -94,7 +94,7 @@ class FuyuBatchFeature(BatchFeature):
     The outputs dictionary from the processors contains a mix of tensors and lists of tensors.
     """
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None, **kwargs):
         """
         Convert the inner content to tensors.
 

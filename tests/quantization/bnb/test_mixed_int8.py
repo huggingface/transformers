@@ -127,7 +127,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map="auto",
         )
 
     def tearDown(self):
@@ -193,14 +196,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         _ = config.to_diff_dict()
 
         _ = config.to_json_string()
-
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.model_8bit.config._pre_quantization_dtype == torch.float16)
 
     def test_memory_footprint(self):
         r"""

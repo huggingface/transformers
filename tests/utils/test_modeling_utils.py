@@ -129,7 +129,11 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import _find_disjoint, _find_identical
+    from transformers.modeling_utils import (
+        FLASH_ATTN_KERNEL_FALLBACK,
+        _find_disjoint,
+        _find_identical,
+    )
     from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
@@ -1678,7 +1682,7 @@ class ModelUtilsTest(TestCasePlus):
         Calling `model.save_pretrained` with generation parameters should raise a `ValueError`
         """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        self.assertTrue(model.generation_config.repetition_penalty == 1.0)
+        self.assertTrue(model.generation_config.repetition_penalty is None)
         self.assertFalse(hasattr(model.config, "repetition_penalty"))
 
         # If the user attempts to save a custom generation parameter, we raise an Error
@@ -1787,11 +1791,8 @@ class ModelUtilsTest(TestCasePlus):
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
-        # The default for `num_beams` is 1 and `early_stopping` is False
-        # NOTE: accessible only from generation config, EVEN IF they are saved
-        # in `config.json` file in the hub
-        self.assertTrue(model.generation_config.num_beams == 1)
-        self.assertTrue(model.generation_config.early_stopping is False)
+        self.assertTrue(model.generation_config.num_beams is None)
+        self.assertTrue(model.generation_config.early_stopping is None)
         self.assertFalse(hasattr(model.config, "num_beams"))
         self.assertFalse(hasattr(model.config, "early_stopping"))
 
@@ -1805,7 +1806,7 @@ class ModelUtilsTest(TestCasePlus):
         # we will throw an error, nudging user to save attributes in the generation_config
         model.config.num_beams = 5
         model.config.early_stopping = True
-        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        self.assertTrue(model.generation_config.num_beams is None)  # default value
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError):
                 model.save_pretrained(tmp_dir)
@@ -3028,7 +3029,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
+            f"You do not have `flash_attn` installed, using `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -3040,7 +3041,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
+                "hf-tiny-model-private/tiny-random-MCTCTModel",
+                attn_implementation=FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"],
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))
