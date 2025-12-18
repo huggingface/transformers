@@ -25,6 +25,14 @@ from ..utils import is_timm_available
 
 
 if is_timm_available():
+    from timm.layers.pos_embed_rel import (
+        RelPosBias,
+        RelPosBiasTf,
+        RelPosMlp,
+        gen_relative_log_coords,
+        gen_relative_position_index,
+        generate_lookup_tensor,
+    )
     from timm.layers.pos_embed_sincos import (
         FourierEmbed,
         RotaryEmbedding,
@@ -72,3 +80,20 @@ def _maybe_reinit_non_persistent_buffer(module):
         init.copy_(module.periods, module._compute_periods())
         if module.pos_embed_cached is not None:
             init.copy_(module.pos_embed_cached, module._create_embed(module.feat_shape, no_aug=True))
+    elif isinstance(module, RelPosBias):
+        has_class_token = module.relative_position_bias_table.shape[0] > (2 * module.window_size[0] - 1) * (
+            2 * module.window_size[1] - 1
+        )
+        init.copy_(
+            module.relative_position_index,
+            gen_relative_position_index(module.window_size, class_token=has_class_token).view(-1),
+        )
+    elif isinstance(module, RelPosMlp):
+        init.copy_(module.relative_position_index, gen_relative_position_index(module.window_size).view(-1))
+        # This one is supposed to pass args `pretrained_window_size` and `mode` in `gen_relative_log_coords`, but they
+        # are not recorded as class attributes in `__init__` so we cannot get the values back... Let's hope it's always
+        # default values
+        init.copy_(module.rel_coords_log, gen_relative_log_coords(module.window_size))
+    elif isinstance(module, RelPosBiasTf):
+        init.copy_(module.height_lookup, generate_lookup_tensor(module.window_size[0]))
+        init.copy_(module.width_lookup, generate_lookup_tensor(module.window_size[1]))
