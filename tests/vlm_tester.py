@@ -12,28 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-import tempfile
 import unittest
 from inspect import signature
-
-import pytest
-
-from transformers.models.auto.auto_factory import getattribute_from_module
-from transformers.testing_utils import (
-    _VLM_COMMON_MODEL_NAMES_MAP,
-    is_flaky,
-    require_flash_attn,
-    require_torch_accelerator,
-    slow,
-)
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
-    ids_tensor,
     floats_tensor,
+    ids_tensor,
     is_torch_available,
     require_torch,
     torch_device,
@@ -187,15 +174,21 @@ class VLMModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.tie_word_embeddings = False
 
-        for required_attribute in ["base_model_class", "config_class", "conditional_generation_class", "text_config_class", "vision_config_class"]:
+        for required_attribute in [
+            "base_model_class",
+            "config_class",
+            "conditional_generation_class",
+            "text_config_class",
+            "vision_config_class",
+        ]:
             if getattr(self, required_attribute) is None:
-                raise ValueError(f"You have inherited from VLMModelTester but did not set the {required_attribute} attribute.")
+                raise ValueError(
+                    f"You have inherited from VLMModelTester but did not set the {required_attribute} attribute."
+                )
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0
-        )
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
 
         input_mask = None
         if self.use_input_mask:
@@ -206,7 +199,6 @@ class VLMModelTester:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         config = self.get_config()
-
 
         return config, input_ids, token_type_ids, input_mask, pixel_values
 
@@ -295,13 +287,9 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
 
     def setUp(self):
         if self.model_tester_class is None:
-            raise ValueError(
-                "You have inherited from VLMModelTest but did not set the model_tester_class attribute."
-            )
+            raise ValueError("You have inherited from VLMModelTest but did not set the model_tester_class attribute.")
         self.model_tester = self.model_tester_class(self)
-        self.config_tester = ConfigTester(
-            self, config_class=self.model_tester.config_class, has_text_modality=False
-        )
+        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, has_text_modality=False)
 
         if self.pipeline_model_mapping is None:
             if self.all_model_classes is not None:

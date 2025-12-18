@@ -24,10 +24,10 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
+    CLIPVisionConfig,
+    LlamaConfig,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
-    LlamaConfig,
-    CLIPVisionConfig,
     LlavaNextModel,
     is_torch_available,
     is_vision_available,
@@ -41,7 +41,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import check_torch_load_is_safe
 
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
@@ -102,13 +101,15 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         # unlike most other VLMs so we have to override
         config = self.get_config()
 
-        pixel_values = floats_tensor([
-            self.batch_size,
-            self.num_patches_per_image,
-            self.num_channels,
-            self.image_size,
-            self.image_size,
-        ])
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.num_patches_per_image,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
+        )
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -138,6 +139,7 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
     """
     Model tester for `LlavaNextForConditionalGeneration`.
     """
+
     model_tester_class = LlavaNextVisionText2TextModelTester
     test_resize_embeddings = False
 
