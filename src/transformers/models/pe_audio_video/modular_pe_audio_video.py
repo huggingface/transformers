@@ -19,6 +19,7 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, eager_attention_forward
@@ -331,7 +332,7 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, PeAudioVideoEncoderPatchEmbedder):
             embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+            init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 @dataclass

@@ -142,6 +142,9 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeSparseMoeBlock):
+            if module.use_expert_bias:
+                init.zeros_(module.expert_bias)
 
 
 class Lfm2MoeModel(MixtralModel):

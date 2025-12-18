@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -58,6 +59,12 @@ class DiaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DiaMultiChannelEmbedding):
+            offsets = torch.arange(self.config.num_channels, dtype=torch.long) * self.config.vocab_size
+            init.copy_(module.offsets, offsets)
 
 
 class DiaMultiChannelEmbedding(nn.Module):
