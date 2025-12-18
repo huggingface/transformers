@@ -953,21 +953,21 @@ class DetrDecoder(DetrPreTrainedModel):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
-        combined_attention_mask = None
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         # optional intermediate hidden states
@@ -989,7 +989,7 @@ class DetrDecoder(DetrPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                combined_attention_mask,
+                attention_mask,
                 object_queries,
                 query_position_embeddings,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing

@@ -1089,13 +1089,14 @@ class GitModel(GitPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=inputs_embeds,
+                input_embeds=embedding_output,
                 attention_mask=attention_mask,
             )
-            if past_key_values_length > 0:
-                expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
-            else:
-                combined_attention_mask[:, :, -input_shape[1] :, -input_shape[1] :] += expanded_attn_mask
+            if expanded_attn_mask is not None:
+                if past_key_values_length > 0:
+                    expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
+                else:
+                    combined_attention_mask[:, :, -input_shape[1] :, -input_shape[1] :] += expanded_attn_mask
 
         encoder_outputs = self.encoder(
             hidden_states,

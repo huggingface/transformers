@@ -1064,9 +1064,11 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and memory_key_padding_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            memory_key_padding_mask = _prepare_4d_attention_mask(
-                memory_key_padding_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            memory_key_padding_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=memory_key_padding_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         for layer_id, decoder_layer in enumerate(self.layers):
