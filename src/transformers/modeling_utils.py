@@ -4156,7 +4156,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, hf_quantizer)
 
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
         model._initialize_missing_keys(is_quantized)
@@ -4393,7 +4393,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return cls._supports_attention_backend
 
     def _move_missing_keys_from_meta_to_cpu(
-        self, missing_keys: list[str], dtype: torch.dtype, hf_quantizer: Optional[HfQuantizer]
+        self, missing_keys: list[str], hf_quantizer: Optional[HfQuantizer]
     ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
         from meta device to cpu.
@@ -4403,10 +4403,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                value = torch.empty_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
             for key, buffer in self.named_buffers():
-                value = torch.empty_like(buffer, dtype=dtype, device="cpu")
+                value = torch.empty_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
@@ -4419,7 +4419,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
-            value = torch.empty_like(buffer, dtype=dtype, device="cpu")
+            value = torch.empty_like(buffer, device="cpu")
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
