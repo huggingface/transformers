@@ -1063,54 +1063,52 @@ class EmbeddingAccessMixin:
             `nn.Module`: A torch module mapping vocabulary to hidden states.
         """
 
-        # 1) Check if the model has an attribute named 'embed_tokens' (the standard input embedding layer
-        #  for most NLP models), and if so, return it.
-
         name = getattr(self, "_input_embed_layer", "embed_tokens")
 
+        # 1) Direct attribute (most NLP models).
         if (default_embedding := getattr(self, name, None)) is not None:
             return default_embedding
-        # 2) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision/audio models).
+        if hasattr(self, "embeddings") and hasattr(self.embeddings, name):
+            return getattr(self.embeddings, name)
+        # 3) Encoder/decoder wrappers (e.g., `self.model.embed_tokens` or similar overrides).
+        if hasattr(self, "model") and hasattr(self.model, name):
+            return getattr(self.model, name)
 
-        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
-            return self.model.embed_tokens
+        if hasattr(self, "base_model"):
+            base_model = self.base_model
+            if base_model is not None and base_model is not self:
+                return base_model.get_input_embeddings()
 
-        # 3) vanilla decoder‑only architectures
-        elif hasattr(self, "embed_tokens"):
-            return self.embed_tokens
-        else:
-            base_model = getattr(self, "base_model_prefix", None)
-            if base_model is not None:
-                base_model = getattr(self, base_model, None)
-                if base_model is not None and base_model is not self:
-                    return base_model.get_input_embeddings()
-            raise NotImplementedError(
-                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
-                "please override in the subclass."
-            )
+        raise NotImplementedError(
+            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+        )
 
     def set_input_embeddings(self, value: nn.Module):
         """Fallback setter that handles **~70%** of models in the code-base.
 
         Order of attempts:
-        1. `self.model.embed_tokens`
-        2. `self.embed_tokens`
-        3. delegate to the *base model* if one exists
-        4. otherwise raise `NotImplementedError` so subclasses still can (and
+        1. `self.<_input_embed_layer>` (direct attribute)
+        2. `self.embeddings.<_input_embed_layer>` (nested embeddings for vision/audio models)
+        3. `self.model.<_input_embed_layer>` (encoder/decoder models)
+        4. delegate to the *base model* if one exists
+        5. otherwise raise `NotImplementedError` so subclasses still can (and
             should) override for exotic layouts.
         """
 
-        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         name = getattr(self, "_input_embed_layer", "embed_tokens")
-        if hasattr(self, "model") and hasattr(self.model, name):
-            setattr(self.model, name, value)
-        # 2) as well as vanilla decoder‑only architectures
-        elif hasattr(self, name):
+        # 1) Direct attribute (most NLP models)
+        if hasattr(self, name):
             setattr(self, name, value)
-        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            base_model.set_input_embeddings(value)
+        # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision models)
+        elif hasattr(self, "embeddings") and hasattr(self.embeddings, name):
+            setattr(self.embeddings, name, value)
+        # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        elif hasattr(self, "model") and hasattr(self.model, name):
+            setattr(self.model, name, value)
+        # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        elif hasattr(self, "base_model") and self.base_model is not self:
+            self.base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -2043,14 +2041,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         hooks = []
         seen_modules = set()
+        found_embeddings = False
 
         for module in self.modules():
             if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
                 continue
 
-            input_embeddings = module.get_input_embeddings()
+            try:
+                input_embeddings = module.get_input_embeddings()
+            except NotImplementedError:
+                continue
 
-            if input_embeddings is None:
+            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
                 continue
 
             embedding_id = id(input_embeddings)
@@ -2059,11 +2061,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             seen_modules.add(embedding_id)
             hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+            found_embeddings = True
 
         self._require_grads_hooks = hooks
         if hooks:
             # for BC
             self._require_grads_hook = hooks[0]
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features, or set `_input_embed_layer` to the attribute name that holds the embeddings."
+            )
 
     def disable_input_require_grads(self):
         """
@@ -3000,7 +3009,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
             )
 
-        if getattr(self, "_hf_peft_config_loaded", False):
+        needs_embedding_grads = self.main_input_name == "input_ids"
+        # we use that also to detect whether or not we have to raise if embeddings are missing (the submodel might not have embeddings at all)
+        enable_input_grads = needs_embedding_grads or getattr(self, "_hf_peft_config_loaded", False)
+        if enable_input_grads:
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
             # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
@@ -4044,6 +4056,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys())
+
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
@@ -4386,8 +4399,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
-                if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
-                    _load_parameter_into_model(self, key, value)
+                _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4527,6 +4539,46 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
+def get_total_byte_count(
+    model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer] = None
+):
+    """
+    This utility function calculates the total bytes count needed to load the model on each device.
+    This is useful for caching_allocator_warmup as we want to know how much cache we need to pre-allocate.
+    """
+
+    total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = model.all_tied_weights_keys.keys()
+
+    tp_plan = getattr(model, "_tp_plan", []) or []
+    tp_plan_regex = (
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
+        if _torch_distributed_available and torch.distributed.is_initialized()
+        else None
+    )
+
+    for param_name, device in accelerator_device_map.items():
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            continue
+
+        param = model.get_parameter_or_buffer(param_name)
+
+        if hf_quantizer is not None:
+            dtype_size = hf_quantizer.param_element_size(model, param_name, param)
+        else:
+            dtype_size = param.element_size()
+
+        param_byte_count = param.numel() * dtype_size
+
+        if tp_plan_regex is not None:
+            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
+            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+
+        total_byte_count[device] += param_byte_count
+    return total_byte_count
+
+
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
@@ -4546,7 +4598,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
+    factor = 2
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
@@ -4555,40 +4607,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
-    tp_plan = getattr(model, "_tp_plan", []) or []
-    tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
-        if _torch_distributed_available and torch.distributed.is_initialized()
-        else None
-    )
-    total_byte_count = defaultdict(lambda: 0)
-    tied_param_names = model.all_tied_weights_keys.keys()
-    for param_name, device in accelerator_device_map.items():
-        # Skip if the parameter has already been accounted for (tied weights)
-        if param_name in tied_param_names:
-            continue
-
-        # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
-        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
-        if hf_quantizer is not None:
-            param_name = hf_quantizer.get_param_name(param_name)
-
-        try:
-            param = model.get_parameter_or_buffer(param_name)
-        except AttributeError:
-            # TODO: for now let's skip if we can't find the parameters
-            if hf_quantizer is not None:
-                continue
-            raise AttributeError(f"Parameter {param_name} not found in model")
-
-        # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = param.numel() * param.element_size()
-
-        if tp_plan_regex is not None:
-            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
-            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
-
-        total_byte_count[device] += param_byte_count
+    total_byte_count = get_total_byte_count(model, accelerator_device_map, hf_quantizer)
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
@@ -4608,8 +4627,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             unused_memory = torch_accelerator_module.memory_reserved(
                 index
             ) - torch_accelerator_module.memory_allocated(index)
-            byte_count = max(0, byte_count - unused_memory)
-        # Allocate memory
+            byte_count = int(max(0, byte_count - unused_memory))
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 
