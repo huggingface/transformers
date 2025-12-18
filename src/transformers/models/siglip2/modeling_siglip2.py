@@ -392,10 +392,10 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn = True
+    _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
 
     _can_record_outputs = {
         "hidden_states": Siglip2EncoderLayer,
@@ -713,6 +713,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
+        self.config = config
         self.num_heads = config.num_attention_heads
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -721,9 +722,22 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=probe,
+                attention_mask=attention_mask,
+                encoder_hidden_states=hidden_state,
+            )
             attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+            # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.where(
+                    attention_mask,
+                    torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                    torch.finfo(probe.dtype).min,
+                )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 

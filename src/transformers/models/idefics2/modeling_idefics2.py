@@ -731,10 +731,10 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
         )
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
-        attention_mask = (
-            _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if self.config._attn_implementation != "flash_attention_2"
-            else attention_mask
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=latents,
+            attention_mask=attention_mask,
         )
 
         compressed_context = latents

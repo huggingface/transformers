@@ -232,7 +232,9 @@ class Siglip2VisionEmbeddings(nn.Module):
 
 
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
+    _supports_flash_attn = False
+    _supports_flex_attn = False
+    _supports_attention_backend = False
 
 
 class Siglip2VisionTransformer(SiglipVisionTransformer):
@@ -293,6 +295,7 @@ class Siglip2TextModel(SiglipTextModel):
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
+        self.config = config
         self.num_heads = config.num_attention_heads
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -301,9 +304,22 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=probe,
+                attention_mask=attention_mask,
+                encoder_hidden_states=hidden_state,
+            )
             attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+            # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.where(
+                    attention_mask,
+                    torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                    torch.finfo(probe.dtype).min,
+                )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 

@@ -757,6 +757,8 @@ class SeamlessM4TConformerEncoder(nn.Module):
 class SeamlessM4TConformerAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
+
         embed_dim = config.hidden_size
         dropout = config.adaptor_dropout
 

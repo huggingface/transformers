@@ -626,6 +626,8 @@ class SeamlessM4Tv2ConformerEncoder(nn.Module):
 class SeamlessM4Tv2ConformerAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
+
         embed_dim = config.hidden_size
         dropout = config.adaptor_dropout
 
@@ -698,9 +700,10 @@ class SeamlessM4Tv2ConformerAdapterLayer(nn.Module):
                 hidden_states.device
             )
             attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
-            attention_mask = _prepare_4d_attention_mask(
-                attention_mask,
-                hidden_states.dtype,
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
             )
 
         # The rest of the computation is identical to a vanilla Transformer
@@ -1699,8 +1702,11 @@ class SeamlessM4Tv2Encoder(SeamlessM4Tv2PreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1856,9 +1862,11 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         # embed positions
@@ -2046,7 +2054,11 @@ class SeamlessM4Tv2TextToUnitDecoder(SeamlessM4Tv2PreTrainedModel):
         hidden_states = char_hidden_states + positions
 
         padding_mask = _compute_new_attention_mask(hidden_states, dur_out.sum(1))
-        attention_mask = _prepare_4d_attention_mask(padding_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=padding_mask,
+        )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 

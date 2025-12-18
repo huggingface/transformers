@@ -24,8 +24,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...masking_utils import create_bidirectional_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -542,12 +541,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if (attention_mask == 0.0).any() else None
-            elif self.config._attn_implementation == "sdpa":
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
-            else:
-                attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -641,16 +639,12 @@ class MoonshineDecoder(LlamaModel):
             mask_len = encoder_hidden_states.shape[-2]
             downsample_stride = 64 * 3 * 2  # conv strides
             encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
-            elif self.config._attn_implementation == "sdpa":
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
-                )
-            else:
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
-                )
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=hidden_states,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
