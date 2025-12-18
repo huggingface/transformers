@@ -928,7 +928,9 @@ def _get_device_from_images(images, is_nested: bool) -> "torch.device":
     """
     if is_nested:
         for row in images:
-            if row:
+            if isinstance(row, torch.Tensor):
+                return row.device
+            if isinstance(row, list) and len(row) > 0:
                 return row[0].device
     return images[0].device
 
