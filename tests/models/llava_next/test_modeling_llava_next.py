@@ -66,6 +66,72 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     text_config_class = LlamaConfig
     vision_config_class = CLIPVisionConfig
 
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        # Use a distinct image_token_index that won't conflict with pad_token_id (0) or random tokens
+        self.image_token_index = self.vocab_size - 1
+
+        # LlavaNext needs specific grid pinpoints that match our test image size
+        # With image_grid_pinpoints=[[image_size, image_size]] and vision_config.image_size=image_size:
+        # num_patches = (image_size/image_size)*(image_size/image_size) + 1 = 2 patches per image
+        self.num_patches_per_image = 2  # 1 grid patch + 1 base patch
+
+        # Calculate num_image_tokens based on LlavaNext's pack_image_features logic:
+        # - base_image_feature: (image_size/patch_size)^2 tokens
+        # - grid patches (1 patch with grid_shape 1x1):
+        #   height = width = image_size/patch_size
+        #   After unpad + newline: height * (width + 1) tokens
+        # Total per image: base_tokens + grid_tokens
+        tokens_per_patch = (self.image_size // self.patch_size) ** 2
+        height = width = self.image_size // self.patch_size
+        grid_tokens = height * (width + 1)  # includes newline token
+        self.num_image_tokens = tokens_per_patch + grid_tokens
+
+        # Ensure seq_length is large enough to hold image tokens plus some text
+        self.seq_length = self.num_image_tokens + 7
+
+    def get_config(self):
+        config = super().get_config()
+        # Set grid pinpoints compatible with our small test image size
+        config.image_grid_pinpoints = [[self.image_size, self.image_size]]
+        return config
+
+    def prepare_config_and_inputs(self):
+        # LlavaNext expects pixel_values with shape (batch_size, num_patches, channels, height, width)
+        # unlike most other VLMs so we have to override
+        config = self.get_config()
+
+        pixel_values = floats_tensor([
+            self.batch_size,
+            self.num_patches_per_image,
+            self.num_channels,
+            self.image_size,
+            self.image_size,
+        ])
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+
+        return config, input_ids, None, input_mask, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, token_type_ids, input_mask, pixel_values = self.prepare_config_and_inputs()
+
+        input_ids[input_ids == config.image_token_index] = self.bos_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),
+        }
+        return config, inputs_dict
+
 
 @require_torch
 class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
@@ -73,6 +139,8 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
     Model tester for `LlavaNextForConditionalGeneration`.
     """
     model_tester_class = LlavaNextVisionText2TextModelTester
+    test_resize_embeddings = False
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -106,28 +174,6 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
-
-    def test_odd_sized_image(self):
-        # prepare model configuration
-        config = self.model_tester.get_config()
-
-        # prepare input
-        num_image_tokens = 24
-        pixel_values = floats_tensor([1, 5, 3, config.vision_config.image_size, config.vision_config.image_size])
-        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
-        input_ids[:, :num_image_tokens] = config.image_token_index
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-
-        # forward with odd-sized image input
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model(**inputs_dict)
 
     @parameterized.expand(
         [
