@@ -226,12 +226,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "TokenizersBackend" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
-        (
-            "mistral",
-            "MistralCommonBackend"
-            if is_mistral_common_available()
-            else ("TokenizersBackend" if is_tokenizers_available() else None),
-        ),
+        ("mistral", "TokenizersBackend"),
         (
             "mistral3",
             (
@@ -681,20 +676,37 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # If that did not work, let's try to use the config.
+        # Load config early to prioritize TOKENIZER_MAPPING over tokenizer_config
+        if not isinstance(config, PreTrainedConfig):
+            if gguf_file:
+                gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+                config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+                config = AutoConfig.for_model(**config_dict)
+            else:
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+        
+        # Prioritize TOKENIZER_MAPPING over tokenizer_config
+        config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
+        
+        if type(config_for_lookup) in TOKENIZER_MAPPING:
+            tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
+            
+            # Resolve tokenizer class from tuple or string
+            if isinstance(tokenizer_class, tuple):
+                tokenizer_class = tokenizer_class[1] or tokenizer_class[0]
+            if isinstance(tokenizer_class, str):
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class)
+            
+            if tokenizer_class is not None:
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        
+        # Fall back to config tokenizer_class if TOKENIZER_MAPPING lookup failed
         if config_tokenizer_class is None:
-            if not isinstance(config, PreTrainedConfig):
-                if gguf_file:
-                    gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-                    config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
-                    config = AutoConfig.for_model(**config_dict)
-                else:
-                    config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                    )
             config_tokenizer_class = config.tokenizer_class
-            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
-                tokenizer_auto_map = config.auto_map["AutoTokenizer"]
+        if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map and tokenizer_auto_map is None:
+            tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         if (
             config_tokenizer_class is not None
@@ -745,24 +757,6 @@ class AutoTokenizer:
                 tokenizer_class = fast_tokenizer_class
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
-        # Otherwise we have to be creative.
-        # if model is an encoder decoder, the encoder tokenizer class is used by default
-        if isinstance(config, EncoderDecoderConfig):
-            if type(config.decoder) is not type(config.encoder):
-                logger.warning(
-                    f"The encoder model config class: {config.encoder.__class__} is different from the decoder model "
-                    f"config class: {config.decoder.__class__}. It is not recommended to use the "
-                    "`AutoTokenizer.from_pretrained()` method in this case. Please use the encoder and decoder "
-                    "specific tokenizer classes."
-                )
-            config = config.encoder
-
-        model_type = config_class_to_model_type(type(config).__name__)
-        if model_type is not None:
-            tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
-            if tokenizer_class is not None:
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
