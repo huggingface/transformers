@@ -601,15 +601,26 @@ class ContinuousBatchProcessor:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
 
         # If some requests need to be forked, we do it now
+        copy_source, copy_destination = [], []
         while self.scheduler._requests_to_fork:
+            # Get the number of children and reset it so it's not forked again
             state = self.scheduler._requests_to_fork.pop()
             num_children = state.num_children
             state.num_children = 0
-            for i in range(num_children):
-                # FIXME: if fork cant be done, create a new pending request without forking
-                new_request = self.cache.fork_request(state, f"{state.request_id}__child#{i}")
+            # Create the new request
+            new_request_ids = [f"{state.request_id}__child#{i}" for i in range(num_children)]
+            new_requests = [state.fork(new_request_id) for new_request_id in new_request_ids]
+            # Fork the cache
+            copy_src, copy_dst = self.cache.fork_request(state.request_id, new_request_ids)
+            copy_source.extend(copy_src)
+            copy_destination.extend(copy_dst)
+            # Add the new requests to the scheduler
+            for new_request in new_requests:
                 self.scheduler.active_requests[new_request.request_id] = new_request
+            # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
 
+        # The copy induced by the fork is done in one go
+        self.cache.copy_cache(copy_source, copy_destination)
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
 

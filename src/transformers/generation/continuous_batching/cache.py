@@ -400,15 +400,16 @@ class PagedAttentionCache:
             # FIXME: should be one copy for al CMs with only the changing blocks
             # FIXME: even once per fork batch
 
-    def fork_request(self, state: RequestState, new_request_id: str) -> RequestState:
-        """Fork a request into a new request. The new request is created by copying the state and updating the
-        request_id."""
-        new_state = state.fork(new_request_id)
+    def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
+        """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
+        # These lists will be the accumulators for the source and destination blocks for the cache copy
+        source_blocks, destination_blocks = [], []
+        # Main fork loop
         for cm in self.group_cache_managers:
-            source_blocks, forked_blocks = cm.fork_blocks(state.request_id, new_state.request_id, self._block_manager)
-            self.copy_cache(source_blocks, forked_blocks)
-            # FIXME: move it to the batch level
-        return new_state
+            src_blocks, dst_blocks = cm.fork_blocks(source_request_id, destination_request_ids, self._block_manager)
+            source_blocks.extend(src_blocks)
+            destination_blocks.extend(dst_blocks)
+        return source_blocks, destination_blocks
 
 
 # TODO: rework computation with the groups and their sizes
