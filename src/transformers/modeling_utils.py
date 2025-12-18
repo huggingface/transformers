@@ -3713,6 +3713,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                   "org/model@main"
                   "org/model:custom_kernel"
                   "org/model@v1.2.3:custom_kernel"
+            experts_implementation (`str`, *optional*):
+                The experts implementation to use in the model (if relevant). Can be any of:
+
+                - `"eager"` (sequential implementation of the experts matrix multiplications).
+                - `"batched_mm"` (using [`torch.bmm`](https://pytorch.org/docs/stable/generated/torch.bmm.html)).
+                - `"grouped_mm"` (using [`torch._grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
+
+                By default, if available, `grouped_mm` will be used for torch>=2.9.0. The default is otherwise the sequential `"eager"` implementation.
 
             > Parameters for big model inference
 
