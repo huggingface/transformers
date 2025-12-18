@@ -57,7 +57,6 @@ Keys in the mapping must match sub-config names.
 from transformers import AutoModelForImageTextToText
 
 experts_implementation_per_backbone = {
-
     "text_config": "grouped_mm",
     "vision_config": "eager",
 }
