@@ -641,14 +641,14 @@ def set_param_for_module(
         mismatch_keys.add((target_name, param_value.shape, ref.shape))
         return
 
-    # super important otherwise _init_weight will re-init the param
-    param_value._is_hf_initialized = True
     # local_rowise/colwise case
     if is_local_tensor and isinstance(param_value, DTensor):
         param_value = param_value.to_local()
 
     if param_name not in module_obj._buffers:
         param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+
+    param_value._is_hf_initialized = True
 
     setattr(module_obj, param_name, param_value)
 
