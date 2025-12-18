@@ -623,7 +623,6 @@ class IsaacVisionTransformer(nn.Module):
         # Generate cumulative sequence lengths for variable-length attention
         cu_seqlens = torch.zeros(seq_sizes.size(0) + 1, dtype=torch.int32, device=hidden_states.device)
         cu_seqlens[1:] = seq_sizes.cumsum(0)
-        max_seqlen = int(seq_sizes.max().item()) if seq_sizes.numel() > 0 else 0
 
         attention_mask = create_document_attention_mask(self.config, hidden_states, cu_seqlens)
 
@@ -632,7 +631,6 @@ class IsaacVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
             return_dict=True,
         )
         hidden_states = encoder_outputs.last_hidden_state
