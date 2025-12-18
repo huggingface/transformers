@@ -20,8 +20,8 @@ won't need to reinit them.
 Do not rely on it, as we will work to integrate it directly in `timm`, to then remove this file without warning.
 """
 
-from ... import initialization as init
-from ...utils import is_timm_available
+from .. import initialization as init
+from ..utils import is_timm_available
 
 
 if is_timm_available():
