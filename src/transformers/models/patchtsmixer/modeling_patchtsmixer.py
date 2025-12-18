@@ -696,6 +696,10 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, PatchTSMixerBatchNorm):
             init.zeros_(module.batchnorm.bias)
             init.ones_(module.batchnorm.weight)
@@ -1141,6 +1145,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         past_values: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, PatchTSMixerEncoderOutput]:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -1251,6 +1256,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> PatchTSMixerModelOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -1362,6 +1368,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> PatchTSMixerForPreTrainingOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -1574,6 +1581,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> PatchTSMixerForPredictionOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -1797,6 +1805,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> PatchTSMixerForTimeSeriesClassificationOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):
@@ -1987,6 +1996,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> PatchTSMixerForRegressionOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, num_input_channels)`):

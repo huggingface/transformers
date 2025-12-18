@@ -884,7 +884,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
                 # and returns all kwargs that were not used to update the generation config
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                    generation_config=default_pipeline_generation_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
@@ -950,20 +950,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             pipe_information["output_modalities"] = self.model.output_modalities
         return f"{self.__class__.__name__}: {pipe_information}"
 
-    def save_pretrained(
-        self,
-        save_directory: str | os.PathLike,
-        safe_serialization: bool = True,
-        **kwargs: Any,
-    ):
+    def save_pretrained(self, save_directory: str | os.PathLike, **kwargs: Any):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
             save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
-            safe_serialization (`str`):
-                Whether to save the model using `safetensors` or PyTorch serialization.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -992,7 +985,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        kwargs["safe_serialization"] = safe_serialization
         self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:

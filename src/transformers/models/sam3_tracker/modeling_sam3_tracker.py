@@ -107,7 +107,12 @@ class Sam3TrackerFeedForward(nn.Module):
         return hidden_states
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 3 (SAM 3) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
 class Sam3TrackerPreTrainedModel(PreTrainedModel):
     config_class = Sam3TrackerConfig
     base_model_prefix = "sam3_tracker"
@@ -123,6 +128,8 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif isinstance(module, Sam3TrackerPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam3TrackerPositionalEmbedding(nn.Module):

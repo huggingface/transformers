@@ -36,7 +36,6 @@ rendered properly in your Markdown viewer.
  사용됩니다.
 - [`~integrations.CometCallback`]는 [comet_ml](https://www.comet.com/site/)이 설치되어 있으면 사용됩니다.
 - [`~integrations.MLflowCallback`]는 [mlflow](https://www.mlflow.org/)가 설치되어 있으면 사용됩니다.
-- [`~integrations.NeptuneCallback`]는 [neptune](https://neptune.ai/)이 설치되어 있으면 사용됩니다.
 - [`~integrations.AzureMLCallback`]는 [azureml-sdk](https://pypi.org/project/azureml-sdk/)가 설치되어
  있으면 사용됩니다.
 - [`~integrations.CodeCarbonCallback`]는 [codecarbon](https://pypi.org/project/codecarbon/)이 설치되어
@@ -81,8 +80,6 @@ rendered properly in your Markdown viewer.
 [[autodoc]] integrations.AzureMLCallback
 
 [[autodoc]] integrations.CodeCarbonCallback
-
-[[autodoc]] integrations.NeptuneCallback
 
 [[autodoc]] integrations.ClearMLCallback
 

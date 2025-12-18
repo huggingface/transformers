@@ -212,6 +212,8 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
             if self.config.visual_embed:
                 init.zeros_(module.cls_token)
                 init.zeros_(module.pos_embed)
+        elif isinstance(module, LayoutLMv3TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class LayoutLMv3SelfAttention(nn.Module):
@@ -657,6 +659,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
@@ -883,6 +886,12 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
+
     @auto_docstring
     def forward(
         self,
@@ -897,6 +906,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -982,6 +992,12 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
+
     @auto_docstring
     def forward(
         self,
@@ -997,6 +1013,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -1101,6 +1118,12 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.layoutlmv3.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.layoutlmv3.set_input_embeddings(value)
+
     @auto_docstring
     def forward(
         self,
@@ -1115,6 +1138,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):

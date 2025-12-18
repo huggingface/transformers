@@ -18,7 +18,7 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -38,7 +38,6 @@ from ..utils import (
     extract_commit_hash,
     find_adapter_config_file,
     is_kenlm_available,
-    is_offline_mode,
     is_peft_available,
     is_pyctcdecode_available,
     is_torch_available,
@@ -278,7 +277,7 @@ SUPPORTED_TASKS = {
     "image-to-text": {
         "impl": ImageToTextPipeline,
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
-        "default": {"model": ("ydshieh/vit-gpt2-coco-en", "5bebf1e")},
+        "default": {"model": ("ydshieh/vit-gpt2-coco-en", "e460201")},
         "type": "multimodal",
     },
     "image-text-to-text": {
@@ -701,12 +700,14 @@ def pipeline(
 
     code_revision = kwargs.pop("code_revision", None)
     commit_hash = kwargs.pop("_commit_hash", None)
+    local_files_only = kwargs.get("local_files_only", False)
 
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
+        "local_files_only": local_files_only,
     }
 
     if task is None and model is None:

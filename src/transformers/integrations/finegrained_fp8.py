@@ -466,9 +466,11 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+
                 else:
                     raise NotImplementedError("Not supported")
+
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
@@ -483,7 +485,8 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
-            output = torch.nan_to_num(output, nan=0.0)
+
+            #            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
@@ -589,12 +592,22 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-    pre_quantized=False,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
-    """Helper function to replace model layers with FP8 versions."""
+    """
+    A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
+
+    Parameters:
+        model (`torch.nn.Module`):
+            Input model or `torch.nn.Module` as the function is run recursively.
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
+            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
+        quantization_config (`FbgemmFp8Config`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
+    """
+
     if quantization_config.dequantize:
         return model
 
@@ -606,7 +619,7 @@ def replace_with_fp8_linear(
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with init_empty_weights():
-            if "gate_up_proj" in module_name or "down_proj" in module_name and "experts" in module_name:
+            if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
                 )

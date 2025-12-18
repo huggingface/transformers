@@ -144,6 +144,7 @@ class TimesFmPositionalEmbedding(nn.Module):
         super().__init__()
         min_timescale = config.min_timescale
         max_timescale = config.max_timescale
+        self.min_timescale, self.max_timescale = min_timescale, max_timescale
         self.embedding_dims = config.hidden_size
 
         num_timescales = self.embedding_dims // 2
@@ -313,6 +314,17 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         if isinstance(module, TimesFmAttention):
             # Initialize scaling parameter
             init.ones_(module.scaling)
+        elif isinstance(module, TimesFmPositionalEmbedding):
+            num_timescales = module.embedding_dims // 2
+            max_timescale, min_timescale = module.max_timescale, module.min_timescale
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 @auto_docstring
@@ -361,6 +373,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         freq: torch.Tensor,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
+        **kwargs,
     ) -> TimesFmOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -668,6 +681,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         truncate_negative: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

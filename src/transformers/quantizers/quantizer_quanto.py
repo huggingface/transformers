@@ -40,12 +40,17 @@ class QuantoHfQuantizer(HfQuantizer):
     Quantizer for the quanto library
     """
 
-    required_packages = ["quanto", "accelerate"]
-    requires_parameters_quantization = True
     requires_calibration = False
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        map_to_param_size = {
+            "int8": 1,
+            "float8": 1,
+            "int4": 0.5,
+            "int2": 0.25,
+        }
+        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights, None)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():
@@ -57,12 +62,8 @@ class QuantoHfQuantizer(HfQuantizer):
                 "Loading an optimum-quanto quantized model requires accelerate library (`pip install accelerate`)"
             )
         device_map = kwargs.get("device_map")
-        if device_map is not None:
-            if (
-                isinstance(device_map, dict)
-                and len(device_map) >= 2
-                and ("cpu" in device_map.values() or "disk" in device_map.values())
-            ):
+        if isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an model with a device_map that contains a CPU or disk device."
                     "This is not supported with quanto when the model is quantized on the fly. "
@@ -89,37 +90,29 @@ class QuantoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
+            return self.quantized_param_size
 
-        mapping = {
-            "int8": torch.int8,
-            "float8": CustomDtype.FP8,
-            "int4": CustomDtype.INT4,
-            "int2": CustomDtype.INT2,
-        }
-        target_dtype = mapping[self.quantization_config.weights]
-        return target_dtype
+        return super().param_element_size(model, param_name, param)
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return False
 
     def get_quantize_ops(self):

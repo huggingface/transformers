@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
@@ -349,6 +350,14 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         return super().device
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BarkSelfAttention):
+            if module.is_causal:
+                block_size = module.config.block_size
+                bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
+                init.copy_(module.bias, bias)
+
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
@@ -426,6 +435,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
@@ -1028,6 +1038,7 @@ class BarkFineModel(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         codebook_idx (`int`):

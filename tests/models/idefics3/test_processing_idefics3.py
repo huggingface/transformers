@@ -29,6 +29,12 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
     model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
 
+    def get_processor(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.tokenizer.add_bos_token = True
+        processor.tokenizer.add_eos_token = False
+        return processor
+
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
