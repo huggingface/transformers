@@ -67,7 +67,6 @@ if is_torch_available():
         AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
-        AutoModelForVision2Seq,
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
@@ -4427,7 +4426,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         """Test that `decoder_input_ids` can be used to condition the generation in vision-to-text models"""
         pixel_values = floats_tensor((2, 3, 30, 30))
         conditioning_input = torch.tensor([[10], [10]])  # this should be the 2nd output token, after the BOS token
-        model = AutoModelForVision2Seq.from_pretrained(
+        model = AutoModelForImageTextToText.from_pretrained(
             "hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2"
         )
         pixel_values = pixel_values.to(torch_device)
@@ -4446,6 +4445,24 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
+
+    @pytest.mark.generate
+    def test_load_generation_config_from_text_subconfig(self):
+        """
+        Tests that generation config is be loaded from model's `text_config` when not present
+        in the model repo. We should infer the text config correctly and re-use special tokens
+        for generation. See https://github.com/huggingface/transformers/issues/42794
+        """
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-LlavaForConditionalGeneration-no-generation-config",
+            device_map=torch_device,
+        )
+        self.assertTrue(model.generation_config.eos_token_id is not None)
+        self.assertTrue(model.generation_config.bos_token_id is not None)
+        self.assertTrue(model.generation_config.pad_token_id is not None)
+
+        # test that we can generate without inputs, i.e. from BOS
+        _ = model.generate()
 
     @require_read_token
     @slow

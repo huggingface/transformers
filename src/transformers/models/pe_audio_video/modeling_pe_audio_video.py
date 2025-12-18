@@ -25,6 +25,7 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -465,7 +466,7 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -542,7 +543,7 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, PeAudioVideoEncoderPatchEmbedder):
             embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+            init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 @dataclass

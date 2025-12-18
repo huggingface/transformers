@@ -86,6 +86,7 @@ from .integrations.tensor_parallel import (
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
+from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
@@ -2205,16 +2206,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
-            if getattr(module, "bias", None) is not None:
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            if getattr(module, "weight", None) is not None:
-                init.normal_(module.weight, mean=0.0, std=std)
-                # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-                if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                    init.zeros_(module.weight[module.padding_idx])
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
@@ -2226,10 +2225,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             or "RMSNorm" in module.__class__.__name__
         ):
             # Norms can exist without weights (in which case they are None from torch primitives)
-            if hasattr(module, "weight") and module.weight is not None:
+            if getattr(module, "weight", None) is not None:
                 init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
+            if getattr(module, "bias", None) is not None:
                 init.zeros_(module.bias)
+            # And the potential buffers for the BatchNorms
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
+        # This matches all the usual RotaryEmbeddings modules
+        elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     def _initialize_weights(self, module):
         """
@@ -2239,7 +2253,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
-        module._is_hf_initialized = True
+        # If we are not currently under meta device (which would virtually skip `_init_weights`), mark as initialized
+        if get_torch_context_manager_or_global_device() != torch.device("meta"):
+            module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
@@ -3671,7 +3687,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             > Parameters for big model inference
 
-            dtype (`str` or `torch.dtype`, *optional*):
+            dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
                 Override the default `torch_dtype` and load the model under a specific `dtype`. The different options
                 are:
 
@@ -4056,6 +4072,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
         expected_keys = list(model.state_dict().keys())
+
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
 
@@ -4398,8 +4415,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
             if param.device == torch.device("meta"):
                 value = torch.empty_like(param, dtype=dtype, device="cpu")
-                if not is_quantized or not hf_quantizer.param_needs_quantization(self, key):
-                    _load_parameter_into_model(self, key, value)
+                _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4539,6 +4555,46 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
+def get_total_byte_count(
+    model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer] = None
+):
+    """
+    This utility function calculates the total bytes count needed to load the model on each device.
+    This is useful for caching_allocator_warmup as we want to know how much cache we need to pre-allocate.
+    """
+
+    total_byte_count = defaultdict(lambda: 0)
+    tied_param_names = model.all_tied_weights_keys.keys()
+
+    tp_plan = getattr(model, "_tp_plan", []) or []
+    tp_plan_regex = (
+        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
+        if _torch_distributed_available and torch.distributed.is_initialized()
+        else None
+    )
+
+    for param_name, device in accelerator_device_map.items():
+        # Skip if the parameter has already been accounted for (tied weights)
+        if param_name in tied_param_names:
+            continue
+
+        param = model.get_parameter_or_buffer(param_name)
+
+        if hf_quantizer is not None:
+            dtype_size = hf_quantizer.param_element_size(model, param_name, param)
+        else:
+            dtype_size = param.element_size()
+
+        param_byte_count = param.numel() * dtype_size
+
+        if tp_plan_regex is not None:
+            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
+            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+
+        total_byte_count[device] += param_byte_count
+    return total_byte_count
+
+
 def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, hf_quantizer: Optional[HfQuantizer]):
     """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
     device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
@@ -4558,7 +4614,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2 if hf_quantizer is None else hf_quantizer.get_accelerator_warm_up_factor()
+    factor = 2
 
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
@@ -4567,40 +4623,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     if not accelerator_device_map:
         return
 
-    tp_plan = getattr(model, "_tp_plan", []) or []
-    tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
-        if _torch_distributed_available and torch.distributed.is_initialized()
-        else None
-    )
-    total_byte_count = defaultdict(lambda: 0)
-    tied_param_names = model.all_tied_weights_keys.keys()
-    for param_name, device in accelerator_device_map.items():
-        # Skip if the parameter has already been accounted for (tied weights)
-        if param_name in tied_param_names:
-            continue
-
-        # For example in the case of MXFP4 quantization, we need to update the param name to the original param name
-        # because the checkpoint contains blocks, and scales, but since we are dequantizing, we need to use the original param name
-        if hf_quantizer is not None:
-            param_name = hf_quantizer.get_param_name(param_name)
-
-        try:
-            param = model.get_parameter_or_buffer(param_name)
-        except AttributeError:
-            # TODO: for now let's skip if we can't find the parameters
-            if hf_quantizer is not None:
-                continue
-            raise AttributeError(f"Parameter {param_name} not found in model")
-
-        # The dtype of different parameters may be different with composite models or `keep_in_fp32_modules`
-        param_byte_count = param.numel() * param.element_size()
-
-        if tp_plan_regex is not None:
-            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
-            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
-
-        total_byte_count[device] += param_byte_count
+    total_byte_count = get_total_byte_count(model, accelerator_device_map, hf_quantizer)
 
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
@@ -4620,8 +4643,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             unused_memory = torch_accelerator_module.memory_reserved(
                 index
             ) - torch_accelerator_module.memory_allocated(index)
-            byte_count = max(0, byte_count - unused_memory)
-        # Allocate memory
+            byte_count = int(max(0, byte_count - unused_memory))
         _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
 
 

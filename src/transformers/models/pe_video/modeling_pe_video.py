@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
@@ -427,7 +428,7 @@ class PeVideoPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, PeVideoEncoderPatchEmbedder):
             embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+            init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
 class PeVideoEncoderRotaryEmbedding(nn.Module):
@@ -447,7 +448,7 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
