@@ -371,6 +371,15 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
+# Model types that should prioritize TOKENIZER_MAPPING over tokenizer_config
+PRIORITIZE_MAPPING_FOR_MODELS = [
+    "ministral3",
+    "mistral3",
+    "mixtral",
+    "pixtral",
+    "voxtral",
+]
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -689,8 +698,9 @@ class AutoTokenizer:
         
         # Prioritize TOKENIZER_MAPPING over tokenizer_config
         config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
+        model_type = getattr(config_for_lookup, "model_type", None)
         
-        if type(config_for_lookup) in TOKENIZER_MAPPING:
+        if model_type in PRIORITIZE_MAPPING_FOR_MODELS and type(config_for_lookup) in TOKENIZER_MAPPING:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
             
             if isinstance(tokenizer_class, tuple):
