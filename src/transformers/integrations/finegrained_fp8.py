@@ -37,9 +37,7 @@ try:
 except AttributeError:
     _FP8_DTYPE = None
     _FP8_MIN, _FP8_MAX = -448, 448
-    logger.warning_once(
-        "torch.float8_e4m3fn not available"
-    )
+    logger.warning_once("torch.float8_e4m3fn not available")
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
