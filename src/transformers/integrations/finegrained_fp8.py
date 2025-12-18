@@ -34,14 +34,10 @@ try:
     _FP8_DTYPE = torch.float8_e4m3fn
     _FP8_MIN = torch.finfo(_FP8_DTYPE).min
     _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-    _FP8_IS_INT = False
 except AttributeError:
-    _FP8_DTYPE = torch.int8
-    _FP8_MIN, _FP8_MAX = -127, 127
-    _FP8_IS_INT = True
-    logger.warning_once(
-        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
-    )
+    _FP8_DTYPE = None
+    _FP8_MIN, _FP8_MAX = -448, 448
+    logger.warning_once("torch.float8_e4m3fn not available")
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -701,10 +697,7 @@ class Fp8Quantize(ConversionOps):
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
 
-        if _FP8_IS_INT:
-            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        else:
-            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
 
         quantized = quantized.reshape(original_shape)
 
