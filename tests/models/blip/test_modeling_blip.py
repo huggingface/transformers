@@ -502,7 +502,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(
-            text_features.logits.shape,
+            text_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,
