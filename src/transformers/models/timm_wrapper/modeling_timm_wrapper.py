@@ -82,7 +82,7 @@ def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     config: TimmWrapperConfig
     _no_split_modules = []
     model_tags = ["timm"]
@@ -90,38 +90,16 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision", "timm"])
-        super().__init__(*args, **kwargs)
-
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
         super().post_init()
-
-    @staticmethod
-    def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
-        """
-        Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
-        We don't want this behavior for timm wrapped models. Instead, this method adds a
-        "timm_model." prefix to enable loading official timm Hub checkpoints.
-        """
-        if "timm_model." not in key:
-            return f"timm_model.{key}", True
-        return key, False
-
-    def _fix_state_dict_key_on_save(self, key):
-        """
-        Overrides original method to remove "timm_model." prefix from state_dict keys.
-        Makes the saved checkpoint compatible with the `timm` library.
-        """
-        return key.replace("timm_model.", ""), True
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
         Override original method to fix state_dict keys on load for cases when weights are loaded
         without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
-        state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
+        state_dict = {f"timm_model.{k}" if "timm_model." not in k else k: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
     @torch.no_grad()
@@ -154,6 +132,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def get_input_embeddings(self):
+        # TIMM backbones operate directly on images and do not expose token embeddings.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -161,6 +146,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
@@ -236,7 +222,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device, self.dtype)
+        pixel_values = pixel_values.to(self.device)
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
@@ -276,6 +262,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
 
         if config.num_labels == 0:

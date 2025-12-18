@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -55,7 +55,7 @@ class ViTMAEModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -262,7 +262,7 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()

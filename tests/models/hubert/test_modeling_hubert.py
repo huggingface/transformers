@@ -48,7 +48,7 @@ class HubertModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=16,

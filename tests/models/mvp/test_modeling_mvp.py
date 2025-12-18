@@ -74,7 +74,7 @@ class MvpModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_labels=False,
@@ -556,7 +556,7 @@ class MvpModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.3461, 0.3624, 0.2689], [0.3461, 0.3624, 0.2689], [-0.1562, 1.1637, -0.3784]], device=torch_device
         )
-        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(output[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_summarization_inference(self):
@@ -580,7 +580,7 @@ class MvpStandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=2,
+        batch_size=13,
         d_model=16,
         decoder_seq_length=7,
         is_training=True,

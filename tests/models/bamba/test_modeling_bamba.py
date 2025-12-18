@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -64,7 +63,7 @@ class BambaModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -444,7 +443,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @unittest.skip(

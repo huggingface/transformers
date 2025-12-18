@@ -46,7 +46,7 @@ class FastSpeech2ConformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
@@ -222,6 +222,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 
@@ -457,7 +458,7 @@ class FastSpeech2ConformerWithHifiGanTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
@@ -640,6 +641,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 

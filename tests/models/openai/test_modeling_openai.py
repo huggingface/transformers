@@ -40,7 +40,7 @@ class OpenAIGPTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_token_type_ids=True,
@@ -300,5 +300,5 @@ class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
             481,
         ]  # the president is a very good man. " \n " i\'m sure he is, " said the
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

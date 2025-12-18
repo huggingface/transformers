@@ -177,7 +177,7 @@ class Mistral3ModelOutputWithPast(BaseModelOutputWithPast):
 class Mistral3PreTrainedModel(PreTrainedModel):
     config: Mistral3Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -212,12 +212,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -258,7 +252,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
+        split_sizes = (
+            (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1).tolist()
+        )
         image_features = torch.split(image_features.squeeze(0), split_sizes)
         return image_features
 
@@ -383,12 +379,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -402,19 +392,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             vision_feature_layer=vision_feature_layer,
             **kwargs,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class ErnieConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ErnieModel`] or a [`TFErnieModel`]. It is used to
+    This is the configuration class to store the configuration of a [`ErnieModel`]. It is used to
     instantiate a ERNIE model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ERNIE
     [nghuyong/ernie-3.0-base-zh](https://huggingface.co/nghuyong/ernie-3.0-base-zh) architecture.
@@ -36,7 +36,7 @@ class ErnieConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ERNIE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ErnieModel`] or [`TFErnieModel`].
+            `inputs_ids` passed when calling [`ErnieModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -56,7 +56,7 @@ class ErnieConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ErnieModel`] or [`TFErnieModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ErnieModel`].
         task_type_vocab_size (`int`, *optional*, defaults to 3):
             The vocabulary size of the `task_type_ids` for ERNIE2.0/ERNIE3.0 model
         use_task_id (`bool`, *optional*, defaults to `False`):

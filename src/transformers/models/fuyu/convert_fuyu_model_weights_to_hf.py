@@ -77,7 +77,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
+def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path):
     sys.path.insert(0, ada_lib_path)
     model_state_dict_base = torch.load(pt_model_path, map_location="cpu", weights_only=True)
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], ".")
@@ -86,7 +86,7 @@ def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_pat
     transformers_config = FuyuConfig()
     model = FuyuForCausalLM(transformers_config).to(torch.bfloat16)
     model.load_state_dict(state_dict)
-    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
+    model.save_pretrained(pytorch_dump_folder_path)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
 
 
@@ -108,14 +108,12 @@ def main():
         "--ada_lib_path",
         help="Location of original source code from adept to deserialize .pt checkpoint",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "adept_vocab.model")
 
     convert_fuyu_checkpoint(
         pytorch_dump_folder_path=args.output_dir,
         pt_model_path=args.pt_model_path,
-        safe_serialization=args.safe_serialization,
         ada_lib_path=args.ada_lib_path,
     )
     tokenizer = tokenizer_class(spm_path, bos_token="|ENDOFTEXT|", eos_token="|ENDOFTEXT|")

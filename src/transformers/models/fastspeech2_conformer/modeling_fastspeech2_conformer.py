@@ -514,7 +514,7 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time)`): Attention mask.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
@@ -530,7 +530,10 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
         # Apply padding mask before convolution
         if attention_mask is not None:
-            all_masked_rows = torch.all(~attention_mask, dim=-1)
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=2)
+            else:
+                all_masked_rows = torch.all(~(attention_mask == 0.0), dim=2)
             hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
 
         # 1D Depthwise Conv
@@ -1007,6 +1010,10 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1118,6 +1125,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1406,6 +1414,12 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FastSpeech2ConformerHifiGan):
+            init.zeros_(module.mean)
+            init.ones_(module.scale)
+
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm"):
@@ -1433,7 +1447,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         waveform.
         """
     )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         spectrogram (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
@@ -1509,6 +1523,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

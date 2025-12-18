@@ -185,7 +185,6 @@ def write_model(
     model_path,
     input_base_path,
     model_size=None,
-    safe_serialization=True,
     llama_version="1",
     vocab_size=None,
     num_shards=None,
@@ -427,10 +426,11 @@ def write_model(
         print("Saving in the Transformers format.")
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(model_path, safe_serialization=safe_serialization, private=True, use_temp_dir=True)
+            model_name = model_path.split(os.path.sep)[-1]
+            model.push_to_hub(model_name, private=True)
         else:
             print("Saving to disk.")
-            model.save_pretrained(model_path, safe_serialization=safe_serialization)
+            model.save_pretrained(model_path)
 
 
 class Llama3Converter(TikTokenConverter):
@@ -511,7 +511,8 @@ def write_tokenizer(
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        model_name = tokenizer_path.split(os.path.sep)[-1]
+        tokenizer.push_to_hub(model_name, private=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         tokenizer.save_pretrained(tokenizer_path)
@@ -538,9 +539,6 @@ def main():
         help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
     )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
@@ -592,7 +590,6 @@ def main():
             model_path=args.output_dir,
             input_base_path=args.input_dir,
             model_size=args.model_size,
-            safe_serialization=args.safe_serialization,
             llama_version=args.llama_version,
             vocab_size=vocab_size,
             num_shards=args.num_shards,

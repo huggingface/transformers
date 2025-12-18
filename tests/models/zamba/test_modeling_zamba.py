@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -52,7 +52,7 @@ class ZambaModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -443,7 +443,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         return config, input_ids, input_mask
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow

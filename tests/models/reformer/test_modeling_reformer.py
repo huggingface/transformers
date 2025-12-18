@@ -50,7 +50,7 @@ class ReformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=32,
         text_seq_length=None,
         is_training=True,
@@ -408,11 +408,11 @@ class ReformerModelTester:
     def create_and_check_reformer_model_generate(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
         config.lsh_num_chunks_after = 0
-        config.bos_token_id = 0
-        config.eos_token_id = None
-        config.max_length = 20
 
         model = ReformerModelWithLMHead(config=config)
+        model.generation_config.bos_token_id = 0
+        model.generation_config.eos_token_id = None
+        model.generation_config.max_length = 20
         model.to(torch_device)
         model.eval()
         output = model.generate()
@@ -770,7 +770,7 @@ class ReformerLSHAttnModelTest(
     def setUp(self):
         self.model_tester = ReformerModelTester(
             self,
-            batch_size=2,
+            batch_size=13,
             seq_length=13,
             use_input_mask=True,
             use_labels=True,

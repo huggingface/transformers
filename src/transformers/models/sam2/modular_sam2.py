@@ -103,15 +103,6 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _get_preprocess_shape(self):
-        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
-
-    def resize(self):
-        raise NotImplementedError("No need to override resize for SAM 2.")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -151,11 +142,9 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -299,6 +288,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         return output_masks
 
+    def _get_preprocess_shape(self):
+        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
+
+    def resize(self):
+        raise NotImplementedError("No need to override resize for SAM 2.")
+
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
@@ -392,7 +387,7 @@ class Sam2PatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         _, num_channels, height, width = pixel_values.shape
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).permute(0, 2, 3, 1)
         return embeddings
 
 
@@ -427,7 +422,7 @@ class Sam2VisionNeck(nn.Module):
         n = len(self.convs) - 1
         for i in range(n, -1, -1):
             lateral_features = hidden_states[i].permute(0, 3, 1, 2)
-            lateral_features = self.convs[n - i](lateral_features)
+            lateral_features = self.convs[n - i](lateral_features.to(self.convs[i].weight.dtype))
             if i not in self.fpn_top_down_levels or i == n:
                 prev_features = lateral_features
             else:
@@ -673,7 +668,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
     config_class = Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
@@ -686,7 +681,9 @@ class Sam2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
                 init.zeros_(module.pos_embed_window)
-        if isinstance(module, Sam2Model):
+        elif isinstance(module, Sam2PositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
 
@@ -721,6 +718,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
                 self.blocks.append(block)
                 total_block_idx += 1
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.patch_embed
 
@@ -732,7 +731,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -784,7 +783,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1286,7 +1285,7 @@ class Sam2Model(SamModel):
 
         return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1375,7 +1374,7 @@ class Sam2Model(SamModel):
 
         >>> # Postprocess masks
         >>> masks = processor.post_process_masks(
-        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ...     outputs.pred_masks, inputs["original_sizes"]
         ... )
         ```
         """

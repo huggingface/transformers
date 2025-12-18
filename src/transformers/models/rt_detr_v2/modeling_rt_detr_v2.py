@@ -454,7 +454,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
     base_model_prefix = "rt_detr_v2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
 
     @torch.no_grad()
@@ -506,6 +506,10 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         elif isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
@@ -515,6 +519,9 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
+        if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            n_points_scale = [1 / n for n in module.n_points_list for _ in range(n)]
+            init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
 @dataclass
@@ -591,6 +598,7 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1439,9 +1447,6 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad_(False)
@@ -1491,6 +1496,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], RTDetrV2ModelOutput]:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):

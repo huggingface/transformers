@@ -551,7 +551,7 @@ class OwlViTEncoderLayer(GradientCheckpointingLayer):
 class OwlViTPreTrainedModel(PreTrainedModel):
     config: OwlViTConfig
     base_model_prefix = "owlvit"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["OwlViTEncoderLayer"]
 
@@ -562,10 +562,12 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         if isinstance(module, OwlViTTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, OwlViTVisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, OwlViTAttention):
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -755,7 +757,7 @@ class OwlViTTextTransformer(nn.Module):
 
 class OwlViTTextModel(OwlViTPreTrainedModel):
     config: OwlViTTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
@@ -777,6 +779,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
@@ -866,7 +869,7 @@ class OwlViTVisionTransformer(nn.Module):
 class OwlViTVisionModel(OwlViTPreTrainedModel):
     config: OwlViTVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
@@ -885,6 +888,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1033,6 +1037,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, OwlViTOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1543,6 +1548,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OwlViTObjectDetectionOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):

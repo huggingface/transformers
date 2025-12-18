@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -66,6 +67,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -665,6 +667,14 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, NllbMoeSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):
     _can_record_outputs = {
@@ -703,7 +713,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -788,7 +798,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -892,9 +902,6 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @can_return_tuple
@@ -1065,12 +1072,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         self.router_aux_loss_coef = config.router_aux_loss_coef
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @can_return_tuple
     @auto_docstring

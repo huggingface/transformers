@@ -37,7 +37,7 @@ from ...modeling_rope_utils import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
 
@@ -741,7 +741,7 @@ class MllamaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -781,7 +781,7 @@ class MllamaRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -794,7 +794,7 @@ class MllamaRotaryEmbedding(nn.Module):
 class MllamaPreTrainedModel(PreTrainedModel):
     config: MllamaConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "MllamaVisionEncoderLayer",
@@ -847,6 +847,15 @@ class MllamaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MllamaPrecomputedAspectRatioEmbedding):
             if module.is_gated:
                 init.zeros_(module.gate)
+        elif isinstance(module, MllamaRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
@@ -982,7 +991,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
 class MllamaVisionModel(MllamaPreTrainedModel):
     config: MllamaVisionConfig
     base_model_prefix = "vision_model"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: MllamaVisionConfig):
         super().__init__(config)
@@ -1033,7 +1042,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
@@ -1180,7 +1189,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
 class MllamaTextModel(MllamaPreTrainedModel):
     config: MllamaTextConfig
     base_model_prefix = "language_model.model"
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: MllamaTextConfig):
         super().__init__(config)
@@ -1203,7 +1212,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1465,13 +1474,7 @@ class MllamaModel(MllamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1599,21 +1602,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
 
     @can_return_tuple
     @auto_docstring

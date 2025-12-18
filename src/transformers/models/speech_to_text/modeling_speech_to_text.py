@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -105,6 +106,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -495,6 +497,14 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Speech2TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
@@ -567,6 +577,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -707,6 +718,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -884,9 +896,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -902,6 +911,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1010,7 +1020,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     """
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, GenerationMixin):
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
     base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
@@ -1021,12 +1031,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @auto_docstring
     def forward(
@@ -1044,6 +1048,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):

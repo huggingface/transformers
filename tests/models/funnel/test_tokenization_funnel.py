@@ -13,11 +13,9 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
-from transformers import FunnelTokenizer, FunnelTokenizerFast
-from transformers.models.funnel.tokenization_funnel import VOCAB_FILES_NAMES
+from transformers import FunnelTokenizer
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -27,61 +25,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "funnel-transformer/small"
     tokenizer_class = FunnelTokenizer
-    rust_tokenizer_class = FunnelTokenizerFast
-    test_rust_tokenizer = True
-    space_between_special_tokens = True
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        vocab_tokens = [
-            "<unk>",
-            "<cls>",
-            "<sep>",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-
-    @classmethod
-    def get_tokenizer(cls, pretrained_name=None, **kwargs):
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return FunnelTokenizer.from_pretrained(pretrained_name, **kwargs)
-
-    @classmethod
-    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
-        pretrained_name = pretrained_name or cls.tmpdirname
-        return FunnelTokenizerFast.from_pretrained(pretrained_name, **kwargs)
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00e9d,running"
-        output_text = "unwanted, running"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
-
-        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
-
-    def test_token_type_ids(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            inputs = tokenizer("UNwant\u00e9d,running")
-            sentence_len = len(inputs["input_ids"]) - 1
-            self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len)
-
-            inputs = tokenizer("UNwant\u00e9d,running", "UNwant\u00e9d,running")
-            self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len + [1] * sentence_len)
+    integration_expected_tokens = ['<unk>', 'is', 'a', 'test', '<unk>', '<unk>', 'was', 'born', 'in', '92', '##00', '##0', ',', 'and', 'this', 'is', '<unk>', '.', '生', '<unk>', '的', '真', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<s>', 'hi', '<s>', 'there', '<unk>', 'following', 'string', 'should', 'be', 'properly', 'encoded', ':', '<unk>', '.', '<unk>', 'ir', '##d', 'and', '<unk>', 'ir', '##d', '<unk>', '<unk>', 'how', 'are', 'you', 'doing']  # fmt: skip
+    integration_expected_token_ids = [100, 2003, 1037, 3231, 100, 100, 2001, 2141, 1999, 6227, 8889, 2692, 1010, 1998, 2023, 2003, 100, 1012, 1910, 100, 1916, 1921, 100, 100, 100, 100, 100, 100, 100, 96, 7632, 96, 2045, 100, 2206, 5164, 2323, 2022, 7919, 12359, 1024, 100, 1012, 100, 20868, 2094, 1998, 100, 20868, 2094, 100, 100, 2129, 2024, 2017, 2725]  # fmt: skip
+    expected_tokens_from_ids = ['<unk>', 'is', 'a', 'test', '<unk>', '<unk>', 'was', 'born', 'in', '92', '##00', '##0', ',', 'and', 'this', 'is', '<unk>', '.', '生', '<unk>', '的', '真', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<unk>', '<s>', 'hi', '<s>', 'there', '<unk>', 'following', 'string', 'should', 'be', 'properly', 'encoded', ':', '<unk>', '.', '<unk>', 'ir', '##d', 'and', '<unk>', 'ir', '##d', '<unk>', '<unk>', 'how', 'are', 'you', 'doing']  # fmt: skip
+    integration_expected_decoded_text = "<unk> is a test <unk> <unk> was born in 92000, and this is <unk>. 生 <unk> 的 真 <unk> <unk> <unk> <unk> <unk> <unk> <unk> <s> hi <s> there <unk> following string should be properly encoded : <unk>. <unk> ird and <unk> ird <unk> <unk> how are you doing"

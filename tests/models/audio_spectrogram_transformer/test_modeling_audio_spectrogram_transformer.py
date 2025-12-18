@@ -45,7 +45,7 @@ class ASTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         patch_size=2,
         max_length=24,
         num_mel_bins=16,

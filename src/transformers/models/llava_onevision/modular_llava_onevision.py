@@ -205,15 +205,12 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
+            processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,

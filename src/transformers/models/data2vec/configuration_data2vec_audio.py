@@ -37,7 +37,7 @@ class Data2VecAudioConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the Data2VecAudio model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Data2VecAudioModel`] or [`TFData2VecAudioModel`]. Vocabulary size
+            by the `inputs_ids` passed when calling [`Data2VecAudioModel`]. Vocabulary size
             of the model. Defines the different tokens that can be represented by the *inputs_ids* passed to the
             forward method of [`Data2VecAudioModel`].
         hidden_size (`int`, *optional*, defaults to 768):

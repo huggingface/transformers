@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,8 +39,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 
@@ -198,6 +198,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -225,6 +226,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3VLMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -383,8 +385,8 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 @auto_docstring
@@ -400,7 +402,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
@@ -416,6 +418,25 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3VLMoeTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Qwen3VLMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
+
+class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
 
 
 class Qwen3VLMoeVisionMLP(nn.Module):
@@ -449,20 +470,6 @@ class Qwen3VLMoeVisionPatchEmbed(nn.Module):
         )
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
-
-
-class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
 
 
 class Qwen3VLMoeVisionPatchMerger(nn.Module):
@@ -644,6 +651,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self.post_init()
+
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
 
@@ -685,7 +694,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
-        device = grid_thw.device
+        device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -813,7 +822,7 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
@@ -858,7 +867,7 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -911,7 +920,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1094,12 +1103,6 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
     def get_rope_index(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1109,7 +1112,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Different from the original implementation, Qwen3VLMoe use timestamps rather than absolute time position ids."""
 
-        # Since we use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split
+        # Since we use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
@@ -1291,7 +1294,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         return special_image_mask, special_video_mask
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1362,44 +1365,19 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             deepstack_visual_embeds = deepstack_video_embeds
 
         if position_ids is None:
-            attention_mask_tensor = (
-                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
-            )
-            if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
-                attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
-                # Only apply conversion for floating point tensors (inverted masks)
-                if attention_mask_tensor.dtype.is_floating_point:
-                    attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
-                    attention_mask_tensor = (1.0 - attention_mask_tensor).int()
-
-            # Calculate RoPE index once per generation in the pre-fill stage only.
-            # When compiling, we can't check tensor values thus we check only input length
-            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
-            # models currently cannot do asssisted decoding
-            prefill_compiled_stage = is_torchdynamo_compiling() and (
-                (input_ids is not None and input_ids.shape[1] != 1)
-                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-            )
-            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-                (cache_position is not None and cache_position[0] == 0)
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if self.rope_deltas is None or past_key_values_length == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
-                    attention_mask=attention_mask_tensor,
+                    attention_mask=attention_mask,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
-                delta = (
-                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                    if cache_position is not None
-                    else 0
-                )
+                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 if cache_position is not None:  # otherwise `deltas` is an int `0`
@@ -1528,12 +1506,6 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1542,16 +1514,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
-
-    @check_model_inputs()
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1661,6 +1624,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 
@@ -1696,8 +1661,33 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             **kwargs,
         )
 
-        # Qwen3VLMoe position_ids are prepareed with rope_deltas in forward
-        model_inputs["position_ids"] = None
+        # Qwen3VLMoe position_ids are prepared with rope_deltas
+        if position_ids is None:
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
+            if model_inputs["cache_position"][0] == 0 or self.model.rope_deltas is None:
+                vision_positions, rope_deltas = self.model.get_rope_index(
+                    model_inputs.get("input_ids", None),
+                    image_grid_thw=image_grid_thw,
+                    video_grid_thw=video_grid_thw,
+                    attention_mask=attention_mask,
+                )
+                self.model.rope_deltas = rope_deltas
+            # then use the prev pre-calculated rope-deltas to get the correct position ids
+            elif "position_ids" in model_inputs:
+                batch_size, seq_length = model_inputs["position_ids"].shape
+                device = model_inputs["position_ids"].device
+                position_ids = torch.arange(seq_length, device=device)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
+                delta = cache_position[0] + self.model.rope_deltas
+                delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                vision_positions = position_ids + delta.expand_as(position_ids)
+
+            # Concatenate "text + vision" positions into [4, bs, seq-len]
+            text_positions = model_inputs["position_ids"][None, ...]
+            model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
         if cache_position[0] != 0:
             model_inputs["pixel_values"] = None

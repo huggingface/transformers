@@ -749,6 +749,11 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
             init.normal_(module.weight)
+        elif isinstance(module, Wav2Vec2BertRotaryPositionalEmbedding):
+            dim = self.config.hidden_size // self.config.num_attention_heads
+            base = self.config.rotary_embedding_base
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(
@@ -994,6 +999,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, Wav2Vec2BertBaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1086,6 +1092,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
@@ -1192,6 +1199,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1282,6 +1290,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1440,6 +1449,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, XVectorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

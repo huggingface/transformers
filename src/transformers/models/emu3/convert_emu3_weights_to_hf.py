@@ -303,7 +303,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     state_dict = convert_state_dict_to_hf(model_vqgan.state_dict(), state_dict)
 
     model.load_state_dict(state_dict, assign=True, strict=True)
-    model.save_pretrained(output_dir, safe_serialization=True)
+    model.save_pretrained(output_dir)
 
     if hub_model_id is not None:
         model.push_to_hub(hub_model_id)

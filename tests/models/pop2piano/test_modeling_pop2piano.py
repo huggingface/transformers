@@ -49,7 +49,7 @@ class Pop2PianoModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=2,
+        batch_size=13,
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests

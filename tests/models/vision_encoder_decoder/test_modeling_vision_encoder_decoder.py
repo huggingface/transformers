@@ -308,6 +308,7 @@ class EncoderDecoderMixin:
         enc_dec_model.to(torch_device)
 
         inputs = pixel_values
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
@@ -648,8 +649,8 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        model_tester_encoder = SwinModelTester(self, batch_size=2, embed_dim=32)
-        model_tester_decoder = BartModelTester(self, batch_size=2, hidden_size=32, max_position_embeddings=512)
+        model_tester_encoder = SwinModelTester(self, batch_size=13, embed_dim=32)
+        model_tester_decoder = BartModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
         config, pixel_values, _ = encoder_config_and_inputs
@@ -741,7 +742,7 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
     def prepare_config_and_inputs(self):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
         model_tester_decoder = TrOCRStandaloneDecoderModelTester(
-            self, batch_size=2, d_model=32, max_position_embeddings=512
+            self, batch_size=13, d_model=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
@@ -774,9 +775,9 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        model_tester_encoder = LayoutLMv3ModelTester(self, batch_size=2, image_size=4, patch_size=2)
+        model_tester_encoder = LayoutLMv3ModelTester(self, batch_size=13, image_size=4, patch_size=2)
         model_tester_decoder = TrOCRStandaloneDecoderModelTester(
-            self, batch_size=2, d_model=32, max_position_embeddings=512
+            self, batch_size=13, d_model=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
@@ -879,6 +880,7 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
@@ -906,7 +908,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
 
     def prepare_config_and_inputs(self):
         model_tester_encoder = ViTModelTester(self, batch_size=13)
-        model_tester_decoder = GPT2ModelTester(self, batch_size=2, hidden_size=32, max_position_embeddings=512)
+        model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
@@ -992,6 +994,7 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,
@@ -1019,7 +1022,7 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
 
     def prepare_config_and_inputs(self):
         model_tester_encoder = DonutSwinModelTester(self, batch_size=13)
-        model_tester_decoder = GPT2ModelTester(self, batch_size=2, hidden_size=32, max_position_embeddings=512)
+        model_tester_decoder = GPT2ModelTester(self, batch_size=13, hidden_size=32, max_position_embeddings=512)
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs(extra_inputs=True)
         config, pixel_values, labels = encoder_config_and_inputs
@@ -1105,6 +1108,7 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         generated_output = enc_dec_model.generate(
             pixel_values=pixel_values,

@@ -720,12 +720,6 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -842,6 +836,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -953,6 +948,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         Example:

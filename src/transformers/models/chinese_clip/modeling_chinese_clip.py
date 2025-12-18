@@ -560,7 +560,7 @@ class ChineseCLIPTextPooler(nn.Module):
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     config: ChineseCLIPConfig
     base_model_prefix = "chinese_clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -572,10 +572,13 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, ChineseCLIPTextEmbeddings):
             init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
                     init.zeros_(embedding.weight[embedding.padding_idx])
@@ -638,9 +641,9 @@ class ChineseCLIPTextEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -798,7 +801,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     config: ChineseCLIPTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _no_split_modules = ["ChineseCLIPTextEmbeddings"]
 
     def __init__(self, config, add_pooling_layer=True):
@@ -839,6 +842,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -906,7 +910,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ChineseCLIPVisionEmbeddings", "ChineseCLIPVisionAttention"]
 
     def __init__(self, config: ChineseCLIPVisionConfig):
@@ -926,6 +930,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1024,14 +1029,14 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
 
-        pooled_output = text_outputs.pooler_output
+        pooled_output = text_outputs[0][:, 0, :]
         text_features = self.text_projection(pooled_output)
 
         return text_features
@@ -1091,6 +1096,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ChineseCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

@@ -32,6 +32,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -137,6 +138,7 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
 def is_fp16_enabled(device_type):
     # Autocast world
+    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
     autocast_dtype = (
         torch.get_autocast_dtype(device_type)
         if hasattr(torch, "get_autocast_dtype")
@@ -266,7 +268,7 @@ class EsmFoldLayerNorm(nn.Module):
     def forward(self, x):
         d = x.dtype
         if d is torch.bfloat16 and not is_deepspeed_initialized():
-            with torch.autocast(device_type="cuda", enabled=False):
+            with maybe_autocast(device_type="cuda", enabled=False):
                 out = nn.functional.layer_norm(x, self.c_in, self.weight.to(dtype=d), self.bias.to(dtype=d), self.eps)
         else:
             out = nn.functional.layer_norm(x, self.c_in, self.weight, self.bias, self.eps)
@@ -281,7 +283,7 @@ def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """
     d = t.dtype
     if d is torch.bfloat16 and not is_deepspeed_initialized():
-        with torch.autocast(device_type="cuda", enabled=False):
+        with maybe_autocast(device_type="cuda", enabled=False):
             s = torch.nn.functional.softmax(t, dim=dim)
     else:
         s = torch.nn.functional.softmax(t, dim=dim)
@@ -867,7 +869,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
 
         device_type = a.device.type if a.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
-            with torch.autocast(device_type=device_type, enabled=False):
+            with maybe_autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)
@@ -910,7 +912,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                 elif module.init == "gating":
                     init.zeros_(module.weight)
                     if module.bias:
-                        init.ones(module.bias)
+                        init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
                 elif module.init == "final":
@@ -1490,7 +1492,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
         # [*, H, N_res, N_res]
         device_type = q.device.type if q.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
-            with torch.autocast(device_type=device_type, enabled=False):
+            with maybe_autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
                     permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]
@@ -1977,6 +1979,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     _can_record_outputs = None
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, EsmForProteinFolding):
+            init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2257,7 +2264,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     @staticmethod
     def output_to_pdb(output: dict) -> list[str]:
-        """Returns the pbd (file) string from the model given the model output."""
+        """Returns the pdb (file) string from the model given the model output."""
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         pdbs = []
         final_atom_positions = atom14_to_atom37(output["positions"][-1], output)

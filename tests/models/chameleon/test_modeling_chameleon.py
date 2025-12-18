@@ -51,7 +51,7 @@ class ChameleonModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=35,
         is_training=False,
         use_input_mask=True,
@@ -246,11 +246,12 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 
 @require_torch
-class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-text-to-text": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}

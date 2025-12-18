@@ -337,9 +337,9 @@ class LayoutLMEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -431,6 +431,8 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, LayoutLMLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, LayoutLMEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
@@ -465,6 +467,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -600,6 +603,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -716,6 +720,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -850,6 +855,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
@@ -963,6 +969,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):

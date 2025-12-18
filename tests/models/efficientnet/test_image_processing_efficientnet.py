@@ -42,7 +42,7 @@ class EfficientNetImageProcessorTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         num_channels=3,
         image_size=18,
         min_resolution=30,

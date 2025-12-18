@@ -198,7 +198,7 @@ class GitModelTester:
         num_channels=3,
         image_size=32,
         patch_size=16,
-        batch_size=2,
+        batch_size=13,
         text_seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -376,6 +376,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
             "image-text-to-text": GitForCausalLM,
+            "any-to-any": GitForCausalLM,
         }
         if is_torch_available()
         else {}

@@ -35,7 +35,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -50,7 +50,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
+from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs, maybe_autocast
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,
@@ -64,11 +64,32 @@ from .configuration_qwen3_omni_moe import (
 )
 
 
+class SinusoidsPositionEmbedding(nn.Module):
+    def __init__(self, length, channels, max_timescale=10000):
+        super().__init__()
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
+        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
+        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        self.register_buffer(
+            "positional_embedding",
+            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            persistent=False,
+        )
+
+    def forward(self, seqlen: int):
+        return self.positional_embedding[:seqlen, :]
+
+
 @auto_docstring
 class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     config: Qwen3OmniMoeConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "audio", "text"]
+    input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3OmniMoeDecoderLayer", "Qwen3OmniMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -84,7 +105,20 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
-            init.normal_(module.router.weight, mean=0.0, std=std)
+            init.normal_(module.gate.weight, mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeCode2Wav):
+            init.copy_(
+                module.code_offset,
+                torch.arange(module.config.num_quantizers).view(1, -1, 1) * module.config.codebook_size,
+            )
+        elif isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
+            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+            init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
+        elif isinstance(module, Qwen3OmniMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 def _get_feat_extract_output_lengths(input_lengths):
@@ -99,7 +133,7 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
-    input_modalities = ["image", "video", "audio", "text"]
+    input_modalities = ("image", "video", "audio", "text")
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
@@ -620,24 +654,6 @@ class Qwen3OmniMoeAudioEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class SinusoidsPositionEmbedding(nn.Module):
-    def __init__(self, length, channels, max_timescale=10000):
-        super().__init__()
-        if channels % 2 != 0:
-            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
-        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
-        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        self.register_buffer(
-            "positional_embedding",
-            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
-            persistent=False,
-        )
-
-    def forward(self, seqlen: int):
-        return self.positional_embedding[:seqlen, :]
-
-
 @auto_docstring(
     custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -686,10 +702,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         self._requires_grad = False
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
+        return self.conv2d1
 
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
+    def set_input_embeddings(self, value):
+        self.conv2d1 = value
 
     def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
         # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
@@ -716,6 +732,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         input_features,
         feature_lens=None,
         aftercnn_lens=None,
+        **kwargs,
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
@@ -959,6 +976,22 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
         return hidden
 
 
+class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
 class Qwen3OmniMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -990,20 +1023,6 @@ class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
         )
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
-
-
-class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
 
 
 class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
@@ -1072,6 +1091,8 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self.post_init()
+
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
 
@@ -1113,7 +1134,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
     def fast_pos_embed_interpolate(self, grid_thw):
         grid_ts, grid_hs, grid_ws = grid_thw[:, 0], grid_thw[:, 1], grid_thw[:, 2]
-        device = grid_thw.device
+        device = self.pos_embed.weight.device
 
         idx_list = [[] for _ in range(4)]
         weight_list = [[] for _ in range(4)]
@@ -1245,7 +1266,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
@@ -1290,7 +1311,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
@@ -1338,22 +1359,21 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        num_experts = top_k_weights.shape[1]
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == num_experts:
+            if expert_idx == self.num_experts:
                 continue
-            _, token_idx = torch.where(expert_mask[expert_idx])
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -1376,20 +1396,20 @@ class Qwen3OmniMoeThinkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__()
         self.experts = Qwen3OmniMoeThinkerTextExperts(config)
-        self.router = Qwen3OmniMoeThinkerTextTopKRouter(config)
+        self.gate = Qwen3OmniMoeThinkerTextTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        routing_weights, selected_experts = self.router(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -1415,6 +1435,7 @@ class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -1442,6 +1463,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1597,7 +1619,7 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, layer_name="mlp.router", index=0),
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
@@ -1667,7 +1689,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -2011,7 +2033,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
             raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
             )
 
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -2164,11 +2186,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             audio_feature_lengths = None
 
         if attention_mask is not None and position_ids is None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -2183,7 +2202,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -2322,6 +2341,7 @@ class Qwen3OmniMoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeTalkerCodePredictorAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -2477,7 +2497,7 @@ class Qwen3OmniMoeRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -2516,7 +2536,7 @@ class Qwen3OmniMoeRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -2555,7 +2575,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -2764,22 +2784,21 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        num_experts = top_k_weights.shape[1]
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == num_experts:
+            if expert_idx == self.num_experts:
                 continue
-            _, token_idx = torch.where(expert_mask[expert_idx])
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, expert_idx, None]
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
@@ -2802,8 +2821,8 @@ class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
@@ -2820,7 +2839,7 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
@@ -2911,7 +2930,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -3102,12 +3121,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         if inputs_embeds is not None and inputs_embeds.shape[1] > 1:
             generation_step = -1
             residual_codes = None
-        if attention_mask is not None:
-            if (
-                cache_position is None
-                or (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-            ):
+        if position_ids is None:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if past_key_values_length == 0 or self.rope_deltas is None:
                 delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
                 position_ids, rope_deltas = self.get_rope_index(
                     talker_input_ids,
@@ -3122,7 +3138,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
                 self.rope_deltas = rope_deltas
             else:
                 batch_size, seq_length = input_ids.shape
-                delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
+                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
                 position_ids = torch.arange(seq_length, device=input_ids.device)
                 position_ids = position_ids.view(1, -1).expand(batch_size, -1)
                 position_ids = position_ids.add(delta)
@@ -3223,7 +3239,10 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         inputs = super().prepare_inputs_for_generation(
             input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
         )
-        # Decode stage
+
+        # Qwen3-Omni will prepare position ids in forward with deltas
+        inputs["position_ids"] = None
+
         # TODO(raushan, gante): Refactor this part to a utility function
         if cache_position[0] != 0:
             input_ids = input_ids[:, -1:]
@@ -3351,6 +3370,7 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
         return hidden_states
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3OmniMoeCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -3565,7 +3585,7 @@ class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -3716,7 +3736,9 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
         self.block = nn.ModuleList(block)
 
-    def forward(self, hidden):
+        self.post_init()
+
+    def forward(self, hidden, **kwargs):
         for block in self.block:
             hidden = block(hidden)
         return hidden
@@ -3758,7 +3780,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
         self.post_init()
 
-    def forward(self, codes):
+    def forward(self, codes, **kwargs):
         if codes.shape[1] != self.config.num_quantizers:
             raise ValueError(f"Expected {self.config.num_quantizers} layer of codes, got {codes.shape[1]}")
         hidden = self.code_embedding(codes + self.code_offset).mean(1)
@@ -3787,7 +3809,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     config_class = Qwen3OmniMoeConfig
-    output_modalities = ["text", "audio"]
+    output_modalities = ("text", "audio")
 
     def __init__(self, config: Qwen3OmniMoeConfig):
         super().__init__(config)

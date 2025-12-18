@@ -122,6 +122,7 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int):
         super().__init__()
         self.embedding_dim = embedding_dim
+        self.num_positions = num_positions
         self.make_weights(num_positions, embedding_dim)
 
     def make_weights(self, num_embeddings: int, embedding_dim: int):
@@ -403,6 +404,9 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, MusicgenMelodySinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(module.num_positions, module.embedding_dim)
+            init.copy_(module.weights, emb_weights)
 
 
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody
@@ -455,6 +459,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -670,6 +675,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -742,7 +748,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 )
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForCausalLM with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,MusicGen->Musicgen Melody
 class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: MusicgenMelodyDecoderConfig):
         super().__init__(config)
@@ -769,12 +775,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_heads = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     # Ignore copy
     def forward(
@@ -791,6 +791,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, MusicgenMelodyOutputWithPast]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
@@ -1234,7 +1235,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config: MusicgenMelodyConfig
     main_input_name = "input_ids"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1317,13 +1318,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
-
-    def get_text_encoder(self):
-        return self.text_encoder
-
-    def get_encoder(self):
-        # get the text encoder to compute the conditioning hidden-states for generation
-        return self.get_text_encoder()
 
     def get_input_embeddings(self):
         return self.text_encoder.get_input_embeddings()
@@ -1824,7 +1818,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # 1. condition on text
         if inputs_tensor is not None:
-            encoder = self.get_text_encoder()
+            encoder = self.get_encoder()
             # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
             # as the inputs.
             if hasattr(encoder, "_hf_hook"):

@@ -394,7 +394,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
 
     config: Aimv2Config
     base_model_prefix = "aimv2"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Aimv2EncoderLayer",
@@ -414,6 +414,10 @@ class Aimv2PreTrainedModel(PreTrainedModel):
                 init.constant_(module.logit_scale, math.log(1 / 0.07))
         elif isinstance(module, Aimv2AttentionPoolingHead):
             init.normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Aimv2VisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, Aimv2TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring(

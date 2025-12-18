@@ -20,19 +20,20 @@ import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
+from huggingface_hub import create_repo
 from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
+from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
     cached_file,
     copy_func,
-    download_url,
     extract_commit_hash,
-    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -50,7 +51,7 @@ logger = logging.get_logger(__name__)
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
 
 
-class PreTrainedConfig(PushToHubMixin):
+class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
@@ -262,6 +263,13 @@ class PreTrainedConfig(PushToHubMixin):
 
             dtype = getattr(torch, dtype)
 
+        # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
+        if hasattr(self, "rope_parameters"):
+            ignore_keys_at_rope_validation = kwargs.pop("ignore_keys_at_rope_validation", None)
+            kwargs = self.convert_rope_params_to_dict(
+                ignore_keys_at_rope_validation=ignore_keys_at_rope_validation, **kwargs
+            )
+
         # Attributes common for all models
         self.return_dict = return_dict
         self.output_hidden_states = output_hidden_states
@@ -303,7 +311,7 @@ class PreTrainedConfig(PushToHubMixin):
         self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
-        for parameter_name in self._get_global_generation_defaults().keys():
+        for parameter_name in GenerationConfig._get_default_generation_params().keys():
             kwargs.pop(parameter_name, None)
 
         # Name or path to the pretrained checkpoint
@@ -442,13 +450,11 @@ class PreTrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        non_default_generation_parameters = self._get_non_default_generation_parameters()
-        if len(non_default_generation_parameters) > 0:
+        generation_parameters = self._get_generation_parameters()
+        if len(generation_parameters) > 0:
             raise ValueError(
-                "Some non-default generation parameters are set in the model config. These should go into either a) "
-                "`model.generation_config` (as opposed to `model.config`); OR b) a GenerationConfig file "
-                "(https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)."
-                f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
+                "Some generation parameters are set in the model config. These should go into `model.generation_config`"
+                f"as opposed to `model.config`. \nGeneration parameters found: {str(generation_parameters)}",
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -456,7 +462,7 @@ class PreTrainedConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # This attribute is important to know on load, but should not be serialized on save.
@@ -659,9 +665,6 @@ class PreTrainedConfig(PushToHubMixin):
             # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            configuration_file = pretrained_model_name_or_path if gguf_file is None else gguf_file
-            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
 
@@ -1015,10 +1018,6 @@ class PreTrainedConfig(PushToHubMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
-        if hasattr(self, "quantization_config"):
-            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = d.pop("_pre_quantization_dtype", None)
-
         if "_auto_class" in d:
             del d["_auto_class"]
         if "_output_attentions" in d:
@@ -1059,58 +1058,17 @@ class PreTrainedConfig(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    @staticmethod
-    def _get_global_generation_defaults() -> dict[str, Any]:
-        return {
-            "max_length": 20,
-            "min_length": 0,
-            "do_sample": False,
-            "early_stopping": False,
-            "num_beams": 1,
-            "temperature": 1.0,
-            "top_k": 50,
-            "top_p": 1.0,
-            "typical_p": 1.0,
-            "repetition_penalty": 1.0,
-            "length_penalty": 1.0,
-            "no_repeat_ngram_size": 0,
-            "encoder_no_repeat_ngram_size": 0,
-            "bad_words_ids": None,
-            "num_return_sequences": 1,
-            "output_scores": False,
-            "return_dict_in_generate": False,
-            "forced_bos_token_id": None,
-            "forced_eos_token_id": None,
-            "remove_invalid_values": False,
-            "exponential_decay_length_penalty": None,
-            "suppress_tokens": None,
-            "begin_suppress_tokens": None,
-            # Deprecated arguments (moved to the Hub). TODO joao, manuel: remove in v4.62.0
-            "num_beam_groups": 1,
-            "diversity_penalty": 0.0,
-        }
-
-    def _get_non_default_generation_parameters(self) -> dict[str, Any]:
+    def _get_generation_parameters(self) -> dict[str, Any]:
         """
         Gets the non-default generation parameters on the PreTrainedConfig instance
         """
-        non_default_generation_parameters = {}
-        decoder_attribute_name = None
+        generation_params = {}
+        default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        for key in GenerationConfig._get_default_generation_params().keys():
+            if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
+                generation_params[key] = getattr(self, key)
 
-        # If it is a composite model, we want to check the subconfig that will be used for generation
-        self_decoder_config = self if decoder_attribute_name is None else getattr(self, decoder_attribute_name)
-
-        for parameter_name, default_global_value in self._get_global_generation_defaults().items():
-            if hasattr(self_decoder_config, parameter_name):
-                parameter_value = getattr(self_decoder_config, parameter_name, None)
-                # Two cases in which is okay for the model config to hold generation config parameters:
-                # 1. The parameter is set to `None`, effectively delegating its value to the generation config
-                # 2. The parameter is set the global generation defaults
-                if parameter_value is None or parameter_value == default_global_value:
-                    continue
-                non_default_generation_parameters[parameter_name] = getattr(self_decoder_config, parameter_name)
-
-        return non_default_generation_parameters
+        return generation_params
 
     def get_text_config(self, decoder=None, encoder=None) -> "PreTrainedConfig":
         """

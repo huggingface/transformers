@@ -44,7 +44,7 @@ class ParakeetEncoderModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=1024,
         is_training=True,
         hidden_size=64,

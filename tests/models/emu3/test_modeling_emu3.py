@@ -54,7 +54,7 @@ class Emu3Text2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         vocab_size=99,
@@ -147,7 +147,7 @@ class Emu3Vision2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=False,
         vocab_size=99,
@@ -284,7 +284,11 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = (
+        {"any-to-any": Emu3ForConditionalGeneration, "image-text-to-text": Emu3ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)

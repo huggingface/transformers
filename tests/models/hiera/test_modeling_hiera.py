@@ -51,7 +51,7 @@ class HieraModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         image_size=[64, 64],
         mlp_ratio=1.0,
         num_channels=3,

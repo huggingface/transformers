@@ -60,6 +60,8 @@ else:
             ("internvl", "InternVLVideoProcessor"),
             ("llava_next_video", "LlavaNextVideoVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
+            ("pe_audio_video", "PeVideoVideoProcessor"),
+            ("pe_video", "PeVideoVideoProcessor"),
             ("perception_lm", "PerceptionLMVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
@@ -68,6 +70,7 @@ else:
             ("qwen3_vl", "Qwen3VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
             ("sam2_video", "Sam2VideoVideoProcessor"),
+            ("sam3_video", "Sam3VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
             ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
@@ -372,9 +375,9 @@ class AutoVideoProcessor:
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif video_processor_class is not None:
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]

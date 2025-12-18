@@ -33,7 +33,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -41,7 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
@@ -52,6 +52,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -117,6 +118,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Emu3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -927,7 +929,7 @@ class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -956,6 +958,10 @@ class Emu3VQVAE(PreTrainedModel):
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
             init.constant_(module.weight, 1.0)
             init.constant_(module.bias, 0.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1095,7 +1101,7 @@ class Emu3ImageVocabularyMapping:
 class Emu3PreTrainedModel(PreTrainedModel):
     config: Emu3Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "Emu3DecoderLayer",
@@ -1105,7 +1111,6 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
-    _supports_param_buffer_assignment = False
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -1127,7 +1132,7 @@ class Emu3RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -1166,7 +1171,7 @@ class Emu3RotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -1198,7 +1203,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1222,8 +1227,8 @@ class Emu3TextModel(Emu3PreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:
@@ -1248,6 +1253,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -1353,12 +1359,6 @@ class Emu3Model(Emu3PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.text_model = decoder
-
-    def get_decoder(self):
-        return self.text_model
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
@@ -1490,7 +1490,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
-    output_modalities = ["image", "text"]
+    output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",
@@ -1513,25 +1513,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    # Make modules available through conditional class for BC
-    @property
-    def text_model(self):
-        return self.model.text_model
-
-    @property
-    def vqmodel(self):
-        return self.model.vqmodel
-
-    @property
-    def vocabulary_mapping(self):
-        return self.model.vocabulary_mapping
 
     def decode_image_tokens(self, **kwargs):
         return self.model.decode_image_tokens(**kwargs)

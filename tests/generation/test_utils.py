@@ -1848,7 +1848,7 @@ class GenerationTesterMixin:
 
     @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_eager_matches_fa2_generate(self):
         """Tests that generate has equivalent outputs with FA2 and eager attention implementations."""
@@ -1863,7 +1863,7 @@ class GenerationTesterMixin:
         self._test_attention_implementation("flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         """
@@ -1894,6 +1894,13 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if not all(
+                getattr(submodel, "_supports_flash_attn")
+                for submodel in model.modules()
+                if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(f"At least some parts of {model_class.__name__} don't support flash attention")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
@@ -1994,6 +2001,14 @@ class GenerationTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input_ids.shape[1] + 1
 
             model = model_class(config)
+            if attn_implementation != "eager":
+                if not all(
+                    getattr(submodel, support_flag[attn_implementation])
+                    for submodel in model.modules()
+                    if isinstance(submodel, PreTrainedModel)
+                ):
+                    self.skipTest(f"At least some parts of {model_class.__name__} don't support {attn_implementation}")
+
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
 
@@ -2065,14 +2080,14 @@ class GenerationTesterMixin:
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_2")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
@@ -2659,6 +2674,32 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_generation_config_defaults(self):
+        "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        # Set the min/max_length to non-default value
+        model.generation_config.min_length = 50
+        model.generation_config.max_length = 50
+
+        # Explicit generate with min/max_length set to global default values
+        generation_config = GenerationConfig(
+            temperature=1.0,
+            max_length=20,
+            min_length=0,
+            do_sample=False,
+            eos_token_id=-1,  # don't stop before max length reached
+        )
+
+        runtime_generation_config, _ = model._prepare_generation_config(generation_config=generation_config)
+        self.assertEqual(runtime_generation_config.max_length, 20)
+        self.assertEqual(runtime_generation_config.min_length, 0)
+
+        out = model.generate(input_ids, generation_config=generation_config)
+        self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
     # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):
@@ -4779,6 +4820,7 @@ class TokenHealingTestCase(unittest.TestCase):
 
         healed_ids = completion_model.heal_tokens(input_ids, tokenizer=tokenizer)
         predicted = tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+        predicted = predicted.lstrip()
 
         self.assertEqual(predicted, expected)
 
@@ -4857,7 +4899,8 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
             self.assertEqual(
-                self.assistant_model.generation_config.assistant_confidence_threshold, self.original_threshold
+                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold,
+                self.original_threshold,
             )
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
@@ -4870,7 +4913,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [0])
             self.assertEqual(self.candidate_generator.probs, [0.9])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4883,7 +4926,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4896,7 +4939,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4909,7 +4952,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4922,7 +4965,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.3)
         else:
             self.assert_no_sklearn()
 
@@ -4935,7 +4978,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 

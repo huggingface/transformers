@@ -15,19 +15,25 @@
 import gc
 import tempfile
 import unittest
+from typing import Any
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FbgemmFp8Config, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
-    require_fbgemm_gpu,
+    require_deterministic_for_xpu,
     require_read_token,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import (
+    is_accelerate_available,
+    is_fbgemm_gpu_available,
+    is_torch_available,
+    is_torch_xpu_available,
+)
 
 
 if is_torch_available():
@@ -37,7 +43,7 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class FbgemmFp8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -61,8 +67,8 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
-@require_fbgemm_gpu
+@require_torch_accelerator
+@unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
 @require_accelerate
 @require_read_token
 class FbgemmFp8Test(unittest.TestCase):
@@ -71,9 +77,15 @@ class FbgemmFp8Test(unittest.TestCase):
     input_text = "What are we having for dinner?"
     max_new_tokens = 9
 
-    EXPECTED_OUTPUT = "What are we having for dinner?\nI'm having a steak and a salad"
+    EXPECTED_OUTPUT = set[Any](
+        [
+            "What are we having for dinner?\nI'm having a steak and a salad",
+            "What are we having for dinner? I don’t know. What are we having",
+            "What are we having for dinner? I don’t know, what are you having",
+        ]
+    )
 
-    device_map = "cuda"
+    device_map = "xpu" if is_torch_xpu_available() else "cuda"
 
     offload_device_map = {
         "model.embed_tokens": 0,
@@ -155,28 +167,32 @@ class FbgemmFp8Test(unittest.TestCase):
             if isinstance(module, FbgemmFp8Linear):
                 nb_fbgemm_linear += 1
 
-        self.assertEqual(nb_linears - 1, nb_fbgemm_linear)
+        self.assertEqual(nb_linears, nb_fbgemm_linear)
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
         quantization_config = FbgemmFp8Config(modules_to_not_convert=["fc1"])
-        model = replace_with_fbgemm_fp8_linear(model, quantization_config=quantization_config)
+        model = replace_with_fbgemm_fp8_linear(
+            model, modules_to_not_convert=["fc1"], quantization_config=quantization_config
+        )
         nb_fbgemm_linear = 0
         for module in model.modules():
             if isinstance(module, FbgemmFp8Linear):
                 nb_fbgemm_linear += 1
 
-        self.assertEqual(nb_linears - 25, nb_fbgemm_linear)
+        self.assertEqual(nb_linears - 24, nb_fbgemm_linear)
 
+    @require_deterministic_for_xpu
     def test_quantized_model(self):
         """
         Simple test that checks if the quantized model is working properly
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
+    @require_deterministic_for_xpu
     def test_save_pretrained(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
@@ -188,8 +204,8 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
     def test_change_loading_attributes(self):
         """
@@ -208,10 +224,11 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
+    @require_deterministic_for_xpu
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -224,8 +241,8 @@ class FbgemmFp8Test(unittest.TestCase):
         )
         self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
 
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+        self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
     def test_quantized_model_offload(self):
         """
@@ -240,6 +257,7 @@ class FbgemmFp8Test(unittest.TestCase):
                 self.model_name, device_map=self.offload_device_map, quantization_config=quantization_config
             )
 
+    @require_deterministic_for_xpu
     def test_save_pretrained_offload(self):
         """
         Simple test that checks if the saved quantized model is working properly cpu/disk offload
@@ -250,10 +268,11 @@ class FbgemmFp8Test(unittest.TestCase):
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
             quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
-            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
+    @require_deterministic_for_xpu
     def test_save_pretrained_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly after being saved and loaded
@@ -266,13 +285,13 @@ class FbgemmFp8Test(unittest.TestCase):
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 
-            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+            output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertTrue(self.tokenizer.decode(output[0], skip_special_tokens=True) in self.EXPECTED_OUTPUT)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @require_accelerate
-@require_fbgemm_gpu
+@unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
 class FbgemmFp8LinearTest(unittest.TestCase):
     def test_linear_preserves_shape(self):
         """
