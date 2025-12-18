@@ -19,52 +19,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import io
-from typing import Optional, Union
+from typing import Union
 
-import torch
+import numpy as np
 
-from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_mistral_common_available, is_soundfile_available, logging
-
-
-if is_soundfile_available():
-    import soundfile as sf
-
-if is_mistral_common_available():
-    from mistral_common.protocol.transcription.request import TranscriptionRequest
-
-
-logger = logging.get_logger(__name__)
-
-
-class GlmasrlProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "pad_to_multiple_of": 480000,
-            "max_source_positions": 3000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "return_dict": True,
-            "tokenize": True,
-        },
-    }
 
 
 class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": True,
+            "padding": False,
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
@@ -72,376 +39,124 @@ class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
             "truncation": False,
             "pad_to_multiple_of": 480000,
             "max_source_positions": 3000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "return_dict": True,
-            "tokenize": True,
         },
     }
 
 
 class GlmasrProcessor(ProcessorMixin):
     r"""
-    Constructs a Glmasr processor which wraps [`WhisperFeatureExtractor`] into a single processor
-    that inherits both the audio feature extraction and tokenizer functionalities.
+    Constructs a Glmasr processor which wraps a Glmasr feature extractor and a Glmasr tokenizer into a single processor.
+
+    [`GlmasrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`PretrainTokenizerFast`]. See the
+    [`~PretrainAudioProcessor.__call__`] and [`~PretrainAudioProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
+        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The feature extractor is a required input.
-        tokenizer ([`MistralCommonBackend`]):
+        tokenizer ([`PretrainTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
+        audio_token (`str`, *optional*, defaults to `"<|pad|>"`):
+            The token to use for audio tokens.
+        audio_bos_token (`str`, *optional*, defaults to `"<|begin_of_audio|>"`):
+            The token to use for audio bos tokens.
+        audio_eos_token (`str`, *optional*, defaults to `"<|end_of_audio|>"`):
+            The token to use for audio eos tokens.
     """
 
     def __init__(
         self,
-        feature_extractor,
-        tokenizer,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        audio_token="<|pad|>",
+        audio_bos_token="<|begin_of_audio|>",
+        audio_eos_token="<|end_of_audio|>",
     ):
-        self.audio_token_id = 59260
-        self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
+        self.audio_bos_token = audio_bos_token
+        self.audio_eos_token = audio_eos_token
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-        super().__init__(feature_extractor, tokenizer)
-
-    def _retrieve_input_features(self, audio, max_source_positions, **kwargs):
-        """
-        Handles specific logic of Glmasr expected input features: audio arrays should be padded to next multiple of 480000 (duration is a multiple of 30s), see GlmasrProcessorKwargs' default audio_kwargs.
-        Then mel input features are extracted and stacked along batch dimension, splitting into chunks of max_source_positions.
-        """
-        input_features_list = []
-        for audio_array in audio:
-            audio_inputs = self.feature_extractor(audio_array, **kwargs)
-
-            # let's split into chunks of max_source_positions, and then stack them along batch dimension
-            input_features = audio_inputs["input_features"].reshape(
-                self.feature_extractor.feature_size, -1, max_source_positions
-            )
-            input_features_list.append(input_features.transpose(0, 1))
-
-        return torch.cat(input_features_list)
-
-    def apply_chat_template(
-        self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
-        **kwargs: Unpack[AllKwargsForChatTemplate],
-    ) -> str:
-        """
-        This method applies the model's chat completion template given a conversation. It relies on MistralCommonBackend's
-        [`~MistralCommonBackend.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
-        [`~WhisperFeatureExtractor.__call__`] to prepare input features to the model.
-
-        Note that audio is padded to the nearest 30-second multiple prior to mel feature extraction.
-
-        A `conversation` is a list of messages, where each message is a dictionary with a `role` and a `content` field.
-        For Glmasr, `role` can be `"user"` or `"assistant"`.
-        The `content` field can be a string or a list of dictionaries with a `type` field. See example below.
-
-        ```python
-        from huggingface_hub import hf_hub_download
-        from transformers.audio_utils import load_audio_as
-
-        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
-        audio_path = hf_hub_download(repo_id="hf-internal-testing/dummy-audio-samples", filename="bcn_weather.mp3", repo_type="dataset")
-        audio_base64 = load_audio_as(audio_path, return_format="base64", force_mono=True)
-
-        # audio + text
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "audio", "url": audio_url},
-                    {"type": "audio", "path": audio_path},
-                    {"type": "audio", "base64": audio_base64},
-                    {"type": "text", "text": "How many audio do you hear?"},
-                ],
-            },
-        ]
-
-        processor = GlmasrProcessor.from_pretrained("mistralai/Glmasr-Mini-3B-2507")
-        inputs = processor.apply_chat_template(conversation)
-        ```
-
-        Args:
-            conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
-                The conversation to format.
-        """
-        if kwargs.get("continue_final_message", False):
-            if kwargs.get("add_generation_prompt", False):
-                raise ValueError(
-                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
-                )
-            if kwargs.get("return_assistant_tokens_mask", False):
-                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
-
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
-
-        # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
-
-        if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
-        ):
-            is_batched = True
-            conversations = conversation
-        else:
-            is_batched = False
-            conversations = [conversation]
-
-        # Check for any overlapping keys between mm_load_kwargs and kwargs
-        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
-        if any(key in kwargs for key in mm_load_kwargs):
-            overlapping_keys = [key for key in mm_load_kwargs if key in kwargs]
-            logger.warning(
-                f"{overlapping_keys[0] if len(overlapping_keys) == 1 else ', '.join(overlapping_keys)} load multimodal data kwarg{'s' if len(overlapping_keys) > 1 else ''} {'have' if len(overlapping_keys) > 1 else 'has'} been passed to the processor, but {'they are' if len(overlapping_keys) > 1 else 'it is'} not supported for VoxtralProcessor since it relies on mistral_common directly. {'They' if len(overlapping_keys) > 1 else 'It'} will be ignored."
-            )
-
-        output_kwargs = self._merge_kwargs(
-            GlmasrProcessorKwargs,
-            **kwargs,
-        )
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors", None)
-
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        tokenizer_kwargs = {**processed_kwargs["template_kwargs"], **text_kwargs}
-        tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
-        tokenize = tokenizer_kwargs.pop("tokenize", False)
-        return_dict = tokenizer_kwargs.pop("return_dict", True)
-
-        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
-            conversations,
-            tokenize=tokenize,
-            return_dict=return_dict,
-            **tokenizer_kwargs,
-        )
-
-        if tokenize:
-            if return_dict:
-                audio = encoded_instruct_inputs.pop("audio", None)
-                data = dict(encoded_instruct_inputs)
-                if audio is not None:
-                    max_source_positions = audio_kwargs.pop("max_source_positions")
-                    data["input_features"] = self._retrieve_input_features(audio, max_source_positions, **audio_kwargs)
-
-                return BatchFeature(data=data, tensor_type=return_tensors)
-
-        if not is_batched:
-            return encoded_instruct_inputs[0]
-
-        return encoded_instruct_inputs
+    def _get_audio_token_length(self, audio_length: int, merge_factor: int = 4) -> int:
+        for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
+            audio_length = (audio_length + 2 * padding - (kernel_size - 1) - 1) // stride + 1
+        num_tokens = (audio_length - merge_factor) // merge_factor + 1
+        return min(num_tokens, 1500 // merge_factor)
 
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, list[np.ndarray]] = None,
         **kwargs: Unpack[GlmasrProcessorKwargs],
-    ):
-        r"""
-        Method to prepare text to be fed as input to the model. This method forwards the `text`
-        arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
-        the text. Please refer to the docstring of the above methods for more information.
-        This methods does not support audio. To prepare the audio, please use:
-        1. `apply_chat_template` [`~GlmasrProcessor.apply_chat_template`] method.
-        2. `apply_transcription_request` [`~GlmasrProcessor.apply_transcription_request`] method.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_features** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-        """
-        if isinstance(text, str):
+    ) -> BatchFeature:
+        if text is None:
+            raise ValueError("You need to specify `text` input to process.")
+        elif isinstance(text, str):
             text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        if any(self.audio_token in t for t in text):
-            raise ValueError(
-                f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
-            )
-
-        output_kwargs = self._merge_kwargs(GlmasrProcessorKwargs, **kwargs)
-        out = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
-
-    # TODO: @eustlb, this should be moved to mistral_common + testing
-    def apply_transcription_request(
-        self,
-        audio: Union[str, list[str], AudioInput],
-        model_id: str,
-        language: Optional[Union[str, list[Union[str, None]]]] = None,
-        sampling_rate: Optional[int] = None,
-        format: Optional[Union[str, list[str]]] = None,
-        **kwargs: Unpack[GlmasrProcessorKwargs],
-    ):
-        """
-        This method applies the model's transcription request template given a language and audio.
-        It relies on MistralCommonBackend and WhisperFeatureExtractor to prepare input ids and input features to the model.
-
-        ```python
-        from transformers import GlmasrProcessor
-
-        model_id = "mistralai/Glmasr-Mini-3B-2507"
-        processor = GlmasrProcessor.from_pretrained(model_id)
-
-        language = "en"
-        audio = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3"
-
-        # set the language is already know for better accuracy
-        inputs = processor.apply_transcription_request(language=language, audio=audio, model_id=model_id)
-
-        # but you can also let the model detect the language automatically
-        inputs = processor.apply_transcription_request(audio=audio, model_id=model_id)
-        ```
-
-        Args:
-            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audio to be prepared. If provided as a string, it should correspond to the path or url of the audio file.
-            model_id (`str`:
-                The hub model id of the model to use for transcription.
-            language (`str`, `list[Union[str, None]]`, *optional*):
-                The language or languages of the audio.
-                If not provided or None, automatic language detection will be used for all audio.
-                If provided as a string (a language code in the [ISO 639-1 alpha-2 format](https://en.wikipedia.org/wiki/ISO_639-1) e.g. `"en"`), it will be applied uniformly to all audio.
-                If provided as a list of strings/ None values, e.g. `["en", None, "fr"]`, will be applied to each audio individually with a one-to-one mapping,
-                with a None value indicating automatic language detection for that audio.
-            sampling_rate (`int`, *optional*):
-                The sampling rate of the audio. Necessary if it is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
-                Used to avoid silent errors when passing audio that is not in the expected sampling rate.
-            format (`str`, `list[str]`, *optional*):
-                The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
-        """
         output_kwargs = self._merge_kwargs(
             GlmasrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        text_kwargs = output_kwargs["text_kwargs"]
-        audio_kwargs = output_kwargs["audio_kwargs"]
-
-        is_str = isinstance(audio, str)
-        is_list_of_str = all(isinstance(el, str) for el in audio)
-        is_list_of_audio = not (is_str or is_list_of_str)
-
-        if is_list_of_audio:
-            if sampling_rate is None:
-                logger.warning_once(
-                    f"You've provided audio without specifying the sampling rate. It will be assumed to be {audio_kwargs['sampling_rate']}, which can result in silent errors."
-                )
-            elif sampling_rate != audio_kwargs["sampling_rate"]:
+        if audio is not None:
+            num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+            num_audios = 1 if type(audio) is np.ndarray else len(audio)
+            if num_audio_tokens != num_audios:
                 raise ValueError(
-                    f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({audio_kwargs['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
+                    f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
                 )
 
-        sampling_rate = audio_kwargs["sampling_rate"]
+            output_kwargs["audio_kwargs"]["return_attention_mask"] = True
+            output_kwargs["audio_kwargs"]["padding"] = "max_length"
+            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            expanded_text = []
+            audio_lengths = audio_inputs.pop("attention_mask").sum(-1).tolist()
 
-        # make sure to remove from text_kwargs and audio_kwargs
-        return_dict = text_kwargs.pop("return_dict", False)
-        tokenize = text_kwargs.pop("tokenize", False)
-        _ = audio_kwargs.pop("return_dict", False)
-        _ = audio_kwargs.pop("tokenize", False)
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    audio_length = audio_lengths.pop(0)
+                    num_audio_tokens = self._get_audio_token_length(audio_length)
+                    expanded_audio_token = self.audio_token * num_audio_tokens
+                    audio_token_start_idx = sample.find(self.audio_token)
+                    audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
 
-        return_tensors = text_kwargs.pop("return_tensors", None)
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+                    has_bos = (
+                        sample[audio_token_start_idx - len(self.audio_bos_token) : audio_token_start_idx]
+                        == self.audio_bos_token
+                    )
+                    has_eos = (
+                        sample[audio_token_end_idx : audio_token_end_idx + len(self.audio_eos_token)]
+                        == self.audio_eos_token
+                    )
 
-        # validate audio input
-        if is_str:
-            audio = [load_audio_as(audio, return_format="buffer", force_mono=True, sampling_rate=sampling_rate)]
-        elif is_list_of_str:
-            audio = [
-                load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
-            ]
-        else:
-            audio = make_list_of_audio(audio)
-            if len(audio) != len(format):
-                raise ValueError(
-                    f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})"
-                )
-            audio_buffers = []
-            for array, f in zip(audio, format):
-                # Create new BytesIO object and write audio data to it
-                buffer = io.BytesIO()
-                # Convert to mono if needed
-                if array.ndim == 2:
-                    array = array.mean(axis=1)
-                # Write to buffer with default format and sampling rate
-                sf.write(buffer, array, samplerate=audio_kwargs["sampling_rate"], format=f)
-                buffer.seek(0)
-                audio_buffers.append(buffer)
-            audio = audio_buffers
+                    if not has_bos and not has_eos:
+                        expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
 
-        # validate language input
-        n_audio = len(audio)
-        if isinstance(language, str):
-            language = [language] * n_audio
-        elif language is None:
-            language = [None] * n_audio
-        if len(language) != n_audio:
-            raise ValueError(
-                f"When passed as a list of languages, the length ({len(language)}) must match the number of audio ({n_audio})"
-            )
+                    replace_str.append(expanded_audio_token)
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
 
-        input_ids = []
-        texts = []
-        audio_arrays = []
-        for audio_el, language_el in zip(audio, language):
-            openai_transcription_request = {
-                "model": model_id,
-                "file": audio_el,
-                "language": language_el,
-            }
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
 
-            transcription_request = TranscriptionRequest.from_openai(openai_transcription_request)
-            tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
+                expanded_text.append(sample)
+            text = expanded_text
 
-            input_ids.append(tokenized_transcription_request.tokens)
-            texts.append(tokenized_transcription_request.text)
-            audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, inputs, modalities=["audio"])
 
-        if tokenize:
-            if return_dict:
-                # text are already tokenized but we need to pad etc
-                encoding = self.tokenizer(
-                    input_ids,
-                    add_special_tokens=False,
-                    **text_kwargs,
-                )
-                data = dict(encoding)
+        if audio is not None:
+            inputs.update(audio_inputs)
 
-                # extract the input features
-                max_source_positions = audio_kwargs.pop("max_source_positions")
-                data["input_features"] = self._retrieve_input_features(
-                    audio_arrays, max_source_positions, **audio_kwargs
-                )
-
-                return BatchFeature(data=data, tensor_type=return_tensors)
-
-        return texts
+        return BatchFeature(data={**inputs}, tensor_type=return_tensors)
 
 
 __all__ = ["GlmasrProcessor"]

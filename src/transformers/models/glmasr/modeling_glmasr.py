@@ -34,12 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_glmasr import GlmasrConfig, GlmasrEncoderConfig
@@ -101,7 +96,9 @@ def apply_rotary_pos_emb_audio(
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
     q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    cos, sin = cos.unsqueeze(1).float(), sin.unsqueeze(1).float()
+    cos = torch.cat([cos, cos], dim=-1)
+    sin = torch.cat([sin, sin], dim=-1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     q_embed = q_embed.to(orig_q_dtype)
@@ -176,7 +173,9 @@ class GlmasrAttention(nn.Module):
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        cos, sin = position_embeddings
+        cos = position_embeddings[..., 0]
+        sin = position_embeddings[..., 1]
+
         query_states, key_states = apply_rotary_pos_emb_audio(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward

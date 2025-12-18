@@ -14,14 +14,19 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, Union
 
+import numpy as np
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ..auto import AutoConfig
 from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 from ..voxtral.modeling_voxtral import (
@@ -33,7 +38,9 @@ from ..voxtral.modeling_voxtral import (
     VoxtralPreTrainedModel,
     eager_attention_forward,
 )
-from ..voxtral.processing_voxtral import VoxtralProcessor, VoxtralProcessorKwargs
+
+
+logger = logging.get_logger(__name__)
 
 
 def rotate_half(x):
@@ -49,7 +56,9 @@ def apply_rotary_pos_emb_audio(
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
     q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    cos, sin = cos.unsqueeze(1).float(), sin.unsqueeze(1).float()
+    cos = torch.cat([cos, cos], dim=-1)
+    sin = torch.cat([sin, sin], dim=-1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     q_embed = q_embed.to(orig_q_dtype)
@@ -252,7 +261,9 @@ class GlmasrAttention(VoxtralAttention):
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        cos, sin = position_embeddings
+        cos = position_embeddings[..., 0]
+        sin = position_embeddings[..., 1]
+
         query_states, key_states = apply_rotary_pos_emb_audio(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
@@ -467,30 +478,135 @@ class GlmasrForConditionalGeneration(VoxtralForConditionalGeneration):
     pass
 
 
-class GlmasrlProcessorKwargs(VoxtralProcessorKwargs):
-    pass
+class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "audio_kwargs": {
+            "sampling_rate": 16000,
+            "padding": True,
+            "truncation": False,
+            "pad_to_multiple_of": 480000,
+            "max_source_positions": 3000,
+        },
+    }
 
 
-class GlmasrProcessor(VoxtralProcessor):
+class GlmasrProcessor(ProcessorMixin):
     r"""
-    Constructs a Glmasr processor which wraps [`WhisperFeatureExtractor`] into a single processor
-    that inherits both the audio feature extraction and tokenizer functionalities.
+    Constructs a Glmasr processor which wraps a Glmasr feature extractor and a Glmasr tokenizer into a single processor.
+
+    [`GlmasrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and [`PretrainTokenizerFast`]. See the
+    [`~PretrainAudioProcessor.__call__`] and [`~PretrainAudioProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
+        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
             The feature extractor is a required input.
-        tokenizer ([`MistralCommonBackend`]):
+        tokenizer ([`PretrainTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the default chat template
+                is used.
+        audio_token (`str`, *optional*, defaults to `"<|pad|>"`):
+            The token to use for audio tokens.
+        audio_bos_token (`str`, *optional*, defaults to `"<|begin_of_audio|>"`):
+            The token to use for audio bos tokens.
+        audio_eos_token (`str`, *optional*, defaults to `"<|end_of_audio|>"`):
+            The token to use for audio eos tokens.
     """
 
     def __init__(
         self,
-        feature_extractor,
-        tokenizer,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        audio_token="<|pad|>",
+        audio_bos_token="<|begin_of_audio|>",
+        audio_eos_token="<|end_of_audio|>",
     ):
-        super().__init__(feature_extractor, tokenizer)
-        self.audio_token_id = 59260
-        self.audio_token = tokenizer.convert_ids_to_tokens(self.audio_token_id)
+        self.audio_token = audio_token
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
+        self.audio_bos_token = audio_bos_token
+        self.audio_eos_token = audio_eos_token
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    def _get_audio_token_length(self, audio_length: int, merge_factor: int = 4) -> int:
+        for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
+            audio_length = (audio_length + 2 * padding - (kernel_size - 1) - 1) // stride + 1
+        num_tokens = (audio_length - merge_factor) // merge_factor + 1
+        return min(num_tokens, 1500 // merge_factor)
+
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, list[np.ndarray]] = None,
+        **kwargs: Unpack[GlmasrProcessorKwargs],
+    ) -> BatchFeature:
+        if text is None:
+            raise ValueError("You need to specify `text` input to process.")
+        elif isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        output_kwargs = self._merge_kwargs(
+            GlmasrProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if audio is not None:
+            num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+            num_audios = 1 if type(audio) is np.ndarray else len(audio)
+            if num_audio_tokens != num_audios:
+                raise ValueError(
+                    f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
+                )
+
+            output_kwargs["audio_kwargs"]["return_attention_mask"] = True
+            output_kwargs["audio_kwargs"]["padding"] = "max_length"
+            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            expanded_text = []
+            audio_lengths = audio_inputs.pop("attention_mask").sum(-1).tolist()
+
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    audio_length = audio_lengths.pop(0)
+                    num_audio_tokens = self._get_audio_token_length(audio_length)
+                    expanded_audio_token = self.audio_token * num_audio_tokens
+                    audio_token_start_idx = sample.find(self.audio_token)
+                    audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
+
+                    has_bos = (
+                        sample[audio_token_start_idx - len(self.audio_bos_token) : audio_token_start_idx]
+                        == self.audio_bos_token
+                    )
+                    has_eos = (
+                        sample[audio_token_end_idx : audio_token_end_idx + len(self.audio_eos_token)]
+                        == self.audio_eos_token
+                    )
+
+                    if not has_bos and not has_eos:
+                        expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
+
+                    replace_str.append(expanded_audio_token)
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+
+                expanded_text.append(sample)
+            text = expanded_text
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, inputs, modalities=["audio"])
+
+        if audio is not None:
+            inputs.update(audio_inputs)
+
+        return BatchFeature(data={**inputs}, tensor_type=return_tensors)
 
 
 __all__ = [
