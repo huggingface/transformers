@@ -49,6 +49,7 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     TransformersKwargs,
+    _is_tensor_or_array_like,
     can_return_loss,
     can_return_tuple,
     expand_dims,

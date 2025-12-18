@@ -271,7 +271,7 @@ class MiniMaxRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -613,6 +613,13 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MiniMaxTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
+        if isinstance(module, MiniMaxLightningAttention):
+            slope_rate = module.get_slope_rate()
+            query_decay, key_decay, diagonal_decay = module.decay_factors(slope_rate)
+            init.copy_(module.slope_rate, slope_rate)
+            init.copy_(module.query_decay, query_decay)
+            init.copy_(module.key_decay, key_decay)
+            init.copy_(module.diagonal_decay, diagonal_decay)
 
 
 @auto_docstring
