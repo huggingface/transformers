@@ -1110,7 +1110,8 @@ class ModelTesterMixin:
 
             self.assertTrue(
                 len(different_weights) == 0,
-                f"The following weights are not properly handled in `_init_weights()`:\n{unique_bad_module_traceback}",
+                f"The following weights are not properly handled in `_init_weights()` (the model should be able to reinitialize "
+                f"them correctly if the model is on meta device)::\n{unique_bad_module_traceback}",
             )
 
     def test_init_weights_can_init_buffers(self):
@@ -1190,7 +1191,8 @@ class ModelTesterMixin:
             unique_bad_module_traceback = "".join(unique_bad_module_traceback)
             self.assertTrue(
                 len(different_buffers) == 0,
-                f"The following buffers are not properly handled in `_init_weights()`:\n{unique_bad_module_traceback}",
+                f"The following buffers are not properly handled in `_init_weights()` (the model should be able to reinitialize "
+                f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
     def test_torch_save_load(self):

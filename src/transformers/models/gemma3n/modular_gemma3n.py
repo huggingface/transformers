@@ -883,6 +883,16 @@ class Gemma3nAudioAttention(nn.Module):
         r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
         self.register_buffer("q_scale", (q_scale * r_softplus_0).clone().detach(), persistent=False)
 
+        local_causal_valid_mask = self.create_local_causal_valid_mask()
+        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
+
+        self.register_buffer(
+            "softcap",
+            torch.tensor(self.attention_logits_soft_cap).float(),
+            persistent=False,
+        )
+
+    def create_local_causal_valid_mask(self):
         lower_causal_mask = torch.tril(
             torch.ones((self.context_size, self.chunk_size), dtype=torch.bool),
             diagonal=0,
@@ -893,13 +903,7 @@ class Gemma3nAudioAttention(nn.Module):
         )
         local_causal_valid_mask = torch.ones((self.chunk_size, self.context_size), dtype=torch.bool)
         local_causal_valid_mask = local_causal_valid_mask * lower_causal_mask * upper_causal_mask
-        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
-
-        self.register_buffer(
-            "softcap",
-            torch.tensor(self.attention_logits_soft_cap).float(),
-            persistent=False,
-        )
+        return local_causal_valid_mask
 
     def _pad_dim1(self, x: torch.Tensor, pad_left: int, pad_right: int) -> torch.Tensor:
         batch, _, *tail_shape = x.shape
@@ -1898,25 +1902,14 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
             init.copy_(module.q_scale, q_scale * r_softplus_0)
             init.constant_(module.softcap, module.attention_logits_soft_cap)
-
-            lower_causal_mask = torch.tril(
-                torch.ones((module.context_size, module.chunk_size), dtype=torch.bool), diagonal=0
-            ).T
-            upper_causal_mask = torch.tril(
-                torch.ones((module.chunk_size, module.context_size), dtype=torch.bool),
-                diagonal=module.max_past_horizon + module.max_future_horizon,
-            )
-            local_causal_valid_mask = torch.ones((module.chunk_size, module.context_size), dtype=torch.bool)
-            local_causal_valid_mask = local_causal_valid_mask * lower_causal_mask * upper_causal_mask
-            init.copy_(module.local_causal_valid_mask, local_causal_valid_mask)
+            init.copy_(module.local_causal_valid_mask, module.create_local_causal_valid_mask())
         elif isinstance(module, Gemma3nTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
         elif isinstance(module, Gemma3nTextAltUp):
             init.zeros_(module.correct_output_scale)
             init.constant_(module.router_input_scale, self.config.hidden_size**-1.0)
         elif isinstance(module, Gemma3nAudioRelativePositionEmbedding):
-            min_timescale = 1.0
-            max_timescale = 1.0e4
+            min_timescale, max_timescale = 1.0, 1.0e4
             num_timescales = module.channels // 2
             log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
                 num_timescales - 1, 1
