@@ -1530,16 +1530,14 @@ class TrainingArguments:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if is_torch_available():
             if self.bf16 or self.bf16_full_eval:
-                if self.use_cpu and not is_torch_xla_available():
-                    # cpu
-                    raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
-                        error_message = "Your setup doesn't support bf16/gpu."
-                        if is_torch_cuda_available():
-                            error_message += " You need Ampere+ GPU with cuda>=11.0"
-                        # gpu
-                        raise ValueError(error_message)
+                if (
+                    not self.use_cpu and not is_torch_bf16_gpu_available() and not is_torch_xla_available()
+                ):  # added for tpu support
+                    error_message = "Your setup doesn't support bf16/gpu. You need to assign use_cpu if you want to train the model on CPU"
+                    if is_torch_cuda_available():
+                        error_message += " You need Ampere+ GPU with cuda>=11.0"
+                    # gpu
+                    raise ValueError(error_message)
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")

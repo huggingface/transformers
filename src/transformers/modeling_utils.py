@@ -792,6 +792,7 @@ def _get_dtype(
     sharded_metadata: Optional[dict],
     state_dict: Optional[dict],
     weights_only: bool,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ) -> tuple[PreTrainedConfig, torch.dtype]:
     """Find the correct `dtype` to use based on provided arguments. Also update the `config` based on the
     inferred dtype. We do the following:
@@ -839,6 +840,9 @@ def _get_dtype(
     else:
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
         dtype = torch.get_default_dtype()
+
+    if hf_quantizer is not None:
+        hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
@@ -1059,54 +1063,52 @@ class EmbeddingAccessMixin:
             `nn.Module`: A torch module mapping vocabulary to hidden states.
         """
 
-        # 1) Check if the model has an attribute named 'embed_tokens' (the standard input embedding layer
-        #  for most NLP models), and if so, return it.
-
         name = getattr(self, "_input_embed_layer", "embed_tokens")
 
+        # 1) Direct attribute (most NLP models).
         if (default_embedding := getattr(self, name, None)) is not None:
             return default_embedding
-        # 2) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision/audio models).
+        if hasattr(self, "embeddings") and hasattr(self.embeddings, name):
+            return getattr(self.embeddings, name)
+        # 3) Encoder/decoder wrappers (e.g., `self.model.embed_tokens` or similar overrides).
+        if hasattr(self, "model") and hasattr(self.model, name):
+            return getattr(self.model, name)
 
-        if hasattr(self, "model") and hasattr(self.model, "embed_tokens"):
-            return self.model.embed_tokens
+        if hasattr(self, "base_model"):
+            base_model = self.base_model
+            if base_model is not None and base_model is not self:
+                return base_model.get_input_embeddings()
 
-        # 3) vanilla decoder‑only architectures
-        elif hasattr(self, "embed_tokens"):
-            return self.embed_tokens
-        else:
-            base_model = getattr(self, "base_model_prefix", None)
-            if base_model is not None:
-                base_model = getattr(self, base_model, None)
-                if base_model is not None and base_model is not self:
-                    return base_model.get_input_embeddings()
-            raise NotImplementedError(
-                f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; "
-                "please override in the subclass."
-            )
+        raise NotImplementedError(
+            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+        )
 
     def set_input_embeddings(self, value: nn.Module):
         """Fallback setter that handles **~70%** of models in the code-base.
 
         Order of attempts:
-        1. `self.model.embed_tokens`
-        2. `self.embed_tokens`
-        3. delegate to the *base model* if one exists
-        4. otherwise raise `NotImplementedError` so subclasses still can (and
+        1. `self.<_input_embed_layer>` (direct attribute)
+        2. `self.embeddings.<_input_embed_layer>` (nested embeddings for vision/audio models)
+        3. `self.model.<_input_embed_layer>` (encoder/decoder models)
+        4. delegate to the *base model* if one exists
+        5. otherwise raise `NotImplementedError` so subclasses still can (and
             should) override for exotic layouts.
         """
 
-        # 1) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
         name = getattr(self, "_input_embed_layer", "embed_tokens")
-        if hasattr(self, "model") and hasattr(self.model, name):
-            setattr(self.model, name, value)
-        # 2) as well as vanilla decoder‑only architectures
-        elif hasattr(self, name):
+        # 1) Direct attribute (most NLP models)
+        if hasattr(self, name):
             setattr(self, name, value)
-        # 3) recurse once into the registered *base* model (e.g. for encoder/decoder)
-        elif getattr(self, self.base_model_prefix, self) is not self:
-            base_model = getattr(self, self.base_model_prefix, self)
-            base_model.set_input_embeddings(value)
+        # 2) Nested embeddings (e.g., self.embeddings.patch_embedding for vision models)
+        elif hasattr(self, "embeddings") and hasattr(self.embeddings, name):
+            setattr(self.embeddings, name, value)
+        # 3) encoder/decoder and VLMs like `Gemma3nForConditionalGeneration`
+        elif hasattr(self, "model") and hasattr(self.model, name):
+            setattr(self.model, name, value)
+        # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
+        elif hasattr(self, "base_model") and self.base_model is not self:
+            self.base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -1433,7 +1435,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def pp_plan(self, plan: dict[str, tuple[str, str]]):
         self._pp_plan = plan
 
-    def dequantize(self):
+    def dequantize(self, dtype=None):
         """
         Potentially dequantize the model in case it has been quantized by a quantization method that support
         dequantization.
@@ -1443,7 +1445,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hf_quantizer is None:
             raise ValueError("You need to first quantize your model in order to dequantize it")
 
-        return hf_quantizer.dequantize(self)
+        return hf_quantizer.dequantize(self, dtype=dtype)
 
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
@@ -2039,14 +2041,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         hooks = []
         seen_modules = set()
+        found_embeddings = False
 
         for module in self.modules():
             if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
                 continue
 
-            input_embeddings = module.get_input_embeddings()
+            try:
+                input_embeddings = module.get_input_embeddings()
+            except NotImplementedError:
+                continue
 
-            if input_embeddings is None:
+            if input_embeddings is None or not hasattr(input_embeddings, "register_forward_hook"):
                 continue
 
             embedding_id = id(input_embeddings)
@@ -2055,11 +2061,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             seen_modules.add(embedding_id)
             hooks.append(input_embeddings.register_forward_hook(make_inputs_require_grads))
+            found_embeddings = True
 
         self._require_grads_hooks = hooks
         if hooks:
             # for BC
             self._require_grads_hook = hooks[0]
+        if not found_embeddings:
+            logger.warning_once(
+                f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
+                "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
+                "support those features, or set `_input_embed_layer` to the attribute name that holds the embeddings."
+            )
 
     def disable_input_require_grads(self):
         """
@@ -2996,7 +3009,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
             )
 
-        if getattr(self, "_hf_peft_config_loaded", False):
+        needs_embedding_grads = self.main_input_name == "input_ids"
+        # we use that also to detect whether or not we have to raise if embeddings are missing (the submodel might not have embeddings at all)
+        enable_input_grads = needs_embedding_grads or getattr(self, "_hf_peft_config_loaded", False)
+        if enable_input_grads:
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
             # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
@@ -3875,8 +3891,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
-        hf_quantizer, config, dtype, device_map = get_hf_quantizer(
-            config, quantization_config, dtype, device_map, weights_only, user_agent
+        hf_quantizer, config, device_map = get_hf_quantizer(
+            config, quantization_config, device_map, weights_only, user_agent
         )
 
         if gguf_file:
@@ -3923,7 +3939,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ]
 
         # Find the correct dtype based on current state
-        config, dtype = _get_dtype(dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only)
+        config, dtype = _get_dtype(
+            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+        )
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
@@ -3932,21 +3950,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+            if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
+                hf_quantizer.preprocess_model(
+                    model=model,
+                    dtype=dtype,
+                    device_map=device_map,
+                    checkpoint_files=checkpoint_files,
+                    use_kernels=use_kernels,
+                )
+
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
-
-        # make sure we use the model's config since the __init__ call might have copied it
-        config = model.config
-
-        if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
-            hf_quantizer.preprocess_model(
-                model=model,
-                device_map=device_map,
-                keep_in_fp32_modules=model._keep_in_fp32_modules,  # TODO prob no longer needed?
-                config=config,
-                checkpoint_files=checkpoint_files,
-                use_kernels=use_kernels,
-            )
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
             model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
@@ -3994,7 +4008,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
-            hf_quantizer.postprocess_model(model, config=config)  # usually a no-op but sometimes needed
+            hf_quantizer.postprocess_model(
+                model
+            )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping

@@ -1019,10 +1019,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
-        if hasattr(self, "quantization_config"):
-            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = d.pop("_pre_quantization_dtype", None)
-
         if "_auto_class" in d:
             del d["_auto_class"]
         if "_output_attentions" in d:

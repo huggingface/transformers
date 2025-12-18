@@ -9,6 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
+    - local: weightconverter
+      title: Dynamic weight loading
     - local: models
       title: Loading models
     - local: custom_models
@@ -78,18 +80,16 @@
       title: Kernels in transformers
     - local: perf_torch_compile
       title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
     - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    - local: llm_optims
-      title: Optimizing inference
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
+    - local: kv_cache
+      title: Cache strategies
     - local: cache_explanation
       title: Caching
-    - local: kv_cache
-      title: KV cache strategies
+    - local: assisted_decoding
+      title: Assisted decoding
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     title: Optimization
@@ -819,6 +819,8 @@
         title: MobileViT
       - local: model_doc/mobilevitv2
         title: MobileViTV2
+      - local: model_doc/pixio
+        title: Pixio
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/prompt_depth_anything

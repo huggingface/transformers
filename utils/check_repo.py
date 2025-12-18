@@ -74,6 +74,8 @@ PRIVATE_MODELS = [
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
+    "SiglipTextTransformer",
+    "Siglip2TextTransformer",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",

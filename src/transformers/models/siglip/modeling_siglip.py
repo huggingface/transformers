@@ -502,9 +502,11 @@ class SiglipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class SiglipTextTransformer(nn.Module):
+class SiglipTextTransformer(SiglipPreTrainedModel):
+    _input_embed_layer = "token_embedding"
+
     def __init__(self, config: SiglipTextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = SiglipTextEmbeddings(config)
@@ -614,6 +616,7 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 
 class SiglipVisionTransformer(SiglipPreTrainedModel):
+    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": SiglipEncoderLayer,
         "attentions": SiglipAttention,
@@ -775,6 +778,12 @@ class SiglipModel(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.text_model.embeddings.token_embedding = value
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -970,6 +979,12 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.vision_model.embeddings.patch_embedding = value
 
     @check_model_inputs
     @auto_docstring
