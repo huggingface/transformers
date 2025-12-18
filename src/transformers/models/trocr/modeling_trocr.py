@@ -520,7 +520,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             input = input_ids
             input_ids = input_ids.view(-1, input.shape[-1])
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
