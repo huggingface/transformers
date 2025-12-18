@@ -629,32 +629,46 @@ class IsaacVisionAttention(Siglip2Attention):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        lengths = None
-        if cu_seqlens is not None and cu_seqlens.numel() >= 2:
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-
-        if max_seqlen is not None:
-            max_q = max_k = int(max_seqlen)
-        elif lengths is not None and lengths.numel() > 0:
-            max_q = max_k = lengths.max()
-        else:
-            max_q = max_k = seq_length
-
+        attn_impl = self.config._attn_implementation
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
-        if self.config._attn_implementation != "sdpa":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if attn_impl != "sdpa":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
         dropout = 0.0 if not self.training else self.dropout
         attention_kwargs: dict[str, Any] = {
             "is_causal": False,
             "scaling": self.scale,
             "dropout": dropout,
-            "cu_seq_lens_q": cu_seqlens,
-            "cu_seq_lens_k": cu_seqlens,
-            "max_length_q": max_q,
-            "max_length_k": max_k,
-            "output_attentions": output_attentions,
         }
+
+        supports_varlen = cu_seqlens is not None and attn_impl in {
+            "flash_attention_2",
+            "flash_attention_3",
+            "flex_attention",
+            "paged|flash_attention_2",
+            "paged|flash_attention_3",
+        }
+
+        if output_attentions and attn_impl == "eager":
+            attention_kwargs["output_attentions"] = True
+
+        if supports_varlen:
+            if max_seqlen is not None:
+                max_q = max_k = int(max_seqlen)
+            elif cu_seqlens.numel() >= 2:
+                lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+                max_q = max_k = lengths.max() if lengths.numel() > 0 else seq_length
+            else:
+                max_q = max_k = seq_length
+
+            attention_kwargs.update(
+                {
+                    "cu_seq_lens_q": cu_seqlens,
+                    "cu_seq_lens_k": cu_seqlens,
+                    "max_length_q": max_q,
+                    "max_length_k": max_k,
+                }
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
