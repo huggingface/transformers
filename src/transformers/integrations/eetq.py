@@ -86,14 +86,9 @@ class EetqLinear(nn.Module):
         return output
 
 
-def replace_with_eetq_linear(
-    model: torch.nn.Module, modules_to_not_convert: list[str] | None = None, pre_quantized=False
-):
+def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = None, pre_quantized=False):
     """
     A helper function to replace all `torch.nn.Linear` modules by `EetqLinear` modules.
-    The function will be run recursively and replace all `torch.nn.Linear` modules except for the `modules_to_not_convert` that should
-    be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
-    CPU/GPU memory is required to run this function. Each weight will be quantized along the channel.
 
     Parameters:
         model (`torch.nn.Module`):
@@ -101,12 +96,8 @@ def replace_with_eetq_linear(
         modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
             Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`list[`str`]`, *optional*):
-            An array to track the current key of the recursion. This is used to check whether the current key (part of
-            it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
-            `disk`).
     """
-    from kernels import get_kernel
+    from .hub_kernels import get_kernel
 
     global eetq_kernels_hub
     eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq")

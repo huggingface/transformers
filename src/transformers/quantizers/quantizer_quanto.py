@@ -40,8 +40,6 @@ class QuantoHfQuantizer(HfQuantizer):
     Quantizer for the quanto library
     """
 
-    required_packages = ["quanto", "accelerate"]
-    requires_parameters_quantization = True
     requires_calibration = False
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
@@ -57,12 +55,8 @@ class QuantoHfQuantizer(HfQuantizer):
                 "Loading an optimum-quanto quantized model requires accelerate library (`pip install accelerate`)"
             )
         device_map = kwargs.get("device_map")
-        if device_map is not None:
-            if (
-                isinstance(device_map, dict)
-                and len(device_map) >= 2
-                and ("cpu" in device_map.values() or "disk" in device_map.values())
-            ):
+        if isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an model with a device_map that contains a CPU or disk device."
                     "This is not supported with quanto when the model is quantized on the fly. "
@@ -101,25 +95,22 @@ class QuantoHfQuantizer(HfQuantizer):
         target_dtype = mapping[self.quantization_config.weights]
         return target_dtype
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_quanto_layers(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
-        model.config.quantization_config = self.quantization_config
 
     @property
     def is_trainable(self) -> bool:
         return True
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return False
 
     def get_quantize_ops(self):

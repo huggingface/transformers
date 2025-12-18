@@ -484,6 +484,7 @@ class Siglip2Encoder(nn.Module):
 
 
 class Siglip2VisionTransformer(Siglip2PreTrainedModel):
+    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": Siglip2EncoderLayer,
         "attentions": Siglip2Attention,
@@ -501,6 +502,8 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
+        self.post_init()
+
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -510,6 +513,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -588,9 +592,11 @@ class Siglip2TextEmbeddings(nn.Module):
         return embeddings
 
 
-class Siglip2TextTransformer(nn.Module):
+class Siglip2TextTransformer(Siglip2PreTrainedModel):
+    _input_embed_layer = "token_embedding"
+
     def __init__(self, config: Siglip2TextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = Siglip2TextEmbeddings(config)
@@ -760,6 +766,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -830,6 +837,12 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.text_model.embeddings.token_embedding = value
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -927,6 +940,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Siglip2Output:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -1048,6 +1062,12 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.vision_model.embeddings.patch_embedding = value
+
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -1058,6 +1078,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

@@ -32,19 +32,13 @@ logger = logging.get_logger(__name__)
 
 class EetqHfQuantizer(HfQuantizer):
     """
-    8-bit quantization from EETQ quantization method:
-        before loading: converts transformer layers into W8A16Linear during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear8bitLt into 8bit at first .cuda() call
+    8-bit quantization from EETQ quantization method
     """
 
-    requires_parameters_quantization = True
     requires_calibration = False
-
-    required_packages = ["eetq", "accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_kernels_available():
@@ -62,24 +56,15 @@ class EetqHfQuantizer(HfQuantizer):
                 "You have loaded an EETQ model on CPU and have a CUDA device available, make sure to set "
                 "your model on a GPU device in order to run your model."
             )
-        elif device_map is not None:
-            if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif isinstance(device_map, dict):
+            if len(device_map) > 1 and "cpu" in device_map.values() or "disk" in device_map.values():
                 raise ValueError(
                     "You are attempting to load an EETQ model with a device_map that contains a CPU or disk device."
                     " This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.float16
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.float16` due to "
-                "requirements of `eetq` to enable model loading in 8-bit. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.float16 to remove this warning.",
-                dtype,
-            )
-        elif dtype != torch.float16:
+        if dtype != torch.float16:
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
         return dtype
 
@@ -98,22 +83,19 @@ class EetqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_eetq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_eetq_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
         )
 
-        model.config.quantization_config = self.quantization_config
-
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     @property
