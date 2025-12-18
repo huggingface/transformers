@@ -469,6 +469,8 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
 
+        self.post_init()
+
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]

@@ -2674,6 +2674,32 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_generation_config_defaults(self):
+        "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        # Set the min/max_length to non-default value
+        model.generation_config.min_length = 50
+        model.generation_config.max_length = 50
+
+        # Explicit generate with min/max_length set to global default values
+        generation_config = GenerationConfig(
+            temperature=1.0,
+            max_length=20,
+            min_length=0,
+            do_sample=False,
+            eos_token_id=-1,  # don't stop before max length reached
+        )
+
+        runtime_generation_config, _ = model._prepare_generation_config(generation_config=generation_config)
+        self.assertEqual(runtime_generation_config.max_length, 20)
+        self.assertEqual(runtime_generation_config.min_length, 0)
+
+        out = model.generate(input_ids, generation_config=generation_config)
+        self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
     # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):
@@ -4873,7 +4899,8 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
             self.assertEqual(
-                self.assistant_model.generation_config.assistant_confidence_threshold, self.original_threshold
+                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold,
+                self.original_threshold,
             )
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
@@ -4886,7 +4913,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [0])
             self.assertEqual(self.candidate_generator.probs, [0.9])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4899,7 +4926,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4912,7 +4939,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4925,7 +4952,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4938,7 +4965,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.3)
         else:
             self.assert_no_sklearn()
 
@@ -4951,7 +4978,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 

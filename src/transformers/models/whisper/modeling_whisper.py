@@ -670,7 +670,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
-                    None,
+                    attention_mask=None,
                     output_attentions=output_attentions,
                 )
 
@@ -866,8 +866,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
-                encoder_hidden_states=encoder_hidden_states,
+                causal_mask,
+                encoder_hidden_states,
+                encoder_attention_mask=None,
                 past_key_values=past_key_values if use_cache else None,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
@@ -1247,6 +1248,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.decoder = WhisperDecoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens

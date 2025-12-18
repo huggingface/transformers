@@ -1037,6 +1037,8 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         self.encoder = PaddleOCRVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,

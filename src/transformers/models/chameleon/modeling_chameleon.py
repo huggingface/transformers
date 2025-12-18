@@ -827,6 +827,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
+        self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
     def encode(
