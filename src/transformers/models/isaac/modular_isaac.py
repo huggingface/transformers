@@ -1567,9 +1567,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
         Forward pass with MRoPE position embeddings.
@@ -1586,6 +1585,8 @@ class IsaacModel(Qwen3PreTrainedModel):
                 values from `TextType`/`VisionType`. Automatically built from `tensor_stream` or `input_ids` when
                 omitted.
         """
+
+        output_attentions = kwargs.pop("output_attentions", None)
 
         text_value = TextType.text.value if TextType is not None else 0
 
@@ -1739,9 +1740,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         Forward pass for conditional generation supporting both standard inputs and TensorStream.
@@ -1751,6 +1751,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             the model derives embeddings, modality masks, and 3D rotary coordinates directly from the stream instead of
             `input_ids`.
         """
+
+        output_attentions = kwargs.pop("output_attentions", None)
 
         # Don't compute embeddings here - let the model handle it
         if tensor_stream is not None:
