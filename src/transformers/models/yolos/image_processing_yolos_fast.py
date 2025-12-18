@@ -31,19 +31,13 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 from .image_processing_yolos import YolosImageProcessorKwargs
 
 
 if is_torch_available():
-    import torch
     from torch import nn
-
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
