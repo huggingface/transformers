@@ -45,6 +45,7 @@ if is_timm_available():
 
 
 def _maybe_reinit_non_persistent_buffer(module):
+    """Reinit the non-persistent buffers of `module` if it matches any timm Module which has any."""
     # This is a loooong list of hardcoded combinations from timm, as the modules do not provide a nice way to do
     # it natively
     if isinstance(module, FourierEmbed):
