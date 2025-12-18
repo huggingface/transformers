@@ -577,34 +577,33 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             model.save_pretrained(tmpdirname)
             model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
 
-        # Disable cache for now
-        inputs_dict.pop("use_cache", None)
-        for module in model.modules():
-            if hasattr(module, "config") and hasattr(module.config, "use_cache"):
-                module.config.use_cache = False
-
         with torch.no_grad():
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
             model.set_experts_implementation("eager")
+            self.assertEqual(model.config._experts_implementation, "eager")
             outputs_eager = model(**prepared_inputs)
             outputs_eager = _get_output_tensors(outputs_eager)
 
             model.set_experts_implementation("batched_mm")
+            self.assertEqual(model.config._experts_implementation, "batched_mm")
             outputs_batched_mm = model(**prepared_inputs)
             outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
 
             model.set_experts_implementation("grouped_mm")
+            self.assertEqual(model.config._experts_implementation, "grouped_mm")
             outputs_grouped_mm = model(**prepared_inputs)
             outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
 
+        # make sure we have collected some tensors from the outputs
         self.assertTrue(outputs_eager, "No outputs from eager implementation")
         self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
         self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
 
-        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-3, atol=1e-4)
-        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-3, atol=1e-4)
+        # make sure all implementations give numerically close outputs
+        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
 
 
 def _config_zero_init(config):
