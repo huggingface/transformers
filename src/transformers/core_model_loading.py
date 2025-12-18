@@ -302,6 +302,8 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
+            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+            pattern = pattern.removesuffix("$")
             # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
             pattern = re.sub(r"\(\?!.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
@@ -342,8 +344,7 @@ class WeightTransform:
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
-        # Strip regex anchors (^ and $) since the replacement is used as a literal string, not a regex
-        replacement = re.sub(r"[$^]", "", self.target_patterns[0])
+        replacement = self.target_patterns[0]
         # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
