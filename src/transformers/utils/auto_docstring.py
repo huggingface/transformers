@@ -1287,12 +1287,12 @@ def _process_parameter_type(param):
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
-        param_name (`str`): The name of the parameter
-        func (`function`): The function the parameter belongs to
     """
     optional = False
     if param.annotation == inspect.Parameter.empty:
         return "", False
+    elif param.annotation is None:
+        return "None", True
     # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
     elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
         subtypes = get_args(param.annotation)
@@ -1313,6 +1313,8 @@ def _process_parameter_type(param):
             subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
         out_str.append(subtype)
 
+    if param.default is not inspect.Parameter.empty:
+        optional = True
     if not out_str:
         return "", optional
     elif len(out_str) == 1:
