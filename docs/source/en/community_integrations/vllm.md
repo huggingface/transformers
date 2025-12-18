@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [vLLM](https://github.com/vllm-project/vllm) is a high-throughput inference engine for serving LLMs at scale. It continuously batches requests and keeps KV cache memory compact with PagedAttention.
 
-Set `model_impl="transformers"` to load a Transformers modeling backend.
+Set `model_impl="transformers"` to load a model using the Transformers modeling backend.
 
 ```py
 from vllm import LLM
@@ -35,13 +35,13 @@ vllm serve meta-llama/Llama-3.2-1B \
     --model-impl transformers
 ```
 
-vLLM fetches `config.json` from the Hub or your Hugging Face cache and reads `model_type` to load the config class. If the model type isn't in vLLM's internal registry, it falls back to [`AutoConfig.from_pretrained`]. With `model_impl="transformers"`, vLLM passes the config to [`~AutoModelForCausalLM.from_pretrained`] to instantiate the model instead of using vLLM's native model classes.
+vLLM uses [`AutoConfig.from_pretrained`] to load a model's `config.json` file from the Hub or your Hugging Face cache. It checks the `architectures` field against its internal model registry to determine which vLLM model class to load. If the model isn't in the registry, vLLM calls [`AutoModel.from_config`] to load the Transformers model implementation.
 
-[`AutoTokenizer.from_pretrained`] loads tokenizer files. Some tokenizer internals are cached to reduce repeated overhead during inference. Model weights download from the Hub in safetensors format.
+Setting `model_impl="transformers"` bypasses the vLLM model registry and loads directly from Transformers. vLLM replaces most model modules (MoE, attention, linear, etc.) with its own optimized versions.
 
-Transformers handles the model and forward pass. vLLM provides the high-throughput serving stack.
+[`AutoTokenizer.from_pretrained`] loads tokenizer files. vLLM caches some tokenizer internals to reduce overhead during inference. Model weights download from the Hub in safetensors format.
 
 ## Resources
 
-- Refer to the [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers) for more usage examples and tips for using a Transformers model as the backend.
-- Learn more about how vLLM integrates with Transformers in the [Integration with Hugging Face](https://docs.vllm.ai/en/latest/design/huggingface_integration/) doc.
+- [vLLM docs](https://docs.vllm.ai/en/latest/models/supported_models.html#transformers) for more usage examples and tips.
+- [Integration with Hugging Face](https://docs.vllm.ai/en/latest/design/huggingface_integration/) explains how vLLM integrates with Transformers.
