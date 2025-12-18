@@ -215,6 +215,8 @@ class BatchEncoding(UserDict):
         n_sequences (`Optional[int]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        device (`Union[torch.device, str]`, *optional*):
+            The device to create tensots on when tensor_type is "pt".
     """
 
     def __init__(
@@ -224,8 +226,12 @@ class BatchEncoding(UserDict):
         tensor_type: Union[None, str, TensorType] = None,
         prepend_batch_axis: bool = False,
         n_sequences: Optional[int] = None,
+        device: Optional[Union[torch.device, str]] = None,
     ):
         super().__init__(data)
+
+        if tensor_type != "pt" and device is not None:
+            raise ValueError(f"Inputs cannot be moved to a device={device} when `tensor_type` is not Pytorch tensors")
 
         # If encoding is not None, the fast tokenization is used
         if encoding is not None and isinstance(encoding, EncodingFast):
@@ -238,7 +244,7 @@ class BatchEncoding(UserDict):
 
         self._n_sequences = n_sequences
 
-        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis, device=device)
 
     @property
     def n_sequences(self) -> Optional[int]:
@@ -663,7 +669,10 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].char_to_word(char_index, sequence_index)
 
     def convert_to_tensors(
-        self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
+        self,
+        tensor_type: Optional[Union[str, TensorType]] = None,
+        prepend_batch_axis: bool = False,
+        device: Optional[Union[torch.device, str]] = None,
     ):
         """
         Convert the inner content to tensors.
@@ -674,6 +683,8 @@ class BatchEncoding(UserDict):
                 `None`, no modification is done.
             prepend_batch_axis (`int`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
+            device (`Union[torch.device, str]`, *optional*):
+                The device to create tensots on when tensor_type is "pt".
         """
         if tensor_type is None:
             return self
@@ -687,12 +698,12 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
                 if len(flatten(value)) == 0 and dtype is None:
                     dtype = torch.int64
-                return torch.tensor(value, dtype=dtype)
+                return torch.tensor(value, dtype=dtype, device=device)
 
             is_tensor = torch.is_tensor
 
@@ -701,7 +712,7 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
             import mlx.core as mx
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
                 if len(flatten(value)) == 0 and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
@@ -710,7 +721,7 @@ class BatchEncoding(UserDict):
                 return isinstance(obj, mx.array)
         else:
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
                 if (
                     isinstance(value, (list, tuple))
                     and len(value) > 0
@@ -733,7 +744,7 @@ class BatchEncoding(UserDict):
                     value = [value]
 
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
+                    tensor = as_tensor(value, device=device)
 
                     # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                     # # at-least2d
@@ -2616,6 +2627,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         return_length: bool = False,
         verbose: bool = True,
         split_special_tokens: bool = False,
+        device: Optional[Union[torch.device, str]] = None,
         **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError

@@ -15,13 +15,36 @@
 
 import json
 import os
+import random
 import tempfile
 
-from transformers.testing_utils import check_json_file_has_correct_format
+import numpy as np
+
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch
+from transformers.utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class FeatureExtractionSavingTestMixin:
     test_cast_dtype = None
+
+    def prepare_audio_inputs(batch_size, seq_len, scale=1.0, rng=None, torchify=False, numpify=False):
+        rng = random.Random()
+        values = []
+        for batch_idx in range(batch_size):
+            values.append([])
+            for _ in range(seq_len):
+                values[-1].append(rng.random() * scale)
+
+        if numpify:
+            values = np.array(values)
+        elif torchify:
+            values = torch.tensor(values)
+
+        return values
 
     def test_feat_extract_to_json_string(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
@@ -52,3 +75,21 @@ class FeatureExtractionSavingTestMixin:
     def test_init_without_params(self):
         feat_extract = self.feature_extraction_class()
         self.assertIsNotNone(feat_extract)
+
+    @require_torch
+    def test_call_with_device(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        list_audio_inputs = self.prepare_audio_inputs(numpify=True)
+        numpy_audio_inputs = self.prepare_audio_inputs(numpify=True)
+        torch_audio_inputs = self.prepare_audio_inputs(torchify=True)
+
+        for inputs in [list_audio_inputs, numpy_audio_inputs, torch_audio_inputs]:
+            encoded_audio = feature_extractor(inputs, return_tensors="pt")
+            for key in encoded_audio:
+                self.assertIsInstance(encoded_audio[key], torch.Tensor)
+                self.assertTrue(encoded_audio[key].device.type == "cpu")
+
+            encoded_audio = feature_extractor(inputs, return_tensors="pt", device="cuda")
+            for key in encoded_audio:
+                self.assertIsInstance(encoded_audio[key], torch.Tensor)
+                self.assertTrue(encoded_audio[key].device.type == "cuda")

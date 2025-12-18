@@ -376,7 +376,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         input_data_format = kwargs.pop("input_data_format")
         do_sample_frames = kwargs.pop("do_sample_frames")
-        device = kwargs.pop("device")
+        device = kwargs.get("device")
         video_metadata = kwargs.pop("video_metadata")
 
         sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
@@ -415,6 +415,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         image_mean: Optional[Union[float, list[float]]],
         image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: torch.device | str | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -443,7 +444,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
 
-        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors, device=device)
 
     @classmethod
     def from_pretrained(

@@ -22,7 +22,7 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from huggingface_hub import is_offline_mode
@@ -45,6 +45,9 @@ from .tokenization_utils_base import (
 )
 from .utils import PaddingStrategy, add_end_docstrings, logging
 
+
+if TYPE_CHECKING:
+    import torch.device
 
 logger = logging.get_logger(__name__)
 
@@ -748,6 +751,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
         split_special_tokens: Optional[bool] = None,
+        device: Optional[Union["torch.device", str]] = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)
@@ -877,6 +881,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,
+                device=device,
             )
 
         return batched_output

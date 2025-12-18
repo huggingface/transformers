@@ -44,6 +44,8 @@ from .utils.hub import cached_file
 
 
 if TYPE_CHECKING:
+    import torch.device
+
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 
@@ -70,6 +72,8 @@ class BatchFeature(UserDict):
             initialization.
         skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
             List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+        device (`Union[torch.device, str]`, *optional*):
+            The device to create tensots on when tensor_type is "pt".
     """
 
     def __init__(
@@ -77,9 +81,12 @@ class BatchFeature(UserDict):
         data: Optional[dict[str, Any]] = None,
         tensor_type: Union[None, str, TensorType] = None,
         skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        device: Optional[Union["torch.device", str]] = None,
     ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
+        if tensor_type != "pt" and device is not None:
+            raise ValueError(f"Inputs cannot be moved to a device={device} when `tensor_type` is not Pytorch tensors")
+        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion, device=device)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -117,13 +124,13 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            def as_tensor(value):
+            def as_tensor(value, device=None):
                 if torch.is_tensor(value):
-                    return value
+                    return value.to(device=device)
 
                 # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
                 if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
-                    return torch.stack(value)
+                    return torch.stack(value).to(device=device)
 
                 # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
                 if isinstance(value, (list, tuple)) and len(value) > 0:
@@ -136,14 +143,14 @@ class BatchFeature(UserDict):
                     ):
                         value = np.array(value)
                 if isinstance(value, np.ndarray):
-                    return torch.from_numpy(value)
+                    return torch.from_numpy(value).to(device=device)
                 else:
-                    return torch.tensor(value)
+                    return torch.tensor(value, device=device)
 
             is_tensor = torch.is_tensor
         else:
 
-            def as_tensor(value, dtype=None):
+            def as_tensor(value, dtype=None, device=None):
                 if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
                     value_lens = [len(val) for val in value]
                     if len(set(value_lens)) > 1 and dtype is None:
@@ -158,6 +165,7 @@ class BatchFeature(UserDict):
         self,
         tensor_type: Optional[Union[str, TensorType]] = None,
         skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        device: Optional[Union["torch.device", str]] = None,
     ):
         """
         Convert the inner content to tensors.
@@ -168,6 +176,8 @@ class BatchFeature(UserDict):
                 `None`, no modification is done.
             skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
                 List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+            device (`Union[torch.device, str]`, *optional*):
+                The device to create tensots on when tensor_type is "pt".
 
         Note:
             Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
@@ -191,7 +201,7 @@ class BatchFeature(UserDict):
 
             try:
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
+                    tensor = as_tensor(value, device=device)
                     self[key] = tensor
             except Exception as e:
                 if key == "overflowing_values":

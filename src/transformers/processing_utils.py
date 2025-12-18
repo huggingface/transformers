@@ -197,6 +197,8 @@ class TextKwargs(TypedDict, total=False):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        device (`Union[str, torch.Tensor]`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
@@ -219,6 +221,7 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Optional[Literal["left", "right"]]
     return_mm_token_type_ids: Optional[bool]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -402,6 +405,8 @@ class AudioKwargs(TypedDict, total=False):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        device (`Union[str, torch.Tensor]`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
     """
 
     sampling_rate: Annotated[Optional[int], positive_int()]
@@ -412,6 +417,7 @@ class AudioKwargs(TypedDict, total=False):
     pad_to_multiple_of: Annotated[Optional[int], positive_int()]
     return_attention_mask: Optional[bool]
     return_tensors: Annotated[Optional[Union[str, TensorType]], tensor_type_validator()]
+    device: Annotated[Optional[Union[str, "torch.device"]], device_validator()]
 
 
 class ProcessingKwargs(TypedDict, total=False):

@@ -829,6 +829,51 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
+    def test_batch_feature_device_placement(self):
+        processor = self.get_processor()
+        attributes = self.processor_class.get_attributes()
+
+        # Map attributes to input parameter names, prepare methods, and output key names
+        attr_to_input_param = {
+            "tokenizer": ("text", "prepare_text_inputs"),
+            "image_processor": ("images", "prepare_image_inputs"),
+            "video_processor": ("videos", "prepare_video_inputs"),
+            "feature_extractor": ("audio", "prepare_audio_inputs"),
+        }
+
+        # Prepare inputs dynamically based on processor attributes
+        processor_inputs = {}
+
+        for attr in attributes:
+            if attr in attr_to_input_param:
+                param_name, prepare_method_name = attr_to_input_param[attr]
+                # Call the prepare method
+                prepare_method = getattr(self, prepare_method_name)
+                if param_name == "text":
+                    modalities = []
+                    if "image_processor" in attributes:
+                        modalities.append("image")
+                    if "video_processor" in attributes:
+                        modalities.append("video")
+                    if "audio_processor" in attributes or "feature_extractor" in attributes:
+                        modalities.append("audio")
+                    processor_inputs[param_name] = prepare_method(modalities=modalities)
+                else:
+                    processor_inputs[param_name] = prepare_method()
+
+        inputs = processor(**processor_inputs, return_tensors="pt")
+        for key in inputs:
+            self.assertIsInstance(inputs[key], torch.Tensor)
+            self.assertTrue(inputs[key].device.type == "cpu")
+
+        inputs = processor(**processor_inputs, return_tensors="pt", device="cuda")
+        for key in inputs:
+            self.assertIsInstance(inputs[key], torch.Tensor)
+            self.assertTrue(inputs[key].device.type == "cuda")
+
+        with self.assertRaises(ValueError):
+            inputs = processor(**processor_inputs, return_tensors="np", device="cuda")
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 

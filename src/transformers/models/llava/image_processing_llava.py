@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for LLaVa."""
 
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -45,6 +45,8 @@ from ...utils import TensorType, is_vision_available, logging
 
 logger = logging.get_logger(__name__)
 
+if TYPE_CHECKING:
+    import torch.device
 
 if is_vision_available():
     import PIL
@@ -294,6 +296,7 @@ class LlavaImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional[Union["torch.device", str]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -426,7 +429,7 @@ class LlavaImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device)
 
 
 __all__ = ["LlavaImageProcessor"]

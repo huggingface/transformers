@@ -852,7 +852,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Extract parameters that are only used for preparing the input images
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
-        device = kwargs.pop("device")
 
         # Update kwargs that need further processing before being validated
         kwargs = self._further_process_kwargs(**kwargs)
@@ -864,7 +863,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         kwargs.pop("data_format")
 
         return self._preprocess_image_like_inputs(
-            images, *args, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+            images, *args, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, **kwargs
         )
 
     def _preprocess_image_like_inputs(
@@ -885,7 +884,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
-        return self._preprocess(images, *args, **kwargs)
+        return self._preprocess(images, *args, device=device, **kwargs)
 
     def _preprocess(
         self,
@@ -904,6 +903,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         pad_size: Optional[SizeDict],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        device: torch.device | str | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -932,7 +932,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device)
 
     def to_dict(self):
         encoder_dict = super().to_dict()

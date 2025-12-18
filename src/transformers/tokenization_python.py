@@ -19,7 +19,7 @@ tokenization_utils_tokenizers.py
 import bisect
 import unicodedata
 from collections import OrderedDict
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -33,6 +33,9 @@ from .tokenization_utils_base import (
 )
 from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
+
+if TYPE_CHECKING:
+    import torch.device
 
 logger = logging.get_logger(__name__)
 
@@ -711,6 +714,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        device: Optional[Union["torch.device", str]] = None,
         **kwargs,
     ) -> BatchEncoding:
         # Detect batched inputs (list of sequences)
@@ -789,7 +793,7 @@ class PythonBackend(PreTrainedTokenizerBase):
                 return_attention_mask=return_attention_mask,
             )
 
-            return BatchEncoding(batch_outputs, tensor_type=return_tensors)
+            return BatchEncoding(batch_outputs, tensor_type=return_tensors, device=device)
 
         # Single sequence handling
         def get_input_ids(text):

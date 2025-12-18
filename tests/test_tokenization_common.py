@@ -599,6 +599,22 @@ Hey how are you doing"""  # noqa: W293
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
+    def test_tokenize_with_device(self):
+        tokenizer = self.get_tokenizer(do_lower_case=True)
+
+        inputs = tokenizer("lower newer", return_tensors="pt")
+        for key in inputs:
+            self.assertIsInstance(inputs[key], torch.Tensor)
+            self.assertTrue(inputs[key].device.type == "cpu")
+
+        inputs = tokenizer("lower newer", return_tensors="pt", device="cuda")
+        for key in inputs:
+            self.assertIsInstance(inputs[key], torch.Tensor)
+            self.assertTrue(inputs[key].device.type == "cuda")
+
+        with self.assertRaises(ValueError):
+            inputs = tokenizer("lower newer", return_tensors="np", device="cuda")
+
     # TODO: this test can be combined with `test_sentencepiece_tokenize_and_convert_tokens_to_string` after the latter is extended to all tokenizers.
     def test_tokenize_special_tokens(self):
         """Test `tokenize` with special tokens."""

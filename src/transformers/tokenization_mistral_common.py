@@ -18,7 +18,7 @@ import warnings
 from collections.abc import Callable, Mapping, Sized
 from enum import Enum
 from pathlib import Path
-from typing import Any, Union, overload
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 import numpy as np
 from huggingface_hub import create_repo
@@ -37,6 +37,10 @@ from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, 
 from transformers.utils.generic import is_torch_tensor
 from transformers.utils.hub import PushToHubMixin
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
+
+
+if TYPE_CHECKING:
+    import torch.device
 
 
 if is_mistral_common_available():
@@ -745,6 +749,7 @@ class MistralCommonBackend(PushToHubMixin):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        device: Optional[Union["torch.device", str]] = None,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -943,6 +948,7 @@ class MistralCommonBackend(PushToHubMixin):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
+        device: Optional[Union["torch.device", str]] = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -1018,7 +1024,7 @@ class MistralCommonBackend(PushToHubMixin):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis, device=device
         )
 
         return batch_outputs

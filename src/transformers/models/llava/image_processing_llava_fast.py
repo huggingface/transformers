@@ -112,6 +112,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        device: torch.device | str | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -150,7 +151,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors, device=device)
 
 
 __all__ = ["LlavaImageProcessorFast"]

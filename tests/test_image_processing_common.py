@@ -441,6 +441,26 @@ class ImageProcessingTestMixin:
                 self.assertEqual(encoding.pixel_values.dtype, torch.float16)
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
+    def test_call_with_device(self):
+        for image_processing_class in self.image_processor_list:
+            image_processing = image_processing_class(**self.image_processor_dict)
+            pil_image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            numpy_image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            torch_image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False, torchify=True
+            )
+
+            for inputs in [pil_image_inputs, numpy_image_inputs, torch_image_inputs]:
+                encoded_images = image_processing(inputs, return_tensors="pt")
+                for key in encoded_images:
+                    self.assertIsInstance(encoded_images[key], torch.Tensor)
+                    self.assertTrue(encoded_images[key].device.type == "cpu")
+
+                encoded_images = image_processing(inputs, return_tensors="pt", device="cuda")
+                for key in encoded_images:
+                    self.assertIsInstance(encoded_images[key], torch.Tensor)
+                    self.assertTrue(encoded_images[key].device.type == "cuda")
+
     def test_call_pil(self):
         for image_processing_class in self.image_processor_list:
             # Initialize image_processing

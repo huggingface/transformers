@@ -258,6 +258,26 @@ class VideoProcessingTestMixin:
                 self.assertEqual(encoding[self.input_name].dtype, torch.float16)
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
+    def test_call_with_device(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            pil_video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False)
+            numpy_video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            torch_video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, torchify=True
+            )
+
+            for inputs in [pil_video_inputs, numpy_video_inputs, torch_video_inputs]:
+                encoded_videos = video_processing(inputs, return_tensors="pt")
+                for key in encoded_videos:
+                    self.assertIsInstance(encoded_videos[key], torch.Tensor)
+                    self.assertTrue(encoded_videos[key].device.type == "cpu")
+
+                encoded_videos = video_processing(inputs, return_tensors="pt", device="cuda")
+                for key in encoded_videos:
+                    self.assertIsInstance(encoded_videos[key], torch.Tensor)
+                    self.assertTrue(encoded_videos[key].device.type == "cuda")
+
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             # Initialize video_processing
