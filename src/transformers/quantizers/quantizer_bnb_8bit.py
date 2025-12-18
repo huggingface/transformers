@@ -83,19 +83,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.float16` due to "
-                "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.float16 to remove this warning.",
-                dtype,
-            )
-            dtype = torch.float16
-        return dtype
-
     def update_device_map(self, device_map):
         if device_map is None:
             if torch.cuda.is_available():
@@ -133,13 +120,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+            model, self.quantization_config.llm_int8_skip_modules, model._keep_in_fp32_modules
         )
 
         if self.quantization_config.llm_int8_enable_fp32_cpu_offload:
@@ -161,10 +147,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         from ..integrations import dequantize_and_replace
 
-        model = dequantize_and_replace(model, quantization_config=self.quantization_config)
+        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
         return model
 
     def get_quantize_ops(self):

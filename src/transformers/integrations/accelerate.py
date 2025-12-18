@@ -182,6 +182,10 @@ def check_and_set_device_map(device_map: "torch.device | int | str | dict | None
         device_map = {"": device_map}
     elif isinstance(device_map, str) and device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
         try:
+            if device_map == "cuda":
+                # setting to the local rank
+                local_rank = int(os.environ.get("LOCAL_RANK", 0))
+                device_map = f"cuda:{local_rank}"
             device_map = {"": torch.device(device_map)}
         except RuntimeError:
             raise ValueError(
