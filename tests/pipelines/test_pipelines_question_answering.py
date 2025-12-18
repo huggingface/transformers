@@ -546,3 +546,9 @@ class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             qa(1)
+
+class QuestionAnsweringPipelineSanitizeParametersTests(unittest.TestCase):
+    def test_sanitize_parameters_max_answer_len_error_message(self):
+        qa = object.__new__(QuestionAnsweringPipeline)
+        with self.assertRaisesRegex(ValueError, r"max_answer_len parameter should be >= 1 \(got 0\)"):
+            qa._sanitize_parameters(max_answer_len=0)
