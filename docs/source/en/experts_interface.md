@@ -143,4 +143,3 @@ This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) co
 | 4          | 128        | True                       | grouped_mm     | 79.67             | 79.69               | 80.54            | 27762.45      |
 | 4          | 128        | max-autotune-no-cudagraphs | grouped_mm     | 83.29             | 79.83               | 111.83           | 27762.46      |
 
-TLDR; For very small inputs batched_mm can be extremely fast and even faster with compilation, otherwise grouped_mm is unbeatable for larger inputs.
