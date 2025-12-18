@@ -226,7 +226,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
                 "TokenizersBackend" if is_tokenizers_available() and not is_mistral_common_available() else None,
             ),
         ),
-        ("mistral", "TokenizersBackend"),
+        (
+            "mistral",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         (
             "mistral3",
             (
@@ -690,20 +695,17 @@ class AutoTokenizer:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # START PRIORITIZE MAPPING FOR MODELS
+        # Check config's model_type (not tokenizer_config's) for models with unreliable tokenizer_config
+        try:
+            config_model_type = (
+                getattr(config, "model_type", None)
+                if isinstance(config, PreTrainedConfig)
+                else PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get("model_type")
+            )
+        except Exception:
+            config_model_type = None
 
-        config_model_type = None
-        if not isinstance(config, PreTrainedConfig):
-            try:
-                config_dict_check, _ = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-                config_model_type = config_dict_check.get("model_type", None)
-            except Exception:
-                # Config file doesn't exist or is invalid, skip priority mapping
-                config_model_type = None
-        else:
-            config_model_type = getattr(config, "model_type", None)
-        
         if config_model_type in PRIORITIZE_MAPPING_FOR_MODELS:
-            # Only load full config if we don't have it already
             if not isinstance(config, PreTrainedConfig):
                 if gguf_file:
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
@@ -713,19 +715,16 @@ class AutoTokenizer:
                     config = AutoConfig.from_pretrained(
                         pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                     )
-            # Prioritize TOKENIZER_MAPPING over tokenizer_config
             config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
-            
             if type(config_for_lookup) in TOKENIZER_MAPPING:
                 tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
-                
                 if isinstance(tokenizer_class, tuple):
                     tokenizer_class = tokenizer_class[1] or tokenizer_class[0]
                 if isinstance(tokenizer_class, str):
                     tokenizer_class = tokenizer_class_from_name(tokenizer_class)
-                
                 if tokenizer_class is not None:
                     return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        # END PRIORITIZE MAPPING FOR MODELS
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
