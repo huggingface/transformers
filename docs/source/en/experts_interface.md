@@ -45,7 +45,7 @@ Switch between experts backends at runtime without reloading the model using [`~
 model.set_experts_implementation("eager")
 ```
 
-### Backbone-specific experts backend
+## Backbone-specific experts backend
 
 Multimodal models can have multiple sub-configs (for example, different backbones). You can set a different experts backend per sub-config by passing a `dict` to `experts_implementation` at load time.
 
