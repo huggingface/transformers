@@ -191,6 +191,7 @@ if __name__ == "__main__":
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -210,6 +211,10 @@ if __name__ == "__main__":
             )
         else:
             args.attn = "kernels-community/flash-attn3"
+
+    # Set seed
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
