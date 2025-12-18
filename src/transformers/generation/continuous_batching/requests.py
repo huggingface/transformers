@@ -50,9 +50,16 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
-        total_memory = None
-        reserved_memory = 0
-        allocated_memory = 0
+        try:
+            import psutil
+
+            total_memory = psutil.virtual_memory().total
+            allocated_memory = psutil.Process().memory_info().rss
+            reserved_memory = allocated_memory
+        except ImportError:
+            total_memory = 0
+            reserved_memory = 0
+            allocated_memory = 0
     return device, total_memory, reserved_memory, allocated_memory
 
 

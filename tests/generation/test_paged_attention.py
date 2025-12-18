@@ -4,7 +4,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.testing_utils import require_flash_attn, require_torch_accelerator, slow
+from transformers.testing_utils import slow, torch_device
 
 
 _TEST_PROMPTS = [
@@ -23,10 +23,17 @@ _EXPECTED_OUTPUTS = [
     "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train travel in 30 minutes?\n## Step 1: Convert the speed from km/h to km/min",
 ]
 
+# TODO: Use Expectations once _EXPECTED_OUTPUTS are verified by HF team. Currently fails on A100.
+_EXPECTED_OUTPUTS_CPU = [
+    "orange.\n\n## Step 1: Identify the key characteristics of the fruit\nThe fruit is described as being orange in color and round in shape.\n\n## Step 2: Determine the taste and nutritional value of the fruit\nThe fruit is described as sweet",
+    "get started with our services.\nWe will be in touch with you shortly to discuss your project and provide a quote.\n\n**Project Details**\n\n* Project Name: _____________________________________________________\n* Project Description: __________________________________________________\n* Project Type (check all that apply",
+    "track. The train is stopped for 30 minutes. The train is moving at a speed of 60 km/h. How many kilometers does the train travel in 30 minutes?\n## Step 1: Convert the speed from km/h to km/min",
+    "This riddle is a classic example of a lateral thinking puzzle, which requires the test-taker to think creatively and consider multiple possibilities. The answer is not a straightforward one, and it requires some lateral thinking to arrive at the correct solution.",
+    "a woman standing on the sidewalk, looking at him. He is immediately drawn to her and feels a strong attraction. He walks up to her and strikes up a conversation.",
+]
+
 
 @slow
-@require_flash_attn
-@require_torch_accelerator
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -51,6 +58,11 @@ class TestBatchGeneration(unittest.TestCase):
         ]
     )
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
+        if attn_impl in ["paged|flash_attention_2", "paged|flex_attention"] and torch_device == "cpu":
+            self.skipTest(
+                f"CPU only support sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
+            )
+
         self.model.config.attn_implementation = attn_impl
 
         generation_config = GenerationConfig(
@@ -77,11 +89,13 @@ class TestBatchGeneration(unittest.TestCase):
             f"\n[{attn_impl}] Batch took {end - start:.2f}s with config: blocks={num_blocks}, block_size={block_size}, max_batch_tokens={max_batch_tokens}"
         )
 
+        expected_outputs = _EXPECTED_OUTPUTS_CPU if torch_device == "cpu" else _EXPECTED_OUTPUTS
+
         for i, req_id in enumerate(batch_outputs):
             generated = self.tokenizer.decode(
                 batch_outputs[req_id].generated_tokens, skip_special_tokens=False
             ).strip()
-            expected = _EXPECTED_OUTPUTS[i].strip()
+            expected = expected_outputs[i].strip()
             self.assertTrue(
                 generated.startswith(expected),
                 msg=f"[{attn_impl}] Mismatch in request {i}:\nExpected start: {expected}\nGot: {generated}",
@@ -97,6 +111,11 @@ class TestBatchGeneration(unittest.TestCase):
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         """Test batch generation with do_sampling=True to verify sampling works correctly."""
+        if attn_impl in ["paged|flash_attention_2", "paged|flex_attention"] and torch_device == "cpu":
+            self.skipTest(
+                f"CPU only support sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
+            )
+
         self.model.config.attn_implementation = attn_impl
 
         generation_config = GenerationConfig(
