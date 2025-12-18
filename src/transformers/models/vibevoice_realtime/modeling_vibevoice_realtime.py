@@ -776,20 +776,10 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
         # NOTE: Marks the text that needs to be spoken by the TTS model.
         self.tts_input_types = nn.Embedding(num_embeddings=2, embedding_dim=config.text_config.hidden_size)
         self.post_init()
-
-    # def get_input_embeddings(self):
-    #     return self.language_model.get_input_embeddings()
     
-    # TODO simplify this method
     def get_input_embeddings(self):
-        if hasattr(self.language_model, 'embed_tokens'):
-            # If the language model has an embed_tokens attribute, return it
-            return self.language_model.embed_tokens
-        
-        for name, attr in self.language_model.fullmap.items(): # parallel by nnscaler, the name is changed
-            if attr.orig_name == 'embed_tokens.weight':
-                return getattr(self.language_model, name)
-        assert False, 'should not arrive here'
+        # return self.language_model.embed_tokens   # TODO original but doesn't seem necessary
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)

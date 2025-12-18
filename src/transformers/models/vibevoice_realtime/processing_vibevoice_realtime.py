@@ -150,13 +150,10 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
         # TODO (ebezzam) hacks to imitate original, `tts_attention_mask` of below doesn't seem to be used by original?
         del encoded_text["attention_mask"]      # original doesn't use this, but manually creates it, and manual has different shape
-        encoded_text["tts_input_ids"] = encoded_text.pop("input_ids")
 
         lm_input_ids = None    # input_ids in original
-        tts_lm_input_ids = None # tts_lm_input_ids in original
         if voice_preset is not None:
             lm_input_ids = []
-            tts_lm_input_ids = []
 
             # TODO how to handle batching? Bark doesn't
             # make batch
@@ -174,17 +171,13 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
                 self._validate_voice_preset_dict(voice_preset[i])
 
                 lm_input_ids.append([self.pad_id] * voice_preset[i]['lm']['last_hidden_state'].size(1))
-                tts_lm_input_ids.append([self.pad_id] * voice_preset[i]['tts_lm']['last_hidden_state'].size(1))
 
             lm_attention_masks = [[1] * len(ids) for ids in lm_input_ids] if return_attention_mask else None
-            tts_lm_attention_masks = [[1] * len(ids) for ids in tts_lm_input_ids] if return_attention_mask else None
 
             # TODO (ebezzam) proper batching
             encoded_text.update({
-                "input_ids": torch.tensor(lm_input_ids, dtype=torch.long),
                 # NOTE (ebezzam) original seems to use this as the attention mask and NOT from tokenizer...
                 "attention_mask": torch.tensor(lm_attention_masks, dtype=torch.long) if lm_attention_masks is not None else None,
-                "tts_lm_attention_mask": torch.tensor(tts_lm_attention_masks, dtype=torch.long) if tts_lm_attention_masks is not None else None,
             })
 
             # NOTE (ebezzam) like in Bark: https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
