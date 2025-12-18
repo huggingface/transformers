@@ -3687,7 +3687,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             > Parameters for big model inference
 
-            dtype (`str` or `torch.dtype`, *optional*):
+            dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
                 Override the default `torch_dtype` and load the model under a specific `dtype`. The different options
                 are:
 
