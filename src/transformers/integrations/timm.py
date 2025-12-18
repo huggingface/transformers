@@ -20,21 +20,20 @@ won't need to reinit them.
 Do not rely on it, as we will work to integrate it directly in `timm`, to then remove this file without warning.
 """
 
-from dataclasses import dataclass
-from typing import Optional, Union
-
-import torch
-from torch import Tensor, nn
-
 from ... import initialization as init
-from ...modeling_outputs import ImageClassifierOutput, ModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, requires_backends
-from .configuration_timm_wrapper import TimmWrapperConfig
+from ...utils import is_timm_available
 
 
 if is_timm_available():
-    from timm.layers.pos_embed_sincos import FourierEmbed, pixel_freq_bands, RotaryEmbedding, freq_bands, RotaryEmbeddingCat, RotaryEmbeddingMixed, RotaryEmbeddingDinoV3
+    from timm.layers.pos_embed_sincos import (
+        FourierEmbed,
+        RotaryEmbedding,
+        RotaryEmbeddingCat,
+        RotaryEmbeddingDinoV3,
+        RotaryEmbeddingMixed,
+        freq_bands,
+        pixel_freq_bands,
+    )
 
 
 def _maybe_reinit_non_persistent_buffer(module):
@@ -44,7 +43,11 @@ def _maybe_reinit_non_persistent_buffer(module):
         init.copy_(module.bands, pixel_freq_bands(module.max_res, module.num_bands))
     elif isinstance(module, RotaryEmbedding):
         if module.bands is not None:
-            bands = pixel_freq_bands(module.dim // 4, float(module.max_res), linear_bands=module.linear_bands) if module.in_pixels else bands = freq_bands(module.dim // 4, temperature=module.temperature, step=1)
+            bands = (
+                pixel_freq_bands(module.dim // 4, float(module.max_res), linear_bands=module.linear_bands)
+                if module.in_pixels
+                else freq_bands(module.dim // 4, temperature=module.temperature, step=1)
+            )
             init.copy_(module.bands, bands)
         elif module.pos_embed_sin is not None:
             emb_sin, emb_cos = module._get_pos_embed_values(module.feat_shape)
@@ -52,7 +55,11 @@ def _maybe_reinit_non_persistent_buffer(module):
             init.copy_(module.pos_embed_cos, emb_cos)
     elif isinstance(module, RotaryEmbeddingCat):
         if module.bands is not None:
-            bands = pixel_freq_bands(module.dim // 4, float(module.max_res), linear_bands=module.linear_bands) if module.in_pixels else bands = freq_bands(module.dim // 4, temperature=module.temperature, step=1)
+            bands = (
+                pixel_freq_bands(module.dim // 4, float(module.max_res), linear_bands=module.linear_bands)
+                if module.in_pixels
+                else freq_bands(module.dim // 4, temperature=module.temperature, step=1)
+            )
             init.copy_(module.bands, bands)
         elif module.pos_embed is not None:
             init.copy_(module.pos_embed, module._get_pos_embed_values(feat_shape=module.feat_shape))
