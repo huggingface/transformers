@@ -23,7 +23,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
@@ -242,6 +242,49 @@ class Modality(enum.Enum):
     VLM = "VLM"
     STT = "STT"
     TTS = "TTS"
+
+
+class StreamingTqdmWrapper:
+    def __init__(
+        self,
+        wrapped,
+        enqueue: Callable[[dict], None],
+        model_id_and_revision: str,
+        desc: str,
+        total: int,
+    ):
+        self._wrapped = wrapped
+        self.enqueue = enqueue
+        self.model_id_and_revision = model_id_and_revision
+        self.desc = desc
+        self.total = total
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+    def update(self, n: int = 1):
+        result = self._wrapped.update(n)
+        self.enqueue(
+            {
+                "stage": "tqdm:update",
+                "model": self.model_id_and_revision,
+                "desc": self.desc,
+                "n": getattr(self._wrapped, "n", None),
+                "total": getattr(self._wrapped, "total", self.total),
+            }
+        )
+        return result
+
+    def close(self):
+        self.enqueue({"stage": "tqdm:close", "model": self.model_id_and_revision, "desc": self.desc})
+        return self._wrapped.close()
+
+    def __enter__(self):
+        self._wrapped.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self._wrapped.__exit__(exc_type, exc_value, traceback)
 
 
 def create_generation_config_from_req(
@@ -623,6 +666,55 @@ class Serve:
         @app.get("/status")
         def status():
             return JSONResponse({"loaded_models": list(self.loaded_models.keys())})
+
+        @app.post("/load_model")
+        async def load_model(body: dict):
+            model = body.get("model")
+            if model is None:
+                raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+
+            model_id_and_revision = self.process_model_name(model)
+
+            async def event_publisher(method: Callable):
+                queue: asyncio.Queue[str | None] = asyncio.Queue()
+                loop = asyncio.get_running_loop()
+
+                def enqueue(payload: dict):
+                    loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(payload)}\n\n")
+
+                def streaming_tqdm_hook(factory, args, kwargs):
+                    bar = factory(*args, **kwargs)
+                    desc = kwargs.get("desc") or getattr(bar, "desc", None)
+                    total = getattr(bar, "total", kwargs.get("total"))
+                    enqueue({"stage": "tqdm:start", "model": model_id_and_revision, "desc": desc, "total": total})
+
+                    return StreamingTqdmWrapper(
+                        bar, enqueue=enqueue, model_id_and_revision=model_id_and_revision, desc=desc, total=total
+                    )
+
+                async def run_load():
+                    enqueue({"stage": "received", "model": model_id_and_revision})
+                    previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
+                    try:
+                        await asyncio.to_thread(method, model_id_and_revision, enqueue)
+                    except Exception as e:
+                        logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
+                        enqueue({"stage": "error", "model": model_id_and_revision, "message": str(e), "error": True})
+                    else:
+                        enqueue({"stage": "ready", "model": model_id_and_revision})
+                    finally:
+                        logging.set_tqdm_hook(previous_hook)
+                        loop.call_soon_threadsafe(queue.put_nowait, None)
+
+                asyncio.create_task(run_load())
+
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    yield item
+
+            return StreamingResponse(event_publisher(self.load_model_and_processor), media_type="text/event-stream")
 
         settings = Settings()
 
@@ -1932,7 +2024,9 @@ class Serve:
             return model_id
         return f"{model_id}@main"
 
-    def _load_model_and_data_processor(self, model_id_and_revision: str):
+    def _load_model_and_data_processor(
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
+    ):
         """
         Generic method to load a model and a data processor from a model ID and revision, making use of the serve CLI
         arguments.
@@ -1951,7 +2045,16 @@ class Serve:
 
         from transformers import AutoConfig, AutoProcessor
 
+        def emit_progress(stage: str, message: str | None = None):
+            if progress_callback is None:
+                return
+            payload = {"stage": stage, "model": model_id_and_revision}
+            if message is not None:
+                payload["message"] = message
+            progress_callback(payload)
+
         logger.warning(f"Loading {model_id_and_revision}")
+        emit_progress("processor:start", "Loading processor")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
@@ -1963,6 +2066,7 @@ class Serve:
             revision=revision,
             trust_remote_code=self.trust_remote_code,
         )
+        emit_progress("processor:ready", "Processor loaded")
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1975,9 +2079,13 @@ class Serve:
             "quantization_config": quantization_config,
         }
 
+        emit_progress("config:start", "Loading config")
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
+        emit_progress("config:ready")
         architecture = getattr(transformers, config.architectures[0])
+        emit_progress("model:start", "Loading model weights")
         model = architecture.from_pretrained(model_id, **model_kwargs)
+        emit_progress("model:ready", "Model weights loaded")
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
@@ -1991,7 +2099,7 @@ class Serve:
         return model, data_processor
 
     def load_model_and_processor(
-        self, model_id_and_revision: str
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
     ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
@@ -2003,8 +2111,20 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
         """
+
+        def emit_progress(stage: str, message: str | None = None):
+            if progress_callback is None:
+                return
+            payload = {"stage": stage, "model": model_id_and_revision}
+            if message is not None:
+                payload["message"] = message
+            progress_callback(payload)
+
         if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            model, processor = self._load_model_and_data_processor(model_id_and_revision)
+            emit_progress("start", "Loading model and processor")
+            model, processor = self._load_model_and_data_processor(
+                model_id_and_revision, progress_callback=progress_callback
+            )
             self.loaded_models[model_id_and_revision] = TimedModel(
                 model,
                 timeout_seconds=self.model_timeout,
@@ -2016,7 +2136,9 @@ class Serve:
             self.loaded_models[model_id_and_revision].reset_timer()
             model = self.loaded_models[model_id_and_revision].model
             processor = self.loaded_models[model_id_and_revision].processor
+            emit_progress("cached", "Model already loaded in memory")
 
+        emit_progress("loaded", "Model available")
         return model, processor
 
     def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:

@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Callable
 from logging import (
     CRITICAL,  # NOQA
     DEBUG,
@@ -29,6 +30,7 @@ from logging import (
     WARNING,
 )
 from logging import captureWarnings as _captureWarnings
+from typing import Any
 
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
@@ -49,6 +51,7 @@ log_levels = {
 _default_log_level = logging.WARNING
 
 _tqdm_active = not hf_hub_utils.are_progress_bars_disabled()
+_tqdm_hook: Callable[[Callable[..., Any], tuple[Any, ...], dict[str, Any]], Any] | None = None
 
 
 def _get_default_logging_level():
@@ -371,8 +374,11 @@ class EmptyTqdm:
 
 class _tqdm_cls:
     def __call__(self, *args, **kwargs):
+        factory = tqdm_lib.tqdm if _tqdm_active else EmptyTqdm
+        if _tqdm_hook is not None:
+            return _tqdm_hook(factory, args, kwargs)
         if _tqdm_active:
-            return tqdm_lib.tqdm(*args, **kwargs)
+            return factory(*args, **kwargs)
         else:
             return EmptyTqdm(*args, **kwargs)
 
@@ -406,3 +412,23 @@ def disable_progress_bar():
     global _tqdm_active
     _tqdm_active = False
     hf_hub_utils.disable_progress_bars()
+
+
+def set_tqdm_hook(hook: Callable[[Callable[..., Any], tuple[Any, ...], dict[str, Any]], Any] | None):
+    """
+    Set a hook that customizes tqdm creation.
+
+    The hook is called with the tqdm factory to use (either `tqdm.auto.tqdm` or an empty shim), along with the
+    positional and keyword arguments that would have been passed to tqdm. The hook should return an object compatible
+    with tqdm (i.e. implementing the methods your code relies on, such as `update`, `close`, context manager methods,
+    etc.).
+
+    Passing `None` clears the hook.
+
+    Returns:
+        The previous hook, which can be restored later.
+    """
+    global _tqdm_hook
+    previous_hook = _tqdm_hook
+    _tqdm_hook = hook
+    return previous_hook
