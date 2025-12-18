@@ -26,6 +26,7 @@ import torch
 import torch.distributed as dist
 from packaging import version
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 
 from ..cache_utils import (
     Cache,
@@ -3649,20 +3650,35 @@ class GenerationMixin(ContinuousMixin):
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape[:2]
         if batch_size > 1:
-            raise ValueError("assisted generate is only supported for batch_size = 1")
+            if assistant_tokenizer is not None:
+                raise ValueError(
+                    "assisted generate is only supported for batch_size > 1 if assistant_tokenizer is None"
+                )
+            if generation_config.prompt_lookup_num_tokens is not None:
+                raise ValueError(
+                    "assisted generate is only supported for batch_size > 1 if prompt_lookup_num_tokens is None"
+                )
+
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         this_peer_finished = False
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
+        assistant_ids_in_cache = None
+        pad_token_id = generation_config._pad_token_tensor
+        decoder_start_token_tensor = generation_config._decoder_start_token_tensor
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
+                input_ids, assistant_ids_in_cache
+            )
+            assistant_ids_in_cache = candidate_input_ids[:, :-1]
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
+            assistant_used = candidate_logits is not None
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
             is_done_candidate = stopping_criteria(candidate_input_ids, None)
@@ -3674,7 +3690,11 @@ class GenerationMixin(ContinuousMixin):
             # 2.1. Prepare the model inputs
             candidate_kwargs = copy.copy(model_kwargs)
             candidate_kwargs = _prepare_attention_mask(
-                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+                candidate_kwargs,
+                candidate_input_ids.shape[1],
+                self.config.is_encoder_decoder,
+                candidate_input_ids if batch_size > 1 else None,
+                pad_token_id if batch_size > 1 else None,
             )
             candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
             if "cache_position" in candidate_kwargs:
@@ -3708,12 +3728,13 @@ class GenerationMixin(ContinuousMixin):
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://huggingface.co/papers/2211.17192).
             if do_sample and candidate_logits is not None:
-                valid_tokens, n_matches = _speculative_sampling(
+                valid_tokens_padded, n_matches = _speculative_sampling(
                     candidate_input_ids,
                     candidate_logits,
                     candidate_length,
                     new_logits,
                     is_done_candidate,
+                    pad_token_id,
                 )
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
@@ -3722,17 +3743,37 @@ class GenerationMixin(ContinuousMixin):
             else:
                 if do_sample:
                     probs = new_logits.softmax(dim=-1)
-                    selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
+                    selected_tokens = (
+                        torch.multinomial(probs.view(-1, probs.size(-1)), num_samples=1)
+                        .squeeze(-1)
+                        .view(probs.size(0), probs.size(1))
+                    )
                 else:
                     selected_tokens = new_logits.argmax(dim=-1)
 
                 candidate_new_tokens = candidate_input_ids[:, cur_len:]
-                n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
+                not_accepted_tokens = ~(
+                    candidate_new_tokens == selected_tokens[:, :-1]
+                )  # shape: (batch_size, candidate_lenght)
+                n_matches = (not_accepted_tokens.cumsum(dim=-1) < 1).sum(dim=-1)  # shape: (batch_size,)
 
                 # Ensure we don't generate beyond max_len or an EOS token
-                if is_done_candidate and n_matches == candidate_length:
-                    n_matches -= 1
-                valid_tokens = selected_tokens[:, : n_matches + 1]
+                # Create fully padded tensor
+                valid_tokens_padded = torch.full(
+                    (batch_size, candidate_length + 1),  # YANIV: max_matches is at most candidate_length
+                    pad_token_id,
+                    dtype=torch.long,
+                    device=selected_tokens.device,
+                )
+
+                # Build mask for which positions in each row should be filled
+                range_row = torch.arange(candidate_length + 1, device=selected_tokens.device).unsqueeze(0)
+                mask = range_row <= n_matches.unsqueeze(1)
+
+                # Fill efficient batched slice
+                valid_tokens_padded[mask] = selected_tokens[:, : candidate_length + 1][
+                    mask
+                ]  # a tensor of the selected_tokens with trailing pad_token_id
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -3740,23 +3781,30 @@ class GenerationMixin(ContinuousMixin):
             # is no match.
 
             # 4.1. Get the valid continuation, after the matching tokens
-            input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
+            input_ids, outputs.past_key_values = repadd_batch_and_fix_cache(
+                input_ids,
+                outputs.past_key_values,
+                valid_tokens_padded,
+                pad_token_id,
+                self.config.is_encoder_decoder,
+                decoder_start_token_tensor,
+            )
             if streamer is not None:
-                streamer.put(valid_tokens.cpu())
+                streamer.put(
+                    valid_tokens_padded.cpu()
+                )  # we might want to remove the padding here. and allow only for batch size 1
             new_cur_len = input_ids.shape[1]
 
-            # 4.2. Discard past key values relative to unused assistant tokens
-            outputs.past_key_values.crop(new_cur_len - 1)
-
             # 5. Update the candidate generation strategy if needed
-            candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
+            candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches, assistant_used)
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs["cache_position"] = torch.tensor([new_cur_len - 1], device=input_ids.device, dtype=torch.long)
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
-                num_new_tokens=n_matches + 1,
+                num_new_tokens=0,
             )
             if synced_gpus and this_peer_finished:
                 continue
@@ -3898,54 +3946,64 @@ def _speculative_sampling(
     candidate_length,
     new_logits,
     is_done_candidate,
+    pad_token_id,
 ):
     """
     Applies sampling as in the speculative decoding paper (https://huggingface.co/papers/2211.17192, algorithm 1). Returns
     the selected tokens, as well as the number of candidate matches.
-
     NOTE: Unless otherwise stated, the variable names match those in the paper.
     """
     new_candidate_input_ids = candidate_input_ids[:, -candidate_length:]
     # Gets the probabilities from the logits. q_i and p_i denote the assistant and model probabilities of the tokens
     # selected by the assistant, respectively.
     q = candidate_logits.softmax(dim=-1)
-    q_i = q[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
+    q_i = q.gather(dim=-1, index=new_candidate_input_ids.unsqueeze(-1)).squeeze(-1)
     p = new_logits.softmax(dim=-1)
-    p_i = p[:, torch.arange(candidate_length), new_candidate_input_ids].squeeze(0, 1)
-    probability_ratio = p_i / q_i
+    p_i = p.gather(dim=-1, index=new_candidate_input_ids.unsqueeze(-1)).squeeze(-1)
+    probability_ratio = p_i / q_i  # [batch_size, candidate_length]
 
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
     # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
     # (= keep with p = probability_ratio). Keep all the tokens until the first rejection
     r_i = torch.rand_like(probability_ratio)
     is_accepted = r_i <= probability_ratio
-    n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
+    n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum(dim=-1)  # this is `n` in algorithm 1. shape: (batch_size,)
 
     # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
-    if is_done_candidate and n_matches == candidate_length:
-        # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
-        # due to acceptance on EOS we fix `n_matches`
-        n_matches -= 1
-        valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
-    else:
-        # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
-        gamma = candidate_logits.shape[1]
-        p_n_plus_1 = p[:, n_matches, :]
-        if n_matches < gamma:
-            q_n_plus_1 = q[:, n_matches, :]
-            p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
-            p_prime.div_(p_prime.sum())
+    valid_tokens_list = [None] * len(n_matches)
+    for i in range(len(n_matches)):
+        if is_done_candidate[i] and n_matches[i] == candidate_length:
+            # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
+            # due to acceptance on EOS we fix `n_matches`
+            n_matches[i] -= 1
+            valid_tokens = new_candidate_input_ids[[i], : n_matches[i] + 1]
         else:
-            p_prime = p_n_plus_1
-        t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+            # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
+            gamma = candidate_logits.shape[1]
+            p_n_plus_1 = p[i, n_matches[i], :]
+            if n_matches[i] < gamma:
+                q_n_plus_1 = q[i, n_matches[i], :]
+                p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
+                p_prime.div_(p_prime.sum())
+            else:
+                p_prime = p_n_plus_1
+            t = torch.multinomial(p_prime, num_samples=1)[None, :]
 
-        # The selected tokens include the matches (if any) plus the next sampled tokens
-        if n_matches > 0:
-            valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
-        else:
-            valid_tokens = t
-
-    return valid_tokens, n_matches
+            # The selected tokens include the matches (if any) plus the next sampled tokens
+            if n_matches[i] > 0:
+                valid_tokens = torch.cat((new_candidate_input_ids[[i], : n_matches[i]], t), dim=-1)
+            else:
+                valid_tokens = t
+        valid_tokens_list[i] = valid_tokens
+    pad_valid_tokens = torch.full(
+        (len(valid_tokens_list), candidate_length + 1),
+        pad_token_id,
+        dtype=torch.long,
+        device=valid_tokens_list[0].device,
+    )
+    for i in range(len(valid_tokens_list)):
+        pad_valid_tokens[i, -valid_tokens_list[i].shape[1] :] = valid_tokens_list[i]
+    return pad_valid_tokens, n_matches
 
 
 def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
@@ -3972,3 +4030,42 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)
     return outputs
+
+
+def repadd_batch_and_fix_cache(
+    input_ids, past_key_values, accepted_tokens_padded, pad_token_id, is_encoder_decoder, decoder_start_token_tensor
+):
+    """
+    params
+        input_ids: the input ids of the model (without the candidate tokens). shape: [B, S]
+        past_key_values: the past key values of the model. shape: [B, S, num_heads, head_dim] for each layer in the cache.
+        accepted_tokens_padded: the accepted tokens padded with the bonus token. shape: [B, candidate_length+1].
+        The bonus token is not always the last token (!). The rejected tokens are replaced with the pad_token_id.
+        pad_token_id: the pad token id.
+        is_encoder_decoder: whether the model is an encoder-decoder model.
+        decoder_start_token_tensor: the decoder start token tensor. shape: [B, 1].
+    returns:
+        repadded_tensor: the repadded tensor. shape: [B, ..]
+        cache: the cache after modifying the keys and values.
+
+    """
+    if is_encoder_decoder and pad_token_id == decoder_start_token_tensor:
+        input_ids[:, 0] = -1  # placeholder to keep safe
+    next_input_ids = torch.cat([input_ids, accepted_tokens_padded], dim=1)  # notive that accepted
+    # this will let us know which locations in the kv cache we should remove.
+    # we remove the last token because it is the bonus token and it does not appear in the cache.
+    cache_input_ids = next_input_ids.clone()
+    # last non zero token in each row is set to 0 because it is the bonus token and it does not appear in the cache.
+    cache_input_ids[torch.arange(cache_input_ids.shape[0]), (cache_input_ids != pad_token_id).cumsum(1).argmax(1)] = (
+        pad_token_id
+    )
+    padding_mask = cache_input_ids[:, :-1] == pad_token_id
+    past_key_values.compress_and_repad_cache(padding_mask)
+    # 1. Filter out current padding and repad to minimum length.
+    next_input_ids_clean = [row[row != pad_token_id] for row in next_input_ids]
+    next_input_ids_padded = pad_sequence(
+        next_input_ids_clean, batch_first=True, padding_value=pad_token_id, padding_side="left"
+    )
+    if is_encoder_decoder and pad_token_id == decoder_start_token_tensor:
+        next_input_ids_padded[:, 0] = decoder_start_token_tensor
+    return next_input_ids_padded, past_key_values

@@ -250,6 +250,8 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         if self.assistant_tokenizer.bos_token_id is None:
             self.assistant_tokenizer.bos_token_id = self.assistant_tokenizer.eos_token_id
 
+        self.generation_config._pad_token_tensor = torch.tensor([self.target_tokenizer.pad_token_id]).to(torch_device)
+
         self.input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
         self.model_kwargs = {
             "attention_mask": torch.ones_like(self.input_ids).to(torch_device),
