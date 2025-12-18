@@ -67,7 +67,7 @@ class DFineConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -308,8 +308,7 @@ class DFineConfig(PreTrainedConfig):
             )
             backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create HGNetV2Config
+            # this will map it to HGNetV2Config
             # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
