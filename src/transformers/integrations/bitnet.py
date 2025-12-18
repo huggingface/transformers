@@ -1,9 +1,6 @@
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_torch_available, logging
 
-
-if is_accelerate_available():
-    pass
 
 if is_torch_available():
     import torch

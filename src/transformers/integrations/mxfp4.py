@@ -12,22 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
     import torch
     from torch import nn
+from contextlib import contextmanager
 from typing import Optional
 
 from ..core_model_loading import ConversionOps
-
-
-if is_accelerate_available():
-    pass
-
-from contextlib import contextmanager
-
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 

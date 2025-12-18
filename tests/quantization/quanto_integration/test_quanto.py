@@ -24,14 +24,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available
+from transformers.utils import is_optimum_quanto_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    pass
 
 if is_optimum_quanto_available():
     from optimum.quanto import QLayerNorm, QLinear
