@@ -12,10 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from ..utils import is_compressed_tensors_available, is_torch_available, logging
 from ..utils.quantization_config import CompressedTensorsConfig
 from .base import HfQuantizer
+
+
+if TYPE_CHECKING:
+    from ..modeling_utils import PreTrainedModel
 
 
 if is_torch_available():
@@ -63,13 +69,19 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
-    def _process_model_before_weight_loading(self, model, **kwargs):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from compressed_tensors.quantization import apply_quantization_config
+        from compressed_tensors.transform import apply_transform_config
 
         ct_quantization_config = self.compressor.quantization_config
+        ct_transform_config = self.quantization_config.transform_config
 
-        # Always initialize compressed wrappers to match the checkpoint
+        # apply configs
+        if ct_transform_config is not None:
+            apply_transform_config(model, ct_transform_config)
         apply_quantization_config(model, ct_quantization_config, self.run_compressed)
+
+        # compress meta model to match compressed checkpoint
         if (
             self.quantization_config.is_quantization_compressed
             or self.quantization_config.is_sparsification_compressed
@@ -82,7 +94,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if (
             self.quantization_config.is_quantization_compressed and not self.run_compressed
         ) or self.quantization_config.is_sparsification_compressed:
-            self.compressor.decompress_model(model=model)
+            self.dequantize(model)
+
+    def dequantize(self, model: "PreTrainedModel"):
+        self.compressor.decompress_model(model=model)
 
     def update_tp_plan(self, config):
         additional_plan = {
