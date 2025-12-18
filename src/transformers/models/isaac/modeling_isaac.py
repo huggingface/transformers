@@ -672,12 +672,10 @@ class IsaacVisionEmbedding(nn.Module):
         return self.multimodal_projector(hidden_states)
 
 
-class IsaacRotaryEmbedding(nn.Module):
+class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
     EXTRA_ROPE_KEYS = {"mrope_section", "mrope_interleaved"}
 
     def __init__(self, config: IsaacConfig, device=None):
-        super().__init__()
-
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
 
@@ -686,9 +684,9 @@ class IsaacRotaryEmbedding(nn.Module):
         config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
+        super().__init__(config_for_rope, device=init_device)
 
-        rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
+        rotary_half_dim = self.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
@@ -713,10 +711,6 @@ class IsaacRotaryEmbedding(nn.Module):
         split_sections = tuple(self.mrope_section * 2)
         chunks = tensor.split(split_sections, dim=-1)
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
-
-    @property
-    def inv_freq(self) -> torch.Tensor:
-        return self._qwen_rotary.inv_freq
 
     def forward(
         self,
@@ -749,7 +743,7 @@ class IsaacRotaryEmbedding(nn.Module):
 
             pos_axes = pos.permute(2, 0, 1).contiguous()
 
-        cos_axes, sin_axes = self._qwen_rotary(hidden_states, pos_axes)
+        cos_axes, sin_axes = super().forward(hidden_states, pos_axes)
 
         cos_axes = cos_axes.to(hidden_states.dtype)
         sin_axes = sin_axes.to(hidden_states.dtype)
