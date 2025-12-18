@@ -214,7 +214,6 @@ def no_init_weights():
         for name, init_func in TORCH_INIT_FUNCTIONS.items():
             setattr(torch.nn.init, name, init_func)
 
-
 @contextmanager
 def set_quantized_state():
     global _is_quantized
@@ -1518,11 +1517,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if quantization_config is not None:
             quant_method = getattr(quantization_config, "quant_method", None)
             # Only FP8 quantization methods are supported in _from_config
-            if quant_method in (QuantizationMethod.FBGEMM_FP8, QuantizationMethod.FP8):
-                hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=False)
-                hf_quantizer.validate_environment(dtype=dtype, device_map=None)
-                dtype = hf_quantizer.update_dtype(dtype)
-                is_quantized = True
+            if quant_method in (QuantizationMethod.FP8):
+                hf_quantizer, config, _ = get_hf_quantizer(config, quantization_config, device_map=None, weights_only=False, user_agent=None)
             else:
                 logger.warning_once(
                     f"Quantization method `{quant_method}` is not supported in `_from_config`. "
@@ -1533,6 +1529,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         init_contexts = []
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
+
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
@@ -1553,9 +1550,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 keep_in_fp32_modules=model._keep_in_fp32_modules,
                 config=config,
             )
+
             model.hf_quantizer = hf_quantizer
             config.quantization_config = quantization_config
-            
 
         return model
 
@@ -3993,7 +3990,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     checkpoint_files=checkpoint_files,
                     use_kernels=use_kernels,
                 )
-
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
