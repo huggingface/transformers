@@ -630,15 +630,17 @@ class XLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-        if isinstance(module, XLMModel) and self.config.sinusoidal_embeddings:
-            init.copy_(
-                module.position_embeddings.weight,
-                create_sinusoidal_embeddings(
-                    self.config.max_position_embeddings,
-                    self.config.emb_dim,
-                    out=torch.empty_like(module.position_embeddings.weight),
-                ),
-            )
+        if isinstance(module, XLMModel):
+            if self.config.sinusoidal_embeddings:
+                init.copy_(
+                    module.position_embeddings.weight,
+                    create_sinusoidal_embeddings(
+                        self.config.max_position_embeddings,
+                        self.config.emb_dim,
+                        out=torch.empty_like(module.position_embeddings.weight),
+                    ),
+                )
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass
@@ -735,10 +737,10 @@ class XLMModel(XLMPreTrainedModel):
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
         # Initialize weights and apply final processing
-        self.post_init()
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings
