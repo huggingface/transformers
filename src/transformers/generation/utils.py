@@ -407,9 +407,19 @@ class GenerationMixin(ContinuousMixin):
                     **repo_loading_kwargs,
                 )
             except OSError:
-                # `self` already has a generation config created from model config so we can simply log info
+                # `self` already has a generation config created from model config, but model config will
+                # not contain any generation-specific params. These are popped at config's `__init__`.
+                # Thus we have to load from `config.json` and create a generation config from it (for BART)
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
+                )
+                self.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    config_file_name="config.json",
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    _from_model_config=True,
+                    **repo_loading_kwargs,
                 )
 
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
