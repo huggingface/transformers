@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoImageProcessor, AutoProcessor, AutoTokenizer
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -40,89 +37,12 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     """Test suite for LightOnOcr processor."""
 
     processor_class = LightOnOcrProcessor
+    model_id = "lightonai/LightOnOCR-1B-1025"
 
     def setUp(self):
         """Set up test fixtures."""
-        self.tmpdirname = tempfile.mkdtemp()
-
-        # Create a Pixtral image processor (LightOnOcr uses Pixtral vision architecture)
-        image_processor = AutoImageProcessor.from_pretrained(
-            "mistral-community/pixtral-12b", size={"longest_edge": 1024}
-        )
-
-        # Create a tokenizer (using Qwen2 as base)
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-
-        # Add special tokens for LightOnOcr
-        special_tokens_dict = {
-            "additional_special_tokens": [
-                "<|image_pad|>",
-                "<|vision_pad|>",
-                "<|vision_end|>",
-            ]
-        }
-        tokenizer.add_special_tokens(special_tokens_dict)
-
-        # Set special token attributes on the tokenizer for multimodal processing
-        tokenizer.image_token = "<|image_pad|>"
-        tokenizer.image_break_token = "<|vision_pad|>"
-        tokenizer.image_end_token = "<|vision_end|>"
-        tokenizer.image_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_token)
-        tokenizer.image_break_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_break_token)
-        tokenizer.image_end_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_end_token)
-
-        # Add a basic multimodal-aware chat template to the tokenizer
-        # This template extracts text from the multimodal content format
-        tokenizer.chat_template = (
-            "{% for message in messages %}"
-            "{% if loop.first and messages[0]['role'] != 'system' %}"
-            "{{ '<|im_start|>system\\nYou are a helpful assistant.<|im_end|>\\n' }}"
-            "{% endif %}"
-            "{{'<|im_start|>' + message['role'] + '\\n' }}"
-            "{% if message['content'] is string %}"
-            "{{ message['content'] }}"
-            "{% else %}"
-            "{% for content in message['content'] %}"
-            "{% if content['type'] == 'text' %}"
-            "{{ content['text'] }}"
-            "{% elif content['type'] == 'image' %}"
-            "{{ '<|image_pad|>' }}"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% endif %}"
-            "{{ '<|im_end|>\\n' }}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}"
-            "{{ '<|im_start|>assistant\\n' }}"
-            "{% endif %}"
-        )
-
-        # Create and save processor
-        processor = LightOnOcrProcessor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            patch_size=14,
-            spatial_merge_size=2,
-        )
-        processor.save_pretrained(self.tmpdirname)
-
+        processor = self.get_processor()
         self.image_token = processor.image_token
-
-    def tearDown(self):
-        """Clean up after tests."""
-        shutil.rmtree(self.tmpdirname, ignore_errors=True)
-
-    def get_tokenizer(self, **kwargs):
-        """Get tokenizer from saved processor."""
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        """Get image processor from saved processor."""
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        """Get processor from saved directory."""
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def prepare_image_inputs(self, batch_size=None):
         """Prepare small dummy image inputs."""
@@ -235,18 +155,19 @@ class LightOnOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """Test different return types (pt, np, list)."""
         processor = self.get_processor()
         image = self.prepare_image_inputs()
-        text = f"{self.image_token} Test image."
+        text_with_image = f"{self.image_token} Test image."
+        text_only = "Test without image."
 
-        # Test PyTorch tensors
-        inputs_pt = processor(images=image, text=text, return_tensors="pt")
+        # Test PyTorch tensors (with images - fast image processor only supports pt)
+        inputs_pt = processor(images=image, text=text_with_image, return_tensors="pt")
         self.assertIsInstance(inputs_pt["input_ids"], torch.Tensor)
 
-        # Test NumPy arrays
-        inputs_np = processor(images=image, text=text, return_tensors="np")
+        # Test NumPy arrays (text-only, since fast image processor doesn't support np)
+        inputs_np = processor(text=text_only, return_tensors="np")
         self.assertIsInstance(inputs_np["input_ids"], np.ndarray)
 
-        # Test lists
-        inputs_list = processor(images=image, text=text, return_tensors=None)
+        # Test lists (text-only, since fast image processor doesn't support list)
+        inputs_list = processor(text=text_only, return_tensors=None)
         self.assertIsInstance(inputs_list["input_ids"], list)
 
     def test_image_sizes_output(self):

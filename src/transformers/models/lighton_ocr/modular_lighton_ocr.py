@@ -294,16 +294,13 @@ class LightOnOcrProcessor(ProcessorMixin):
         # Calculate effective patch size for image processing
         self.effective_patch_size = patch_size * spatial_merge_size
 
-        # Get special tokens from tokenizer attributes
-        # These should be set on the tokenizer before creating the processor
-        self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
-        self.image_break_token = getattr(tokenizer, "image_break_token", "<|vision_pad|>")
-        self.image_end_token = getattr(tokenizer, "image_end_token", "<|vision_end|>")
-
-        # Get token IDs by converting from token strings
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
-        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        # Get special tokens and IDs directly from tokenizer attributes
+        self.image_token = tokenizer.image_token
+        self.image_break_token = tokenizer.image_break_token
+        self.image_end_token = tokenizer.image_end_token
+        self.image_token_id = tokenizer.image_token_id
+        self.image_break_token_id = tokenizer.image_break_token_id
+        self.image_end_token_id = tokenizer.image_end_token_id
 
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
