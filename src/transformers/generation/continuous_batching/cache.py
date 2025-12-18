@@ -397,8 +397,8 @@ class PagedAttentionCache:
             value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
             key_cache[forked_blocks] = key_cache[source_blocks]
             value_cache[forked_blocks] = value_cache[source_blocks]
-            # FIXME: should be one copy for al CMs with only the changing blocks
-            # FIXME: even once per fork batch
+        # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
+        # This will allow for  better .update and a single copy instead of one per cache tensor
 
     def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
         """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
