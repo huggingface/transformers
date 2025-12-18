@@ -84,7 +84,7 @@ model = AutoModelForCausalLM.from_pretrained(
 All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) support `torch.compile`.
 
 - `"eager"` and `"batched_mm"` work with all `torch.compile` modes.
-- `"grouped_mm"` compiles, but does **not** support compilation modes that rely on CUDA graphs (for example `mode="max-autotune"` or `mode="reduce-overhead"`). If you want to compile `"grouped_mm"`, use a mode that disables CUDA graphs (for example `mode="max-autotune-no-cudagraphs"`) or leave `mode=None`.
+- `"grouped_mm"` does **not** support compilation modes, `"max-autotune"` or `"reduce-overhead"`, that rely on CUDA graphs. To compile `"grouped_mm"`, use `"max-autotune-no-cudagraphs"` to disable CUDA graphs or leave `mode=None`.
 
 ```py
 import torch
