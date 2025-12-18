@@ -215,6 +215,7 @@ def no_init_weights():
         for name, init_func in TORCH_INIT_FUNCTIONS.items():
             setattr(torch.nn.init, name, init_func)
 
+
 @contextmanager
 def set_quantized_state():
     global _is_quantized
@@ -1495,7 +1496,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype (`torch.dtype`, *optional*):
                 Override the default `dtype` and load the model under this dtype.
         """
-        from .quantizers.auto import AutoHfQuantizer
 
         # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
@@ -1519,7 +1519,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             quant_method = getattr(quantization_config, "quant_method", None)
             # Only FP8 quantization methods are supported in _from_config
             if quant_method in (QuantizationMethod.FP8):
-                hf_quantizer, config, _ = get_hf_quantizer(config, quantization_config, device_map=None, weights_only=False, user_agent=None)
+                hf_quantizer, config, _ = get_hf_quantizer(
+                    config, quantization_config, device_map=None, weights_only=False, user_agent=None
+                )
             else:
                 logger.warning_once(
                     f"Quantization method `{quant_method}` is not supported in `_from_config`. "
