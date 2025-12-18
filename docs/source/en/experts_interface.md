@@ -89,7 +89,6 @@ import torch
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="grouped_mm",
