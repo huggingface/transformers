@@ -31,6 +31,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -62,6 +63,52 @@ from .configuration_qwen2_5_omni import (
 logger = logging.get_logger(__name__)
 
 
+def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
+    """Generates a 1D Kaiser-windowed sinc filter.
+
+    Args:
+        cutoff (float): Normalized cutoff frequency (0 to 0.5).
+        half_width (float): Transition bandwidth.
+        kernel_size (int): Number of filter taps.
+
+    Returns:
+        torch.Tensor: A tensor of shape (1, 1, kernel_size) representing the filter.
+    """
+    is_even = kernel_size % 2 == 0
+    half_size = kernel_size // 2
+
+    # Compute Kaiser window parameters
+    delta_f = 4 * half_width
+    attenuation = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
+
+    if attenuation > 50.0:
+        beta = 0.1102 * (attenuation - 8.7)
+    elif attenuation >= 21.0:
+        beta = 0.5842 * (attenuation - 21) ** 0.4 + 0.07886 * (attenuation - 21.0)
+    else:
+        beta = 0.0
+
+    kaiser_window = torch.kaiser_window(kernel_size, beta=beta, periodic=False, dtype=torch.float32)
+
+    # Compute time indices
+    if is_even:
+        time_indices = torch.arange(-half_size, half_size) + 0.5
+    else:
+        time_indices = torch.arange(kernel_size) - half_size
+
+    # Compute sinc filter
+    if cutoff == 0:
+        return torch.zeros((1, 1, kernel_size), dtype=torch.float32)  # Ensures correct shape
+
+    sinc_filter = torch.sinc(2 * cutoff * time_indices)
+    normalized_filter = 2 * cutoff * kaiser_window * sinc_filter
+
+    # Normalize to ensure sum = 1 (avoid leakage of constant component)
+    normalized_filter /= normalized_filter.sum()
+
+    return normalized_filter.view(1, 1, kernel_size)
+
+
 @auto_docstring
 class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     config: Qwen2_5OmniConfig
@@ -74,6 +121,23 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _can_compile_fullgraph = False
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
+            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+            init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
+        elif isinstance(module, UpSample1d):
+            filter_tensor = kaiser_sinc_filter1d(0.5 / module.ratio, 0.6 / module.ratio, module.kernel_size)
+            init.copy_(module.filter, filter_tensor)
+        elif isinstance(module, DownSample1d):
+            filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
+            init.copy_(module.filter, filter_tensor)
+        elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -686,6 +750,9 @@ class Qwen2_5OmniAudioEncoderLayer(GradientCheckpointingLayer):
 class SinusoidsPositionEmbedding(nn.Module):
     def __init__(self, length, channels, max_timescale=10000):
         super().__init__()
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
         if channels % 2 != 0:
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
@@ -1018,6 +1085,22 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Qwen2_5_VisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
 class Qwen2_5_VisionPatchEmbed(nn.Module):
     def __init__(
         self,
@@ -1042,20 +1125,6 @@ class Qwen2_5_VisionPatchEmbed(nn.Module):
         )
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
-
-
-class Qwen2_5_VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
 
 
 class Qwen2_5OmniPatchMerger(nn.Module):
@@ -1254,7 +1323,7 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -2523,7 +2592,7 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -3186,52 +3255,6 @@ class SnakeBeta(nn.Module):
         return hidden_states
 
 
-def kaiser_sinc_filter1d(cutoff, half_width, kernel_size):
-    """Generates a 1D Kaiser-windowed sinc filter.
-
-    Args:
-        cutoff (float): Normalized cutoff frequency (0 to 0.5).
-        half_width (float): Transition bandwidth.
-        kernel_size (int): Number of filter taps.
-
-    Returns:
-        torch.Tensor: A tensor of shape (1, 1, kernel_size) representing the filter.
-    """
-    is_even = kernel_size % 2 == 0
-    half_size = kernel_size // 2
-
-    # Compute Kaiser window parameters
-    delta_f = 4 * half_width
-    attenuation = 2.285 * (half_size - 1) * math.pi * delta_f + 7.95
-
-    if attenuation > 50.0:
-        beta = 0.1102 * (attenuation - 8.7)
-    elif attenuation >= 21.0:
-        beta = 0.5842 * (attenuation - 21) ** 0.4 + 0.07886 * (attenuation - 21.0)
-    else:
-        beta = 0.0
-
-    kaiser_window = torch.kaiser_window(kernel_size, beta=beta, periodic=False, dtype=torch.float32)
-
-    # Compute time indices
-    if is_even:
-        time_indices = torch.arange(-half_size, half_size) + 0.5
-    else:
-        time_indices = torch.arange(kernel_size) - half_size
-
-    # Compute sinc filter
-    if cutoff == 0:
-        return torch.zeros((1, 1, kernel_size), dtype=torch.float32)  # Ensures correct shape
-
-    sinc_filter = torch.sinc(2 * cutoff * time_indices)
-    normalized_filter = 2 * cutoff * kaiser_window * sinc_filter
-
-    # Normalize to ensure sum = 1 (avoid leakage of constant component)
-    normalized_filter /= normalized_filter.sum()
-
-    return normalized_filter.view(1, 1, kernel_size)
-
-
 class UpSample1d(nn.Module):
     def __init__(self, ratio=2, kernel_size=None):
         super().__init__()
@@ -3262,6 +3285,9 @@ class DownSample1d(nn.Module):
         super().__init__()
         cutoff = 0.5 / ratio
         half_width = 0.6 / ratio
+        self.cutoff = cutoff
+        self.half_width = half_width
+        self.kernel_size = kernel_size
 
         if cutoff < 0.0:
             raise ValueError("Minimum cutoff must be larger than zero.")

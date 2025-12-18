@@ -613,6 +613,9 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=std)
+        if isinstance(module, FalconMambaMixer):
+            init.ones_(module.b_c_rms)
+            init.ones_(module.dt_rms)
 
 
 @dataclass

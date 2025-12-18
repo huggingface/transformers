@@ -428,6 +428,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
             ),
         ):
             init.zeros_(module.query_tokens)
+        elif isinstance(module, Blip2TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoder with Blip->Blip2

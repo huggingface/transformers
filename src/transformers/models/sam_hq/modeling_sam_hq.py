@@ -413,6 +413,29 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 @auto_docstring
 class SamHQPreTrainedModel(PreTrainedModel):
     config: SamHQConfig
@@ -433,6 +456,8 @@ class SamHQPreTrainedModel(PreTrainedModel):
         elif isinstance(module, SamHQVisionEncoder):
             if self.config.use_abs_pos:
                 init.zeros_(module.pos_embed)
+        elif isinstance(module, SamHQPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class SamHQPatchEmbeddings(nn.Module):
@@ -1068,29 +1093,6 @@ class SamHQVisionModel(SamHQPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, SamHQVisionEncoderOutput]:
         return self.vision_encoder(pixel_values, **kwargs)
-
-
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class SamHQMaskEmbedding(nn.Module):

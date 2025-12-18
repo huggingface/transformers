@@ -552,7 +552,7 @@ class MMGroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MMGroundingDinoFusionLayer):
             init.constant_(module.vision_param, 1e-4)
             init.constant_(module.text_param, 1e-4)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)

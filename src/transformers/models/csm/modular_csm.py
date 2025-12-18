@@ -149,6 +149,8 @@ class CsmPreTrainedModel(PreTrainedModel):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
                 init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, CsmBackboneModelEmbeddings):
+            init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.vocab_size)
 
 
 @auto_docstring

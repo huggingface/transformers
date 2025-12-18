@@ -110,6 +110,9 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
     _can_record_outputs = None
     _no_split_modules = None
 
+    def _init_weights(self, module):
+        raise AttributeError("Not needed")
+
 
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None

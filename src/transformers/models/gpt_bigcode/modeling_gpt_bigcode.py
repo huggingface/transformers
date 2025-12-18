@@ -369,6 +369,9 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
             init.normal_(
                 module.c_proj.weight, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
             )
+        elif isinstance(module, GPTBigCodeModel):
+            max_positions = module.config.max_position_embeddings
+            init.copy_(module.bias, torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)))
 
 
 @auto_docstring

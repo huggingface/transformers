@@ -361,6 +361,9 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
             init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring

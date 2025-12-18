@@ -524,7 +524,7 @@ class PeAudioPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, PeAudioEncoderPatchEmbedder):
             embed_dim = module.class_embedding.shape[-1]
-            nn.init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
+            init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
         if isinstance(module, nn.Conv1d):
             init.trunc_normal_(module.weight, std=0.02)
             init.constant_(module.bias, 0)
@@ -564,7 +564,7 @@ class PeAudioEncoderRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(

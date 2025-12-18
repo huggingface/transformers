@@ -52,6 +52,8 @@ class MPNetPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MPNetLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, MPNetEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class MPNetEmbeddings(nn.Module):

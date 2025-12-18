@@ -619,6 +619,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -1253,6 +1254,11 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
             init.normal_(module.latent_query, mean=0.0, std=1.0)
+        elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):

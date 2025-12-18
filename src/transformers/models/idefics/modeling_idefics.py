@@ -840,6 +840,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, IdeficsVisionEmbeddings):
             init.normal_(module.class_embedding)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
                 init.zeros_(module.alpha_cross_attn)
@@ -852,6 +853,15 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
             init.normal_(module.latents)
+        elif isinstance(module, IdeficsEmbedding):
+            inv_freq = 1.0 / (module.base ** (torch.arange(0, module.dim, 2) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+            t = torch.arange(module.max_position_embeddings).type_as(inv_freq)
+            freqs = torch.einsum("i,j->ij", t, inv_freq)
+            # Different from paper, but it uses a different permutation in order to obtain the same calculation
+            emb = torch.cat((freqs, freqs), dim=-1)
+            init.copy_(module.cos_cached, emb.cos())
+            init.copy_(module.sin_cached, emb.sin())
 
 
 @auto_docstring

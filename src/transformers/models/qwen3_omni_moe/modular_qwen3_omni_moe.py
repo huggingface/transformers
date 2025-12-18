@@ -62,7 +62,11 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniThinkerForConditionalGeneration,
     SnakeBeta,
 )
-from ..qwen2_5_omni.processing_qwen2_5_omni import Qwen2_5OmniProcessor, Qwen2_5OmniProcessorKwargs
+from ..qwen2_5_omni.processing_qwen2_5_omni import (
+    Qwen2_5OmniProcessor,
+    Qwen2_5OmniProcessorKwargs,
+    SinusoidsPositionEmbedding,
+)
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
@@ -91,6 +95,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeTextRotaryEmbedding,
     Qwen3VLMoeVisionAttention,
     Qwen3VLMoeVisionModel,
+    Qwen3VLMoeVisionRotaryEmbedding,
 )
 
 
@@ -900,6 +905,19 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
             init.normal_(module.gate.weight, mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeCode2Wav):
+            init.copy_(
+                module.code_offset,
+                torch.arange(module.config.num_quantizers).view(1, -1, 1) * module.config.codebook_size,
+            )
+        elif isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
+            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+            init.copy_(module.positional_embedding, torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1))
+        elif isinstance(module, Qwen3OmniMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
@@ -1295,6 +1313,10 @@ class Qwen3OmniMoeVisionPatchMerger(nn.Module):
         for layer in self.mlp:
             hidden = layer(hidden)
         return hidden
+
+
+class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
+    pass
 
 
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):

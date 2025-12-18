@@ -27,6 +27,7 @@ import torch.distributions
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -102,7 +103,7 @@ class BltRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -458,9 +459,9 @@ class BltPreTrainedModel(PreTrainedModel):
         # Norms: RMSNorm / LayerNorm
         if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
             if getattr(module, "weight", None) is not None:
-                nn.init.ones_(module.weight)
+                init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             return
 
         # Embeddings (encoder / patcher / hash embeddings)
@@ -472,7 +473,7 @@ class BltPreTrainedModel(PreTrainedModel):
                 hidden_size = module.embedding_dim
 
             std = hidden_size**-0.5
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -480,7 +481,7 @@ class BltPreTrainedModel(PreTrainedModel):
                 b=3 * std,
             )
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
             return
 
         # Self-attention / cross-attention projections
@@ -506,7 +507,7 @@ class BltPreTrainedModel(PreTrainedModel):
             for proj_name in ("q_proj", "k_proj", "v_proj"):
                 proj = getattr(module, proj_name, None)
                 if proj is not None and hasattr(proj, "weight"):
-                    nn.init.trunc_normal_(
+                    init.trunc_normal_(
                         proj.weight,
                         mean=0.0,
                         std=std,
@@ -514,12 +515,12 @@ class BltPreTrainedModel(PreTrainedModel):
                         b=3 * std,
                     )
                     if getattr(proj, "bias", None) is not None:
-                        nn.init.zeros_(proj.bias)
+                        init.zeros_(proj.bias)
 
             # Output projection: o_proj or dense
             o_proj = getattr(module, "o_proj", getattr(module, "dense", None))
             if o_proj is not None and hasattr(o_proj, "weight"):
-                nn.init.trunc_normal_(
+                init.trunc_normal_(
                     o_proj.weight,
                     mean=0.0,
                     std=std,
@@ -527,7 +528,7 @@ class BltPreTrainedModel(PreTrainedModel):
                     b=3 * std,
                 )
                 if getattr(o_proj, "bias", None) is not None:
-                    nn.init.zeros_(o_proj.bias)
+                    init.zeros_(o_proj.bias)
             return
 
         # MLP / FFN blocks
@@ -551,7 +552,7 @@ class BltPreTrainedModel(PreTrainedModel):
             for proj in (gate_proj, up_proj):
                 if proj is not None and hasattr(proj, "weight"):
                     std = in_std or (proj.weight.shape[1] ** -0.5)
-                    nn.init.trunc_normal_(
+                    init.trunc_normal_(
                         proj.weight,
                         mean=0.0,
                         std=std,
@@ -559,13 +560,13 @@ class BltPreTrainedModel(PreTrainedModel):
                         b=3 * std,
                     )
                     if getattr(proj, "bias", None) is not None:
-                        nn.init.zeros_(proj.bias)
+                        init.zeros_(proj.bias)
 
             # output/ down projections
             if down_proj is not None and hasattr(down_proj, "weight"):
                 hidden_dim = down_proj.weight.shape[1]
                 out_std = hidden_dim**-0.5
-                nn.init.trunc_normal_(
+                init.trunc_normal_(
                     down_proj.weight,
                     mean=0.0,
                     std=out_std,
@@ -573,14 +574,14 @@ class BltPreTrainedModel(PreTrainedModel):
                     b=3 * out_std,
                 )
                 if getattr(down_proj, "bias", None) is not None:
-                    nn.init.zeros_(down_proj.bias)
+                    init.zeros_(down_proj.bias)
             return
 
         # Generic Linear layers (projections, lm_head, etc.)
         if isinstance(module, nn.Linear):
             fan_in = module.in_features
             std = fan_in**-0.5
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -588,10 +589,18 @@ class BltPreTrainedModel(PreTrainedModel):
                 b=3 * std,
             )
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             return
 
-        return
+        if isinstance(module, BltRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class BltLocalEncoder(BltPreTrainedModel):

@@ -346,6 +346,11 @@ class ParakeetPreTrainedModel(PreTrainedModel):
             # Initialize positional bias parameters
             init.normal_(module.bias_u, mean=0.0, std=std)
             init.normal_(module.bias_v, mean=0.0, std=std)
+        elif isinstance(module, ParakeetEncoderRelPositionalEncoding):
+            inv_freq = 1.0 / (
+                10000.0 ** (torch.arange(0, self.config.hidden_size, 2, dtype=torch.int64) / self.config.hidden_size)
+            )
+            init.copy_(module.inv_freq, inv_freq)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, ParakeetCTCConfig) else self.config

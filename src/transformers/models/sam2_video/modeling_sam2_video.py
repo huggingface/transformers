@@ -688,6 +688,12 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
+        elif isinstance(module, Sam2VideoVisionRotaryEmbedding):
+            inv_freq = module.create_inv_freq()
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, Sam2VideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam2VideoVisionRotaryEmbedding(nn.Module):
@@ -698,24 +704,17 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
 
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
-        dim = config.memory_attention_hidden_size // (
+        self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
         # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
+        if self.dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        end_x, end_y = config.memory_attention_rope_feat_sizes
-        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
 
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = flattened_indices % end_x
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
+        inv_freq = self.create_inv_freq()
         self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
         self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
 
@@ -723,6 +722,20 @@ class Sam2VideoVisionRotaryEmbedding(nn.Module):
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
         # As the feature map size is fixed, we can just return the pre-computed embeddings.
         return self.rope_embeddings_cos, self.rope_embeddings_sin
+
+    def create_inv_freq(self):
+        freqs = 1.0 / (
+            self.memory_attention_rope_theta ** (torch.arange(0, self.dim, 4)[: (self.dim // 4)].float() / self.dim)
+        )
+        # Generate 2D position indices for axial rotary embedding
+        flattened_indices = torch.arange(self.end_x * self.end_y, dtype=torch.long)
+        x_positions = flattened_indices % self.end_x
+        y_positions = torch.div(flattened_indices, self.end_x, rounding_mode="floor")
+        freqs_x = torch.outer(x_positions, freqs).float()
+        freqs_y = torch.outer(y_positions, freqs).float()
+        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+        return inv_freq
 
 
 def rotate_pairwise(x):
@@ -1101,6 +1114,31 @@ class Sam2VideoMemoryEncoder(nn.Module):
         return vision_features, vision_pos_enc
 
 
+class Sam2VideoPositionalEmbedding(nn.Module):
+    def __init__(self, config: Sam2VideoPromptEncoderConfig):
+        super().__init__()
+        self.scale = config.scale
+        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
+        self.register_buffer("positional_embedding", positional_embedding)
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates.to(torch.float32)
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
 class Sam2VideoVisionEncoderOutput(ModelOutput):
@@ -1128,31 +1166,6 @@ class Sam2VideoVisionEncoderOutput(ModelOutput):
     fpn_position_encoding: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-
-
-class Sam2VideoPositionalEmbedding(nn.Module):
-    def __init__(self, config: Sam2VideoPromptEncoderConfig):
-        super().__init__()
-        self.scale = config.scale
-        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-        coordinates.to(torch.float32)
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class Sam2VideoMaskEmbedding(nn.Module):
