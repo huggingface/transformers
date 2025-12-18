@@ -235,7 +235,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     dim=-1,
                 )
 
-            # Example: advance cache_position with a full range
             model_kwargs["cache_position"] = torch.arange(
                 model_kwargs["cache_position"][-1] + 1,
                 model_kwargs["cache_position"][-1] + num_new_tokens + 1,
@@ -275,6 +274,8 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         n_diffusion_steps = kwargs.pop("n_diffusion_steps", None)
         monitor_progress = kwargs.pop("monitor_progress", None)
         history_prompt = kwargs.pop("history_prompt", None)
+        tts_lm_attention_mask = kwargs.pop("tts_lm_attention_mask", None)
+        tts_input_ids = kwargs.pop("tts_input_ids", None)
 
         # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(
@@ -327,6 +328,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         generation_config.monitor_progress = monitor_progress
         if history_prompt is not None:
             generation_config.history_prompt = history_prompt
+        if tts_lm_attention_mask is not None:
+            generation_config.tts_lm_attention_mask = tts_lm_attention_mask
+        if tts_input_ids is not None:
+            generation_config.tts_input_ids = tts_input_ids
 
         return generation_config, model_kwargs
     
@@ -354,13 +359,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
     def _sample(
         self,
         input_ids: torch.LongTensor,    # used in different way... for first language model
-        tts_input_ids: torch.LongTensor,  # normally called input_ids, called "tts_text_ids" in original
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional[Union[AudioStreamer]] = None,
-        tts_lm_input_ids: Optional[torch.LongTensor] = None,
-        tts_lm_attention_mask: Optional[torch.LongTensor] = None,
         **model_kwargs,
     ):
         """
@@ -415,6 +417,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 "VibeVoiceRealTime generation does not support sampling-based token selection. An internal diffusion process naturally samples latent representations, and a seed can be set for a deterministic output."
             )
 
+        # TODO need to be passed or can be created here?
+        tts_lm_attention_mask = generation_config.tts_lm_attention_mask
+        tts_input_ids = generation_config.tts_input_ids     # this one needed to be computed in processor but maybe input_ids doesn't have to be?
+
         # Extract prefilled outputs from history_prompt
         history_prompt = getattr(generation_config, "history_prompt", None)
         if history_prompt is None:
@@ -440,6 +446,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         total_prefilled_text_tokens = 0
 
         # Prepare TTS inputs and that of negative for CFG
+        tts_lm_input_ids = torch.full((batch_size, tts_lm_outputs.last_hidden_state.shape[1]), pad_token_id, dtype=torch.long, device=input_ids.device)
         tts_lm_kwargs = {
             "attention_mask": tts_lm_attention_mask,
             "max_new_tokens": generation_config.max_new_tokens,
@@ -509,20 +516,14 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 # Forward pass through LM
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 outputs = self.forward_lm(**model_inputs, return_dict=True)
-                # Pre-allocate attention mask for next text window
                 model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs, num_new_tokens=next_text_window_size)
 
                 # Forward pass through TTS LM with text
-                tts_lm_model_inputs = self.prepare_inputs_for_generation(tts_lm_input_ids, **tts_lm_model_kwargs)
-                # Need to pass the same number of input_ids as lm_last_hidden_state tokens
-                window_size = outputs.last_hidden_state.shape[1]
-                tts_lm_model_inputs["input_ids"] = tts_lm_input_ids[:, -window_size:]
-                tts_lm_additional_inputs = {
-                    "tts_text_masks": torch.ones_like(tts_lm_input_ids[:, -1:]),
-                    "lm_last_hidden_state": outputs.last_hidden_state,
-                }
-                tts_lm_outputs = self.forward_tts_lm(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
-                # Update for the tokens just processed (base class method)
+                tts_lm_model_inputs = self.prepare_inputs_for_generation(
+                    input_ids=tts_lm_input_ids, inputs_embeds=outputs.last_hidden_state, **tts_lm_model_kwargs
+                )
+                tts_lm_additional_inputs = {"tts_text_masks": torch.ones_like(tts_lm_input_ids[:, -1:])}
+                tts_lm_outputs = self(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
                 tts_lm_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_outputs, tts_lm_model_kwargs)
 
             # Generate speech tokens
@@ -593,12 +594,11 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     total_generated_speech_tokens += 1
 
                     # Forward pass through TTS LM with speech
-                    tts_lm_model_inputs = self.prepare_inputs_for_generation(tts_lm_input_ids, **tts_lm_model_kwargs)
-                    tts_lm_additional_inputs = {
-                        "tts_text_masks": torch.zeros_like(tts_lm_input_ids[:, -1:]),
-                        "lm_last_hidden_state": acoustic_embed,
-                    }
-                    tts_lm_outputs = self.forward_tts_lm(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
+                    tts_lm_model_inputs = self.prepare_inputs_for_generation(
+                        tts_lm_input_ids, inputs_embeds=acoustic_embed, **tts_lm_model_kwargs
+                    )
+                    tts_lm_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_input_ids[:, -1:])}
+                    tts_lm_outputs = self(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
                     
                     # Update model kwargs: on last speech token + more text coming, pre-allocate for next window
                     if cur_speech_index == TTS_SPEECH_WINDOW_SIZE - 1 and next_text_window_size > 0:
@@ -610,12 +610,11 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
                     # Update negative TTS LM
                     tts_lm_negative_input_ids = torch.cat([tts_lm_negative_input_ids, torch.ones_like(tts_lm_input_ids[:, -1:])], dim=-1)
-                    tts_lm_negative_model_inputs = self.prepare_inputs_for_generation(tts_lm_negative_input_ids, **tts_lm_negative_model_kwargs)
-                    tts_lm_negative_additional_inputs = {
-                        "tts_text_masks": torch.zeros_like(tts_lm_negative_input_ids[:, -1:]),
-                        "lm_last_hidden_state": acoustic_embed,
-                    }
-                    tts_lm_negative_outputs = self.forward_tts_lm(**tts_lm_negative_model_inputs, **tts_lm_negative_additional_inputs, return_dict=True)
+                    tts_lm_negative_model_inputs = self.prepare_inputs_for_generation(
+                        tts_lm_negative_input_ids, inputs_embeds=acoustic_embed, **tts_lm_negative_model_kwargs
+                    )
+                    tts_lm_negative_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_negative_input_ids[:, -1:])}
+                    tts_lm_negative_outputs = self(**tts_lm_negative_model_inputs, **tts_lm_negative_additional_inputs, return_dict=True)
                     tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
 
                     # Check TTS EOS

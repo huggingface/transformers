@@ -131,9 +131,10 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         
         if voice_preset is None:
             # TODO (ebezzam) best way to default?
-            logger.warning("Defaulting to `en-Frank_man` voice preset.")
+            default_preset = "en-Frank_man"
+            logger.warning(f"Defaulting to `{default_preset}` voice preset.")
             from huggingface_hub import hf_hub_download
-            default_preset = "voice_presets/en-Frank_man_converted.pt"
+            default_preset = f"voice_presets/{default_preset}_converted.pt"
             voice_preset = hf_hub_download(repo_id="bezzam/VibeVoice-0.5B", filename=default_preset)
 
         # make batch
@@ -183,7 +184,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
                 "input_ids": torch.tensor(lm_input_ids, dtype=torch.long),
                 # NOTE (ebezzam) original seems to use this as the attention mask and NOT from tokenizer...
                 "attention_mask": torch.tensor(lm_attention_masks, dtype=torch.long) if lm_attention_masks is not None else None,
-                "tts_lm_input_ids": torch.tensor(tts_lm_input_ids, dtype=torch.long),
                 "tts_lm_attention_mask": torch.tensor(tts_lm_attention_masks, dtype=torch.long) if tts_lm_attention_masks is not None else None,
             })
 

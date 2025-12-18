@@ -794,35 +794,37 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    # TODO eventually remove / merge into forward?
+    @can_return_tuple
+    def forward_lm(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        **kwargs,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        lm_last_hidden_state: Optional[torch.FloatTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        """
-        replicate forward_tts_lm code path
-        """
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # TODO can input embeds be computed by self.language model if only input_ids is provided?
+            raise ValueError("Input embeds should be computed by with `self.forward_lm`")
 
-        # NOTE (ebezzam) why not just call language_model here too? for lm_last_hidden_state
-
-        # Replace the last part of inputs_embeds with lm_last_hidden_state
-        start_idx = inputs_embeds.shape[1] - lm_last_hidden_state.shape[1]
-        inputs_embeds[:, start_idx:, :] = lm_last_hidden_state
-
-        # Adds type embedding via `tts_text_masks`.
         inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
-
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
 
 # NOTE (ebezzam) copied from original
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
+    loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
 
 
@@ -832,7 +834,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel, VibeVoiceRealTimeGenerationMixin):
-    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -865,205 +866,41 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def diffusion_head(self):
         return self.model.diffusion_head
 
-    @property
-    def tts_input_types(self):
-        return self.model.tts_input_types
+    # TODO eventually remove / merge into forward?
+    def forward_lm(self, *args, **kwargs):
+        return self.model.forward_lm(*args, **kwargs)
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        lm_last_hidden_state: Optional[torch.FloatTensor] = None,
-        tts_text_masks: Optional[torch.BoolTensor] = None,
-        # attention_mask: Optional[torch.Tensor] = None,
-        lm_input_ids: Optional[torch.Tensor] = None,
-        lm_attention_mask: Optional[torch.Tensor] = None,
-        tts_lm_input_ids: Optional[torch.Tensor] = None,
-        tts_lm_attention_mask: Optional[torch.Tensor] = None,
-        # remove/rename eventually
-        tts_input_ids: Optional[torch.Tensor] = None,   # should be called input_ids? namely this is encoded text
-        **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
-        """
-        lm_last_hidden_state (`torch.FloatTensor`, *optional*):
-            TODO
-        tts_text_masks (`torch.BoolTensor`, *optional*):
-            TODO
-        lm_input_ids (`torch.LongTensor`, *optional*):
-            TODO
-        lm_attention_mask (`torch.Tensor`, *optional*):
-            TODO
-        tts_lm_input_ids (`torch.LongTensor`, *optional*):
-            TODO
-        tts_lm_attention_mask (`torch.Tensor`, *optional*):
-            TODO
-        tts_input_ids (`torch.LongTensor`, *optional*):
-            TODO
-        """
-        outputs = self.model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            lm_last_hidden_state=lm_last_hidden_state,
-            tts_text_masks=tts_text_masks,
-            **kwargs,
-        )
-        hidden_states = outputs.last_hidden_state
-        logits = self.tts_eos_classifier(hidden_states[:, -1, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=hidden_states,
-            attentions=outputs.attentions,
-        )
-    
-    # TODO eventually remove / merged into forward
-    def forward_lm(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
-        """
-        Single pass of the base text LM.
-
-        - Builds embeddings if `inputs_embeds` not provided.
-        - Uses (and returns) `past_key_values` when `use_cache=True`.
-        - No loss / no lm_head / no speech logic.
-
-        Args:
-            input_ids: (B, S) token ids.
-            attention_mask: (B, S) mask.
-            past_key_values: cache from previous steps.
-            cache_position: positions for cached tokens.
-            labels: unsupported (will raise).
-
-        Returns:
-            BaseModelOutputWithPast with `last_hidden_state` and `past_key_values`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        # Get embeddings
-        if inputs_embeds is None:
-            inputs_embeds = self.model.get_input_embeddings()(input_ids)
-
-        outputs = self.language_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = outputs[0] if not return_dict else outputs.last_hidden_state
-                
-        if labels is not None:
-            raise NotImplementedError("Loss computation is not implemented in this version.")
-
-        return BaseModelOutputWithPast(
-            past_key_values=outputs.past_key_values,
-            last_hidden_state=hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    # TODO eventually remove / merged into forward
-    def forward_tts_lm(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        lm_last_hidden_state: Optional[torch.FloatTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[Tuple, VibeVoiceCausalLMOutputWithPast]:
         """
-        Single pass of the TTS LM.
-
-        - Overwrites tail embeddings with `lm_last_hidden_state`.
-        - Adds type embedding via `tts_text_masks` (1=text, 0=speech).
-        - Predicts EOS from last hidden state (binary classifier).
-        - No loss / no full acoustic decoding here.
-
-        Args:
-            input_ids: (B, S) token ids.
-            attention_mask: (B, S) mask.
-            lm_last_hidden_state: (B, K, H) hidden states to splice into the tail.
-            tts_text_masks: (B, 1) mask marking current position as text(1)/speech(0).
-            past_key_values: cache from previous TTS steps.
-            cache_position: positions for cached tokens.
-            labels: unsupported (will raise).
-
-        Returns:
-            VibeVoiceCausalLMOutputWithPast with `logits` (EOS), `last_hidden_state`, `past_key_values`.
+        tts_text_masks (`torch.FloatTensor`, *optional*):
+            Mask marking current position as text(1)/speech(0)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        # Get embeddings
-        if inputs_embeds is None:
-            # Will be replaced with lm_last_hidden_state
-            inputs_embeds = self.model.get_input_embeddings()(input_ids)
-        
-        # Replace the last part of inputs_embeds with lm_last_hidden_state
-        start_idx = inputs_embeds.shape[1] - lm_last_hidden_state.shape[1]
-        inputs_embeds[:, start_idx:, :] = lm_last_hidden_state
-        
-        # Adds type embedding via `tts_text_masks`.
-        inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
-
-        outputs = self.tts_language_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            **kwargs,
+        outputs = self.model(
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds, 
+            tts_text_masks=tts_text_masks, 
+            **kwargs
         )
-
-        hidden_states = outputs[0] if not return_dict else outputs.last_hidden_state
-        logits = self.tts_eos_classifier(hidden_states[:, -1, :])
+        last_hidden_state = outputs.last_hidden_state
+        logits = self.tts_eos_classifier(last_hidden_state[:, -1, :])
                 
         loss = None
         if labels is not None:
             raise NotImplementedError("Loss computation is not implemented in this version.")
 
         return VibeVoiceCausalLMOutputWithPast(
+            loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            last_hidden_state=hidden_states,
+            last_hidden_state=last_hidden_state,
             attentions=outputs.attentions,
         )
 
