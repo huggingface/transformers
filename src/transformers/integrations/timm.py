@@ -90,10 +90,11 @@ def _maybe_reinit_non_persistent_buffer(module):
         )
     elif isinstance(module, RelPosMlp):
         init.copy_(module.relative_position_index, gen_relative_position_index(module.window_size).view(-1))
-        # This one is supposed to pass args `pretrained_window_size` and `mode` in `gen_relative_log_coords`, but they
-        # are not recorded as class attributes in `__init__` so we cannot get the values back... Let's hope it's always
-        # default values
-        init.copy_(module.rel_coords_log, gen_relative_log_coords(module.window_size))
+        # This one is supposed to pass args `pretrained_window_size` as well to `gen_relative_log_coords`, but it's
+        # not recorded as class attributes in `__init__` and we have no way to infer its value back as we do for `mode` here...
+        # Let's hope it's always default value
+        mode = "cr" if module.bias_gain is None else "swin"
+        init.copy_(module.rel_coords_log, gen_relative_log_coords(module.window_size, mode=mode))
     elif isinstance(module, RelPosBiasTf):
         init.copy_(module.height_lookup, generate_lookup_tensor(module.window_size[0]))
         init.copy_(module.width_lookup, generate_lookup_tensor(module.window_size[1]))
