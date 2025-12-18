@@ -126,7 +126,10 @@ class Bnb4BitTest(Base4bitTest):
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_4bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            device_map="auto",
         )
 
     def tearDown(self):
@@ -177,14 +180,6 @@ class Bnb4BitTest(Base4bitTest):
         self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE, delta=1e-5)
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
-
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.model_4bit.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.model_4bit.config._pre_quantization_dtype == torch.float16)
 
     def test_linear_are_4bit(self):
         r"""
@@ -238,7 +233,6 @@ class Bnb4BitTest(Base4bitTest):
         Test that loading the model and unquantize it produce correct results
         """
         bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-
         model_4bit = AutoModelForCausalLM.from_pretrained(
             self.model_name, quantization_config=bnb_config, device_map="auto"
         )
@@ -264,7 +258,6 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertFalse(hasattr(model_4bit, "hf_quantizer"))
         self.assertFalse(hasattr(model_4bit.config, "quantization_config"))
-        self.assertFalse(hasattr(model_4bit.config, "_pre_quantization_dtype"))
         self.assertFalse(hasattr(model_4bit, "quantization_method"))
         self.assertFalse(model_4bit.is_quantized)
 

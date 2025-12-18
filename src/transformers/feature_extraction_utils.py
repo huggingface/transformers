@@ -30,6 +30,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
+    _is_tensor_or_array_like,
     copy_func,
     is_numpy_array,
     is_torch_available,
@@ -167,6 +168,11 @@ class BatchFeature(UserDict):
                 `None`, no modification is done.
             skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
                 List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+
+        Note:
+            Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
+            automatically skipped and won't be converted to tensors. Ragged arrays (lists of arrays with
+            different lengths) are still attempted, though they may raise errors during conversion.
         """
         if tensor_type is None:
             return self
@@ -177,6 +183,10 @@ class BatchFeature(UserDict):
         for key, value in self.items():
             # Skip keys explicitly marked for no conversion
             if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
+            # Skip values that are not array-like
+            if not _is_tensor_or_array_like(value):
                 continue
 
             try:
@@ -233,12 +243,15 @@ class BatchFeature(UserDict):
 
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         def maybe_to(v):
-            # check if v is a floating point
+            # check if v is a floating point tensor
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
                 return v.to(device=device, non_blocking=non_blocking)
+            # recursively handle lists and tuples
+            elif isinstance(v, (list, tuple)):
+                return type(v)(maybe_to(item) for item in v)
             else:
                 return v
 
@@ -256,8 +269,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", it should not be saved in feature extractor config
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -265,10 +278,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
 
     @classmethod
     def from_pretrained(
@@ -612,12 +621,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

@@ -159,6 +159,7 @@ else:
             ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
             ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
+            ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
@@ -605,9 +606,9 @@ class AutoImageProcessor:
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()
-            return image_processor_class.from_dict(config_dict, **kwargs)
+            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif image_processor_class is not None:
-            return image_processor_class.from_dict(config_dict, **kwargs)
+            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]
