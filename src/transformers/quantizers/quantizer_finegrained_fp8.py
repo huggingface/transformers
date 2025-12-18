@@ -29,12 +29,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
+        if self.quantization_config.dequantize:
+            return
+
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             if self.pre_quantized:
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
                 self.quantization_config.dequantize = True
+                return
             else:
                 raise RuntimeError("No GPU or XPU found. A GPU or XPU is needed for FP8 quantization.")
 
@@ -47,9 +51,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16 "
                 )
                 self.quantization_config.dequantize = True
-
-        if self.quantization_config.dequantize:
-            return
+                return
 
         device_map = kwargs.get("device_map")
         if device_map is None:
