@@ -417,6 +417,20 @@ There is a tracker for that here: https://github.com/huggingface/transformers/is
 
 ## Library-wide changes with lesser impact
 
+### Drop support for `safe_serialization=False`
+
+Safetensors is a simple format for storing tensors safely (as opposed to pickle) and that is still fast (zero-copy). It is the preferred file format to store transformers's weights. Prior to transformers `v5`, it was still possible to pass `safe_serialization=False` to fall back to torch's default (and unsafe) file format. This is no longer possible in `v5`. The `safe_serialization` parameter has been removed from all `save_pretrained` and `push_to_hub` methods.
+
+If you really want to export weights to another file format, you must save the `model.state_dict()` by yourself.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
+### 50GB default shard size
+
+The default shard size went up from `5GB` to `50GB`. Main benefit will be to avoid having tens or hundreds of weight files for large models. This change was made possible thanks to the Xet backend allowing us to efficiently serve very large files. Increasing default shard size was a decision that was only taken after *very careful considerations* around optimizations and load speed. Check out the linked PR for benchmark details.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
 ### `use_auth_token`
 
 The `use_auth_token` argument/parameter is deprecated in favor of `token` everywhere.
