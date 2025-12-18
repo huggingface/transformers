@@ -135,7 +135,7 @@ class T5Config(PreTrainedConfig):
         # model code. Original T5 always scaled outputs, but the 1.1v does not.
         # The model code was relying on saved configs where `tie_word_embeddings` is
         # set to `False` in 1.1v and using it as indicator of whether to scale or not
-        # But in fact we always have shared embed_weights, so we enforce `tie_word_embeddings=True`
+        # But in fact we tie weights always and force it to be `True`
         self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
         kwargs["tie_word_embeddings"] = True
         super().__init__(

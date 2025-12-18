@@ -367,7 +367,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
-        kwargs["tie_word_embeddings"] = True
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

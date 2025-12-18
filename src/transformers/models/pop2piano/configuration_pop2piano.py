@@ -115,7 +115,6 @@ class Pop2PianoConfig(PreTrainedConfig):
         self.hidden_size = self.d_model
         self.num_attention_heads = num_heads
         self.num_hidden_layers = num_layers
-        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             pad_token_id=pad_token_id,

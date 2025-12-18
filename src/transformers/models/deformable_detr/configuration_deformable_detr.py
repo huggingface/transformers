@@ -269,7 +269,7 @@ class DeformableDetrConfig(PreTrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
-        kwargs["tie_word_embeddings"] = True
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

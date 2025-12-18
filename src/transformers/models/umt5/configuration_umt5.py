@@ -94,7 +94,6 @@ class UMT5Config(PreTrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=True,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
@@ -136,6 +135,7 @@ class UMT5Config(PreTrainedConfig):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
+            # Force because official weights have False serialized, but we have to tie always
             tie_word_embeddings=True,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

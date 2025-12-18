@@ -155,7 +155,6 @@ class PegasusXConfig(PreTrainedConfig):
         self.num_global_tokens = num_global_tokens
         self.block_size = block_size
         self.stagger_local_blocks = stagger_local_blocks
-        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             pad_token_id=pad_token_id,

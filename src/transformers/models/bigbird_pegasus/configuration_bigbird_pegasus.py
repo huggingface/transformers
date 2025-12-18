@@ -168,7 +168,6 @@ class BigBirdPegasusConfig(PreTrainedConfig):
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
         self.use_bias = use_bias
-        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             pad_token_id=pad_token_id,

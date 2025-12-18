@@ -173,7 +173,6 @@ class SwitchTransformersConfig(PreTrainedConfig):
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
         self.dense_act_fn = dense_act_fn
-        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             pad_token_id=pad_token_id,

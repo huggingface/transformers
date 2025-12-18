@@ -155,7 +155,6 @@ class MvpConfig(PreTrainedConfig):
         self.use_prompt = use_prompt
         self.prompt_length = prompt_length
         self.prompt_mid_dim = prompt_mid_dim
-        kwargs["tie_word_embeddings"] = True
 
         super().__init__(
             pad_token_id=pad_token_id,
