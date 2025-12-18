@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Union
 
@@ -29,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..chameleon.modeling_chameleon import (
     ChameleonPreTrainedModel,
     ChameleonVQVAEEncoderConvDownsample,
@@ -39,6 +41,17 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+@auto_docstring
+class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
+    r"""
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+        Indices of the image tokens predicted by the VQ-VAE model.
+    """
+
+    image_tokens: Optional[torch.FloatTensor] = None
 
 
 class Emu3Attention(LlamaAttention):
@@ -733,7 +746,10 @@ class Emu3VQVAE(PreTrainedModel):
 
         self.post_init()
 
-    def encode(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor):
+    @check_model_inputs(tie_last_hidden_states=False)
+    def encode(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Emu3VQVAEModelOutput:
         is_image = pixel_values.ndim == 4
         if is_image:
             temporal = self.config.temporal_downsample_factor
@@ -745,12 +761,11 @@ class Emu3VQVAE(PreTrainedModel):
         hidden_states = self.encoder(pixel_values)
 
         # b t c h w -> b c t h w
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-        hidden_states = self.quant_conv(hidden_states)
+        conv_hidden_states = self.quant_conv(hidden_states.permute(0, 2, 1, 3, 4))
 
         # b c t h w -> b t c h w
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-        codes = self.quantize(hidden_states)
+        conv_hidden_states = conv_hidden_states.permute(0, 2, 1, 3, 4)
+        codes = self.quantize(conv_hidden_states)
 
         image_tokens = codes.squeeze(1) if is_image else codes
 
@@ -759,7 +774,10 @@ class Emu3VQVAE(PreTrainedModel):
             for single_image, size in zip(image_tokens, image_sizes)
         ]
 
-        return image_tokens
+        return Emu3VQVAEModelOutput(
+            last_hidden_state=hidden_states,
+            image_tokens=image_tokens,
+        )
 
     def decode(self, hidden_states: torch.Tensor):
         is_image = hidden_states.ndim == 3
@@ -920,13 +938,16 @@ class Emu3Model(Emu3PreTrainedModel):
             image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
                 The sizes of the images in the batch, being (height, width) for each image.
         """
-        image_tokens_list = self.vqmodel.encode(pixel_values, image_sizes)
-        bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
+        image_tokens_list: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
+        bpe_tokens_list = [
+            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list.image_tokens
+        ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, return_dict: bool = False
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ):
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
@@ -936,23 +957,16 @@ class Emu3Model(Emu3PreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
         """
-        image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
         split_sizes = [
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes
         ]
-        image_embeddings = self.get_input_embeddings()(image_tokens)
+        image_embeddings = self.get_input_embeddings()(vqmodel_outputs.image_tokens)
         image_features = torch.split(image_embeddings, split_sizes)
+        vqmodel_outputs.pooler_output = image_features
 
-        # TODO: @Tom to revisit with the new can_return_tuple approach.
-        # Presumably requires updating the `self.vqmodel.encode` method to return a BaseModelOutput
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=image_embeddings,
-                pooler_output=image_features,
-            )
-
-        return image_features
+        return vqmodel_outputs
 
     @torch.no_grad()
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
@@ -1027,12 +1041,12 @@ class Emu3Model(Emu3PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_sizes)
-            image_embeds = torch.cat(image_embeds, dim=0)
+            image_features = self.get_image_features(pixel_values, image_sizes).pooler_output
+            image_features = torch.cat(image_features, dim=0)
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.text_model(

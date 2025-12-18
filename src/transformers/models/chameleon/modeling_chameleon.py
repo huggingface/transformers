@@ -50,10 +50,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class ChameleonVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
-        Indices of the image tokens predicted by the VQ-VAE model.
     quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+        Indices of the image tokens predicted by the VQ-VAE model.
     embedding_loss (`torch.FloatTensor`):
         The embedding loss computed during quantization.
     """
