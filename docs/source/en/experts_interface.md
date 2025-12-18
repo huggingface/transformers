@@ -33,7 +33,6 @@ Use the `experts_implementation` argument in [`~PreTrainedModel.from_pretrained`
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-
     "Qwen/Qwen1.5-MoE-A2.7B",
     dtype="bfloat16",
     experts_implementation="batched_mm",
