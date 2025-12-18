@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 if is_optimum_quanto_available():
     from optimum.quanto import QLayerNorm, QLinear
@@ -46,7 +46,7 @@ class QuantoTestIntegration(unittest.TestCase):
 
     def setUp(self):
         config = AutoConfig.from_pretrained(self.model_id)
-        with init_empty_weights():
+        with torch.device("meta"):
             self.model = AutoModelForCausalLM.from_config(config)
         self.nb_linear = 0
         self.nb_layernorm = 0

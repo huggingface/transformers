@@ -20,7 +20,7 @@ from ..utils import is_accelerate_available, is_torch_available, logging
 
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 if is_torch_available():
     import torch
@@ -97,7 +97,7 @@ def replace_with_awq_linear(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, nn.Linear):
                 new_module = target_cls(
                     bits=quantization_config.bits,

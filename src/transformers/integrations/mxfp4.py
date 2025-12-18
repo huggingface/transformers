@@ -24,7 +24,7 @@ from ..core_model_loading import ConversionOps
 
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 from contextlib import contextmanager
 
@@ -620,7 +620,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            with init_empty_weights():
+            with torch.device("meta"):
                 model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:

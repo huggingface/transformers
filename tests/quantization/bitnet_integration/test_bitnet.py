@@ -36,7 +36,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 
 @require_torch_accelerator
@@ -80,7 +80,7 @@ class BitNetTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0

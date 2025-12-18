@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 
 @require_torch_gpu
@@ -115,7 +115,7 @@ class SpQRTest(unittest.TestCase):
         quantization_config = AutoConfig.from_pretrained(self.model_name, return_dict=False).quantization_config
         quantization_config = SpQRConfig.from_dict(quantization_config)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id, config=config)
 
         nb_linears = 0

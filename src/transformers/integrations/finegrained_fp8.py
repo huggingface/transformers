@@ -26,7 +26,7 @@ if is_torch_available():
     from torch.nn import functional as F
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -618,7 +618,7 @@ def replace_with_fp8_linear(
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
-        with init_empty_weights():
+        with torch.device("meta"):
             if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs

@@ -62,7 +62,6 @@ from .integrations.accelerate import (
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
-    init_empty_weights,
     load_offloaded_parameter,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -2253,9 +2252,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
-        # If we are not currently under meta device (which would virtually skip `_init_weights`), mark as initialized
-        if get_torch_context_manager_or_global_device() != torch.device("meta"):
-            module._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
@@ -2987,11 +2984,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        if _init_weights:
-            # Initialize weights
-            self.initialize_weights()
-            # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
-            self.tie_weights(recompute_mapping=False)
+        if not _init_weights or get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
+        # Initialize weights
+        self.initialize_weights()
+        # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
+        self.tie_weights(recompute_mapping=False)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -3532,15 +3530,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            init_contexts.append(no_init_weights())
             # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+                init_contexts.extend(
+                    [no_init_weights(), deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+                )
             elif is_quantized:
-                init_contexts.extend([init_empty_weights(), set_quantized_state()])
+                init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.extend([no_init_weights(), init_empty_weights()])
+            init_contexts.append(torch.device("meta"))
 
         return init_contexts
 
