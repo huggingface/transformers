@@ -39,7 +39,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-Switch between experts backends at runtime (without reloading the model) using [`~PreTrainedModel.set_experts_implementation`].
+Switch between experts backends at runtime without reloading the model using [`~PreTrainedModel.set_experts_implementation`].
 
 ```py
 model.set_experts_implementation("eager")
