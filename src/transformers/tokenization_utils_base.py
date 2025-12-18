@@ -1622,11 +1622,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             # For legacy support: allow single-file loading if:
             # 1. Only one vocab file is required, OR
             # 2. It's a fast tokenizer with tokenizer_file (which is optional), OR
-            # 3. It's a GGUF file
             vocab_files_count = len(cls.vocab_files_names)
             has_optional_tokenizer_file = vocab_files_count > 1 and "tokenizer_file" in cls.vocab_files_names
 
-            if vocab_files_count > 1 and not gguf_file and not has_optional_tokenizer_file:
+            if vocab_files_count > 1 and not has_optional_tokenizer_file:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
@@ -1650,35 +1649,35 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
 
-            vocab_files = {**cls.vocab_files_names, **additional_files_names}
+                vocab_files = {**cls.vocab_files_names, **additional_files_names}
 
-            # Check for versioned tokenizer files
-            if "tokenizer_file" in vocab_files:
-                fast_tokenizer_file = FULL_TOKENIZER_FILE
-                try:
-                    resolved_config_file = cached_file(
-                        pretrained_model_name_or_path,
-                        TOKENIZER_CONFIG_FILE,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        token=token,
-                        revision=revision,
-                        local_files_only=local_files_only,
-                        subfolder=subfolder,
-                        user_agent=user_agent,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
-                    if resolved_config_file is not None:
-                        with open(resolved_config_file, encoding="utf-8") as reader:
-                            tokenizer_config = json.load(reader)
-                            if "fast_tokenizer_files" in tokenizer_config:
-                                fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                        commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-                except Exception:
-                    pass
-                vocab_files["tokenizer_file"] = fast_tokenizer_file
+                # Check for versioned tokenizer files
+                if "tokenizer_file" in vocab_files:
+                    fast_tokenizer_file = FULL_TOKENIZER_FILE
+                    try:
+                        resolved_config_file = cached_file(
+                            pretrained_model_name_or_path,
+                            TOKENIZER_CONFIG_FILE,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            token=token,
+                            revision=revision,
+                            local_files_only=local_files_only,
+                            subfolder=subfolder,
+                            user_agent=user_agent,
+                            _raise_exceptions_for_missing_entries=False,
+                            _commit_hash=commit_hash,
+                        )
+                        if resolved_config_file is not None:
+                            with open(resolved_config_file, encoding="utf-8") as reader:
+                                tokenizer_config = json.load(reader)
+                                if "fast_tokenizer_files" in tokenizer_config:
+                                    fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
+                            commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+                    except Exception:
+                        pass
+                    vocab_files["tokenizer_file"] = fast_tokenizer_file
 
             # This block looks for any extra chat template files
             if is_local:
@@ -1989,7 +1988,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
                     added_tokens_map[str(added_tokens_decoder[idx])] = added_tokens_decoder[idx]
             # end legacy
-
         # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
@@ -2003,7 +2001,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # for `tokenizers` based tokenizer, we actually want to have vocab and merges pre-extracted from whatever inputs
         # for `none` (PythonBackend) based tokenizer, we also want the vocab file / merge files not extracted.
         # for `sentencepiece` based tokenizer, we pass the sentencepiece model file directly.
-        init_kwargs = cls.convert_to_native_format(**init_kwargs)
+        if not kwargs.get("gguf_file"):
+            init_kwargs = cls.convert_to_native_format(**init_kwargs)
 
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
