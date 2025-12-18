@@ -19,10 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
 from ...models.qwen3.configuration_qwen3 import Qwen3Config
 
 
@@ -97,23 +96,23 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_parameters: Optional[dict[str, Any]] = None
         attn_implementation = kwargs.get("attn_implementation")
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
+        elif isinstance(text_config, Qwen3Config):
+            self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
+        # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
+        self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
+        self.layer_types = getattr(self.text_config, "layer_types", None)
+
         super().__init__(**kwargs)
 
-        if self._rope_scaling is None:
-            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
-        else:
-            self.text_config.rope_scaling = self._rope_scaling
-
-        # Keep rope parameters alias in sync with upstream expectations
-        self._rope_parameters = self._rope_scaling
+        # Keep rope parameters aligned between the composite and text sub-configs.
+        self.text_config.rope_parameters = self.rope_parameters
 
         # Mirror frequently accessed Qwen3 attributes at the composite config level
         self.vocab_size = self.text_config.vocab_size
@@ -123,10 +122,7 @@ class IsaacConfig(PretrainedConfig):
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
-
-        # Validate rotary parameters now that they have been mirrored locally.
-        rope_config_validation(self)
+        self.rope_theta = self.rope_parameters["rope_theta"]
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
@@ -154,33 +150,6 @@ class IsaacConfig(PretrainedConfig):
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-
-    @property
-    def rope_scaling(self):
-        if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_scaling", None)
-        return self._rope_scaling
-
-    @rope_scaling.setter
-    def rope_scaling(self, value):
-        self._rope_scaling = value
-        if hasattr(self, "text_config") and self.text_config is not None:
-            self.text_config.rope_scaling = value
-
-    @property
-    def rope_parameters(self) -> dict[str, Any] | None:
-        """Alias introduced upstream for rope scaling dictionaries."""
-        value = self._rope_parameters
-        if value is None:
-            value = self.rope_scaling
-        if value is None:
-            return {"rope_type": "default"}
-        return value
-
-    @rope_parameters.setter
-    def rope_parameters(self, value: dict[str, Any] | None) -> None:
-        self._rope_parameters = value
-        self.rope_scaling = value
 
     def to_dict(self):
         output = super().to_dict()
