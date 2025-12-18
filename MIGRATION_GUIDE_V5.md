@@ -420,7 +420,7 @@ Linked PR: https://github.com/huggingface/transformers/issues/42556
 
 ### 50GB default shard size
 
-The default shard size went up from `5GB` to `50GB`. Main consequence will be to avoid having tens or hundreds of weight files for large models. This change was made possible thanks to the Xet backend allowing us to efficiently serve very large files. Increasing default shard size was a decision that was only taken after *very careful considerations* around optimizations and load speed. Check out the linked PR for benchmark details.
+The default shard size went up from `5GB` to `50GB`. Main benefit will be to avoid having tens or hundreds of weight files for large models. This change was made possible thanks to the Xet backend allowing us to efficiently serve very large files. Increasing default shard size was a decision that was only taken after *very careful considerations* around optimizations and load speed. Check out the linked PR for benchmark details.
 
 Linked PR: https://github.com/huggingface/transformers/issues/42556
 
