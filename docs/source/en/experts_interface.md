@@ -98,7 +98,9 @@ model = AutoModelForCausalLM.from_pretrained(
 model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 ```
 
-For the best performance we ran a [benchmark](https://github.com/user-attachments/files/24125816/bench.py) of different inputs sizes, with different experts implementations, with and without `torch.compile`. The results are summarized in the table below.
+## Benchmarks
+
+This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) compares different input sizes and experts implementations with and without `torch.compile`.
 
 | Batch Size | Seq Length | Torch Compile              | Implementation | Mean Latency (ms) | Median Latency (ms) | P90 Latency (ms) | Peak Mem (MB) |
 | ---------- | ---------- | -------------------------- | -------------- | ----------------- | ------------------- | ---------------- | ------------- |
