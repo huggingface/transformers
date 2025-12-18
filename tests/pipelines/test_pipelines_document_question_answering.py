@@ -422,3 +422,10 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
+
+
+class DocumentQuestionAnsweringPipelineSanitizeParametersTests(unittest.TestCase):
+    def test_sanitize_parameters_max_answer_len_error_message(self):
+        dqa = object.__new__(DocumentQuestionAnsweringPipeline)
+        with self.assertRaisesRegex(ValueError, r"max_answer_len parameter should be >= 1 \(got 0\)"):
+            dqa._sanitize_parameters(max_answer_len=0)
