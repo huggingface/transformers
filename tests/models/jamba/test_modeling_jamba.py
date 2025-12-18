@@ -110,7 +110,7 @@ class JambaModelTester:
         attn_layer_period=8,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=40,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,

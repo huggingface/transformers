@@ -557,17 +557,6 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Make sure the dimensions are multiples of 8 to avoid issues with torch._grouped_mm
-        # 8 multiples here because we test with fp32 (4 bytes) and fp16/bf16 (2 bytes)
-        # giving us at least 16 bytes alignment (which is the requirement for torch._grouped_mm)
-        if hasattr(config, "intermediate_size"):
-            config.intermediate_size += (-config.intermediate_size) % 8
-        if hasattr(config, "moe_intermediate_size"):
-            config.moe_intermediate_size += (-config.moe_intermediate_size) % 8
-        if hasattr(config, "text_config") and hasattr(config.text_config, "intermediate_size"):
-            config.text_config.intermediate_size += (-config.text_config.intermediate_size) % 8
-
         set_config_for_less_flaky_test(config)
         model = model_class(config)
         set_model_for_less_flaky_test(model)

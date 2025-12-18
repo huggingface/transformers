@@ -778,7 +778,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # If both are present, use `dtype`
             kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
 
-        # We remove them from kwargs so that they does not appear in `return_unused_kwargs`.
+        # We remove them from kwargs so that they do not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
         config_dict["experts_implementation"] = kwargs.pop("experts_implementation", None)
 

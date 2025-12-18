@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import wraps
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
@@ -210,10 +211,12 @@ def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[tor
     original_init = experts_class.__init__
     original_forward = experts_class.forward
 
+    @wraps(original_init)
     def __init__(self, config):
         original_init(self, config)
         self.config = config
 
+    @wraps(original_forward)
     def forward(self, *args, **kwargs):
         experts_forward = original_forward
 

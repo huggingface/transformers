@@ -108,6 +108,7 @@ from .utils import (
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
@@ -1781,6 +1782,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return True
 
+    def _grouped_mm_can_dispatch(self) -> bool:
+        """
+        Check the availability of Grouped MM for a given model.
+        """
+
+        if not is_grouped_mm_available():
+            raise ImportError(
+                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
+            )
+
+        # If no error raised by this point, we can return `True`
+        return True
+
     def _flex_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flex Attention for a given model.
@@ -1890,12 +1904,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return applicable_attn_implementation
 
     def _check_and_adjust_experts_implementation(self, experts_implementation: Optional[str]) -> str:
-        applicable_experts_implementation = "eager" if experts_implementation is None else experts_implementation
-        if applicable_experts_implementation not in ["eager", "batched_mm", "grouped_mm"]:
-            raise ValueError(
-                f'Specified `experts_implementation="{applicable_experts_implementation}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `experts_implementation="batched_mm"` and `experts_implementation="grouped_mm"`.'
-            )
+        """
+        Check that the `experts_implementation` exists and is supported by the models.
+
+        Args:
+            experts_implementation (`str` or `None`):
+                The experts implementation to check for existence/validity.
+        Returns:
+            `str`: The final experts implementation to use.
+        """
+        applicable_experts_implementation = self.get_correct_experts_implementation(experts_implementation)
         return applicable_experts_implementation
 
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
@@ -1931,6 +1949,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 applicable_attention = "eager"
 
         return applicable_attention
+
+    def get_correct_experts_implementation(self, requested_experts: Optional[str]) -> str:
+        applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+            raise ValueError(
+                f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `experts_implementation="grouped_mm"`, `experts_implementation="batched_mm"`.'
+            )
+
+        # Perform relevant checks
+        if applicable_experts == "grouped_mm":
+            try:
+                self._grouped_mm_can_dispatch()
+            except (ValueError, ImportError) as e:
+                if requested_experts == "grouped_mm":
+                    raise e
+                applicable_experts = "eager"
+
+        return applicable_experts
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
@@ -2049,19 +2086,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
 
-    def set_experts_implementation(self, experts_implementation: str):
+    def set_experts_implementation(self, experts_implementation: Union[str, dict]):
         """
         Set the requested `experts_implementation` for this model.
 
         Args:
-            experts_implementation (`str`):
-                The experts implementation to set for this model.
+            experts_implementation (`str` or `dict`):
+                The experts implementation to set for this model. It can be either a `str`, in which case it will be
+                dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
+                submodel will dispatch the corresponding value.
         """
-        applicable_implementation = self._check_and_adjust_experts_implementation(experts_implementation)
+        requested_implementation = (
+            experts_implementation
+            if not isinstance(experts_implementation, dict)
+            else experts_implementation.get("", self.config._experts_implementation)
+        )
 
-        if applicable_implementation != self.config._experts_implementation:
+        if requested_implementation != self.config._experts_implementation:
+            requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
             # Apply the change (on the internal attr, to avoid setting it recursively)
-            self.config._experts_implementation_internal = applicable_implementation
+            self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
         for submodule in self.modules():
@@ -2072,8 +2116,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 and isinstance(submodule, PreTrainedModel)
                 and submodule.config.__class__ != self.config.__class__
             ):
-                # Set the moe on the submodule
-                submodule.config._experts_implementation_internal = applicable_implementation
+                # Set the experts on the submodule
+                sub_implementation = requested_implementation
+                if isinstance(experts_implementation, dict):
+                    for subconfig_key in self.config.sub_configs:
+                        # We need to check for exact object match here, with `is`
+                        if getattr(self.config, subconfig_key) is submodule.config:
+                            sub_implementation = experts_implementation.get(
+                                subconfig_key, submodule.config._experts_implementation
+                            )
+                            break
+                # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
+                sub_implementation = submodule.get_correct_experts_implementation(sub_implementation)
+                submodule.config._experts_implementation_internal = sub_implementation
 
     def enable_input_require_grads(self):
         """
