@@ -33,7 +33,7 @@ from .configuration_sam3_video import Sam3VideoConfig
 
 
 if is_kernels_available():
-    from kernels import get_kernel
+    from ...integrations.hub_kernels import get_kernel
 
 logger = logging.get_logger(__name__)
 
