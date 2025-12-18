@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 All Mixture-of-Experts (MoE) implementations perform the same high-level computation. For each token, a router selects *k* experts. The token hidden state is then projected through the selected experts' parameters and aggregated with routing weights. The difference between experts backends is *how* those expert matrix multiplications execute.
 
-The [`ExpertsInterface`] provides optimized experts implementations. It decouples the experts implementation from the model implementation to simplify experimentation with different functions. Add new backends easily with this consistent interface.
+The [`ExpertsInterface`] provides optimized experts backends. It decouples the experts implementation from the model code to simplify experimentation with different functions. Add new backends through the same interface.
 
 | experts backend | description                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------------- |
