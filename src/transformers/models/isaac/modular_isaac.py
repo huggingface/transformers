@@ -26,6 +26,7 @@ from ...utils.import_utils import (
     is_perceptron_available,
     is_torch_available,
     is_torchdynamo_compiling,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -41,6 +42,8 @@ if is_vision_available():
 else:
     Image = None
 
+if is_torchvision_available():
+    from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
 
 if is_perceptron_available():
     from perceptron.tensorstream.ops import (
@@ -84,12 +87,10 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import (
-    ChannelDimension,
     PILImageResampling,
 )
-from ...masking_utils import create_masks_for_generate, packed_sequence_mask_function
+from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, create_masks_for_generate, packed_sequence_mask_function
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.auto.modeling_auto import AutoModel
 from ...models.auto.tokenization_auto import AutoTokenizer
@@ -101,7 +102,7 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.generic import TransformersKwargs, can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
@@ -176,36 +177,27 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
-    valid_kwargs = IsaacImageProcessorKwargs
+    valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
-    size: Optional[SizeDict] = None
-    default_to_square: Optional[bool] = None
     do_center_crop = False
-    crop_size: Optional[SizeDict] = None
     patch_size: Optional[int] = 16
     max_num_patches: Optional[int] = 256
     min_num_patches: Optional[int] = None
     pixel_shuffle_scale: Optional[int] = 1
     do_pad = False
-    pad_size: Optional[SizeDict] = None
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = list(VISION_MEAN)
     image_std = list(VISION_STD)
     do_convert_rgb = True
-    return_tensors = None
-    data_format = ChannelDimension.FIRST
-    input_data_format = None
-    device = None
     disable_grouping = False
     size_divisor: Optional[int] = None
 
     def __init__(
         self,
-        **kwargs: Unpack[IsaacImageProcessorKwargs],
+        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
     ) -> None:
         super().__init__(**kwargs)
 
@@ -341,7 +333,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             nhwc_images = image_batch.permute(0, 2, 3, 1)
             nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
 
-            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            patches = torch_extract_patches(nhwc_images.permute(0, 3, 1, 2), patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
@@ -430,32 +422,39 @@ def document_mask_function_from_cu_seqlens(cu_seqlens: Optional[torch.Tensor]) -
     return packed_sequence_mask_function(packed_sequence_mask)
 
 
-def ensure_document_attention_mask(
-    attention_mask: Optional[torch.Tensor],
+def create_document_attention_mask(
+    config: PretrainedConfig,
+    input_embeds: torch.Tensor,
     cu_seqlens: Optional[torch.Tensor],
-    total_tokens: int,
-    dtype: torch.dtype,
-    device: torch.device,
-    *,
-    return_mask_function: bool = False,
-) -> Optional[Union[torch.Tensor, Callable]]:
-    """Return the provided mask, a callable mask from ``cu_seqlens``, or ``None``.
+) -> Optional[Union[torch.Tensor, Any]]:
+    """Materialize a backend-specific block-diagonal attention mask.
 
-    ``return_mask_function=True`` yields a callable suitable for ``masking_utils``; otherwise
-    ``None`` is returned when no explicit ``attention_mask`` is provided. The legacy additive mask
-    has been removed in favor of the callable-based path.
+    This uses the standard `masking_utils` mask interface (same mechanism as Llama4),
+    so the returned object matches the selected attention backend (e.g. SDPA bool mask,
+    eager additive mask, or flex `BlockMask`).
     """
 
-    if attention_mask is not None:
-        return attention_mask
-
-    if cu_seqlens is None:
+    mask_function = document_mask_function_from_cu_seqlens(cu_seqlens)
+    if mask_function is None:
         return None
 
-    if return_mask_function:
-        return document_mask_function_from_cu_seqlens(cu_seqlens)
+    seq_len = input_embeds.shape[1]
+    cache_position = torch.arange(seq_len, device=input_embeds.device, dtype=torch.long)
 
-    return None
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
+    return mask_interface(
+        batch_size=input_embeds.shape[0],
+        cache_position=cache_position,
+        kv_length=seq_len,
+        kv_offset=0,
+        mask_function=mask_function,
+        attention_mask=None,
+        allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=False,
+        dtype=input_embeds.dtype,
+        config=config,
+        use_vmap=False,
+    )
 
 
 class IsaacVisionEmbeddings(nn.Module):
@@ -613,18 +612,11 @@ class IsaacVisionAttention(Siglip2Attention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        past_key_value: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        is_causal: bool = False,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         **kwargs,
     ):
-        # Ignore unused arguments for interface compatibility
-        _ = position_ids
-        _ = past_key_value
-        _ = is_causal
         kwargs.pop("output_hidden_states", None)
         kwargs.pop("return_dict", None)
 
@@ -637,22 +629,10 @@ class IsaacVisionAttention(Siglip2Attention):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if not queries.is_contiguous():
-            queries = queries.contiguous()
-        if not keys.is_contiguous():
-            keys = keys.contiguous()
-        if not values.is_contiguous():
-            values = values.contiguous()
-
-        L = queries.size(0)
-        if max_seqlen is not None:
-            max_q = max_k = int(max_seqlen)
-        else:
-            max_q = max_k = self._max_from_cu(cu_seqlens, L)
-
+        attn_impl = self.config._attn_implementation
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS["sdpa"]
-        if self.config._attn_implementation != "sdpa":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if attn_impl != "sdpa":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
         dropout = 0.0 if not self.training else self.dropout
         attention_kwargs: dict[str, Any] = {
@@ -660,14 +640,35 @@ class IsaacVisionAttention(Siglip2Attention):
             "scaling": self.scale,
             "dropout": dropout,
         }
-        if cu_seqlens is not None:
-            attention_kwargs["cu_seq_lens_q"] = cu_seqlens
-            attention_kwargs["cu_seq_lens_k"] = cu_seqlens
-        if max_seqlen is not None:
-            attention_kwargs["max_length_q"] = max_q
-            attention_kwargs["max_length_k"] = max_k
-        if output_attentions:
+
+        supports_varlen = cu_seqlens is not None and attn_impl in {
+            "flash_attention_2",
+            "flash_attention_3",
+            "flex_attention",
+            "paged|flash_attention_2",
+            "paged|flash_attention_3",
+        }
+
+        if output_attentions and attn_impl == "eager":
             attention_kwargs["output_attentions"] = True
+
+        if supports_varlen:
+            if max_seqlen is not None:
+                max_q = max_k = int(max_seqlen)
+            elif cu_seqlens.numel() >= 2:
+                lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+                max_q = max_k = lengths.max() if lengths.numel() > 0 else seq_length
+            else:
+                max_q = max_k = seq_length
+
+            attention_kwargs.update(
+                {
+                    "cu_seq_lens_q": cu_seqlens,
+                    "cu_seq_lens_k": cu_seqlens,
+                    "max_length_q": max_q,
+                    "max_length_k": max_k,
+                }
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -690,12 +691,6 @@ class IsaacVisionAttention(Siglip2Attention):
             attn_output = attn_output.to(hidden_states.dtype)
 
         return attn_output, attn_weights
-
-    @staticmethod
-    def _max_from_cu(cu: Optional[torch.Tensor], fallback: int) -> int:
-        if cu is None or cu.numel() < 2:
-            return fallback
-        return int((cu[1:] - cu[:-1]).max().item())
 
 
 class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
@@ -722,30 +717,16 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
             Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
             buffers for packed variable-length attention.
         """
-        attention_mask = ensure_document_attention_mask(
-            attention_mask,
-            cu_seqlens,
-            hidden_states.size(1),
-            hidden_states.dtype,
-            hidden_states.device,
-            return_mask_function=False,
-        )
-
         # Run attention directly so variable-length metadata reaches FlashAttention.
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
-        attn_outputs = self.self_attn(
+        attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        if isinstance(attn_outputs, tuple):
-            attn_output, attn_weights = attn_outputs
-        else:
-            attn_output, attn_weights = attn_outputs, None
         hidden_states = residual + attn_output
 
         residual = hidden_states
@@ -753,8 +734,6 @@ class IsaacVisionEncoderLayer(Siglip2EncoderLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        if output_attentions:
-            return hidden_states, attn_weights
         return hidden_states
 
 
@@ -766,36 +745,14 @@ class IsaacVisionEncoder(Siglip2Encoder):
         self.layers = nn.ModuleList([IsaacVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        attention_mask = ensure_document_attention_mask(
-            attention_mask,
-            cu_seqlens,
-            inputs_embeds.size(1),
-            inputs_embeds.dtype,
-            inputs_embeds.device,
-            return_mask_function=False,
-        )
-
         hidden_states = inputs_embeds
-        kwargs.update(
-            {
-                "max_seqlen": max_seqlen,
-                "cu_seqlens": cu_seqlens,
-                "output_attentions": output_attentions,
-                "output_hidden_states": output_hidden_states,
-                "return_dict": return_dict,
-            }
-        )
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
@@ -898,15 +855,15 @@ def pixel_shuffle_varlen(
     Raises:
         ValueError: If more than one batch item is provided.
     """
-    keep_batch_dim = x.dim() == 3
-    if keep_batch_dim:
+    return_with_batch_dim = x.dim() == 3
+    if return_with_batch_dim:
         if x.size(0) != 1:
             raise AssertionError("Packed sequence is expected to have batch_size == 1")
-        x_ = x.squeeze(0)  # (seq, embed)
+        embeddings = x.squeeze(0)  # (seq, embed)
     else:
-        x_ = x  # (seq, embed)
+        embeddings = x  # (seq, embed)
 
-    embed_dim = x_.size(-1)
+    embed_dim = embeddings.size(-1)
     scale_factor = int(scale_factor)
 
     # Calculate seq_sizes from token_grids
@@ -917,17 +874,17 @@ def pixel_shuffle_varlen(
         seq_sizes=seq_sizes,
         token_grids=token_grids,
         scale_factor=scale_factor,
-        device=x_.device,
+        device=embeddings.device,
     )  # (new_seq, scale_factor**2)
 
     # Gather → (new_seq, scale_factor**2, embed_dim)
-    gathered = x_[gather_idx]  # fancy indexing keeps gradient
+    gathered = embeddings[gather_idx]  # fancy indexing keeps gradient
 
     # Merge the scale_factor**2 group dimension into channels to finish the shuffle
     out = gathered.reshape(gathered.size(0), embed_dim * scale_factor * scale_factor)
 
     # Restore batch dimension if needed
-    if keep_batch_dim:
+    if return_with_batch_dim:
         out = out.unsqueeze(0)
     return out
 
@@ -956,14 +913,14 @@ class IsaacVisionTransformer(nn.Module):
         # Generate cumulative sequence lengths for variable-length attention
         cu_seqlens = torch.zeros(seq_sizes.size(0) + 1, dtype=torch.int32, device=hidden_states.device)
         cu_seqlens[1:] = seq_sizes.cumsum(0)
-        max_seqlen = int(seq_sizes.max().item()) if seq_sizes.numel() > 0 else 0
+
+        attention_mask = create_document_attention_mask(self.config, hidden_states, cu_seqlens)
 
         # Pass through encoder with variable-length attention parameters
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            return_dict=True,
         )
         hidden_states = encoder_outputs.last_hidden_state
 
@@ -1094,33 +1051,6 @@ def get_image_size_for_max_num_patches(
         return target_height, target_width
 
 
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
-
-
 class IsaacConfig(PretrainedConfig):
     """Configuration class for Isaac multimodal model.
 
@@ -1141,25 +1071,25 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
-        self._rope_parameters: Optional[dict[str, Any]] = None
         attn_implementation = kwargs.get("attn_implementation")
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
+        elif isinstance(text_config, Qwen3Config):
+            self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"]()
 
+        # Seed RoPE parameters before base init so the shared mixin can standardize/validate them.
+        self.rope_parameters = getattr(self.text_config, "rope_parameters", None)
+        self.layer_types = getattr(self.text_config, "layer_types", None)
+
         super().__init__(**kwargs)
 
-        if self._rope_scaling is None:
-            self._rope_scaling = getattr(self.text_config, "rope_scaling", None)
-        else:
-            self.text_config.rope_scaling = self._rope_scaling
+        # Keep rope parameters aligned between the composite and text sub-configs.
+        self.text_config.rope_parameters = self.rope_parameters
 
-        # Keep rope parameters alias in sync with upstream expectations
-        self._rope_parameters = self._rope_scaling
-
-        # Mirror frequently accessed Qwen3 attributes at the composite config level for BC.
+        # Mirror frequently accessed Qwen3 attributes at the composite config level
         self.vocab_size = self.text_config.vocab_size
         self.hidden_size = self.text_config.hidden_size
         self.num_hidden_layers = self.text_config.num_hidden_layers
@@ -1167,10 +1097,7 @@ class IsaacConfig(PretrainedConfig):
         self.head_dim = self.text_config.head_dim
         self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
-
-        # Validate rotary parameters now that they have been mirrored locally.
-        rope_config_validation(self)
+        self.rope_theta = self.rope_parameters["rope_theta"]
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
@@ -1198,33 +1125,6 @@ class IsaacConfig(PretrainedConfig):
         # Processing parameters
         self.max_sequence_length = max_sequence_length
         self.vision_token = vision_token
-
-    @property
-    def rope_scaling(self):
-        if hasattr(self, "text_config") and self.text_config is not None:
-            return getattr(self.text_config, "rope_scaling", None)
-        return self._rope_scaling
-
-    @rope_scaling.setter
-    def rope_scaling(self, value):
-        self._rope_scaling = value
-        if hasattr(self, "text_config") and self.text_config is not None:
-            self.text_config.rope_scaling = value
-
-    @property
-    def rope_parameters(self) -> dict[str, Any] | None:
-        """Alias introduced upstream for rope scaling dictionaries."""
-        value = self._rope_parameters
-        if value is None:
-            value = self.rope_scaling
-        if value is None:
-            return {"rope_type": "default"}
-        return value
-
-    @rope_parameters.setter
-    def rope_parameters(self, value: dict[str, Any] | None) -> None:
-        self._rope_parameters = value
-        self.rope_scaling = value
 
     def to_dict(self):
         output = super().to_dict()
@@ -1467,12 +1367,10 @@ def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
     return position_ids
 
 
-class IsaacRotaryEmbedding(nn.Module):
+class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
     EXTRA_ROPE_KEYS = {"mrope_section", "mrope_interleaved"}
 
     def __init__(self, config: IsaacConfig, device=None):
-        super().__init__()
-
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
 
@@ -1481,9 +1379,9 @@ class IsaacRotaryEmbedding(nn.Module):
         config_for_rope.rope_scaling = sanitized_scaling if sanitized_scaling else None
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        self._qwen_rotary = qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding(config_for_rope, device=init_device)
+        super().__init__(config_for_rope, device=init_device)
 
-        rotary_half_dim = self._qwen_rotary.inv_freq.shape[0]
+        rotary_half_dim = self.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
@@ -1508,10 +1406,6 @@ class IsaacRotaryEmbedding(nn.Module):
         split_sections = tuple(self.mrope_section * 2)
         chunks = tensor.split(split_sections, dim=-1)
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
-
-    @property
-    def inv_freq(self) -> torch.Tensor:
-        return self._qwen_rotary.inv_freq
 
     def forward(
         self,
@@ -1544,7 +1438,7 @@ class IsaacRotaryEmbedding(nn.Module):
 
             pos_axes = pos.permute(2, 0, 1).contiguous()
 
-        cos_axes, sin_axes = self._qwen_rotary(hidden_states, pos_axes)
+        cos_axes, sin_axes = super().forward(hidden_states, pos_axes)
 
         cos_axes = cos_axes.to(hidden_states.dtype)
         sin_axes = sin_axes.to(hidden_states.dtype)
@@ -1559,6 +1453,7 @@ class IsaacModel(Qwen3PreTrainedModel):
     supports_gradient_checkpointing = True
     _can_compile_fullgraph = False
     _supports_flex_attn = False
+    _can_record_outputs = {"attentions": OutputRecorder(IsaacVisionAttention, index=1)}
     # Expose tied-weights mapping even if empty for base model tests.
     all_tied_weights_keys: dict[str, str] = {}
 
@@ -1618,12 +1513,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.text_model.embed_tokens = value
 
     @property
-    def layers(self) -> nn.ModuleList:
-        return self.text_model.layers
-
-    @property
-    def norm(self) -> nn.Module:
-        return self.text_model.norm
+    def vision_model(self) -> nn.Module:
+        return self.vision_embedding.vision_tower
 
     @property
     def vision_model(self) -> nn.Module:
@@ -1680,6 +1571,62 @@ class IsaacModel(Qwen3PreTrainedModel):
         h = embedded_ts.compact()  # (B, T, D)
         return h
 
+    @staticmethod
+    def compute_position_ids_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
+        return compute_position_ids_input_ids(input_ids)
+
+    def _prepare_position_and_modality(
+        self,
+        position_ids: Optional[torch.LongTensor],
+        modality_tensor: Optional[torch.LongTensor],
+        tensor_stream: Optional[TensorStream],
+        inputs_embeds: torch.Tensor,
+        cache_position: torch.LongTensor,
+    ) -> tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor, torch.Tensor, torch.Tensor]:
+        text_value = TextType.text.value if TextType is not None else 0
+        batch_size, seq_len = inputs_embeds.shape[:2]
+
+        if modality_tensor is None:
+            if tensor_stream is not None:
+                modality_tensor = modality_mask(tensor_stream)
+            else:
+                modality_tensor = torch.full(
+                    (batch_size, seq_len), text_value, device=inputs_embeds.device, dtype=torch.long
+                )
+        else:
+            modality_tensor = modality_tensor.to(device=inputs_embeds.device, dtype=torch.long)
+            expected_shape = (batch_size, seq_len)
+            if modality_tensor.shape != torch.Size(expected_shape):
+                raise ValueError(
+                    f"modality_tensor must have shape (batch_size, seq_len) {expected_shape}, "
+                    f"but got {tuple(modality_tensor.shape)}"
+                )
+
+        if position_ids is None:
+            if tensor_stream is not None:
+                position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
+            else:
+                position_ids = cache_position.view(1, -1).expand(modality_tensor.shape[0], -1)
+
+        if position_ids.ndim == 2:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        if position_ids.shape[1] != seq_len:
+            start_positions = position_ids[:, :1, 0]
+            position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
+            position_ids = position_ids + start_positions
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        cos, sin = self.rotary_emb(
+            position_ids,
+            modality_tensor,
+            hidden_states=inputs_embeds,
+        )
+
+        decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
+        return position_ids, modality_tensor, decoder_position_ids, cos, sin
+
     @auto_docstring
     @check_model_inputs
     def forward(
@@ -1692,11 +1639,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
         Forward pass with MRoPE position embeddings.
@@ -1714,7 +1658,7 @@ class IsaacModel(Qwen3PreTrainedModel):
                 omitted.
         """
 
-        text_value = TextType.text.value if TextType is not None else 0
+        output_attentions = kwargs.pop("output_attentions", None)
 
         # Get inputs
         if tensor_stream is not None and inputs_embeds is not None:
@@ -1744,54 +1688,13 @@ class IsaacModel(Qwen3PreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
 
-        # Normalize modality tensor
-        if modality_tensor is None:
-            if tensor_stream is not None:
-                modality_tensor = modality_mask(tensor_stream)
-            else:
-                modality_tensor = torch.full(
-                    (batch_size, seq_len), text_value, device=inputs_embeds.device, dtype=torch.long
-                )
-        else:
-            modality_tensor = modality_tensor.to(dtype=torch.long)
-
-        if modality_tensor.shape[1] != seq_len:
-            if modality_tensor.shape[1] > seq_len:
-                modality_tensor = modality_tensor[:, :seq_len]
-            else:
-                pad = modality_tensor[:, -1:].expand(-1, seq_len - modality_tensor.shape[1])
-                modality_tensor = torch.cat([modality_tensor, pad], dim=1)
-
-        # Normalize position ids
-        if position_ids is None:
-            if tensor_stream is not None:
-                position_ids = compute_mrope_pos_tensor(tensor_stream)  # (B,L,3)
-            else:
-                position_ids = cache_position.view(1, -1).expand(modality_tensor.shape[0], -1)
-
-        # Expand 2D position ids (from generic padding tests or decode cache positions) to 3D MRoPE coords
-        if position_ids.ndim == 2:
-            position_ids = position_ids.to(device=inputs_embeds.device)
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-
-        # Align lengths so rotary embedding sees matching shapes
-        if position_ids.shape[1] != seq_len:
-            start_positions = position_ids[:, :1, 0]
-            position_ids = torch.arange(seq_len, device=inputs_embeds.device).view(1, -1)
-            position_ids = position_ids + start_positions
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-
-        # Compute MRoPE position embeddings if we have custom rotary_emb
-        cos, sin = self.rotary_emb(
-            position_ids,
-            modality_tensor,
-            hidden_states=inputs_embeds,
+        position_ids, modality_tensor, decoder_position_ids, cos, sin = self._prepare_position_and_modality(
+            position_ids=position_ids,
+            modality_tensor=modality_tensor,
+            tensor_stream=tensor_stream,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
         )
-        cos = cos.to(inputs_embeds.dtype)
-        sin = sin.to(inputs_embeds.dtype)
-
-        # Flash attention expects 1D position_ids; keep 3D only for rotary phases
-        decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
         # Prepare attention mask
         if not isinstance(attention_mask, dict):
@@ -1848,6 +1751,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     config_class = IsaacConfig
     _can_compile_fullgraph = False
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    all_tied_weights_keys: dict[str, str] = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
@@ -1867,11 +1771,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         Forward pass for conditional generation supporting both standard inputs and TensorStream.
@@ -1882,66 +1783,43 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             `input_ids`.
         """
 
-        # Don't compute embeddings here - let the model handle it
+        output_attentions = kwargs.pop("output_attentions", None)
+
+        # Don't compute embeddings here - let the inner model handle it
         if tensor_stream is not None:
             input_ids = None
         if input_ids is None and inputs_embeds is None and tensor_stream is None:
             raise ValueError("Either input_ids, inputs_embeds, or tensor_stream must be provided.")
 
-        text_value = TextType.text.value if TextType is not None else 0
-
-        if tensor_stream is None:
+        # Record rope deltas on prefill when TensorStream is provided; leave position_ids building to IsaacModel.
+        if position_ids is None and tensor_stream is not None:
+            position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
+        elif position_ids is None and cache_position is not None and self.rope_deltas is not None:
+            # Decode continuation after TensorStream prefill: advance positions using cached rope offsets.
             if input_ids is not None:
-                batch_size, seq_len = input_ids.shape
-                input_device = input_ids.device
+                base_position_ids = compute_position_ids_input_ids(input_ids)
             else:
+                if inputs_embeds is None:
+                    raise ValueError("inputs_embeds must be provided when input_ids is None during decode")
                 batch_size, seq_len = inputs_embeds.shape[:2]
-                input_device = inputs_embeds.device
+                dummy_ids = torch.zeros((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
+                base_position_ids = compute_position_ids_input_ids(dummy_ids)
 
-        # Build position ids (MRoPE) if needed and tensor_stream is available
-        # During decode we reuse `self.rope_deltas` computed on the initial forward pass; `rope_delta` captures how far
-        # cached rotary phases have progressed so we can advance `position_ids` without rebuilding the TensorStream.
-        if position_ids is None:
-            if tensor_stream is not None:
-                position_ids, self.rope_deltas = self.get_rope_index(input_ids, tensor_stream, attention_mask)
-            elif input_ids is None:
-                dummy_ids = torch.zeros((batch_size, seq_len), device=input_device, dtype=torch.long)
-                position_ids = compute_position_ids_input_ids(dummy_ids)
-            else:
-                position_ids = compute_position_ids_input_ids(input_ids)
-
-                rope_delta = 0
-                if cache_position is not None and self.rope_deltas is not None:
-                    # Combine the incremental decode step (`cache_position`) with cached offsets so hidden states continue
-                    # rotating in lockstep across generation steps.
-                    rope_delta = (cache_position[0] + self.rope_deltas).to(input_ids.device)
-                    if not isinstance(rope_delta, int):  # otherwise `deltas` is an int `0`
-                        rope_delta = rope_delta.repeat_interleave(batch_size // rope_delta.shape[0], dim=0)
-
-                position_ids = position_ids.add(rope_delta)
-
-        if attention_mask is None and tensor_stream is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=input_device, dtype=torch.long)
-
-        if tensor_stream is not None:
-            modality_tensor = modality_mask(tensor_stream)
-        else:
-            modality_tensor = torch.full(
-                (batch_size, seq_len), text_value, device=position_ids.device, dtype=torch.long
-            )
+            rope_delta = (cache_position[0] + self.rope_deltas).to(base_position_ids.device)
+            if not isinstance(rope_delta, int):
+                rope_delta = rope_delta.repeat_interleave(base_position_ids.shape[0] // rope_delta.shape[0], dim=0)
+            position_ids = base_position_ids.add(rope_delta)
 
         outputs = self.model(
             input_ids=input_ids,
             tensor_stream=tensor_stream,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            modality_tensor=modality_tensor,
+            modality_tensor=None,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -2062,21 +1940,10 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         else:
             model_inputs["tensor_stream"] = None
 
-        # TensorStream decode path: preserve rotary offsets from prefill
+        # TensorStream decode path: preserve rotary offsets from prefill; let forward rebuild positions
         if tensor_stream is not None and not first_step and self.rope_deltas is not None:
             model_inputs["position_ids"] = None
             return model_inputs
-
-        # For decode steps, synthesize position_ids that continue from the cache offsets
-        if model_inputs.get("position_ids") is None and cache_position is not None and not first_step:
-            batch_size = 1
-            if model_inputs.get("input_ids") is not None:
-                batch_size = model_inputs["input_ids"].shape[0]
-            elif model_inputs.get("inputs_embeds") is not None:
-                batch_size = model_inputs["inputs_embeds"].shape[0]
-            pos_ids = cache_position.view(1, -1).expand(batch_size, -1)
-            pos_ids = pos_ids.unsqueeze(-1).expand(-1, -1, 3)
-            model_inputs["position_ids"] = pos_ids
 
         return model_inputs
 

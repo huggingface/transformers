@@ -25,20 +25,45 @@ from typing import Any, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
-from ...image_utils import ChannelDimension, PILImageResampling
+from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.import_utils import is_torch_available
-from .image_processing_isaac import IsaacImageProcessorKwargs
+from ...utils.import_utils import (
+    is_torch_available,
+)
+from .modeling_isaac import IsaacImageProcessorFastKwargs
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
+
+# Disable as it causes issues with torch.compile
+@torch.compiler.disable
+def torch_extract_patches(image_tensor, patch_height, patch_width):
+    """
+    Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
+
+    Args:
+        image_tensor (`torch.Tensor`):
+            Image tensor of shape (batch, channels, height, width).
+        patch_height (`int`):
+            Height of patches to extract.
+        patch_width (`int`):
+            Width of patches to extract.
+    """
+    batch_size, channels, height, width = image_tensor.shape
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
+    )
+    return patches
 
 
 def get_scaled_image_size(
@@ -131,33 +156,6 @@ def get_image_size_for_max_num_patches(
         return target_height, target_width
 
 
-def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
-    r"""Convert normalized images into flattened ViT-style patches.
-
-    Args:
-        image (`torch.Tensor`):
-            Tensor of shape `(num_images, height, width, channels)`.
-        patch_size (`int`):
-            Edge length of the square patches
-
-    Returns:
-        `torch.Tensor`:
-            Patch tensor where each position stores the flattened pixels belonging to that patch.
-
-    Raises:
-        ValueError: If `height` or `width` is not divisible by `patch_size`.
-    """
-    num_images, height, width, channels = image.shape
-    if height % patch_size or width % patch_size:
-        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
-    patches = image.reshape(num_images, height // patch_size, patch_size, width // patch_size, patch_size, channels)
-    patches = patches.permute(0, 1, 3, 2, 4, 5)
-    patches = patches.reshape(
-        num_images, height // patch_size, width // patch_size, channels * patch_size * patch_size
-    )
-    return patches
-
-
 def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
     """Compute residuals for P-frames to stay in sync with the training pipeline."""
     if not any(is_p_frame):
@@ -178,36 +176,27 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
-    valid_kwargs = IsaacImageProcessorKwargs
+    valid_kwargs = IsaacImageProcessorFastKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size"]
 
     do_resize = True
-    size: Optional[SizeDict] = None
-    default_to_square: Optional[bool] = None
     do_center_crop = False
-    crop_size: Optional[SizeDict] = None
     patch_size: Optional[int] = 16
     max_num_patches: Optional[int] = 256
     min_num_patches: Optional[int] = None
     pixel_shuffle_scale: Optional[int] = 1
     do_pad = False
-    pad_size: Optional[SizeDict] = None
     do_rescale = True
-    rescale_factor = 1 / 255
     do_normalize = True
     image_mean = list(VISION_MEAN)
     image_std = list(VISION_STD)
     do_convert_rgb = True
-    return_tensors = None
-    data_format = ChannelDimension.FIRST
-    input_data_format = None
-    device = None
     disable_grouping = False
     size_divisor: Optional[int] = None
 
     def __init__(
         self,
-        **kwargs: Unpack[IsaacImageProcessorKwargs],
+        **kwargs: Unpack[IsaacImageProcessorFastKwargs],
     ) -> None:
         super().__init__(**kwargs)
 
@@ -343,7 +332,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             nhwc_images = image_batch.permute(0, 2, 3, 1)
             nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
 
-            patches = patchify_vision(nhwc_images, patch_size=patch_size)
+            patches = torch_extract_patches(nhwc_images.permute(0, 3, 1, 2), patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
