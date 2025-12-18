@@ -76,28 +76,17 @@ def _make_causal_mask(
 
 
 @dataclass
-class BaseModelOutputWithProjectionAttentions(ModelOutput):
+@auto_docstring
+class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
+    projection_attentions (`tuple(torch.FloatTensor)`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        projection_attentions (`tuple(torch.FloatTensor)`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
     projection_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
@@ -518,7 +507,7 @@ class Kosmos2VisionEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithProjectionAttentions(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
@@ -1227,7 +1216,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithProjectionAttentions]:
         return self.model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1514,7 +1503,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithProjectionAttentions]:
         if "return_attentions" in kwargs:
             warnings.warn(
                 "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"
@@ -1522,7 +1511,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 FutureWarning,
             )
 
-        vision_output = self.vision_model(
+        vision_output: BaseModelOutputWithProjectionAttentions = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
@@ -1533,7 +1522,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
         vision_output.pooler_output = image_embeds
-        # NOTE: @Tom we need to add projection_attentions to the output
+        vision_output.projection_attentions = projection_attentions
 
         return vision_output
 
