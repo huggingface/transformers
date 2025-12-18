@@ -424,7 +424,6 @@ class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Kosmos2Vision
 class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a

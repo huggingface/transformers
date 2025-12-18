@@ -383,7 +383,6 @@ class InstructBlipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)

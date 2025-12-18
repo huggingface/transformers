@@ -477,7 +477,6 @@ class Blip2Encoder(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
