@@ -31,12 +31,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ...video_utils import VideoInput
 from ..llama.modeling_llama import LlamaRotaryEmbedding
@@ -68,26 +68,13 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(
-    ModelOutput
-):  # NOTE: @Tom Should we subclass from BaseModelOutputWithPooler instead?
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        deepstack_features (`List[torch.FloatTensor]`, *optional*):
-            List of hidden-states (feature maps) from deepstack layers.
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
     deepstack_features: Optional[list[torch.FloatTensor]] = None
 
 
@@ -663,7 +650,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[ProcessingKwargs]
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Args:
@@ -991,7 +978,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
             pixel_values, grid_thw=image_grid_thw, **kwargs
         )
-        image_embeds = vision_output.last_hidden_state
+        image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
         vision_output.pooler_output = image_embeds
