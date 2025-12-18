@@ -132,11 +132,11 @@ class UMT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
-            # Force because official weights have False serialized, but we have to tie always
-            tie_word_embeddings=True,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
