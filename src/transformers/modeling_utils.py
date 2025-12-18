@@ -1342,6 +1342,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
         self.dtype_plan = {}
+        self.quantization_config = kwargs.pop("quantization_config", None)
 
         if isinstance(self._keep_in_fp32_modules, list):
             self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
@@ -1494,6 +1495,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype (`torch.dtype`, *optional*):
                 Override the default `dtype` and load the model under this dtype.
         """
+        from .quantizers.auto import AutoHfQuantizer
+
         # For BC on the old `torch_dtype`
         dtype = kwargs.pop("dtype", config.dtype)
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
@@ -1507,10 +1510,30 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        # Handle FP8 quantization config if passed
+        quantization_config = kwargs.pop("quantization_config", None)
+        hf_quantizer = None
+        is_quantized = False
+
+        if quantization_config is not None:
+            quant_method = getattr(quantization_config, "quant_method", None)
+            # Only FP8 quantization methods are supported in _from_config
+            if quant_method in (QuantizationMethod.FBGEMM_FP8, QuantizationMethod.FP8):
+                hf_quantizer = AutoHfQuantizer.from_config(quantization_config, pre_quantized=False)
+                hf_quantizer.validate_environment(dtype=dtype, device_map=None)
+                dtype = hf_quantizer.update_dtype(dtype)
+                is_quantized = True
+            else:
+                logger.warning_once(
+                    f"Quantization method `{quant_method}` is not supported in `_from_config`. "
+                    "Only FP8 quantization methods (`fbgemm_fp8` and `fp8`) are supported. "
+                    "Please use `from_pretrained` for other quantization methods."
+                )
+
         init_contexts = []
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
-        if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
             # and memory copying it on CPU or each GPU first
@@ -1521,6 +1544,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Instantiate the model
         with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
+
+        # For FP8 quantization, preprocess the model to replace linears with quantized versions
+        if hf_quantizer is not None:
+            hf_quantizer.preprocess_model(
+                model=model,
+                device_map=None,
+                keep_in_fp32_modules=model._keep_in_fp32_modules,
+                config=config,
+            )
+            model.hf_quantizer = hf_quantizer
+            config.quantization_config = quantization_config
+            
 
         return model
 
