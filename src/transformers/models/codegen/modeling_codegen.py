@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -69,7 +70,7 @@ class CodeGenAttention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
 
-        max_positions = config.max_position_embeddings
+        self.max_positions = config.max_position_embeddings
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
         self.layer_idx = layer_idx
@@ -93,8 +94,10 @@ class CodeGenAttention(nn.Module):
 
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
+        self.pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.register_buffer(
+            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
@@ -278,6 +281,11 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = "past_key_values"
     _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, CodeGenAttention):
+            init.copy_(module.embed_positions, create_sinusoidal_positions(module.max_positions, module.pos_embd_dim))
 
 
 @auto_docstring
