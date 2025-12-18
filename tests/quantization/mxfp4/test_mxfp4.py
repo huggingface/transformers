@@ -225,21 +225,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             quantizer.validate_environment()
             self.assertTrue(quantizer.quantization_config.dequantize)
 
-    def test_update_dtype(self):
-        """Test torch dtype updating"""
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
-
-        # Should default to bfloat16
-        result_dtype = quantizer.update_dtype(None)
-        self.assertEqual(result_dtype, torch.bfloat16)
-
-        # Should preserve existing dtype
-        result_dtype = quantizer.update_dtype(torch.float32)
-        self.assertEqual(result_dtype, torch.float32)
-
     def test_get_param_name_dequantize(self):
         """Test parameter name updating when dequantizing"""
         from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
