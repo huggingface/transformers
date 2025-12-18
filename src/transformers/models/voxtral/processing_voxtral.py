@@ -97,8 +97,8 @@ class VoxtralProcessor(ProcessorMixin):
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
-        This method applies the model's chat completion template given a conversation. It relies on MistralCommonTokenizer's
-        [`~MistralCommonTokenizer.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
+        This method applies the model's chat completion template given a conversation. It relies on MistralCommonBackend's
+        [`~MistralCommonBackend.apply_chat_template`] to prepare input ids to the model and on WhisperFeatureExtractor's
         [`~WhisperFeatureExtractor.__call__`] to prepare input features to the model.
 
         Note that audio is padded to the nearest 30-second multiple prior to mel feature extraction.
@@ -222,15 +222,13 @@ class VoxtralProcessor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
-        """
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_features** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
+        r"""
+        Method to prepare text to be fed as input to the model. This method forwards the `text`
+        arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
+        the text. Please refer to the docstring of the above methods for more information.
+        This methods does not support audio. To prepare the audio, please use:
+        1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
+        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
         """
         if isinstance(text, str):
             text = [text]
@@ -257,7 +255,7 @@ class VoxtralProcessor(ProcessorMixin):
     ):
         """
         This method applies the model's transcription request template given a language and audio.
-        It relies on MistralCommonTokenizer and WhisperFeatureExtractor to prepare input ids and input features to the model.
+        It relies on MistralCommonBackend and WhisperFeatureExtractor to prepare input ids and input features to the model.
 
         ```python
         from transformers import VoxtralProcessor

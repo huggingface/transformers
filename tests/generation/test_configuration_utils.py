@@ -86,8 +86,8 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(loaded_config.bad_words_ids, [[1, 2, 3], [4, 5]])
 
         # Checks parameters that were not specified (defaults)
-        self.assertEqual(loaded_config.top_k, 50)
-        self.assertEqual(loaded_config.max_length, 20)
+        self.assertEqual(loaded_config.top_k, None)
+        self.assertEqual(loaded_config.max_length, None)
         self.assertEqual(loaded_config.max_time, None)
 
     def test_from_model_config(self):
@@ -123,9 +123,9 @@ class GenerationConfigTest(unittest.TestCase):
     def test_kwarg_init(self):
         """Tests that we can overwrite attributes at `from_pretrained` time."""
         default_config = GenerationConfig()
-        self.assertEqual(default_config.temperature, 1.0)
+        self.assertEqual(default_config.temperature, None)
         self.assertEqual(default_config.do_sample, False)
-        self.assertEqual(default_config.num_beams, 1)
+        self.assertEqual(default_config.num_beams, None)
 
         config = GenerationConfig(
             do_sample=True,
@@ -135,7 +135,7 @@ class GenerationConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.temperature, 0.7)
         self.assertEqual(config.do_sample, True)
-        self.assertEqual(config.num_beams, 1)
+        self.assertEqual(config.num_beams, None)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
@@ -143,7 +143,7 @@ class GenerationConfigTest(unittest.TestCase):
 
         self.assertEqual(loaded_config.temperature, 1.0)
         self.assertEqual(loaded_config.do_sample, True)
-        self.assertEqual(loaded_config.num_beams, 1)  # default value
+        self.assertEqual(loaded_config.num_beams, None)  # default value
 
     def test_validate(self):
         """
@@ -253,7 +253,7 @@ class GenerationConfigTest(unittest.TestCase):
                 config.save_pretrained(tmp_dir)
             self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
             self.assertTrue(
-                "Greedy methods without beam search do not support `num_return_sequences` different than 1"
+                "Greedy methods (do_sample != True) without beam search do not support `num_return_sequences` different than 1"
                 in str(exc.exception)
             )
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)

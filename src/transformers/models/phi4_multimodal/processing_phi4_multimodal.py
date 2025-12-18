@@ -41,8 +41,6 @@ class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
-    audio_processor_class = "Phi4MultimodalFeatureExtractor"
-
     def __init__(
         self,
         image_processor,

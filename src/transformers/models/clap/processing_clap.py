@@ -16,14 +16,9 @@
 Audio/Text processor class for CLAP
 """
 
-from typing import Optional, Union
-
-from ...audio_utils import AudioInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessorMixin
 from ...utils import logging
 from ...utils.auto_docstring import auto_docstring
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -33,25 +28,6 @@ logger = logging.get_logger(__name__)
 class ClapProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-
-    @deprecate_kwarg("audios", version="v4.59.0", new_name="audio")
-    @auto_docstring
-    def __call__(
-        self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audios: Optional[AudioInput] = None,
-        audio: Optional[AudioInput] = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        # The `deprecate_kwarg` will not work if the inputs are passed as arguments, so we check
-        # again that the correct naming is used
-        if audios is not None and audio is None:
-            logger.warning(
-                "Using `audios` keyword argument is deprecated when calling ClapProcessor, instead use `audio`."
-            )
-            audio = audios
-
-        return super().__call__(text=text, audio=audio, **kwargs)
 
 
 __all__ = ["ClapProcessor"]

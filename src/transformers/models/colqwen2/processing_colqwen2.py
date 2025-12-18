@@ -57,6 +57,12 @@ class ColQwen2Processor(ProcessorMixin):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
+        """
+        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Query: "`):
+            A prefix to be used for the query.
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -77,10 +83,6 @@ class ColQwen2Processor(ProcessorMixin):
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
-        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
-            A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*, defaults to `"Query: "`):
-            A prefix to be used for the query.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

@@ -151,3 +151,49 @@ model.enable_adapters()
 # disable all adapters
 model.disable_adapters()
 ```
+
+## Hotswapping adapters
+
+A common use case when serving multiple adapters is to load one adapter first, generate output, load another adapter, generate more outputs, load another adapter, etc. This can be inefficient, since each time a new adapter is loaded, new memory is reserved; moreover, if the model is compiled with `torch.compile`, it needs to be re-compiled each time a new adapter is used. When switching frequently, the compilation time may never be amortized.
+
+To better support this common workflow, you can "hotswap" a LoRA adapter, to avoid accumulating memory and, in some cases, recompilation. It requires an adapter to already be loaded, and the new adapter weights are swapped in-place for the existing adapter. Note that other PEFT methods are not supported yet, only LoRA.
+
+Pass `hotswap=True` when loading a LoRA adapter to enable this feature. It is important to indicate the name of the existing adapter (`"default"` is the default adapter name) to be swapped.
+
+```python
+model = AutoModel.from_pretrained(...)
+# load adapter 1 as normal
+model.load_adapter(file_name_adapter_1)
+# generate outputs with adapter 1
+...
+# now hotswap the 2nd adapter
+model.load_adapter(file_name_adapter_2, hotswap=True, adapter_name="default")
+# generate outputs with adapter 2
+```
+
+For compiled models, it is often necessary to call [`~integrations.peft.PeftAdapterMixin.enable_peft_hotswap`] to avoid recompilation. Call this method _before_ loading the first adapter, while `torch.compile` should be called _after_ loading the first adapter.
+
+```python
+model = AutoModel.from_pretrained(...)
+max_rank = ...  # the highest rank among all LoRAs that you want to load
+# call *before* compiling and loading the LoRA adapter
+model.enable_peft_hotswap(target_rank=max_rank)
+model.load_adapter(file_name_1, adapter_name="default")
+# optionally compile the model now
+model = torch.compile(model, ...)
+output_1 = model(...)
+# now you can hotswap the 2nd adapter, use the same name as for the 1st
+model.load_adapter(file_name_2, adapter_name="default")
+output_2 = model(...)
+```
+
+The `target_rank=max_rank` argument is important for setting the maximum rank among all LoRA adapters that will be loaded. If you have one adapter with rank 8 and another with rank 16, pass `target_rank=16`. You should use a higher value if in doubt. By default, this value is 128.
+
+By default, hotswapping is disabled and requires you to pass `hotswap=True` to `load_adapter`. However, if you called `enable_peft_hotswap` first, hotswapping will be enabled by default. If you want to avoid using it, you need to pass `hotswap=False`.
+
+However, there can be situations where recompilation is unavoidable. For example, if the hotswapped adapter targets more layers than the initial adapter, then recompilation is triggered. Try to load the adapter that targets the most layers first. Refer to the PEFT docs on [hotswapping](https://huggingface.co/docs/peft/main/en/package_reference/hotswap#peft.utils.hotswap.hotswap_adapter) for more details about the limitations of this feature.
+
+> [!Tip]
+> Move your code inside the `with torch._dynamo.config.patch(error_on_recompile=True)` context manager to detect if a model was recompiled. If you detect recompilation despite following all the steps above, please open an issue with [PEFT](https://github.com/huggingface/peft/issues) with a reproducible example.
+
+For an example of how the use of `torch.compile` in combination with hotswapping can improve runtime, check out [this blogpost](https://huggingface.co/blog/lora-fast). Although that example uses Diffusers, similar improvements can be expected here.

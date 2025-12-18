@@ -707,13 +707,18 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000.0,
+            "mrope_section": [8, 12, 12],
+            "partial_rotary_factor": 0.5,
+        },
     }
     hf_config["text_config"] = txt_config
 
     if "vision_config" in model_config:
         vision_config = {
-            "model_type": "glm4v_moe",
+            "model_type": "glm4v_moe_vision",
             "hidden_size": model_config["vision_config"].get("hidden_size", 1536),
             "depth": model_config["vision_config"].get("num_layers", 24),
             "num_heads": model_config["vision_config"].get("num_attention_heads", 12),

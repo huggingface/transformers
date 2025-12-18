@@ -20,15 +20,18 @@ import os.path
 import random
 import re
 import tempfile
+import unittest.mock
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
+from copy import deepcopy
 
 import numpy as np
 import pytest
 from packaging import version
 from parameterized import parameterized
 from pytest import mark
+from safetensors.torch import load_file
 
 from transformers import (
     AutoModel,
@@ -40,13 +43,16 @@ from transformers import (
     logging,
     set_seed,
 )
+from transformers.conversion_mapping import get_model_conversion_mapping
+from transformers.core_model_loading import WeightRenaming
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
-from transformers.modeling_utils import _get_tied_weight_keys
+from transformers.modeling_layers import GradientCheckpointingLayer
+from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -74,6 +80,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -102,7 +109,6 @@ from transformers.utils import (
     CONFIG_NAME,
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
-    is_accelerate_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -110,17 +116,16 @@ from transformers.utils import (
 from .generation.test_utils import GenerationTesterMixin
 
 
-if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
-
-
 if is_torch_available():
     import torch
+    from safetensors import safe_open
     from safetensors.torch import load_file as safe_load_file
     from safetensors.torch import save_file as safe_save_file
     from torch import nn
 
     from transformers import MODEL_MAPPING
+    from transformers.integrations.accelerate import compute_module_sizes
+    from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -158,7 +163,7 @@ def _test_eager_matches_sdpa_inference(
 ):
     """
     This test is written as a regular function to be able to overload it easily with different tolerances.
-    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
@@ -260,7 +265,11 @@ def _test_eager_matches_sdpa_inference(
                 model_sdpa = model_class.from_pretrained(**model_from_pretrained_kwargs)
             model_sdpa = model_sdpa.eval().to(torch_device)
 
-            model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
+            try:
+                model_eager = deepcopy(model_sdpa)
+                model_eager.set_attn_implementation("eager")
+            except Exception as _:
+                model_eager = model_class.from_pretrained(**model_from_pretrained_kwargs, attn_implementation="eager")
             model_eager = model_eager.eval().to(torch_device)
 
         set_model_for_less_flaky_test(model_eager)
@@ -440,7 +449,7 @@ def _test_eager_matches_sdpa_inference(
             if torch_device in ["cpu", "cuda"]:
                 atol = atols[torch_device, enable_kernels, dtype]
                 rtol = rtols[torch_device, enable_kernels, dtype]
-            elif torch_device == "hpu":
+            elif torch_device in ["hpu", "npu"]:
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
             elif torch_device == "xpu":
@@ -671,6 +680,7 @@ class ModelTesterMixin:
             "Owlv2TextModelTest": 12,
             "Owlv2ForObjectDetectionTest": 12,
             "Qwen2_5OmniThinkerForConditionalGenerationModelTest": 4,
+            "Qwen3OmniMoeThinkerForConditionalGenerationModelTest": 4,
             "SamHQModelTest": 12,
             "Swin2SRModelTest": 3,
             "XLNetModelTest": 3,
@@ -697,18 +707,6 @@ class ModelTesterMixin:
                 assert self.model_tester.text_config.num_hidden_layers <= target_num_hidden_layers
 
     def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -739,9 +737,11 @@ class ModelTesterMixin:
 
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
+                    torch.testing.assert_close(
+                        tensor1, tensor2, msg="Running save/load and forward yields different results"
+                    )
             else:
-                check_save_load(first, second)
+                torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
 
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -752,8 +752,18 @@ class ModelTesterMixin:
             new_model = model_class.from_pretrained(
                 pretrained_model_name_or_path=None, config=config, state_dict=state_dict
             )
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+            new_state_dict = new_model.state_dict()
+            assert state_dict.keys() == new_state_dict.keys()
+            keys = state_dict.keys()
+            for k in keys:
+                p1, p2 = new_state_dict[k], state_dict[k]
+                with self.subTest(k):
+                    torch.testing.assert_close(p1, p2, msg=f"failed on {k}")
+
+            new_params = dict(new_model.named_parameters())
+            for k, v in list(model.named_parameters()):
+                with self.subTest(k):
+                    torch.testing.assert_close(v, new_params[k], msg=f"failed on {k}")
 
     def test_keep_in_fp32_modules(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -768,10 +778,11 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
 
                 for name, param in model.named_parameters():
-                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
-                        self.assertTrue(param.dtype == torch.float32)
-                    else:
-                        self.assertTrue(param.dtype == torch.float16, name)
+                    with self.subTest(name):
+                        if re.search("|".join(model_class._keep_in_fp32_modules), name):
+                            self.assertTrue(param.dtype == torch.float32)
+                        else:
+                            self.assertTrue(param.dtype == torch.float16, name)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -799,11 +810,14 @@ class ModelTesterMixin:
                 load_result = model.load_state_dict(state_dict_saved, strict=False)
                 keys_to_ignore = set(model._keys_to_ignore_on_save)
 
-                if hasattr(model, "_tied_weights_keys"):
+                if getattr(model, "_tied_weights_keys", None):
                     keys_to_ignore.update(set(model._tied_weights_keys))
-
-                self.assertTrue(len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore)
-                self.assertTrue(len(load_result.unexpected_keys) == 0)
+                with self.subTest(model=model_class.__name__):
+                    self.assertTrue(
+                        len(load_result.missing_keys) == 0 or set(load_result.missing_keys) == keys_to_ignore,
+                        msg=f"Missing keys: {load_result.missing_keys}\nKeys to ignore: {keys_to_ignore}",
+                    )
+                    self.assertTrue(len(load_result.unexpected_keys) == 0)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -826,6 +840,12 @@ class ModelTesterMixin:
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
             self.assertFalse(model.is_gradient_checkpointing)
+
+            # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
+            # an implementation issue. Note we exclude clvp for now since they are still not using
+            # GradientCheckpointingLayer.
+            if config.model_type not in ["clvp", "clvp_decoder"]:
+                self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
             model.gradient_checkpointing_enable()
@@ -887,7 +907,115 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+    def test_enable_input_require_grads(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            if not hasattr(model, "get_input_embeddings"):
+                continue
+            try:
+                model.enable_input_require_grads()
+            except NotImplementedError as error:
+                self.fail(f"enable_input_require_grads raised NotImplementedError for {model_class.__name__}: {error}")
+            finally:
+                model.disable_input_require_grads()
+
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        has_verified_model = False
+
+        for model_class in self.all_model_classes:
+            if not getattr(model_class, "supports_gradient_checkpointing", False):
+                continue
+
+            model = model_class(copy.deepcopy(config))
+            try:
+                embeddings_module = model.get_input_embeddings()
+            except NotImplementedError:
+                continue
+            if embeddings_module is None:
+                continue
+
+            embedding_param = getattr(embeddings_module, "weight", None)
+            if embedding_param is None and isinstance(embeddings_module, (tuple, list)):
+                for candidate in embeddings_module:
+                    if hasattr(candidate, "weight"):
+                        embedding_param = candidate.weight
+                        break
+            if embedding_param is None or not isinstance(embedding_param, torch.Tensor):
+                continue
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            model.to(torch_device)
+            model.train()
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            baseline_grad = embedding_param.grad
+            if (
+                baseline_grad is None
+                or baseline_grad.abs().sum().item() == 0
+                or not torch.isfinite(baseline_grad).all()
+            ):
+                model.zero_grad(set_to_none=True)
+                continue
+
+            model.zero_grad(set_to_none=True)
+            model.gradient_checkpointing_enable()
+            model.enable_input_require_grads()
+
+            torch.manual_seed(0)
+            outputs = model(**inputs)
+            loss_tensor = outputs.loss if getattr(outputs, "loss", None) is not None else outputs[0]
+            if isinstance(loss_tensor, (tuple, list)):
+                loss_tensor = loss_tensor[0]
+            if loss_tensor is None or not isinstance(loss_tensor, torch.Tensor) or not loss_tensor.requires_grad:
+                model.zero_grad(set_to_none=True)
+                continue
+            loss = loss_tensor.sum()
+            loss.backward()
+
+            grad_after_gc = embedding_param.grad
+            self.assertIsNotNone(
+                grad_after_gc,
+                f"{model_class.__name__} should produce embedding gradients when gradient checkpointing is enabled. "
+                "This typically means the model is not exposing its embeddings via `get_input_embeddings()` or "
+                "a properly configured `_input_embed_layer` attribute.",
+            )
+            self.assertTrue(
+                torch.isfinite(grad_after_gc).all(),
+                f"{model_class.__name__} produced non-finite gradients with gradient checkpointing enabled.",
+            )
+            self.assertGreater(
+                grad_after_gc.abs().sum().item(),
+                0,
+                f"{model_class.__name__} should keep non-zero embedding gradients with gradient checkpointing enabled.",
+            )
+            has_verified_model = True
+
+        if not has_verified_model:
+            self.skipTest(
+                reason="No model with a differentiable loss was available to verify enable_input_require_grads with gradient checkpointing."
+            )
+
     def test_can_init_all_missing_weights(self):
+        """Ensure that all weights are correctly taken into account in `_init_weights`"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # This is used to get the addition year of the model
@@ -900,30 +1028,19 @@ class ModelTesterMixin:
             addition_year = int(match_object.group(1))
 
         for model_class in self.all_model_classes:
-            # For now, skip everything older than 2024 and "important models" (too much models to patch otherwise)
+            # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
             # TODO: relax this as we patch more and more models
             if addition_year < 2023:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
-            # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
-            # `_init_weights` so that it can add the seed for composite models as well)
-            original_initialize_weights = PreTrainedModel._initialize_weights
-
-            def seeded_initialize_weights(self, module):
-                set_seed(0)
-                original_initialize_weights(self, module)
-
-            PreTrainedModel._initialize_weights = seeded_initialize_weights
-
-            # First, initialize the model from config -> this ensure everything is correctly initialized, even if
-            # _init_weights() does not take all weights into account correctly
-            model_from_config = model_class(copy.deepcopy(config))
-            # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
-            # by _init_weights()
-            model_from_pretrained = model_class.from_pretrained(None, config=config, state_dict={})
-
-            # Back to original method to avoid issues if running several other tests
-            PreTrainedModel._initialize_weights = original_initialize_weights
+            # This context manager makes sure that we get the same results deterministically for random new weights
+            with seeded_weight_init():
+                # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+                # _init_weights() does not take all weights into account correctly
+                model_from_config = model_class(copy.deepcopy(config))
+                # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
+                # by _init_weights()
+                model_from_pretrained = model_class.from_pretrained(None, config=copy.deepcopy(config), state_dict={})
 
             # First, check if any parameters are still on meta -> this is usually an issue with tied weights
             params_on_meta = []
@@ -936,29 +1053,146 @@ class ModelTesterMixin:
                 f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
             )
 
-            # Everything must be exactly the same as we set the same seed for each init
-            different_weights = []
-            for (k1, v1), (k2, v2) in zip(
-                model_from_config.state_dict().items(), model_from_pretrained.state_dict().items()
-            ):
-                self.assertEqual(k1, k2, "The keys from each model should be the same")
+            from_pretrained_state_dict = model_from_pretrained.state_dict()
+            from_config_state_dict = model_from_config.state_dict()
+            self.assertEqual(
+                sorted(from_pretrained_state_dict.keys()),
+                sorted(from_config_state_dict.keys()),
+                "The keys from each model should be the exact same",
+            )
 
+            # Everything must be exactly the same as we set the same seed for each init
+            different_weights = set()
+            for k1, v1 in from_config_state_dict.items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
-
+                v2 = from_pretrained_state_dict[k1]
                 # Since we added the seed, they should be exactly the same (i.e. using allclose maybe be wrong due
                 # to very low std in init function)
                 if not (v1 == v2).all():
-                    different_weights.append(k1)
+                    different_weights.add(k1)
 
             # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
             buffer_names = {name for name, _ in model_from_config.named_buffers()}
-            different_weights = [k for k in different_weights if k not in buffer_names]
+            different_weights = {k for k in different_weights if k not in buffer_names}
+
+            # Find the parent structure of the buffers that are different
+            unique_bad_module_traceback = set()
+            for weight in different_weights.copy():
+                parent_name, weight_name = weight.rsplit(".", 1) if "." in weight else ("", weight)
+                parent = model_from_config.get_submodule(parent_name)
+                immediate_parent_class = type(parent).__name__
+                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
+                while not isinstance(parent, PreTrainedModel):
+                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
+                    parent = model_from_config.get_submodule(parent_name)
+                # Get the exact XXXPreTrainedModel
+                pretrained_parent_class = next(
+                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                )
+                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
+                if pretrained_parent_class == "PreTrainedModel":
+                    pretrained_parent_class = type(parent).__name__
+
+                # We cannot control timm model weights initialization, so skip in this case
+                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in weight) or (
+                    pretrained_parent_class == "TimmBackbone" and "_backbone." in weight
+                ):
+                    different_weights.discard(weight)
+                    continue
+
+                # Add it to the traceback
+                traceback = (
+                    f"`{weight_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
+                )
+                unique_bad_module_traceback.add(traceback)
 
             self.assertTrue(
                 len(different_weights) == 0,
-                f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
+                f"The following weights are not properly handled in `_init_weights()` (the model should be able to reinitialize "
+                f"them correctly if the model is on meta device)::\n{unique_bad_module_traceback}",
+            )
+
+    def test_init_weights_can_init_buffers(self):
+        """Ensure that all buffers (persistent and non-persistent) are correctly taken into account in `_init_weights`"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Usually, buffers are not initialized randomly (it's kind of the point of having a Buffer instead of a Parameter...)
+        # However, some PositionalEmbedding modules have a `positional_embedding` buffer, initialized randomly with normal
+        # distribution and std `config.scale` - set it at 0 here to avoid randomness
+        if hasattr(config, "scale"):
+            config.scale = 0
+        for sub_key in config.sub_configs:
+            subconfig = getattr(config, sub_key)
+            if hasattr(subconfig, "scale"):
+                subconfig.scale = 0
+
+        for model_class in self.all_model_classes:
+            # First, initialize the model directly with `__init__`, with the context manager making sure that we do
+            # not run `initialiaze_weights()`, i.e. buffers are the same as in the modules's `__init__` initial definition
+            with skip_weight_init():
+                model_from_init = model_class(copy.deepcopy(config))
+            # Second, initialize the model fully on meta device, then move everything to cpu and run `init_weights`
+            with torch.device("meta"):
+                model_from_meta_init = model_class(copy.deepcopy(config))
+            # move everything randomly to cpu
+            model_from_meta_init.to_empty(device="cpu")
+            # Now, run all the inits
+            model_from_meta_init.init_weights()
+
+            buffers_from_init = dict(model_from_init.named_buffers())
+            buffers_from_meta_init = dict(model_from_meta_init.named_buffers())
+
+            self.assertEqual(
+                sorted(buffers_from_init.keys()),
+                sorted(buffers_from_meta_init.keys()),
+                "The name of the buffers from each model should be the exact same",
+            )
+
+            # Buffers are not random usually, so everything must match exactly
+            different_buffers = set()
+            for k1, v1 in buffers_from_init.items():
+                v2 = buffers_from_meta_init[k1]
+                if not (v1 == v2).all():
+                    different_buffers.add(k1)
+
+            # Find the parent structure of the buffers that are different
+            unique_bad_module_traceback = set()
+            for buffer in different_buffers.copy():
+                parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else ("", buffer)
+                parent = model_from_init.get_submodule(parent_name)
+                immediate_parent_class = type(parent).__name__
+                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
+                while not isinstance(parent, PreTrainedModel):
+                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
+                    parent = model_from_init.get_submodule(parent_name)
+                # Get the exact XXXPreTrainedModel
+                pretrained_parent_class = next(
+                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                )
+                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
+                if pretrained_parent_class == "PreTrainedModel":
+                    pretrained_parent_class = type(parent).__name__
+
+                # We cannot control timm model weights initialization, so skip in this case
+                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
+                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
+                ):
+                    different_buffers.discard(buffer)
+                    continue
+
+                # Add it to the traceback
+                traceback = (
+                    f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
+                )
+                unique_bad_module_traceback.add(traceback)
+
+            unique_bad_module_traceback = "".join(unique_bad_module_traceback)
+            self.assertTrue(
+                len(different_buffers) == 0,
+                f"The following buffers are not properly handled in `_init_weights()` (the model should be able to reinitialize "
+                f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
     def test_torch_save_load(self):
@@ -1151,22 +1385,63 @@ class ModelTesterMixin:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
                 config.use_cache = False
                 config.return_dict = True
-                model = model_class(config)
 
+                # make sure that test runs are consistent by disabling dropout
+                #
+                # Note: attention_probs_dropout_prob seem to influence classifier.bias in BertForMultipleChoice
+                # (and other Bert derived models). Sometimes classifier.bias is None when
+                # attention_probs_dropout_prob > 0. This might indicate a bug somewhere.
+                if hasattr(config, "hidden_dropout_prob"):
+                    config.hidden_dropout_prob = 0.0
+                if hasattr(config, "attention_probs_dropout_prob"):
+                    config.attention_probs_dropout_prob = 0.0
+
+                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                torch.manual_seed(0)
+                model = model_class(config)
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers
                 for p in model.parameters():
                     p.requires_grad_(True)
 
+                # do a non-checkpointing run, so we can compare the set of non-zero gradients later. we skip None
+                # grads here to collect a reference set of modules that have non-zero gradients (to filter layers like
+                # MoE that drop out parts of the model).
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-
-                inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                torch.manual_seed(0)
                 loss = model(**inputs).loss
                 loss.backward()
-                optimizer.step()
+                grad_expected_params = [(n, p) for n, p in model.named_parameters() if p.grad is not None]
+                non_zero_grads_normal = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+
+                # reset all gradients to zero for the comparison with the gradient checkpointing run
+                optimizer.zero_grad()
+
+                # now enable gradient checkpointing and compare the gradients
+                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+
+                checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+                with unittest.mock.patch.object(
+                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
+                ) as forward_mock:
+                    torch.manual_seed(0)
+                    loss = model(**inputs).loss
+                    loss.backward()
+                    optimizer.step()
+
+                    # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
+                    # forward more than once.
+                    self.assertGreater(forward_mock.call_count, 1)
+
+                # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
+                # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
+                non_zero_grads_gradcp = {n for n, p in grad_expected_params if p.grad.abs().sum() > 0}
+                self.assertEqual(non_zero_grads_gradcp, non_zero_grads_normal)
 
                 if self.test_all_params_have_gradient:
                     for k, v in model.named_parameters():
@@ -1251,6 +1526,10 @@ class ModelTesterMixin:
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             for k in config.sub_configs:
+                if (
+                    self._is_composite and k == "vision_config"
+                ):  # skip because it's not needed and causes errors e.g with Timm
+                    continue
                 if getattr(config, k) is not None:
                     getattr(config, k).output_attentions = True
 
@@ -1410,6 +1689,10 @@ class ModelTesterMixin:
         config.output_attentions = self.has_attentions
 
         for k in config.sub_configs:
+            if (
+                self._is_composite and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
             if getattr(config, k) is not None:
                 getattr(config, k).output_attentions = self.has_attentions
 
@@ -1757,6 +2040,10 @@ class ModelTesterMixin:
 
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as _:
+            pass
         inputs_dict.pop("labels", None)
 
         # if model cannot untied embeddings -> leave test
@@ -1764,76 +2051,77 @@ class ModelTesterMixin:
             self.skipTest(reason="Model cannot untied embeddings")
 
         for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
-            else:
-                model = model_class(config).to(torch_device)
-            model.eval()
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.Init():
+                        model = model_class(config)
+                else:
+                    model = model_class(config).to(torch_device)
+                model.eval()
 
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
+                # if no output embeddings -> leave test
+                if model.get_output_embeddings() is None:
+                    continue
 
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.get_text_config().vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
-            self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+                model_vocab_size = config.get_text_config().vocab_size
+                model.resize_token_embeddings(model_vocab_size + 10)
+                new_model_vocab_size = model.config.get_text_config().vocab_size
+                self.assertEqual(new_model_vocab_size, model_vocab_size + 10)
+                output_embeds = model.get_output_embeddings()
+                self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+                # Check bias if present
+                if output_embeds.bias is not None:
+                    self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                if not is_deepspeed_zero3_enabled():
+                    # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                    model(**self._prepare_for_class(inputs_dict, model_class))
 
-            # Test multivariate resizing.
-            model.resize_token_embeddings(model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            # Check that added embeddings mean is close to the old embeddings mean
-            if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                # Test multivariate resizing.
+                model.resize_token_embeddings(model_vocab_size + 10)
+                output_embeds = model.get_output_embeddings()
+                # Check that added embeddings mean is close to the old embeddings mean
+                if is_deepspeed_zero3_enabled():
+                    with deepspeed.zero.GatheredParameters(output_embeds.weight, modifier_rank=None):
+                        old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
+                        new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
+                else:
                     old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
                     new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
-            else:
-                old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
-                new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
-            # check if the old bias mean close to added bias mean.
-            if output_embeds.bias is not None:
-                if is_deepspeed_zero3_enabled():
-                    with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
+                # check if the old bias mean close to added bias mean.
+                if output_embeds.bias is not None:
+                    if is_deepspeed_zero3_enabled():
+                        with deepspeed.zero.GatheredParameters(output_embeds.bias, modifier_rank=None):
+                            old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
+                            new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
+                    else:
                         old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
                         new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
-                else:
-                    old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
-                    new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
 
-                torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
+                    torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
 
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size - 15)
-            new_model_vocab_size = model.config.get_text_config().vocab_size
-            self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            if "decoder_input_ids" in inputs_dict:
-                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            if not is_deepspeed_zero3_enabled():
-                # A distriputed launcher is needed for the forward pass when deepspeed is enabled
-                model(**self._prepare_for_class(inputs_dict, model_class))
+                # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+                model.resize_token_embeddings(model_vocab_size - 15)
+                new_model_vocab_size = model.config.get_text_config().vocab_size
+                self.assertEqual(new_model_vocab_size, model_vocab_size - 15)
+                # Check that it actually resizes the embeddings matrix
+                output_embeds = model.get_output_embeddings()
+                self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+                # Check bias if present
+                if output_embeds.bias is not None:
+                    self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                # Input ids should be clamped to the maximum size of the vocabulary
+                inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                if "decoder_input_ids" in inputs_dict:
+                    inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+                if not is_deepspeed_zero3_enabled():
+                    # A distriputed launcher is needed for the forward pass when deepspeed is enabled
+                    model(**self._prepare_for_class(inputs_dict, model_class))
 
     @require_deepspeed
     @require_torch_accelerator
@@ -1879,6 +2167,20 @@ class ModelTesterMixin:
             observed_main_input_name = list(model_signature.parameters.keys())[1]
             self.assertEqual(model_class.main_input_name, observed_main_input_name)
 
+    def test_model_base_model_prefix(self):
+        """
+        Normally a generative model is a base model + lm_head on top. If this test
+        fails for new model, probably the model has incorrect `base_model_prefix` or
+        the you are re-defining base blocks for a generative model.
+        There are some models which might not fit this assumption, if the model
+        has a special architecture. Feel free to skip the test in that case with
+        a reason in description.
+        """
+        for model_class in self.all_generative_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            self.assertTrue(model.base_model is not model)
+
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
             self.skipTest(reason="test_missing_keys is set to `False`")
@@ -1911,60 +2213,87 @@ class ModelTesterMixin:
             model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 try:
-                    model_tied.save_pretrained(d, safe_serialization=True)
+                    model_tied.save_pretrained(d)
                 except Exception as e:
                     raise Exception(f"Class {model_class.__name__} cannot be saved using safetensors: {e}")
+                with self.subTest(model_class):
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model_tied.state_dict().items():
+                        with self.subTest(f"{model_class.__name__}.{k}"):
+                            torch.testing.assert_close(
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}.\n{v}\nvs\n{reloaded_state[k]}\n"
+                                "This probably means that it was not set with the correct value when tying.",
+                            )
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model_tied.state_dict().items():
-                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                    )
-                # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                    # Checking the tensor sharing are correct on the new model (weights are properly tied in both cases)
+                    ptrs = defaultdict(list)
+                    for k, v in model_tied.state_dict().items():
+                        ptrs[v.data_ptr()].append(k)
 
-                # Checking the tensor sharing are correct
-                ptrs = defaultdict(list)
-                for k, v in model_tied.state_dict().items():
-                    ptrs[v.data_ptr()].append(k)
+                    shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
 
-                shared_ptrs = {k: v for k, v in ptrs.items() if len(v) > 1}
+                    for shared_names in shared_ptrs.values():
+                        reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                        self.assertEqual(
+                            len(reloaded_ptrs),
+                            1,
+                            f"The shared pointers are incorrect, found different pointers for keys {shared_names}. `__init__` and `from_pretrained` end up not tying the weights the same way.",
+                        )
 
-                for shared_names in shared_ptrs.values():
-                    reloaded_ptrs = {reloaded_state[k].data_ptr() for k in shared_names}
+                    # Checking there was no complain of missing weights
                     self.assertEqual(
-                        len(reloaded_ptrs),
-                        1,
-                        f"The shared pointers are incorrect, found different pointers for keys {shared_names}",
+                        infos["missing_keys"],
+                        set(),
+                        "These keys were removed when serializing, and were not properly loaded by `from_pretrained`.",
                     )
 
     def test_load_save_without_tied_weights(self):
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            model = model_class(config)
+            try:
+                config.get_text_config().tie_word_embeddings = False
+            except Exception as _:
+                pass
+
+            # config.tie_encoder_decoder = False
+            model = model_class(config)  # we init the model without tie
+            # if this test fails later on, it means init tied the weights
             with tempfile.TemporaryDirectory() as d:
                 model.save_pretrained(d)
+                with safe_open(f"{d}/model.safetensors", framework="pt") as f:
+                    serialized_keys = f.keys()
 
-                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
-                # Checking the state dicts are correct
-                reloaded_state = model_reloaded.state_dict()
-                for k, v in model.state_dict().items():
-                    self.assertIn(k, reloaded_state, f"Key {k} is missing from reloaded")
-                    torch.testing.assert_close(
-                        v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
-                    )
+                    model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+                    # Checking the state dicts are correct
+
+                    reloaded_state = model_reloaded.state_dict()
+                    for k, v in model.state_dict().items():
+                        with self.subTest(k):
+                            torch.testing.assert_close(
+                                v,
+                                reloaded_state[k],
+                                msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}. Key {k} was serialized: {k in serialized_keys}. If `False`, this means it was probably aliased and safetensors removed it. If `True` it means `_init_weights` overwrote that key",
+                            )
+
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(
+                    infos["missing_keys"],
+                    set(),
+                    "Given that the loaded weights are the same, the issue is in `tie_weights`: it tied these keys and removed them from serialization. But because of tiying (hardcoded or not) the previous check is fine.\
+                        This can happen if `save_pretrained` remove the targets and not the keys from serialiazation, or you hardcoded `self.xxx = yyy` thus forcing to always tie -> they are removed from serialization.",
+                )
 
     def test_tied_weights_keys(self):
         original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             copied_config = copy.deepcopy(original_config)
             copied_config.get_text_config().tie_word_embeddings = True
+            copied_config.tie_word_embeddings = True
             model_tied = model_class(copied_config)
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
@@ -1983,7 +2312,10 @@ class ModelTesterMixin:
             # Detect we get a hit for each key
             for key in tied_weight_keys:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
-                self.assertTrue(is_tied_key, f"{key} is not a tied weight key for {model_class}.")
+                self.assertTrue(
+                    is_tied_key,
+                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}",
+                )
 
             # Removed tied weights found from tied params -> there should only be one left after
             for key in tied_weight_keys:
@@ -2017,7 +2349,7 @@ class ModelTesterMixin:
                 missing_keys = set(infos["missing_keys"])
 
                 extra_missing = missing_keys - param_names
-                # Remove tied weights from extra missing: they are normally not warned as missing if their tied
+                # IMPORTANT Remove tied weights from extra missing: they are normally not warned as missing if their tied
                 # counterpart is present but here there are no weights at all so we do get the warning.
                 ptrs = collections.defaultdict(list)
                 for name, tensor in model_reloaded.state_dict().items():
@@ -2227,6 +2559,7 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
+            torch.cuda.synchronize()  # otherwise the transfer might not be complete
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
@@ -2263,20 +2596,25 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir, safe_serialization=False)
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
 
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, use_safetensors=False
+                    )
 
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
                 new_model = model_class.from_pretrained(
-                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir, use_safetensors=False
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
@@ -2307,7 +2645,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2315,7 +2653,9 @@ class ModelTesterMixin:
                 max_memory = {0: max_size, "cpu": max_size}
 
                 # This doesn't error out as it's in safetensors and doesn't need an offload folder
-                new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
                 torch.manual_seed(0)
@@ -2346,7 +2686,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2389,7 +2729,7 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             base_output = model(**inputs_dict_class)
 
-            model_size = compute_module_sizes(model)[""]
+            model_size = compute_module_sizes(model)[0][""]
             # We test several splits of sizes to make sure it works.
             max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2472,7 +2812,6 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
-
                     # Fails when we don't set ignore_mismatched_sizes=True
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
@@ -2485,7 +2824,7 @@ class ModelTesterMixin:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
@@ -2495,7 +2834,7 @@ class ModelTesterMixin:
                         new_model_without_prefix = AutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
                     input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     if self.is_encoder_decoder:
@@ -2536,7 +2875,7 @@ class ModelTesterMixin:
 
                     with CaptureLogger(logger) as cl:
                         new_model = model_class.from_pretrained(tmp_dir, num_labels=42, ignore_mismatched_sizes=True)
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("Reinit due to size mismatch", cl.out)
 
                     # Find the name of the module with the mismatched size
                     top_linear_modules = [
@@ -2570,18 +2909,21 @@ class ModelTesterMixin:
                         ]
                     # Usually we have only 1, but swiftformer and deit have 2 Linear layers using `num_labels`
                     mismatched_modules = [name for name, module in top_linear_modules if module.out_features == 42]
-
-                    for (k1, v1), (k2, v2) in zip(new_model.named_parameters(), model.named_parameters()):
-                        # Sanity check: params must have all the same name
-                        self.assertEqual(k1, k2)
+                    old = dict(model.named_parameters())
+                    new = dict(new_model.named_parameters())
+                    assert not set(old.keys()) - set(new.keys())
+                    for k1 in new.keys():
+                        k2 = k1
+                        v1 = old[k1]
+                        v2 = new[k2]
                         # Each param except the mismatched ones must be exactly similar
                         if not any(k1.startswith(mismatched_module) for mismatched_module in mismatched_modules):
-                            self.assertTrue((v1 == v2).all())
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
                         # Check that the dims are indeed mismatched between old and new models
                         else:
                             # The old model should have `num_labels=3` (here it's the first dim of shape, as Linear layers
                             # are transposed)
-                            self.assertEqual(v2.shape[0], 3)
+                            self.assertEqual(v2.shape[0], 42)
                             # Make sure the mean of the new Linear layer is correctly centered around 0 (we cannot use
                             # a lower value for the check as some models hardcode a std of 0.02 instead of using the
                             # config, which we set very small with `config_no_init`)
@@ -2766,7 +3108,7 @@ class ModelTesterMixin:
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -2774,7 +3116,7 @@ class ModelTesterMixin:
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()
@@ -2918,13 +3260,18 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
+                model_sdpa = model_sdpa.base_model
 
                 vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
                 language_model_names = {"language_model", "model", "text_model"}
-                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)][0]
-                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)][0]
-
+                vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
+                vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
+                language_model_name = [name for name in language_model_names if hasattr(model_sdpa, name)]
+                language_model_name = language_model_name[0] if len(language_model_name) > 0 else None
+                if language_model_name is None or vision_model_name is None:
+                    self.skipTest(
+                        reason="Model does not have both vision and language sub-models, cannot test composite SDPA dispatch"
+                    )
                 vision_model_sdpa = getattr(model_sdpa, vision_model_name)
                 language_model_sdpa = getattr(model_sdpa, language_model_name)
                 text_attn = "sdpa" if language_model_sdpa._supports_sdpa else "eager"
@@ -2936,7 +3283,7 @@ class ModelTesterMixin:
                 self.assertTrue(vision_model_sdpa.config._attn_implementation == vision_attn)
 
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
+                model_eager = model_eager.base_model
                 self.assertTrue(getattr(model_eager, language_model_name).config._attn_implementation == "eager")
                 self.assertTrue(getattr(model_eager, vision_model_name).config._attn_implementation == "eager")
 
@@ -3118,6 +3465,20 @@ class ModelTesterMixin:
             self.skipTest(f"bfloat16 not supported on {torch_device} (on the specific device currently used)")
 
         dtype = torch.bfloat16
+
+        def _expected_attn_implementations(attention_implementation: str) -> set[str]:
+            # Allow kernels fallbacks for flash attention tests.
+            requested = attention_implementation
+            base = requested.removeprefix("paged|")
+            prefix = "paged|" if requested.startswith("paged|") else ""
+
+            expected = {requested}
+            if base in FLASH_ATTN_KERNEL_FALLBACK:
+                expected.add(f"{prefix}{FLASH_ATTN_KERNEL_FALLBACK[base]}")
+            return expected
+
+        expected_attn_implementations = _expected_attn_implementations(attn_implementation)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3150,7 +3511,7 @@ class ModelTesterMixin:
                     for key in model_fa.config:
                         if isinstance(getattr(model_fa.config, key), PreTrainedConfig):
                             sub_config = getattr(model_fa.config, key)
-                            self.assertTrue(sub_config._attn_implementation == attn_implementation)
+                            self.assertIn(sub_config._attn_implementation, expected_attn_implementations)
 
                     has_fa = False
                     for name, submodule in model_fa.named_modules():
@@ -3158,7 +3519,7 @@ class ModelTesterMixin:
                         if (
                             "Attention" in class_name
                             and getattr(submodule, "config", None)
-                            and submodule.config._attn_implementation == attn_implementation
+                            and submodule.config._attn_implementation in expected_attn_implementations
                         ):
                             has_fa = True
                             break
@@ -3166,7 +3527,7 @@ class ModelTesterMixin:
                         raise ValueError(f"The {attn_implementation} model should have {attn_implementation} layers")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_2")
@@ -3178,7 +3539,7 @@ class ModelTesterMixin:
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @mark.flash_attn_test
     @slow
@@ -3191,6 +3552,11 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flash attention")
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
@@ -3234,7 +3600,7 @@ class ModelTesterMixin:
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     @slow
@@ -3251,13 +3617,18 @@ class ModelTesterMixin:
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
+        if torch_device == "xpu":
+            self.skipTest("XPU FA2 currently does not support backward.")
+
         torch.compiler.reset()
         dtype = torch.float16
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         cls = self._torch_compile_train_cls  # e.g. LlamaFroCausalLM
-        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
+        if not cls._supports_flash_attn:
+            self.skipTest(f"{cls.__name__} does not support Flash Attention 2")
 
+        model = cls._from_config(config, attn_implementation="flash_attention_2").to(device=torch_device, dtype=dtype)
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "labels": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -3285,6 +3656,12 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} does not support {attn_implementation}")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)  # let's construct it here to see if any submodels can't support flash attn
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
+
             # TODO: to change it in the future with other relevant auto classes
             fa_model = model_class._from_config(
                 config, attn_implementation=attn_implementation, dtype=torch.bfloat16
@@ -3321,7 +3698,7 @@ class ModelTesterMixin:
                 self.assertTrue(model_from_pretrained.config._attn_implementation != attn_implementation)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_from_config(self):
@@ -3538,7 +3915,10 @@ class ModelTesterMixin:
                 getattr(config, "hidden_size", None) is not None
                 and getattr(config, "num_attention_heads", None) is not None
             ):
-                head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
+                # For some models, num_attention_heads is a list of ints: we take the max to maximize the multiplier
+                num_attn_heads = getattr(config, "num_attention_heads")
+                num_attn_heads = num_attn_heads if isinstance(num_attn_heads, int) else max(num_attn_heads)
+                head_dim = head_dim if head_dim is not None else config.hidden_size // num_attn_heads
                 config.hidden_size *= max(requested_dim // head_dim, 1)
 
             if (
@@ -3890,15 +4270,214 @@ class ModelTesterMixin:
                 for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
                     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
                     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+
                     for (k1, v1), (k2, v2) in zip(
                         model_torch_dtype.named_parameters(), model_dtype.named_parameters()
                     ):
-                        self.assertEqual(k1, k2)
-                        self.assertEqual(v1.dtype, v2.dtype)
-                        self.assertTrue((v1 == v2).all())
+                        with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
+                            self.assertEqual(k1, k2)
+                            self.assertEqual(v1.dtype, v2.dtype)
+                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+
+    def test_tp_plan_matches_params(self):
+        """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
+        with regexes)"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # If none of the config and subconfigs have a tp_plan, then skip (otherwise we should make sure to respect the plan)
+        if config.base_model_tp_plan is None and all(
+            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
+        ):
+            self.skipTest("Model does not have a TP plan.")
+
+        # Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have each one
+        # in order to test the whole tp plan
+        config_to_set = config.get_text_config()
+        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config_to_set.mlp_only_layers = [0]  # same but for qwens
+
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            param_names = {name for name, _ in model.named_parameters()} | {name for name, _ in model.named_buffers()}
+            module_names = {name for name, _ in model.named_modules()}
+            tp_plan = model.tp_plan
+            # Make sure the plan is not empty
+            self.assertTrue(
+                len(tp_plan) > 0,
+                f"No TP-plan found for class {model_class.__name__} even though the associated config has one",
+            )
+            pattern_usage = {}
+            for pattern in tp_plan:
+                # Check if this given pattern matches any param or module (the value attributed to the pattern does not matter)
+                pattern_usage[pattern] = any(
+                    _get_parameter_tp_plan(param, {pattern: ""}, is_weight=True) is not None for param in param_names
+                ) or any(
+                    _get_parameter_tp_plan(module, {pattern: ""}, is_weight=False) is not None
+                    for module in module_names
+                )
+
+            unused_entries = {k for k, v in pattern_usage.items() if not v}
+            self.assertTrue(
+                len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
+            )
+
+    def test_reverse_loading_mapping(self):
+        """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
+        mapping.
+        Note that this test would be better if we could start from the serialized keys, and check that the model
+        keys correspond to the weight converions. However, when instantiating a model, it already has the "target"
+        keys (or modified keys after mapping) of the conversion mapping, so we have to do it the other way, i.e.
+        reverse the conversion and then check that those converted keys match correctly the conversions.
+
+        However, all the checks performed here should ensure everything is going as it should.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
+        # lest one MoE layer here to check the mapping
+        config_to_set = config.get_text_config(decoder=True)
+        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
+        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
+        config_to_set.mlp_only_layers = [0]  # same but for qwens
+        config_to_set.num_dense_layers = 1  # lfm2_moe
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                # Skip if no conversions
+                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                if len(conversions) == 0:
+                    self.skipTest("No conversion found for this model")
+
+                # Find the model keys, so the targets according to the conversions
+                model_keys = list(model.state_dict().keys())
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Serialize with reverse mapping
+                    model.save_pretrained(tmpdirname)
+                    state_dict = load_file(os.path.join(tmpdirname, "model.safetensors"))
+                    # Get all the serialized keys that we just saved according to the reverse mapping
+                    serialized_keys = list(state_dict.keys())
+
+                # They should be different, otherwise we did not perform any mapping
+                self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+
+                # Check that for each conversion entry, we at least map to one key
+                for conversion in conversions:
+                    for source_pattern in conversion.source_patterns:
+                        # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
+                        if isinstance(conversion, WeightRenaming):
+                            if any(
+                                re.search(conversion.target_patterns[0], k) for k in model.all_tied_weights_keys.keys()
+                            ):
+                                continue
+                        num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
+                        self.assertTrue(
+                            num_matches > 0,
+                            f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
+                            "This indicates whether that the pattern is not properly written, ot that it could not be reversed correctly",
+                        )
+
+                # If everything is still good at this point, let's test that we perform the same operations both when
+                # reverting ops from `from_pretrained` and from `__init__`
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # The model was instantiated from __init__ before being saved
+                    model.save_pretrained(tmpdirname)
+                    state_dict_saved_from_init = load_file(os.path.join(tmpdirname, "model.safetensors"))
+
+                    # Now reload it
+                    model_reloaded = model_class.from_pretrained(tmpdirname)
+
+                    # Make sure both loaded state_dict are identical
+                    self.assertTrue(compare_state_dicts(model_reloaded.state_dict(), model.state_dict()))
+
+                    # The model was instantiated from `from_pretrained` before being saved
+                    model_reloaded.save_pretrained(tmpdirname)
+                    state_dict_saved_from_pretrained = load_file(os.path.join(tmpdirname, "model.safetensors"))
+
+                    # Make sure both saved state_dict are identical
+                    self.assertTrue(compare_state_dicts(state_dict_saved_from_init, state_dict_saved_from_pretrained))
+
+    def test_can_load_from_already_mapped_keys(self):
+        """Test that we can correctly reload a model if we chose `save_original_format=False` in `save_pretrained`,
+        i.e. we do not reapply weight conversions when reloading if it was saved correctly already.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+
+                # Skip if no conversions
+                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                if len(conversions) == 0:
+                    self.skipTest("No conversion found for this model")
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Serialize without reverting the mapping
+                    model.save_pretrained(tmpdirname, save_original_format=False)
+                    model_reloaded = model_class.from_pretrained(tmpdirname)
+                    # Make sure both saved state_dict are identical
+                    self.assertTrue(compare_state_dicts(model.state_dict(), model_reloaded.state_dict()))
 
 
 global_rng = random.Random()
+
+
+def compare_state_dicts(state_dict1, state_dict2) -> bool:
+    """Make sure 2 state dicts are the exact same"""
+    # Make sure the keys are the exact same
+    if sorted(state_dict1.keys()) != sorted(state_dict2.keys()):
+        raise ValueError("The keys of both state dict are not the same")
+
+    for k, v1 in state_dict1.items():
+        v2 = state_dict2[k]
+        try:
+            torch.testing.assert_close(v1, v2)
+        except Exception as e:
+            raise AssertionError(f"For key {k}: {e}")
+
+    return True
+
+
+@contextmanager
+def seeded_weight_init():
+    """Add a seed before weight initialization, to get the same random weights deterministically"""
+    try:
+        # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
+        # `_init_weights` so that it can add the seed for composite models as well)
+        original_initialize_weights = PreTrainedModel._initialize_weights
+
+        def seeded_initialize_weights(self, module):
+            set_seed(0)
+            original_initialize_weights(self, module)
+
+        PreTrainedModel._initialize_weights = seeded_initialize_weights
+
+        yield
+    finally:
+        # Restore it
+        PreTrainedModel._initialize_weights = original_initialize_weights
+
+
+@contextmanager
+def skip_weight_init():
+    """Skip weight initialization by `_init_weights` altogether."""
+    try:
+        original_initialize_weights = PreTrainedModel._initialize_weights
+
+        # Just do nothing instead
+        def skip_initialize_weights(self, module):
+            pass
+
+        PreTrainedModel._initialize_weights = skip_initialize_weights
+
+        yield
+    finally:
+        # Restore it
+        PreTrainedModel._initialize_weights = original_initialize_weights
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

@@ -20,6 +20,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -58,6 +59,12 @@ class DiaPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     main_input_name = "input_ids"
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DiaMultiChannelEmbedding):
+            offsets = torch.arange(self.config.num_channels, dtype=torch.long) * self.config.vocab_size
+            init.copy_(module.offsets, offsets)
 
 
 class DiaMultiChannelEmbedding(nn.Module):
@@ -241,6 +248,8 @@ class DiaEncoder(DiaPreTrainedModel):
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
 
+        self.post_init()
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -314,7 +323,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         self_attn_cache = past_key_values
@@ -367,6 +375,8 @@ class DiaDecoder(DiaPreTrainedModel):
         )
         self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_emb = DiaRotaryEmbedding(config=config)
+
+        self.post_init()
 
     @auto_docstring
     @can_return_tuple
@@ -477,9 +487,6 @@ class DiaModel(DiaPreTrainedModel):
         self.encoder = DiaEncoder(config.encoder_config)
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     @can_return_tuple
@@ -600,7 +607,7 @@ class DiaModel(DiaPreTrainedModel):
 )
 class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     base_model_prefix = "model"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config: DiaConfig):
         super().__init__(config)
@@ -616,12 +623,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     @auto_docstring
     @can_return_tuple

@@ -336,6 +336,22 @@ def scale_bbox_to_transformed_image(
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        """
+        Override for BC. Fuyu uses TokenizersBackend and requires token_type_ids to be removed from model_input_names
+        because Fuyu uses mm_token_type_ids instead for multimodal token identification.    `
+        """
+        from ...tokenization_utils_tokenizers import TokenizersBackend
+
+        tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # Remove token_type_ids as Fuyu uses mm_token_type_ids instead
+        if "token_type_ids" in tokenizer.model_input_names:
+            tokenizer.model_input_names.remove("token_type_ids")
+        return tokenizer
+
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor
@@ -475,14 +491,32 @@ class FuyuProcessor(ProcessorMixin):
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         """
-        Returns:
-            [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
+        <<<<<<< HEAD
+        =======
+                Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+                and `kwargs` arguments to TokenizersBackend's [`~TokenizersBackend.__call__`] if `text` is not `None` to
+                encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
+                FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
+                of the above two methods for more information.
 
-            - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
-            - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
-              `return_attention_mask=True`.
+                Args:
+                    images (`PIL.Image.Image`, `list[PIL.Image.Image]`):
+                        The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                        tensor. Both channels-first and channels-last formats are supported.
+                    text (`str`, `list[str]`):
+                        The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                        (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                        `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+
+        >>>>>>> upstream/main
+                Returns:
+                    [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
+
+                    - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
+                    - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
+                    - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
+                    - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
+                      `return_attention_mask=True`.
         """
         requires_backends(self, ["torch"])
 

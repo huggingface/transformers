@@ -60,7 +60,7 @@ class UdopProcessor(ProcessorMixin):
     [`UdopProcessor`] offers all the functionalities you need to prepare data for the model.
 
     It first uses [`LayoutLMv3ImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
-    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`],
+    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`],
     which turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).

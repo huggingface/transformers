@@ -35,13 +35,6 @@ if is_vision_available():
         FRAME_TIMESTAMP_MESSAGE,
     )
 
-if is_vision_available():
-    from .video_processing_smolvlm import (
-        DEFAULT_MEDIA_OUTTRO,
-        DEFAULT_VIDEO_INTRO,
-        FRAME_TIMESTAMP_MESSAGE,
-    )
-
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
@@ -284,7 +277,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
             # If user has not requested video metadata, pop it. By default metadata
             # is always returned to expand video tokens correctly
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 vision_inputs.pop("video_metadata")
             inputs.update(vision_inputs)
 

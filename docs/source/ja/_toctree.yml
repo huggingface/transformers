@@ -252,8 +252,6 @@
         title: Blenderbot Small
       - local: model_doc/bloom
         title: BLOOM
-      - local: model_doc/bort
-        title: BORT
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert
@@ -297,8 +295,6 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
-      - local: model_doc/deta
-        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat

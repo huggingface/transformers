@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
@@ -249,40 +250,8 @@ class Swin2SRSelfAttention(nn.Module):
             nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
         )
 
-        # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
-        relative_coords_table = (
-            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
-            .permute(1, 2, 0)
-            .contiguous()
-            .unsqueeze(0)
-        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
-        if pretrained_window_size[0] > 0:
-            relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        elif window_size > 1:
-            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
-        relative_coords_table *= 8  # normalize to -8, 8
-        relative_coords_table = (
-            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
-        )
-        # set to same dtype as mlp weight
-        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
+        relative_coords_table, relative_position_index = self.create_coords_table_and_index()
         self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
         self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -357,6 +326,43 @@ class Swin2SRSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_coords_table_and_index(self):
+        # get relative_coords_table
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
+        relative_coords_table = (
+            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            .permute(1, 2, 0)
+            .contiguous()
+            .unsqueeze(0)
+        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
+        if self.pretrained_window_size[0] > 0:
+            relative_coords_table[:, :, :, 0] /= self.pretrained_window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= self.pretrained_window_size[1] - 1
+        elif self.window_size[0] > 1:
+            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
+        relative_coords_table *= 8  # normalize to -8, 8
+        relative_coords_table = (
+            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+        )
+        # set to same dtype as mlp weight
+        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
+
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+
+        return relative_coords_table, relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
@@ -688,18 +694,30 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     config: Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, Swin2SRSelfAttention):
+            init.constant_(module.logit_scale, math.log(10))
+            relative_coords_table, relative_position_index = module.create_coords_table_and_index()
+            init.copy_(module.relative_coords_table, relative_coords_table)
+            init.copy_(module.relative_position_index, relative_position_index)
+        elif isinstance(module, Swin2SRModel):
+            if module.config.num_channels == 3 and module.config.num_channels_out == 3:
+                mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
+            else:
+                mean = torch.zeros(1, 1, 1, 1)
+            init.copy_(module.mean, mean)
 
 
 @auto_docstring
@@ -752,6 +770,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -970,6 +989,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageSuperResolutionOutput]:
         r"""
         Example:

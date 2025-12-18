@@ -80,7 +80,9 @@ class StackCompressedModelTest(unittest.TestCase):
                     if comp_decomp_obj is not None and hasattr(submodule, "weight"):
                         if "sparse-only" in uncompressed_model:
                             self.assertTrue(
-                                torch.equal(submodule.weight, comp_decomp_obj.weight),
+                                torch.equal(
+                                    submodule.weight.to(torch_device), comp_decomp_obj.weight.to(torch_device)
+                                ),
                                 f"Weight mismatch for module '{name}' in sparse-only model.",
                             )
                         else:
@@ -155,8 +157,8 @@ class StackCompressedModelTest(unittest.TestCase):
 @require_compressed_tensors
 @require_torch
 class RunCompressedTest(unittest.TestCase):
-    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed-hf-quantizer"
-    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed-hf-quantizer"
+    tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
+    tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
 
     prompt = "Paris is the capital of which country?"
 

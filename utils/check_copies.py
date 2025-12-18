@@ -43,7 +43,10 @@ import re
 import subprocess
 from collections import OrderedDict
 
-from transformers.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -97,7 +100,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ja.md": {
-        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "start_prompt": "🤗 Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
@@ -672,8 +675,8 @@ def is_copy_consistent(
                 object_name, base_path, buffer=buffer
             )
         except Exception as exc:
-            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
-            raise
+            logger.error(f"[31mError while trying to find source code for {filename}.\n\n" + str(exc) + "[0")
+            return []
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -807,8 +810,11 @@ def is_copy_consistent(
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
         if diff_index is not None:
-            # switch to the index in the original `observed_code` (i.e. before removing empty lines)
-            diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            try:
+                # switch to the index in the original `observed_code` (i.e. before removing empty lines)
+                diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            except KeyError:
+                raise RuntimeError(f"{filename}:L{start_index}: Error in the format")
             diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 # `theoretical_code_to_write` is a single string but may have several lines.

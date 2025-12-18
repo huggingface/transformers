@@ -52,8 +52,6 @@ class Kosmos2_5Processor(ProcessorMixin):
         num_image_tokens (`int`, *optional*, defaults to 2048):
             Number of image tokens used as a placeholder.
         """
-
-    def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         self.image_start_token = tokenizer.boi_token  # "<image>" : fixed token for the start of image
         self.image_end_token = tokenizer.eoi_token  # "</image>" : fixed token for the end of image
         self.image_token = tokenizer.image_token  # "<s>" : within a <image> ... </image> pair, these <s> tokens indicate they are positions reserved for an image
