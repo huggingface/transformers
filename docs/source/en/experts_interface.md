@@ -71,7 +71,6 @@ Set the experts backend globally with an empty key.
 
 ```py
 model = AutoModelForCausalLM.from_pretrained(
-
     "Qwen/Qwen1.5-MoE-A2.7B",
     experts_implementation={"": "batched_mm"},
 )
