@@ -29,8 +29,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...masking_utils import create_bidirectional_mask
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1856,8 +1855,17 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         # expand encoder attention mask
@@ -1901,7 +1909,6 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
                 cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 

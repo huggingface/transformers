@@ -1051,7 +1051,6 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
