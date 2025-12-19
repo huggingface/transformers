@@ -121,6 +121,7 @@ if TYPE_CHECKING:
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
+    from .eomt import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
