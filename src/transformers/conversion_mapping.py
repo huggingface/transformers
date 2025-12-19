@@ -18,7 +18,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
+from .core_model_loading import (
+    Chunk,
+    Concatenate,
+    ErnieFuseAndSplitTextVisionExperts,
+    MergeModulelist,
+    Transpose,
+    WeightConverter,
+    WeightRenaming,
+)
 from .utils import is_torch_available
 
 
@@ -103,6 +111,57 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="feed_forward.experts.*.w2.weight",
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "ernie4_5_vl_moe": [
+            # vision
+            WeightRenaming("vision_model", "vision_tower"),
+            # resampler
+            WeightRenaming("spatial_linear.0", "spatial_linear.fc1"),
+            WeightRenaming("spatial_linear.2", "spatial_linear.fc2"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("temporal_linear.0", "temporal_linear.fc1"),
+            WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
+            # language model
+            WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
+            WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
+            WeightConverter(
+                source_patterns="mlp.gate.weight_1",
+                target_patterns="mlp.vision_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.gate.weight",
+                target_patterns="mlp.text_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.moe_statics.e_score_correction_bias"],
+                target_patterns=[
+                    "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["experts.*.down_proj.weight"],
+                target_patterns=[
+                    "text_moe.experts.down_proj",
+                    "vision_moe.experts.down_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.gate_proj.weight",
+                    "experts.*.up_proj.weight",
+                ],
+                target_patterns=[
+                    "text_moe.experts.gate_up_proj",
+                    "vision_moe.experts.gate_up_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
         "jamba": [
@@ -229,6 +288,7 @@ VLMS = [
     "sam3_tracker",
     "sam3_tracker_video",
     "paddleocrvl",
+    "ernie4_5_vl_moe",
 ]
 
 

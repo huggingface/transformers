@@ -128,6 +128,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("ernie4_5", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("ernie4_5_moe", "LlamaTokenizer" if is_tokenizers_available() else None),
+        ("ernie4_5_vl_moe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
         ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("falcon", "TokenizersBackend" if is_tokenizers_available() else None),

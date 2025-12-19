@@ -212,6 +212,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
     ]
@@ -425,6 +426,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
 ]
 
