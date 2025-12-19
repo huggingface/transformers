@@ -426,6 +426,9 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
 
 
 class LasrPreTrainedModel(ParakeetPreTrainedModel):
+    # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
+    _supports_flex_attn = False
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
 

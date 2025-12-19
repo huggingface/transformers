@@ -421,7 +421,8 @@ class LasrPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["LasrEncoderBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
+    _supports_flex_attn = False
 
     # TODO: @eustlb, add support when flash attention supports custom attention bias
     _supports_flash_attn = False
