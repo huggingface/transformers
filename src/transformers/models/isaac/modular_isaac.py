@@ -939,6 +939,24 @@ class IsaacVisionTransformer(nn.Module):
         return hidden_states
 
 
+class IsaacMultiModalProjector(nn.Module):
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        self.vision_hidden_size = config.vision_config.hidden_size * (
+            config.vision_config.pixel_shuffle_scale_factor**2
+        )
+        self.backbone_hidden_size = config.hidden_size
+        self.linear_1 = nn.Linear(self.vision_hidden_size, 4 * self.vision_hidden_size, bias=False)
+        self.silu = nn.SiLU()
+        self.linear_2 = nn.Linear(4 * self.vision_hidden_size, self.backbone_hidden_size, bias=False)
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.silu(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 class IsaacVisionEmbedding(nn.Module):
     """Vision embedding wrapper exposing tower and projector."""
 
@@ -947,14 +965,9 @@ class IsaacVisionEmbedding(nn.Module):
     def __init__(self, config: IsaacConfig):
         super().__init__()
         vision_cfg = config.vision_config
-        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
 
         self.vision_tower = IsaacVisionTransformer(vision_cfg)
-        self.multimodal_projector = nn.Sequential(
-            nn.Linear(hidden_dim, 4 * hidden_dim, bias=False),
-            nn.SiLU(),
-            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
-        )
+        self.multimodal_projector = IsaacMultiModalProjector(config)
 
     def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         hidden_states = self.vision_tower(vision_tokens)
