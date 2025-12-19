@@ -4471,6 +4471,10 @@ class Trainer:
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
+            # Stop evaluation early if max_eval_steps is set — added as part of issue #31561 fix by @priyankaz-ml
+            if self.args.max_eval_steps is not None and step >= self.args.max_eval_steps:
+             \ break
+
             # Update the observed num examples
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
