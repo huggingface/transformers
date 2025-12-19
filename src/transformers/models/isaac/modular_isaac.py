@@ -458,7 +458,12 @@ def create_document_attention_mask(
 
 
 class IsaacVisionEmbeddings(nn.Module):
-    """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences."""
+    """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences.
+
+    Isaac accepts variable-resolution vision inputs as a single packed sequence with per-image
+    `token_grids`; packing/unpacking here reconstructs per-image shapes so we can resize positional
+    embeddings and build `cu_seqlens` for variable-length attention (not generic generation packing).
+    """
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
@@ -476,6 +481,8 @@ class IsaacVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
+        # Rebatch packed variable-resolution patches to resize per-image position embeddings
+        # and track lengths for varlen attention metadata.
         packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
         if packed_pixel_values is None:
             return seq_patches.new_zeros((0, self.embed_dim))
@@ -559,6 +566,17 @@ class IsaacVisionEmbeddings(nn.Module):
         seq_patches: torch.Tensor,
         spatial_shapes: torch.Tensor,
     ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+        """Rebatch a packed patch sequence using per-image grids to align embeddings.
+
+        Args:
+            seq_patches (`torch.Tensor`): Packed patches of shape `(total_patches, patch_dim)`.
+            spatial_shapes (`torch.Tensor`): Per-image patch grids of shape `(num_images, 2)` as `(H_tokens, W_tokens)`.
+
+        Returns:
+            `tuple[Optional[torch.Tensor], torch.Tensor]`: A padded batch tensor shaped
+            `(batch, max_len, patch_dim)` plus `seq_lengths` used to form `cu_seqlens` for
+            variable-length attention.
+        """
         if seq_patches.ndim != 2:
             raise ValueError("`seq_patches` is expected to be 2D (total_patches, patch_dim).")
         if spatial_shapes.ndim != 2 or spatial_shapes.size(-1) != 2:
@@ -593,6 +611,7 @@ class IsaacVisionEmbeddings(nn.Module):
         return packed_pixel_values, seq_lengths
 
     def _unpack_from_batch(self, embeddings: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor:
+        """Flatten a padded batch back to packed sequence order using `seq_lengths`."""
         output_chunks: list[torch.Tensor] = []
         for batch_idx, length in enumerate(seq_lengths.tolist()):
             if length == 0:
@@ -681,14 +700,7 @@ class IsaacVisionAttention(Siglip2Attention):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
 
-        # Align projection inputs with parameter dtype to avoid mixed-dtype matmul errors
-        out_proj_dtype = self.out_proj.weight.dtype
-        if attn_output.dtype != out_proj_dtype:
-            attn_output = attn_output.to(out_proj_dtype)
-
         attn_output = self.out_proj(attn_output)
-        if attn_output.dtype != hidden_states.dtype:
-            attn_output = attn_output.to(hidden_states.dtype)
 
         return attn_output, attn_weights
 
@@ -939,6 +951,24 @@ class IsaacVisionTransformer(nn.Module):
         return hidden_states
 
 
+class IsaacMultiModalProjector(nn.Module):
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        self.vision_hidden_size = config.vision_config.hidden_size * (
+            config.vision_config.pixel_shuffle_scale_factor**2
+        )
+        self.backbone_hidden_size = config.hidden_size
+        self.linear_1 = nn.Linear(self.vision_hidden_size, 4 * self.vision_hidden_size, bias=False)
+        self.silu = nn.SiLU()
+        self.linear_2 = nn.Linear(4 * self.vision_hidden_size, self.backbone_hidden_size, bias=False)
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.silu(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 class IsaacVisionEmbedding(nn.Module):
     """Vision embedding wrapper exposing tower and projector."""
 
@@ -947,14 +977,9 @@ class IsaacVisionEmbedding(nn.Module):
     def __init__(self, config: IsaacConfig):
         super().__init__()
         vision_cfg = config.vision_config
-        hidden_dim = vision_cfg.hidden_size * (vision_cfg.pixel_shuffle_scale_factor**2)
 
         self.vision_tower = IsaacVisionTransformer(vision_cfg)
-        self.multimodal_projector = nn.Sequential(
-            nn.Linear(hidden_dim, 4 * hidden_dim, bias=False),
-            nn.SiLU(),
-            nn.Linear(4 * hidden_dim, config.hidden_size, bias=False),
-        )
+        self.multimodal_projector = IsaacMultiModalProjector(config)
 
     def forward(self, vision_tokens: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         hidden_states = self.vision_tower(vision_tokens)
@@ -1514,14 +1539,6 @@ class IsaacModel(Qwen3PreTrainedModel):
 
     @property
     def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
-    @property
-    def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
-    @property
-    def vision_tower(self) -> nn.Module:
         return self.vision_embedding.vision_tower
 
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
