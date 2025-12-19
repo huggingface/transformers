@@ -2987,12 +2987,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        if not _init_weights or get_torch_context_manager_or_global_device() == torch.device("meta"):
-            return
-        # Initialize weights
-        self.initialize_weights()
-        # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
-        self.tie_weights(recompute_mapping=False)
+        if _init_weights:
+            # If we are using the meta device in a context, no need to actually initialize
+            if get_torch_context_manager_or_global_device() != torch.device("meta"):
+                # Initialize weights
+                self.initialize_weights()
+            # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
+            self.tie_weights(recompute_mapping=False)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
