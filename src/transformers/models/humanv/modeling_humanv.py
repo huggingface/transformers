@@ -1,18 +1,12 @@
-# coding=utf-8
-# Copyright 2025 The HumanV Team. All rights reserved.
-
-from typing import Optional, List, Union, Tuple
+from typing import Optional, Tuple, List, Union
 import math
-
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_humanv import HumanVConfig
@@ -102,7 +96,6 @@ class HumanVAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         
-        # Qwen3-Style: Norm on Heads for Stability
         self.q_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -117,12 +110,10 @@ class HumanVAttention(nn.Module):
         
         bsz, q_len, _ = hidden_states.size()
 
-        # 1. Projections
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # 2. Reshape & Norm (Qwen3 Style)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -130,64 +121,43 @@ class HumanVAttention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        # 3. RoPE
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        # 4. KV Cache Update
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # 5. Repeat KV for GQA
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # 6. Attention Scores
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
-        # =================================================================
-        # 7. MASKING LOGIC (The Anti-Leakage & Sparse Fix)
-        # =================================================================
-        # محاسبه ابعاد فعلی (با توجه به کش)
         curr_seq_len = query_states.shape[-2]
         kv_seq_len = key_states.shape[-2]
         
-        # ساخت ماسک Causal پایه (جلوگیری از دیدن آینده)
-        # 1 = ماسک (نادیده بگیر)، 0 = نگه دار
         causal_mask = torch.triu(
             torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool), 
             diagonal=kv_seq_len - curr_seq_len + 1
         )
         
-        # اعمال ماسک Sparse (Window) اگر لایه از نوع sparse_attention باشد
         if self.layer_type == "sparse_attention":
             window_size = self.config.sparse_window_size
-            # ماسک کردن توکن‌های خیلی قدیمی (پایین سمت چپ دور)
-            # اگر فاصله index ها بیشتر از window_size باشد، ماسک کن
-            # منطق: index_q - index_k > window -> Mask
-            # پیاده‌سازی با triu روی (diagonal=-window)
             sparse_mask = torch.tril(
                 torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool),
                 diagonal= (kv_seq_len - curr_seq_len) - window_size - 1
             )
-            # ترکیب ماسک‌ها (یا آینده است یا خیلی گذشته)
             final_mask = causal_mask | sparse_mask
         else:
             final_mask = causal_mask
 
-        # اعمال مقدار -inf
         min_dtype = torch.finfo(attn_weights.dtype).min
         attn_weights = torch.where(final_mask[None, None, :, :], torch.tensor(min_dtype, dtype=attn_weights.dtype), attn_weights)
 
-        # اعمال Padding Mask ورودی (اگر وجود دارد)
         if attention_mask is not None:
-            # مطمئن شویم ماسک ورودی هم‌اندازه است یا پخش می‌شود
             if attention_mask.size() != (bsz, 1, curr_seq_len, kv_seq_len):
-                 # هندل کردن ماسک‌های 2 بعدی
                  pass 
             attn_weights = attn_weights + attention_mask
 
-        # 8. Softmax & Output
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         
@@ -284,7 +254,6 @@ class HumanVModel(HumanVPreTrainedModel):
 
         bsz, seq_len = inputs_embeds.shape[:2]
         
-        # Position IDs creation
         if past_key_values is not None:
             past_length = past_key_values.get_seq_length()
         else:
@@ -293,16 +262,12 @@ class HumanVModel(HumanVPreTrainedModel):
         position_ids = torch.arange(past_length, past_length + seq_len, dtype=torch.long, device=inputs_embeds.device)
         position_ids = position_ids.unsqueeze(0).view(-1, seq_len)
         
-        # RoPE embeddings
         cos, sin = self.rotary_emb(inputs_embeds, position_ids)
         position_embeddings = (cos, sin)
 
-        # Padding Mask Handling
         if attention_mask is not None:
             if attention_mask.dim() == 2:
-                # [Batch, Seq] -> [Batch, 1, 1, Seq]
                 attention_mask = attention_mask[:, None, None, :]
-            # تبدیل 0 به -inf برای پدینگ
             attention_mask = (1.0 - attention_mask) * torch.finfo(inputs_embeds.dtype).min
 
         hidden_states = inputs_embeds
@@ -394,7 +359,6 @@ class HumanVForSequenceClassification(HumanVPreTrainedModel):
     def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         outputs = self.model(input_ids, attention_mask=attention_mask, **kwargs)
         hidden_states = outputs.last_hidden_state
-        # Use last token for classification (padding handling required in real usage)
         logits = self.score(hidden_states[:, -1, :])
         
         loss = None
@@ -404,7 +368,6 @@ class HumanVForSequenceClassification(HumanVPreTrainedModel):
             
         return loss, logits
 
-# Placeholder classes for compatibility
 class HumanVForTokenClassification(HumanVPreTrainedModel): pass
 class HumanVForQuestionAnswering(HumanVPreTrainedModel): pass
 
