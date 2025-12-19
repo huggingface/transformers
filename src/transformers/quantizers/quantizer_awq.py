@@ -43,18 +43,17 @@ class AwqQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-    def validate_environment(self, device_map, **kwargs):
+    def validate_environment(self, **kwargs):
         if not is_gptqmodel_available():
-            raise ImportError("Loading an AWQ quantized model requires gptqmodel library (`pip install gptqmodel`)")
+            raise ImportError(
+                "Loading an AWQ quantized model requires gptqmodel. Please install it with `pip install gptqmodel`"
+            )
 
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
     def update_dtype(self, dtype):
-        if dtype is None:
-            dtype = torch.float16
-            logger.info("Loading the model in `torch.float16`. To overwrite it, set `dtype` manually.")
-        elif dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+        if dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
             logger.warning(
                 "`torch.bfloat16` is not supported for AWQ CUDA/XPU kernels yet. Casting to `torch.float16`."
             )
@@ -63,16 +62,14 @@ class AwqQuantizer(HfQuantizer):
             logger.warning("We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ.")
         return dtype
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
 
-        model, has_been_replaced = replace_with_awq_linear(
+        model = replace_with_awq_linear(
             model,
             quantization_config=self.quantization_config,
             modules_to_not_convert=self.modules_to_not_convert,
@@ -81,18 +78,12 @@ class AwqQuantizer(HfQuantizer):
 
         model = replace_quantization_scales(model, model.config.model_type)
 
-        if not has_been_replaced:
-            logger.warning(
-                "You are loading an AWQ model but no linear modules were found in your model."
-                " Please double check your model architecture, or submit an issue on github if you think this is a bug."
-            )
-
     def _process_model_after_weight_loading(self, model, **kwargs):
         from gptqmodel.utils.model import hf_gptqmodel_post_init
 
         hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
             logger.warning("You cannot save an AWQ model that uses Exllama backend!")
             return False

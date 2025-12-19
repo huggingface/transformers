@@ -80,7 +80,7 @@ class Dots1RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -315,7 +315,7 @@ class Dots1NaiveMoe(nn.Module):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
+        self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
@@ -476,6 +476,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Dots1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Dots1NaiveMoe):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)

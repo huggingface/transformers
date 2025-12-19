@@ -84,7 +84,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -809,6 +809,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
+        self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
         hidden_states = self.encoder(pixel_values)

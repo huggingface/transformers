@@ -155,6 +155,26 @@ def is_torch_dtype(x):
     return isinstance(x, torch.dtype)
 
 
+def _is_tensor_or_array_like(value):
+    """
+    Check if a value is array-like (includes ragged arrays)
+    """
+    if is_numpy_array(value):
+        return True
+    if is_torch_tensor(value):
+        return True
+    if isinstance(value, (int, float, bool, np.number)):
+        return True
+
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            # consider empty list or nested list as array-like
+            return True
+        return _is_tensor_or_array_like(value[0])
+
+    return False
+
+
 def maybe_autocast(
     device_type: str,
     dtype: Optional["_dtype"] = None,
@@ -703,6 +723,8 @@ class TransformersKwargs(TypedDict, total=False):
             Maximum sequence length for query state.
         max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
+        position_ids (`torch.LongTensor`, *optional*)
+            Indices of positions of each input sequence tokens.
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
@@ -713,6 +735,7 @@ class TransformersKwargs(TypedDict, total=False):
     cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: int | None
     max_length_k: int | None
+    position_ids: Optional["torch.LongTensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:

@@ -435,7 +435,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientnet"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = []
+    _no_split_modules = ["EfficientNetBlock"]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -444,6 +444,10 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
 
 @auto_docstring

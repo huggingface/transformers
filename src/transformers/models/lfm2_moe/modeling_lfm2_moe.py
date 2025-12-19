@@ -84,7 +84,7 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -452,7 +452,6 @@ class Lfm2MoeAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -685,6 +684,9 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Lfm2MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Lfm2MoeSparseMoeBlock):
+            if module.use_expert_bias:
+                init.zeros_(module.expert_bias)
 
 
 @auto_docstring

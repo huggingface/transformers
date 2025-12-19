@@ -624,6 +624,8 @@ class DebertaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.v_bias)
         elif isinstance(module, (LegacyDebertaLMPredictionHead, DebertaLMPredictionHead)):
             init.zeros_(module.bias)
+        elif isinstance(module, DebertaEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
