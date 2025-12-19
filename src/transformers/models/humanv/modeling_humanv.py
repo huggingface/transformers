@@ -1,140 +1,79 @@
-from collections.abc import Callable
-from typing import Optional, Union
+# coding=utf-8
+# Copyright 2025 The HumanV Team. All rights reserved.
+
+from typing import Optional, List, Union, Tuple
+import math
 
 import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from .configuration_humanv import HumanVConfig
 
-try:
-    from peft import LoraConfig, get_peft_model, TaskType
-except ImportError:
-    pass
+logger = logging.get_logger(__name__)
 
-try:
-    from sageattention import sageattn
-except ImportError:
-    sageattn = None
-
-try:
-    from flash_attn import flash_attn_func
-except ImportError:
-    flash_attn_func = None
-
-@use_kernel_forward_from_hub("RMSNorm")
 class HumanVRMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
-
 class HumanVMLP(nn.Module):
-    def __init__(self, config: HumanVConfig):
+    def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate = self.act_fn(self.gate_proj(x))
-        up = self.up_proj(x)
-        return self.down_proj(gate * up)
-
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 class HumanVRotaryEmbedding(nn.Module):
-    def __init__(self, config: HumanVConfig, device: Optional[torch.device] = None):
+    def __init__(self, config: HumanVConfig, device=None):
         super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
         self.config = config
-        self.rope_type = self.config.rope_parameters["rope_type"] if self.config.rope_parameters else "default"
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.config.rope_parameters and "rope_type" in self.config.rope_parameters:
-             if self.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Optional[HumanVConfig] = None,
-        device: Optional[torch.device] = None,
-        seq_len: Optional[int] = None,
-    ) -> tuple[torch.Tensor, float]:
-        base = config.rope_parameters["rope_theta"] if config.rope_parameters else 10000.0
+        base = config.rope_parameters.get("rope_theta", 10000.0) if config.rope_parameters else 10000.0
         dim = config.head_dim
-        attention_factor = 1.0
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.attention_scaling = 1.0
 
     @torch.no_grad()
-    @dynamic_rope_update
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
-    half_dim = x.shape[-1] // 2
-    x1 = x[..., :half_dim]
-    x2 = x[..., half_dim:]
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    position_ids: Optional[torch.Tensor] = None,
-    unsqueeze_dim: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+def apply_rotary_pos_emb(q, k, cos, sin):
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
@@ -143,137 +82,122 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    
-    query_length, key_length = query.shape[-2], key_states.shape[-2]
-    causal_mask = torch.tril(
-        torch.ones((query_length, key_length), device=query.device, dtype=torch.bool)
-    ).view(1, 1, query_length, key_length)
-    
-    min_value = torch.finfo(query.dtype).min
-    attn_weights = torch.where(causal_mask, attn_weights, torch.tensor(min_value, dtype=query.dtype))
-    
-    if attention_mask is not None:
-        if attention_mask.shape[-2:] == (query_length, key_length):
-             attn_weights = attn_weights + attention_mask
-    
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    
-    return attn_output, attn_weights
-
-
-def flash_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[FlashAttentionKwargs],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    if flash_attn_func is not None:
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-        attn_output, attn_weights = flash_attn_func(
-            query,
-            key,
-            value,
-            softmax_scale=scaling,
-            causal=module.is_causal,
-            attention_dropout=dropout if module.training else 0.0,
-        )
-        attn_output = attn_output.transpose(1, 2)
-        return attn_output, attn_weights
-    else:
-        raise ImportError("Flash-Attn not available.")
-
-
 class HumanVAttention(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if config.layer_types else None
         self.config = config
         self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[layer_idx]
+        
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.scaling = self.head_dim ** -0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
         
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         
+        # Qwen3-Style: Norm on Heads for Stability
         self.q_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        
+        bsz, q_len, _ = hidden_states.size()
+
+        # 1. Projections
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # 2. Reshape & Norm (Qwen3 Style)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
+        # 3. RoPE
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        
+
+        # 4. KV Cache Update
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            
-        if self.config.attn_implementation in ["flash_attention_2", "flash_attention_3"]:
-            attention_interface = flash_attention_forward
-        else:
-            attention_interface = eager_attention_forward
-            
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        # 5. Repeat KV for GQA
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # 6. Attention Scores
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+
+        # =================================================================
+        # 7. MASKING LOGIC (The Anti-Leakage & Sparse Fix)
+        # =================================================================
+        # محاسبه ابعاد فعلی (با توجه به کش)
+        curr_seq_len = query_states.shape[-2]
+        kv_seq_len = key_states.shape[-2]
+        
+        # ساخت ماسک Causal پایه (جلوگیری از دیدن آینده)
+        # 1 = ماسک (نادیده بگیر)، 0 = نگه دار
+        causal_mask = torch.triu(
+            torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool), 
+            diagonal=kv_seq_len - curr_seq_len + 1
         )
         
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        # اعمال ماسک Sparse (Window) اگر لایه از نوع sparse_attention باشد
+        if self.layer_type == "sparse_attention":
+            window_size = self.config.sparse_window_size
+            # ماسک کردن توکن‌های خیلی قدیمی (پایین سمت چپ دور)
+            # اگر فاصله index ها بیشتر از window_size باشد، ماسک کن
+            # منطق: index_q - index_k > window -> Mask
+            # پیاده‌سازی با triu روی (diagonal=-window)
+            sparse_mask = torch.tril(
+                torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool),
+                diagonal= (kv_seq_len - curr_seq_len) - window_size - 1
+            )
+            # ترکیب ماسک‌ها (یا آینده است یا خیلی گذشته)
+            final_mask = causal_mask | sparse_mask
+        else:
+            final_mask = causal_mask
 
+        # اعمال مقدار -inf
+        min_dtype = torch.finfo(attn_weights.dtype).min
+        attn_weights = torch.where(final_mask[None, None, :, :], torch.tensor(min_dtype, dtype=attn_weights.dtype), attn_weights)
 
-class HumanVDecoderLayer(GradientCheckpointingLayer):
+        # اعمال Padding Mask ورودی (اگر وجود دارد)
+        if attention_mask is not None:
+            # مطمئن شویم ماسک ورودی هم‌اندازه است یا پخش می‌شود
+            if attention_mask.size() != (bsz, 1, curr_seq_len, kv_seq_len):
+                 # هندل کردن ماسک‌های 2 بعدی
+                 pass 
+            attn_weights = attn_weights + attention_mask
+
+        # 8. Softmax & Output
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        
+        return self.o_proj(attn_output), attn_weights
+
+class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -281,245 +205,213 @@ class HumanVDecoderLayer(GradientCheckpointingLayer):
         self.mlp = HumanVMLP(config)
         self.input_layernorm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx] if config.layer_types else "full_attention"
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> torch.Tensor:
+        
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states += residual
+        hidden_states = residual + hidden_states
+
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states += residual
+        hidden_states = residual + hidden_states
+        
         return hidden_states
 
-
-@auto_docstring
 class HumanVPreTrainedModel(PreTrainedModel):
     config_class = HumanVConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HumanVDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-        try:
-             from peft import LoraConfig, get_peft_model, TaskType
-             if model.config.lora_rank > 0:
-                lora_config = LoraConfig(
-                    r=model.config.lora_rank,
-                    lora_alpha=model.config.lora_alpha,
-                    lora_dropout=model.config.lora_dropout,
-                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-                    task_type=TaskType.CAUSAL_LM,
-                )
-                model = get_peft_model(model, lora_config)
-        except ImportError:
-             pass
-        return model
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
-
-@auto_docstring
 class HumanVModel(HumanVPreTrainedModel):
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([HumanVDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
         self.norm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = HumanVRotaryEmbedding(config=config)
+        self.rotary_emb = HumanVRotaryEmbedding(config)
+        
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs()
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("Specify exactly one of input_ids or inputs_embeds")
+        
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device)
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
             
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
+        bsz, seq_len = inputs_embeds.shape[:2]
+        
+        # Position IDs creation
+        if past_key_values is not None:
+            past_length = past_key_values.get_seq_length()
+        else:
+            past_length = 0
+            
+        position_ids = torch.arange(past_length, past_length + seq_len, dtype=torch.long, device=inputs_embeds.device)
+        position_ids = position_ids.unsqueeze(0).view(-1, seq_len)
+        
+        # RoPE embeddings
+        cos, sin = self.rotary_emb(inputs_embeds, position_ids)
+        position_embeddings = (cos, sin)
+
+        # Padding Mask Handling
         if attention_mask is not None:
-             if attention_mask.dim() == 2:
-                 expanded_mask = attention_mask[:, None, None, :].to(dtype=inputs_embeds.dtype)
-                 expanded_mask = (1.0 - expanded_mask) * torch.finfo(inputs_embeds.dtype).min
-                 attention_mask = expanded_mask
+            if attention_mask.dim() == 2:
+                # [Batch, Seq] -> [Batch, 1, 1, Seq]
+                attention_mask = attention_mask[:, None, None, :]
+            # تبدیل 0 به -inf برای پدینگ
+            attention_mask = (1.0 - attention_mask) * torch.finfo(inputs_embeds.dtype).min
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
         
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                **kwargs,
-            )
+        for layer in self.layers:
+            if self.gradient_checkpointing and self.training:
+                hidden_states = self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    position_embeddings,
+                    past_key_values,
+                )
+            else:
+                hidden_states = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_embeddings=position_embeddings,
+                    past_key_values=past_key_values,
+                )
+                
         hidden_states = self.norm(hidden_states)
+        
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
 
-
-@auto_docstring
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.embed_tokens.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
-        self.config = config
         self.model = HumanVModel(config)
-        if config.tie_word_embeddings:
-            self.lm_head = None
-        else:
-            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head if not self.config.tie_word_embeddings else self.model.embed_tokens
-
-    def set_output_embeddings(self, new_embeddings):
-        if self.config.tie_word_embeddings:
-            raise ValueError("Cannot set output embeddings when tie_word_embeddings=True")
-        self.lm_head = new_embeddings
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        cache_position=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         **kwargs,
-    ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> CausalLMOutputWithPast:
+        
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            return_dict=return_dict,
             **kwargs,
         )
-
+        
         hidden_states = outputs.last_hidden_state
-        if self.config.tie_word_embeddings:
-            logits = torch.nn.functional.linear(hidden_states, self.model.embed_tokens.weight)
-        else:
-            logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
+            loss_fct = CrossEntropyLoss()
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
-    
+
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not getattr(self, "attention_mask", None):
-            if attention_mask is not None and position_ids is None:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 0)
-                if past_key_values is not None:
-                    position_ids = position_ids[:, -input_ids.shape[1]:]
+        
         return {
             "input_ids": input_ids,
-            "position_ids": position_ids,
             "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache", True),
             "attention_mask": attention_mask,
-            "cache_position": kwargs.get("cache_position"),
+            "use_cache": kwargs.get("use_cache", True),
         }
 
-class HumanVForSequenceClassification(GenericForSequenceClassification, HumanVPreTrainedModel):
-    pass
-class HumanVForTokenClassification(GenericForTokenClassification, HumanVPreTrainedModel):
-    pass
-class HumanVForQuestionAnswering(GenericForQuestionAnswering, HumanVPreTrainedModel):
-    base_model_prefix = "transformer"
+class HumanVForSequenceClassification(HumanVPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = HumanVModel(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.post_init()
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
+        outputs = self.model(input_ids, attention_mask=attention_mask, **kwargs)
+        hidden_states = outputs.last_hidden_state
+        # Use last token for classification (padding handling required in real usage)
+        logits = self.score(hidden_states[:, -1, :])
+        
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            
+        return loss, logits
+
+# Placeholder classes for compatibility
+class HumanVForTokenClassification(HumanVPreTrainedModel): pass
+class HumanVForQuestionAnswering(HumanVPreTrainedModel): pass
 
 __all__ = [
+    "HumanVForCausalLM",
     "HumanVModel",
     "HumanVPreTrainedModel",
-    "HumanVForCausalLM",
     "HumanVForSequenceClassification",
     "HumanVForTokenClassification",
     "HumanVForQuestionAnswering",
