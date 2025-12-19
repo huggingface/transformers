@@ -1791,6 +1791,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Check the availability of Grouped MM for a given model.
         """
 
+        if not self._supports_grouped_mm:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support an experts implementation through torch's grouped_mm."
+                " If you believe this error is a bug, please open an issue in Transformers GitHub repository."
+            )
+
         if not is_grouped_mm_available():
             raise ImportError(
                 "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
@@ -1957,10 +1963,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def get_correct_experts_implementation(self, requested_experts: Optional[str]) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
         if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
-            raise ValueError(
-                f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `experts_implementation="grouped_mm"`, `experts_implementation="batched_mm"`.'
+            message = (
+                f'Specified `experts_implementation="{applicable_experts}"` is not supported. '
+                'The only possible arguments are `experts_implementation="eager"`'
             )
+            if self._supports_grouped_mm:
+                message += ', `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`'
+            raise ValueError(message + ".")
 
         # Perform relevant checks
         if applicable_experts == "grouped_mm":
