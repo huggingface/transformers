@@ -406,6 +406,9 @@ class GenerationMixin(ContinuousMixin):
                     **repo_loading_kwargs,
                 )
             except OSError:
+                # `self` already has a generation config created from model config, but model config will
+                # not contain any generation-specific params. These are popped at config's `__init__`.
+                # Thus we have to load from `config.json` and create a generation config from it (for BART)
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
@@ -417,6 +420,7 @@ class GenerationMixin(ContinuousMixin):
                     _from_model_config=True,
                     **repo_loading_kwargs,
                 )
+
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:

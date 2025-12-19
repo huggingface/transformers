@@ -116,18 +116,17 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         super().__init__()
         self.max_len = config.max_source_positions
         self.d_model = config.hidden_size
-        self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
+        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
-    def extend_pe(self, x):
+    def extend_pe(self, x, pe=None):
         # Reset the positional encodings
-        if self.pe is not None:
+        if pe is not None:
             # self.pe contains both positive and negative parts
             # the length of self.pe is 2 * input_len - 1
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
-                if self.pe.dtype != x.dtype or self.pe.device != x.device:
-                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
-                return
+            if pe.size(1) >= x.size(1) * 2 - 1:
+                if pe.dtype != x.dtype or pe.device != x.device:
+                    pe = pe.to(dtype=x.dtype, device=x.device)
+                return pe
         # Suppose `i` is the position of query vector and `j` is the
         # position of key vector. We use positive relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
@@ -148,10 +147,10 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
         pe_negative = pe_negative[1:].unsqueeze(0)
         pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
+        return pe.to(device=x.device, dtype=x.dtype)
 
     def forward(self, hidden_states: torch.Tensor):
-        self.extend_pe(hidden_states)
+        self.pe = self.extend_pe(hidden_states, self.pe)
         start_idx = self.pe.size(1) // 2 - hidden_states.size(1) + 1
         end_idx = self.pe.size(1) // 2 + hidden_states.size(1)
         relative_position_embeddings = self.pe[:, start_idx:end_idx]
@@ -602,6 +601,8 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
             init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, Wav2Vec2ConformerRelPositionalEmbedding):
+            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
