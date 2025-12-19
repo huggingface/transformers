@@ -23,6 +23,7 @@ from ..test_modeling_common import ids_tensor
 
 if is_torch_available():
     import torch
+    from torch.nn.utils.rnn import pad_sequence
 
     from transformers.generation import (
         ConfidenceCriteria,
@@ -165,7 +166,6 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Now try it with a tokenizer where those are actually special tokens
         tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
         true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
         false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
