@@ -20,3 +20,4 @@ jobs:
     with:
       languages: '["actions"]'
       queries: 'security-extended,security-and-quality'
+      runner: 'ubuntu-latest'
