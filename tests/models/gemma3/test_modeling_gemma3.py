@@ -257,7 +257,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         conditional_generation_class = Gemma3ForConditionalGeneration
         sequence_classification_class = Gemma3ForSequenceClassification
 
-    def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=4, image_token_index=4, **kwargs):
+    def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=2, image_token_index=4, **kwargs):
         super().__init__(parent, image_size=image_size, patch_size=patch_size, num_key_value_heads=1, **kwargs)
         self.mm_tokens_per_image = mm_tokens_per_image
         self.image_token_index = image_token_index
@@ -319,6 +319,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             out = model(**inputs_dict, output_attentions=True)
             # We expect a non-causal mask on first 4 tokens, thus no zeros
             for attention in out.attentions:
+                breakpoint()
                 self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
         # Now when removing `token_type_ids`, we will get simple causal mask
