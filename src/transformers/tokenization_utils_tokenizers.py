@@ -262,6 +262,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if merges is not None:
                 vocab_dict = vocab if isinstance(vocab, dict) else {w: i for i, (w, _) in enumerate(vocab)}
                 fast_tokenizer = TokenizerFast(BPE(vocab=vocab_dict, merges=merges, fuse_unk=True, dropout=None))
+            elif isinstance(vocab, dict):
+                fast_tokenizer = TokenizerFast(BPE(vocab=vocab, merges=[], fuse_unk=True, dropout=None))
             elif isinstance(vocab, list) and vocab and isinstance(vocab[0], (tuple, list)):
                 fast_tokenizer = TokenizerFast(Unigram(vocab=vocab, unk_id=kwargs.get("unk_id", 0)))
         elif self._tokenizer is None:
@@ -272,6 +274,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 "(3) an equivalent slow tokenizer class to instantiate and convert. \n"
                 "You need to have sentencepiece or tiktoken installed to convert a slow tokenizer to a fast one."
             )
+        # Only set defaults when creating TokenizersBackend from scratch
+        if fast_tokenizer_file is None and tokenizer_object is None and self._tokenizer is None:
+            kwargs.setdefault("bos_token", "<s>")
+            kwargs.setdefault("eos_token", "</s>")
+
         if fast_tokenizer is not None:
             self._tokenizer = fast_tokenizer
 
@@ -301,11 +308,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
-
-        # Only set defaults when creating TokenizersBackend from scratch
-        if fast_tokenizer_file is None and tokenizer_object is None and self._tokenizer is None:
-            kwargs.setdefault("bos_token", "<s>")
-            kwargs.setdefault("eos_token", "</s>")
 
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
