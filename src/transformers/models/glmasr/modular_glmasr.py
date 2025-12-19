@@ -28,6 +28,7 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoConfig
+from ..glm4.modeling_glm4 import apply_rotary_pos_emb
 from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 from ..voxtral.modeling_voxtral import (
     VoxtralAttention,
@@ -37,7 +38,7 @@ from ..voxtral.modeling_voxtral import (
     VoxtralPreTrainedModel,
     eager_attention_forward,
 )
-from ..glm4.modeling_glm4 import apply_rotary_pos_emb as apply_rotary_pos_emb_audio
+
 
 logger = logging.get_logger(__name__)
 
@@ -240,7 +241,7 @@ class GlmasrAttention(VoxtralAttention):
         cos = position_embeddings[..., 0]
         sin = position_embeddings[..., 1]
 
-        query_states, key_states = apply_rotary_pos_emb_audio(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
