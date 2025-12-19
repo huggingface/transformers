@@ -714,6 +714,9 @@ class Ernie4_5_VL_MoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
         elif isinstance(module, Ernie4_5_VL_MoeMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Ernie4_5_VL_MoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Ernie4_5_VL_MoeTextModel(Ernie4_5_MoeModel):
