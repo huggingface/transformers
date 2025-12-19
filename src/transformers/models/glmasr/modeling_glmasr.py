@@ -352,7 +352,7 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
 
         self.gradient_checkpointing = False
-        self.rotary_pos_emb = GlmasrAudioRotaryEmbedding(config.hidden_size // config.encoder_attention_heads)
+        self.rotary_pos_emb = GlmasrAudioRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
         # Initialize weights and apply final processing
         self.post_init()
 
