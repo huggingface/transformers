@@ -38,7 +38,11 @@ from transformers import (
 from transformers.image_utils import load_image
 from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
-from transformers.models.isaac.modeling_isaac import document_mask_function_from_cu_seqlens
+from transformers.models.isaac.modeling_isaac import (
+    document_mask_function_from_cu_seqlens,
+    IsaacVisionAttention,
+    IsaacVisionConfig,
+)
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
     require_flash_attn,
@@ -625,6 +629,116 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         decoded_prompt = processor.tokenizer.decode(generated[0], skip_special_tokens=True)
         self.assertIsInstance(decoded_prompt, str)
         self.assertNotEqual(decoded_prompt.strip(), "")
+
+
+@require_torch
+@require_flash_attn
+class IsaacAttentionDtypeTest(unittest.TestCase):
+    def _make_config(self):
+        return IsaacVisionConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_channels=3,
+            num_patches=64,
+            patch_size=4,
+            attention_dropout=0.0,
+            pixel_shuffle_scale_factor=1,
+        )
+
+    def _skip_if_no_cuda_bf16(self):
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for flash attention dtype/parity tests.")
+        if not torch.cuda.is_bf16_supported():
+            pytest.skip("CUDA bfloat16 support required.")
+
+    def test_flash_attention_matches_weight_dtype_bf16(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_matches_weight_dtype_bf16_with_padding(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
+        attention_mask = torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]], device=device, dtype=torch.bool)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states, attention_mask=attention_mask)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_matches_weight_dtype_bf16_with_cu_seqlens(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(1, 5, config.hidden_size, device=device, dtype=torch.bfloat16)
+        cu_seqlens = torch.tensor([0, 3, 5], device=device, dtype=torch.int32)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states, cu_seqlens=cu_seqlens, max_seqlen=3)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_parity_with_sdpa_bf16(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config_sdpa = self._make_config()
+        config_sdpa._attn_implementation = "sdpa"
+
+        config_fa2 = self._make_config()
+        config_fa2._attn_implementation = "flash_attention_2"
+
+        attn_sdpa = IsaacVisionAttention(config_sdpa).to(device=device, dtype=torch.bfloat16).eval()
+        attn_fa2 = IsaacVisionAttention(config_fa2).to(device=device, dtype=torch.bfloat16).eval()
+
+        # Align weights so the only difference is the backend
+        attn_fa2.load_state_dict(attn_sdpa.state_dict())
+
+        hidden_states = torch.randn(2, 4, config_sdpa.hidden_size, device=device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            out_sdpa, _ = attn_sdpa(hidden_states)
+            out_fa2, _ = attn_fa2(hidden_states)
+
+        torch.testing.assert_close(
+            out_fa2.float(),
+            out_sdpa.float(),
+            rtol=1e-3,
+            atol=1e-3,
+            msg="FlashAttention2 output deviates from SDPA baseline beyond tolerance",
+        )
 
 
 @require_torch
