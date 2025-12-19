@@ -151,7 +151,6 @@ logger = logging.get_logger(__name__)
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-_init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 
@@ -168,51 +167,6 @@ def is_local_dist_rank_0():
         and torch.distributed.is_initialized()
         and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
-
-
-TORCH_INIT_FUNCTIONS = {
-    "uniform_": nn.init.uniform_,
-    "normal_": nn.init.normal_,
-    "trunc_normal_": nn.init.trunc_normal_,
-    "constant_": nn.init.constant_,
-    "xavier_uniform_": nn.init.xavier_uniform_,
-    "xavier_normal_": nn.init.xavier_normal_,
-    "kaiming_uniform_": nn.init.kaiming_uniform_,
-    "kaiming_normal_": nn.init.kaiming_normal_,
-    "uniform": nn.init.uniform,
-    "normal": nn.init.normal,
-    "xavier_uniform": nn.init.xavier_uniform,
-    "xavier_normal": nn.init.xavier_normal,
-    "kaiming_uniform": nn.init.kaiming_uniform,
-    "kaiming_normal": nn.init.kaiming_normal,
-    "orthogonal_": nn.init.orthogonal_,
-}
-
-
-@contextmanager
-def no_init_weights():
-    """
-    Context manager to globally disable weight initialization to speed up loading large models.
-    """
-    global _init_weights
-    old_init_weights = _init_weights
-
-    _init_weights = False
-
-    def _skip_init(*args, **kwargs):
-        pass
-
-    # Save the original initialization functions
-    for name, init_func in TORCH_INIT_FUNCTIONS.items():
-        setattr(torch.nn.init, name, _skip_init)
-
-    try:
-        yield
-    finally:
-        _init_weights = old_init_weights
-        # Restore the original initialization functions
-        for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, init_func)
 
 
 @contextmanager
@@ -2987,12 +2941,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        if not _init_weights or get_torch_context_manager_or_global_device() == torch.device("meta"):
-            return
-        # Initialize weights
-        self.initialize_weights()
-        # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
-        self.tie_weights(recompute_mapping=False)
+        # If we are initializing on meta device, there is no point in trying to run inits
+        if get_torch_context_manager_or_global_device() != torch.device("meta"):
+            # Initialize weights
+            self.initialize_weights()
+            # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
+            self.tie_weights(recompute_mapping=False)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """
@@ -3537,7 +3491,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
                 init_contexts.extend(
-                    [no_init_weights(), deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()]
+                    [
+                        init.no_init_weights(),
+                        deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                        set_zero3_state(),
+                    ]
                 )
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
