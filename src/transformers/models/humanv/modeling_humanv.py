@@ -466,7 +466,7 @@ class HumanVModel(HumanVPreTrainedModel):
 
 @auto_docstring
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.embed_tokens.weight"] if tie_word_embeddings else None
+    _tied_weights_keys = ["model.embed_tokens.weight"]
 
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
