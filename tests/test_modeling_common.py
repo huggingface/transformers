@@ -1225,7 +1225,7 @@ class ModelTesterMixin:
 
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+                _ = model(**final_inputs)
             except (RuntimeError, NotImplementedError) as e:
                 # Re-raise a more friendly exception (unfortunately, we cannot know which tensor it was...)
                 if "Cannot copy out of meta tensor; no data!" in str(
