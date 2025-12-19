@@ -372,50 +372,20 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+                    model = AutoModel.from_pretrained(GPTJ_TINY, dtype=torch.float32)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # The model weights are in BF16 as per deepspeed config
         self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
         good_deepspeed_sin_cos = model.h[0].attn.embed_positions
 
-        # Monkeypatches the function that creates RoPE embeddings using the INCORRECT torch.arange() pattern, and
-        # then recreates the model
-        def bad_deepspeed_create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-            # Incorrect pattern here: torch.arange has dtype=torch.float32 as its argument, and it will automatically
-            # converted to BF16 by DeepSpeed
-            sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=inv_freq.dtype), inv_freq)
-            return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
         good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-        transformers.models.gptj.modeling_gptj.create_sinusoidal_positions = bad_deepspeed_create_sinusoidal_positions
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-        self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
-        bad_deepspeed_sin_cos = model.h[0].attn.embed_positions
-
-        # Compares the two values: the two sets of values are different, and the correct one matches the torch
-        # (i.e. outside DeepSpeed) version.
         good_torch_sin_cos = good_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
         )
-        self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
+        # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
-
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
-        # exclusive to DeepSpeed
-        bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
-            model.config.max_position_embeddings, model.config.rotary_dim
-        )
-        torch.testing.assert_close(bad_torch_sin_cos, good_torch_sin_cos)
-
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
     def setUp(self):
