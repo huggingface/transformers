@@ -809,6 +809,12 @@ class TrainingArguments:
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
     )
+    # Added as part of issue #31561 fix by @priyankaz-ml — allows users to limit evaluation to a fixed number of batches
+    max_eval_steps: Optional[int] = field(
+    default=None,
+    metadata={"help": "If set, limits the number of batches used during evaluation."}
+    )
+
     eval_accumulation_steps: int | None = field(
         default=None,
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
