@@ -29,6 +29,8 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 if is_timm_available():
     import timm
 
+    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
+
 
 @dataclass
 @auto_docstring(
@@ -109,10 +111,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
-        if isinstance(module, (nn.Linear)):
+        if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        # Also, reinit all non-persistemt buffers if any!
+        _maybe_reinit_non_persistent_buffer(module)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

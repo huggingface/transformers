@@ -15,7 +15,6 @@
 """PyTorch OWL-ViT model."""
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any, Optional, Union
 
 import torch
@@ -590,6 +589,8 @@ class OwlViTPreTrainedModel(PreTrainedModel):
                 std=module.vision_embed_dim**-0.5 * factor,
             )
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
+        elif isinstance(module, OwlViTForObjectDetection):
+            init.copy_(module.box_bias, module.compute_box_bias(module.num_patches_height, module.num_patches_width))
         if isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
@@ -1202,7 +1203,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.config = config
         self.num_patches_height = self.config.vision_config.image_size // self.config.vision_config.patch_size
         self.num_patches_width = self.config.vision_config.image_size // self.config.vision_config.patch_size
-        self.box_bias = self.compute_box_bias(self.num_patches_height, self.num_patches_width)
+        self.register_buffer(
+            "box_bias", self.compute_box_bias(self.num_patches_height, self.num_patches_width), persistent=False
+        )
 
         self.post_init()
 
@@ -1223,7 +1226,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
-    @lru_cache(maxsize=2)
     def compute_box_bias(
         self, num_patches_height: int, num_patches_width: int, feature_map: Optional[torch.FloatTensor] = None
     ) -> torch.Tensor:

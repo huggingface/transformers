@@ -21,7 +21,6 @@ import re
 from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
 from transformers import EomtConfig, EomtForUniversalSegmentation, EomtImageProcessorFast
@@ -255,7 +254,7 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = EomtForUniversalSegmentation(config)
 
     # Load and convert state dict

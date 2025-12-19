@@ -15,7 +15,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -24,9 +24,6 @@ if is_torch_available():
     import triton
     import triton.language as tl
     from torch.nn import functional as F
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 logger = logging.get_logger(__name__)
@@ -614,7 +611,7 @@ def replace_with_fp8_linear(
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
-        with init_empty_weights():
+        with torch.device("meta"):
             if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs

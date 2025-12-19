@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
@@ -187,6 +188,13 @@ class CTRLPreTrainedModel(PreTrainedModel):
     config: CTRLConfig
     base_model_prefix = "transformer"
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, CTRLModel):
+            init.copy_(
+                module.pos_encoding, positional_encoding(module.config.n_positions, module.d_model_size, torch.float)
+            )
+
 
 @auto_docstring
 class CTRLModel(CTRLPreTrainedModel):
@@ -196,7 +204,9 @@ class CTRLModel(CTRLPreTrainedModel):
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
 
-        self.pos_encoding = positional_encoding(config.n_positions, self.d_model_size, torch.float)
+        self.register_buffer(
+            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        )
 
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 

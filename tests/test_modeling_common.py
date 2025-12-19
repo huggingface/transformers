@@ -1195,6 +1195,42 @@ class ModelTesterMixin:
                 f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
+    def test_all_tensors_are_parameter_or_buffer(self):
+        """Check that all tensors are registered as Parameter or Buffer, i.e. we don't have simple assignments such
+        as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not registered as
+        parameter/buffer)"""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # apparently this model cannot correctly create its inputs and has to use another function....
+            if "modeling_perceiver.py" in inspect.getfile(model_class):
+                _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+
+            # Initialize the model fully on meta device, then move everything to cpu and run `init_weights`
+            with torch.device("meta"):
+                model = model_class(copy.deepcopy(config)).eval()
+            # move everything randomly to cpu
+            model.to_empty(device="cpu")
+            # Now, run all the inits
+            model.init_weights()
+
+            # Try running a forward, to see if a tensor stayed on meta somewhere
+            try:
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+            except (RuntimeError, NotImplementedError) as e:
+                # Re-raise a more friendly exception (unfortunately, we cannot know which tensor it was...)
+                if "Cannot copy out of meta tensor; no data!" in str(
+                    e
+                ) or "Tensor on device meta is not on the expected device cpu!" in str(e):
+                    raise ValueError(
+                        "A tensor is still on meta device. It means it was not properly registered as a Parameter or "
+                        "Buffer.\nMost of the time, it should be added as a non-persistent buffer if you don't want to include "
+                        "it in the model's state dict. It can also be a scalar that was added as a torch.Tensor, consider making it "
+                        "a Python scalar in this case and use it as such in forward"
+                    ) from e
+                else:
+                    raise e
+
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:

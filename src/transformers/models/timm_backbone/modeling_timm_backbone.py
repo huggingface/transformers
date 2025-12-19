@@ -27,6 +27,8 @@ from .configuration_timm_backbone import TimmBackboneConfig
 if is_timm_available():
     import timm
 
+    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
+
 
 if is_torch_available():
     from torch import Tensor
@@ -89,7 +91,6 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])
-        from ...models.timm_backbone import TimmBackboneConfig
 
         config = kwargs.pop("config", TimmBackboneConfig())
 
@@ -118,9 +119,9 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """
-        Empty init weights function to ensure compatibility of the class in the library.
-        """
+        """We need to at least re-init the non-persistent buffers if the model was initialized on meta device (we
+        assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
+        _maybe_reinit_non_persistent_buffer(module)
 
     def forward(
         self,

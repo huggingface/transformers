@@ -626,6 +626,8 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
             base = self.config.rotary_embedding_base
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
             init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, Wav2Vec2BertRelPositionalEmbedding):
+            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
 
     # Ignore copy
     def _get_feat_extract_output_lengths(

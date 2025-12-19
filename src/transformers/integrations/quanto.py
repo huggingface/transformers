@@ -73,7 +73,6 @@ def replace_with_quanto_layers(
             A list of modules to not convert. If a module name is in the list (e.g. `lm_head`), it will not be
             converted.
     """
-    from accelerate import init_empty_weights
     from optimum.quanto import QLayerNorm, QLinear, qfloat8, qint2, qint4, qint8
 
     w_mapping = {"float8": qfloat8, "int8": qint8, "int4": qint4, "int2": qint2}
@@ -83,7 +82,7 @@ def replace_with_quanto_layers(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             new_module = None
             if isinstance(module, nn.Linear):
                 new_module = QLinear(
