@@ -900,6 +900,10 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, ModernBertUnpaddedRotaryEmbedding):
+            # Reinitialize inv_freq buffer for flash_attn-based rotary embedding
+            inv_freq = module._compute_inv_freq(device=module.inv_freq.device)
+            init.copy_(module.inv_freq, inv_freq)
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False
