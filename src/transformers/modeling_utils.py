@@ -4106,9 +4106,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
                 state_dict = merged_state_dict
-            error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
+            error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            missing_keys, unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set(), set()
+            unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set()
         else:
             all_pointer = set()
             # Checkpoints are safetensors
