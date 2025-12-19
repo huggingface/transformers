@@ -104,7 +104,8 @@ class PeVideoEncoderTester:
             ]
         )
         torch.manual_seed(0)
-        valid_lengths = ids_tensor([self.batch_size], self.num_frames)
+        # Generate valid_lengths in range [1, num_frames] to ensure at least one valid frame
+        valid_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
         padding_mask_videos = (
             torch.arange(self.num_frames, device=torch_device).unsqueeze(0) < valid_lengths[:, None]
         )
