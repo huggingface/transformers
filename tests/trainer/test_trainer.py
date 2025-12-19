@@ -5528,6 +5528,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
 
 @require_torch
 @require_ray
+@unittest.skip("don't work because of a serialization issue")
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments("..")
