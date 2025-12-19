@@ -44,6 +44,8 @@ if is_kernels_available():
     import kernels as kernels_pkg
     from kernels import Device, Mode, kernelize
 
+    import transformers.integrations.hub_kernels as hub_kernels_pkg
+
 
 @require_kernels
 @slow
@@ -95,6 +97,7 @@ class TestHubKernels(TestCasePlus):
 
         self.EXPECTED_OUTPUT = set()
         self.EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+        self.EXPECTED_OUTPUT.add("Hello! I'm excited to be a part of this")
 
         self.assertTrue(output in self.EXPECTED_OUTPUT)
 
@@ -249,7 +252,7 @@ class TestKernelUtilities(TestCasePlus):
                 self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
                 return sentinel
 
-            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
             _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
             mod1 = lazy_load_kernel("causal-conv1d")
@@ -286,7 +289,7 @@ class TestKernelUtilities(TestCasePlus):
             HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}  # type: ignore[assignment]
             _KERNEL_MODULE_MAPPING.pop(name, None)
 
-            def fake_get_kernel(repo_id, revision=None, version=None, user_agent=None):
+            def fake_get_kernel(repo_id, revision=None, version=None):
                 call_count["n"] += 1
                 self.assertEqual(repo_id, "kernels-community/causal-conv1d")
                 self.assertIsNone(revision, "revision must not be set when version is provided")
@@ -294,7 +297,7 @@ class TestKernelUtilities(TestCasePlus):
                 return sentinel_mod
 
             # Patch kernels.get_kernel so lazy_load_kernel picks it up on import
-            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
 
             # Act
             mod1 = lazy_load_kernel(name)
