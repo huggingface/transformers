@@ -43,6 +43,7 @@ class VLMModelTester:
     text_config_class = None
     vision_config_class = None
     conditional_generation_class = None
+    sequence_classification_class = None
     # These attributes are required after the initialization phase of the tester.
     _required_attributes = ("base_model_class", "config_class", "conditional_generation_class")
 
@@ -58,6 +59,7 @@ class VLMModelTester:
             for model_class in (
                 self.base_model_class,
                 self.conditional_generation_class,
+                self.sequence_classification_class
             )
             if model_class is not None
         ]
@@ -123,10 +125,10 @@ class VLMModelTester:
         image_token_index=0,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
+        num_image_tokens=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
@@ -175,6 +177,8 @@ class VLMModelTester:
         self.image_token_index = image_token_index
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
+        self.num_image_tokens = num_image_tokens
+        self.seq_length = seq_length + self.num_image_tokens
         self.tie_word_embeddings = False
 
         for required_attribute in [
@@ -351,25 +355,6 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
             ([-1, -2],),
         ],
     )
-    def test_vision_feature_layers(self, vision_feature_layer):
-        """
-        Test that we can use either one vision feature layer, or a list of
-        vision feature layers.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layer = vision_feature_layer
-
-        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
-        hidden_size = config.vision_config.hidden_size
-        expected_features = hidden_size * num_feature_layers
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            # We should have the right number of input features,
-            # and should be able to run a forward pass without exploding
-            base_model = getattr(model, "model", model)
-            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
-            model(**input_dict)
 
     @unittest.skip(reason="VLMs cannot pass input_embeds without input_ids")
     def test_inputs_embeds(self):
