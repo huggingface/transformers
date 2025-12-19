@@ -31,7 +31,7 @@ from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -432,10 +432,10 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn = True
+    _supports_flash_attn = False
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
+    _supports_flex_attn = False
+    _supports_attention_backend = False
 
     _can_record_outputs = {
         "hidden_states": Siglip2EncoderLayer,
@@ -570,11 +570,11 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-        else:
-            encoder_attention_mask = attention_mask
+        encoder_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -627,13 +627,11 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
-        # expand attention_mask
-        uses_flash_attention = "flash" in self.config._attn_implementation
-        if uses_flash_attention:
-            attention_mask = None
-        elif attention_mask is not None and not uses_flash_attention:
-            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -719,6 +717,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
+        self.config = config
         self.num_heads = config.num_attention_heads
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -727,9 +726,22 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
 
         if attention_mask is not None:
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                input_embeds=probe,
+                attention_mask=attention_mask,
+                encoder_hidden_states=hidden_state,
+            )
             attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
             attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+            # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.where(
+                    attention_mask,
+                    torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                    torch.finfo(probe.dtype).min,
+                )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 

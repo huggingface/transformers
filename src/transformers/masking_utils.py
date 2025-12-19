@@ -725,6 +725,10 @@ def _preprocess_mask_arguments(
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
         return True, attention_mask, None, None, None
 
+    # TODO: fix this in certain models: owlvit, owlv2, groupvit, x_clip
+    if config._attn_implementation is None:
+        config._attn_implementation = "eager"
+
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
     # Note: it's not ideal to check the `_global_mapping` attribute instead of the object itself, however otherwise
     # full graph dynamo tracing (i.e. torch.export or compile with `fullgraph=True`) will fail on Python<3.11

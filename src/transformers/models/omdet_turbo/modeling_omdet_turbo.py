@@ -31,7 +31,7 @@ from ...file_utils import (
     ModelOutput,
 )
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -1361,11 +1361,15 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         fusion_size = attn_mask_len + task_features.shape[0]
         key_padding_mask = torch.zeros([batch_size, fusion_size], dtype=torch.bool).to(task_features.device)
         key_padding_mask[:, attn_mask_len:] = src_key_mask
-        attention_mask = _prepare_4d_attention_mask(~key_padding_mask, dtype=vision_features.dtype)
         decoder_embeddings, reference_points, encoder_bboxes, encoder_class_similarity, init_reference_points = (
             self._get_decoder_input(
                 vision_features, tuple(vision_shapes_list), class_features, denoise_embeddings, denoise_bboxes
             )
+        )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=torch.ones_like(key_padding_mask, dtype=decoder_embeddings.dtype)[..., None],
+            attention_mask=~key_padding_mask,
         )
 
         all_hidden_states = () if output_hidden_states else None

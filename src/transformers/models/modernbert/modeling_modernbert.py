@@ -32,7 +32,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_func_from_hub
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -999,7 +998,13 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     " Setting `output_attentions=False`."
                 )
 
-        global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype)
+        bsz, src_len = attention_mask.size()
+        expanded_mask = attention_mask[:, None, None, :].expand(bsz, 1, src_len, src_len).to(torch.bool)
+        global_attention_mask = torch.where(
+            expanded_mask,
+            torch.tensor(0.0, device=expanded_mask.device, dtype=self.dtype),
+            torch.finfo(self.dtype).min,
+        )
 
         # Create position indices
         rows = torch.arange(global_attention_mask.shape[2]).unsqueeze(0)
