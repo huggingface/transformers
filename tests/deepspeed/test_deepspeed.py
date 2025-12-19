@@ -277,15 +277,17 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         import deepspeed
         import torch
 
-        from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
+        from transformers.models.gpt2.modeling_gpt2 import GPT2Model, GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
-            _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
-
             def __init__(self, config):
                 super().__init__(config)
-                self.transformer = AutoModel.from_pretrained(GPT2_TINY, config=config)
+                self.transformer = GPT2Model(config)
+                # AutoModel.from_pretrained(GPT2_TINY, config=config)
                 self.new_head = torch.nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+
+                # Initialize weights and apply final processing
+                self.post_init()
 
             def forward(self, *args, **kwargs):
                 transformer_outputs = self.transformer(*args, **kwargs)
@@ -316,7 +318,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -338,7 +340,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
