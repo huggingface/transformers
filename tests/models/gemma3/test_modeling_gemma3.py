@@ -258,7 +258,18 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         sequence_classification_class = Gemma3ForSequenceClassification
 
     def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=2, image_token_index=4, **kwargs):
-        super().__init__(parent, image_size=image_size, patch_size=patch_size, num_key_value_heads=1, **kwargs)
+        # Match the original test's batch_size and seq_length to ensure compatibility
+        # with the bidirectional attention test. The test expects specific dimensions.
+        super().__init__(
+            parent,
+            image_size=image_size,
+            patch_size=patch_size,
+            num_key_value_heads=1,
+            batch_size=3,
+            seq_length=25,
+            num_image_tokens=0,  # Don't add extra to seq_length; match original behavior
+            **kwargs
+        )
         self.mm_tokens_per_image = mm_tokens_per_image
         self.image_token_index = image_token_index
         # Actual tokens per image after pooling: int(sqrt(mm_tokens_per_image))^2
@@ -275,6 +286,11 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         # Insert the correct number of image tokens at the start of each sequence
         # Each batch item has one image, and each image needs actual_tokens_per_image tokens
         input_ids[:, : self.actual_tokens_per_image] = config.image_token_index
+
+        # Override the attention mask from parent (which is tril/causal) with a proper padding mask.
+        # Gemma3 uses bidirectional attention for image tokens, which requires a padding mask
+        # (not a causal mask) so that the token_type_ids masking can work correctly.
+        inputs_dict["attention_mask"] = input_ids.ne(self.pad_token_id).to(torch_device)
 
         # Set up token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
@@ -319,7 +335,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             out = model(**inputs_dict, output_attentions=True)
             # We expect a non-causal mask on first 4 tokens, thus no zeros
             for attention in out.attentions:
-                breakpoint()
                 self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
         # Now when removing `token_type_ids`, we will get simple causal mask
