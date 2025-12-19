@@ -334,7 +334,5 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):
             quant_method = hf_quantizer.quantization_config.quant_method
-            if user_agent is not None:
-                user_agent["quant"] = getattr(quant_method, "value", quant_method)
-
+            user_agent["quant"] = getattr(quant_method, "value", quant_method)
     return hf_quantizer, config, device_map

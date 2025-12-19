@@ -26,7 +26,7 @@ if is_torch_available():
     from torch.nn import functional as F
 
 if is_accelerate_available():
-    pass
+    from accelerate import init_empty_weights
 
 
 logger = logging.get_logger(__name__)
@@ -409,7 +409,7 @@ def w8a8_block_fp8_matmul_compile(
     return output.to(output_dtype)
 
 
-class FP8Linear(nn.Module):
+class FP8Linear(nn.Linear):
     def __init__(
         self,
         in_features: int,
@@ -419,13 +419,10 @@ class FP8Linear(nn.Module):
         block_size: tuple[int, int] | None = None,
         activation_scheme="dynamic",
     ):
-        super().__init__()
+        super().__init__(in_features, out_features)
 
-        self.block_size = block_size
-        self.dtype = dtype
-        self.in_features = in_features
-        self.out_features = out_features
         # If block size is None, it means that we are doing per-tensor quantization
+        self.block_size = block_size
         self.activation_scheme = activation_scheme
 
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
@@ -446,30 +443,6 @@ class FP8Linear(nn.Module):
             self.bias = nn.Parameter(torch.empty(self.out_features))
         else:
             self.register_parameter("bias", None)
-
-        # Even without this check, initialization is a no-op on meta device
-        # but it's still a good practice to check
-        if self.weight.device != torch.device("meta"):
-            self.reset_parameters()
-
-    # TODO: look into other initialization methods for FP8Linear especially for training when we have QAT
-    def reset_parameters(self) -> None:
-        """Initialize weights using Xavier uniform initialization, clamped to FP8 range."""
-        if self.block_size is None:
-            self.weight_scale_inv.data.fill_(1.0)
-        else:
-            nn.init.ones_(self.weight_scale_inv)
-
-        dtype = torch.float8_e4m3fn
-
-        # Initialize in float32, clamp to FP8 range, then convert to FP8
-        # Note: We create a new Parameter because copy_() doesn't change dtype
-        weight_f32 = torch.empty(self.out_features, self.in_features, dtype=torch.float32, device=self.weight.device)
-        nn.init.xavier_uniform_(weight_f32)
-        self.weight = nn.Parameter(weight_f32.clamp(min=torch.finfo(dtype).min, max=torch.finfo(dtype).max).to(dtype))
-
-        if self.bias is not None:
-            nn.init.zeros_(self.bias)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
@@ -524,7 +497,6 @@ class FP8Expert(nn.Module):
         from ..activations import ACT2FN
 
         self.block_size = block_size
-        self.dtype = dtype
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
@@ -558,37 +530,6 @@ class FP8Expert(nn.Module):
         # Activation used in the MLP (same as your config / ACT2FN)
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
-
-        # Even without this check, initialization is a no-op on meta device
-        # but it's still a good practice to check
-        if self.gate_up_proj.device != torch.device("meta"):
-            self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        """Initialize weights using Xavier uniform initialization, clamped to FP8 range."""
-        dtype = torch.float8_e4m3fn
-
-        # Initialize gate_up_proj in float32, clamp to FP8 range, then convert to FP8
-        # Note: We create new Parameters because copy_() doesn't change dtype
-        gate_up_f32 = torch.empty_like(self.gate_up_proj, dtype=torch.float32)
-        nn.init.xavier_uniform_(gate_up_f32)
-        self.gate_up_proj = nn.Parameter(
-            gate_up_f32.clamp(min=torch.finfo(dtype).min, max=torch.finfo(dtype).max).to(dtype)
-        )
-
-        # Initialize down_proj in float32, clamp to FP8 range, then convert to FP8
-        down_f32 = torch.empty_like(self.down_proj, dtype=torch.float32)
-        nn.init.xavier_uniform_(down_f32)
-        self.down_proj = nn.Parameter(down_f32.clamp(min=torch.finfo(dtype).min, max=torch.finfo(dtype).max).to(dtype))
-
-        # Initialize scale tensors
-        nn.init.ones_(self.gate_up_proj_scale_inv)
-        nn.init.ones_(self.down_proj_scale_inv)
-
-        if self.gate_up_proj_bias is not None:
-            nn.init.zeros_(self.gate_up_proj_bias)
-        if self.down_proj_bias is not None:
-            nn.init.zeros_(self.down_proj_bias)
 
     def forward(
         self,
@@ -647,10 +588,7 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert: list[str] | None = None,
-    quantization_config=None,
-    pre_quantized=False,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
@@ -662,7 +600,7 @@ def replace_with_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FbgemmFp8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`bool`, defaults to `False`):
+        pre_quantized (`book`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
 
@@ -676,24 +614,23 @@ def replace_with_fp8_linear(
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
-
-        if module_name.endswith(".experts"):
-            new_module = FP8Expert(
-                config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
-            )
-
-        elif isinstance(module, nn.Linear):
-            new_module = FP8Linear(
-                in_features=module.in_features,
-                out_features=module.out_features,
-                bias=module.bias is not None,
-                activation_scheme=quantization_config.activation_scheme,
-                block_size=quantization_config.weight_block_size,
-                **module_kwargs,
-            )
-        if new_module is not None:
-            model.set_submodule(module_name, new_module)
-            has_been_replaced = True
+        with init_empty_weights():
+            if module_name.endswith(".experts"):
+                new_module = FP8Expert(
+                    config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
+                )
+            elif isinstance(module, nn.Linear):
+                new_module = FP8Linear(
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    bias=module.bias is not None,
+                    activation_scheme=quantization_config.activation_scheme,
+                    block_size=quantization_config.weight_block_size,
+                    **module_kwargs,
+                )
+            if new_module is not None:
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(
