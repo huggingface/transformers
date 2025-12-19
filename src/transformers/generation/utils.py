@@ -1795,6 +1795,20 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
+        # Due to some values being boolean and not `None`, we need additional logic to overwrite
+        # them explicitly (`defaults_only=False`) on the condition that it's only a previous
+        # default value
+        default_generation_config = GenerationConfig()
+        generation_config.update(
+            **{
+                k: v
+                for k, v in self.generation_config.to_dict().items()
+                if isinstance(v, bool)
+                and hasattr(default_generation_config, k)
+                and getattr(generation_config, k, None) == getattr(default_generation_config, k)
+            }
+        )
+
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
 
