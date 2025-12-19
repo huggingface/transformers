@@ -1266,18 +1266,24 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 PretrainedConfig = PreTrainedConfig
 
 
-ALLOWED_LAYER_TYPES = (
+ALLOWED_ATTENTION_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
     "linear_attention",  # used in minimax
 )
 
+ALLOWED_MLP_LAYER_TYPES = (
+    "sparse",
+    "dense",
+)
 
-def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None, attention: bool = True):
     """Check that `layer_types` is correctly defined."""
-    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
-        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
+    if not all(layer_type in allowed_layer_types for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {allowed_layer_types}")
     if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
         raise ValueError(
             f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
