@@ -684,7 +684,6 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Lfm2MoeDecoderLayer,
         "attentions": Lfm2MoeAttention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

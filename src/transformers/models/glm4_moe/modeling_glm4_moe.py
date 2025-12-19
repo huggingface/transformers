@@ -493,7 +493,7 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Glm4MoeDecoderLayer,
         "attentions": Glm4MoeAttention,
     }
-    _supports_grouped_mm = True
+
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()

@@ -460,7 +460,6 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV2DecoderLayer,
         "attentions": DeepseekV2Attention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

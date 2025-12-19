@@ -305,7 +305,7 @@ class DeepseekV3DecoderLayer(LlamaDecoderLayer):
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-    _supports_grouped_mm = True
+
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()

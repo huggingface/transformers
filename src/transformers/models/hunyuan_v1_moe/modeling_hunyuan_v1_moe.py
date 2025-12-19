@@ -383,7 +383,6 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
         "hidden_states": HunYuanMoEV1DecoderLayer,
         "attentions": HunYuanMoEV1Attention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

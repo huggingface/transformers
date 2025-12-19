@@ -429,7 +429,6 @@ class FlexOlmoPreTrainedModel(PreTrainedModel):
         "hidden_states": FlexOlmoDecoderLayer,
         "attentions": FlexOlmoAttention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -416,7 +416,6 @@ class MixtralPreTrainedModel(PreTrainedModel):
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

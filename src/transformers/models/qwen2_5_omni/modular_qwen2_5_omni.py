@@ -1053,8 +1053,6 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5OmniConfig
     input_modalities = ("image", "video", "audio", "text")
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-    _supports_grouped_mm = True
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

@@ -445,7 +445,6 @@ class Qwen2MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen2MoeDecoderLayer,
         "attentions": Qwen2MoeAttention,
     }
-    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

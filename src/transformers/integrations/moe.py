@@ -15,7 +15,7 @@
 from functools import wraps
 
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torchdynamo_compiling
 
 
 if is_torch_available():
@@ -100,6 +100,8 @@ def batched_mm_experts_forward(
 
     # --- Up projection per expert (batched) ---
     gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
+    if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
+        gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids]
 
     # Split into gate and up components
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
@@ -109,6 +111,8 @@ def batched_mm_experts_forward(
 
     # --- Down projection per expert (batched) ---
     out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
+    if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
+        out_per_sample = out_per_sample + self.down_proj_bias[expert_ids]
 
     # Apply routing weights
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
@@ -173,6 +177,9 @@ def grouped_mm_experts_forward(
 
     # --- Up projection per expert (grouped_mm) ---
     gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
+    if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
+        # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
+        gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids_g]
 
     # Split into gate and up components
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
@@ -182,6 +189,9 @@ def grouped_mm_experts_forward(
 
     # --- Down projection per expert (grouped_mm) ---
     out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
+    if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
+        # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
+        out_per_sample_g = out_per_sample_g + self.down_proj_bias[expert_ids_g]
 
     # Apply routing weights
     out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
@@ -222,6 +232,15 @@ def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[tor
 
         if self.config._experts_implementation != "eager":
             experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
+
+        if (
+            (self.gate_up_proj.dtype != torch.bfloat16 or self.down_proj.dtype != torch.bfloat16)
+            and self.config._experts_implementation == "grouped_mm"
+            and is_torchdynamo_compiling()
+        ):
+            # grouped_mm currently only supports bfloat16 when being compiled with torchdynamo
+            # we dispatch to batched_mm as it behaves better than eager in this case
+            experts_forward = batched_mm_experts_forward
 
         return experts_forward(self, *args, **kwargs)
 

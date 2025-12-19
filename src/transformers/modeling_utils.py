@@ -1198,9 +1198,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Grouped MM support
-    _supports_grouped_mm = False
-
     _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For
@@ -1791,11 +1788,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Check the availability of Grouped MM for a given model.
         """
 
-        if not self._supports_grouped_mm:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support an experts implementation through torch's grouped_mm."
-                " If you believe this error is a bug, please open an issue in Transformers GitHub repository."
-            )
+        if not self._can_set_experts_implementation():
+            raise ValueError(f"{self.__class__.__name__} does not support setting experts implementation.")
 
         if not is_grouped_mm_available():
             raise ImportError(
@@ -1964,12 +1958,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
         if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
             message = (
-                f'Specified `experts_implementation="{applicable_experts}"` is not supported. '
-                'The only possible arguments are `experts_implementation="eager"`'
+                f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
             )
-            if self._supports_grouped_mm:
-                message += ', `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`'
-            raise ValueError(message + ".")
+            raise ValueError(message)
 
         # Perform relevant checks
         if applicable_experts == "grouped_mm":
@@ -1999,6 +1991,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
+
+    @classmethod
+    def _can_set_experts_implementation(cls) -> bool:
+        """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
+        opening the file, but avoids maintaining yet another property flag.
+        """
+        class_file = sys.modules[cls.__module__].__file__
+        with open(class_file, "r") as f:
+            code = f.read()
+        # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
+        return "@use_experts_implementation" in code
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """

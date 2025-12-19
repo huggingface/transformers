@@ -475,7 +475,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
         "hidden_states": Dots1DecoderLayer,
         "attentions": Dots1Attention,
     }
-    _supports_grouped_mm = True
+
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()

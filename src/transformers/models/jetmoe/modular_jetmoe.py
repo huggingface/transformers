@@ -433,6 +433,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+
     _supports_flash_attn = True
     _supports_sdpa = True
 
