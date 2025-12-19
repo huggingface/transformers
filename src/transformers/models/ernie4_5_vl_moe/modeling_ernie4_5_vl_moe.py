@@ -1463,7 +1463,16 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
             self.rope_deltas = rope_deltas
         # then use the prev pre-calculated rope-deltas to get the correct position ids
         else:
-            batch_size, seq_length, device = input_ids.shape[0], 1, input_ids.device
+            if input_ids is not None:
+                batch_size, seq_length, device = input_ids.shape[0], 1, input_ids.device
+            elif inputs_embeds is not None:
+                batch_size, seq_length, device = inputs_embeds.shape[0], 1, inputs_embeds.device
+            else:
+                raise ValueError(
+                    "Cannot calculate position ids without any input to the model. "
+                    "Need either `input_ids` or `inputs_embeds`!"
+                )
+
             delta = (cache_position[0] + self.rope_deltas).to(device) if cache_position is not None else 0
             position_ids = torch.arange(seq_length, device=device)
             position_ids = position_ids.view(1, -1).expand(batch_size, -1)

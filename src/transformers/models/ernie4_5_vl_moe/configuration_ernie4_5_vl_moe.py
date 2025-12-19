@@ -317,7 +317,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
 
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(vision_config, Ernie4_5_VL_MoeTextConfig):
+        elif isinstance(text_config, Ernie4_5_VL_MoeTextConfig):
             self.text_config = text_config
         elif text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
