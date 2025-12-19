@@ -25,6 +25,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -51,6 +52,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.integrations.moe import batched_mm_experts_forward, grouped_mm_experts_forward
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -536,7 +538,7 @@ def _get_output_tensors(outputs):
 
 
 def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-    if not self.all_model_classes[0]._supports_grouped_mm:
+    if not self.all_model_classes[0]._can_set_experts_implementation():
         self.skipTest(f"{self.all_model_classes[0].__name__} does not support grouped_mm")
 
     # convert shorthand name to torch.dtype
@@ -570,20 +572,46 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            model.set_experts_implementation("eager")
-            self.assertEqual(model.config._experts_implementation, "eager")
-            outputs_eager = model(**prepared_inputs)
-            outputs_eager = _get_output_tensors(outputs_eager)
+            mock_batched_mm_forward = Mock(wraps=batched_mm_experts_forward)
+            mock_grouped_mm_forward = Mock(wraps=grouped_mm_experts_forward)
+            with (
+                # This is needed because we call the functions through the interface's global mapping
+                patch.dict(
+                    "transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping",
+                    {"batched_mm": mock_batched_mm_forward, "grouped_mm": mock_grouped_mm_forward},
+                ),
+            ):
+                model.set_experts_implementation("eager")
+                self.assertEqual(model.config._experts_implementation, "eager")
+                outputs_eager = model(**prepared_inputs)
+                mock_batched_mm_forward.assert_not_called()
+                mock_grouped_mm_forward.assert_not_called()
 
-            model.set_experts_implementation("batched_mm")
-            self.assertEqual(model.config._experts_implementation, "batched_mm")
-            outputs_batched_mm = model(**prepared_inputs)
-            outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
 
-            model.set_experts_implementation("grouped_mm")
-            self.assertEqual(model.config._experts_implementation, "grouped_mm")
-            outputs_grouped_mm = model(**prepared_inputs)
-            outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
+                model.set_experts_implementation("batched_mm")
+                self.assertEqual(model.config._experts_implementation, "batched_mm")
+                outputs_batched_mm = model(**prepared_inputs)
+                mock_grouped_mm_forward.assert_not_called()
+                mock_batched_mm_forward.assert_called()
+
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
+
+                model.set_experts_implementation("grouped_mm")
+                self.assertEqual(model.config._experts_implementation, "grouped_mm")
+                outputs_grouped_mm = model(**prepared_inputs)
+                mock_batched_mm_forward.assert_not_called()
+                mock_grouped_mm_forward.assert_called()
+
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
+
+        # extract output tensors for comparison
+        outputs_eager = _get_output_tensors(outputs_eager)
+        outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
+        outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
 
         # make sure we have collected some tensors from the outputs
         self.assertTrue(outputs_eager, "No outputs from eager implementation")
