@@ -120,7 +120,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
 
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
 
     def _init_weights(self, module):

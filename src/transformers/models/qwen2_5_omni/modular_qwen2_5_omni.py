@@ -1074,6 +1074,7 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
+    _can_compile_fullgraph = False
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,

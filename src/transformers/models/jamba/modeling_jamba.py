@@ -754,7 +754,6 @@ class JambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["JambaAttentionDecoderLayer", "JambaMambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
