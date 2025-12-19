@@ -60,7 +60,7 @@ class Blip2Processor(ProcessorMixin):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
     """
 
-    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
+    def __init__(self, image_processor, tokenizer, num_query_tokens=32, **kwargs):
         tokenizer.return_token_type_ids = False
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
@@ -107,8 +107,9 @@ class Blip2Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         max_length = output_kwargs["text_kwargs"].pop("max_length", None)
         if max_length is not None:
-            output_kwargs["text_kwargs"]["max_length"] = max_length - self.num_query_tokens
-
+            adjusted_max_length = max_length - self.num_query_tokens
+            if adjusted_max_length > 0:
+                output_kwargs["text_kwargs"]["max_length"] = adjusted_max_length
         encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):
