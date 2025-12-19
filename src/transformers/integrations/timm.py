@@ -51,7 +51,6 @@ if is_timm_available():
     )
     from timm.models.beit import Attention
     from timm.models.beit import gen_relative_position_index as beit_gen_relative_position_index
-    from timm.models.csatv2 import _DCT_MEAN, _DCT_VAR, LearnableDct2d
     from timm.models.efficientformer_v2 import Attention2d, Attention2dDownsample
     from timm.models.eva import EvaAttention
     from timm.models.levit import AttentionDownsample
@@ -61,6 +60,12 @@ if is_timm_available():
     from timm.models.swin_transformer_v2 import WindowAttention as Swin2WindowAttention
     from timm.models.swin_transformer_v2_cr import SwinTransformerV2CrBlock, WindowMultiHeadAttention
     from timm.models.vision_transformer import ParallelScalingBlock
+
+    # This one is very recent and is not necesarily in all versions we support (we require timm>=1.0.20)
+    try:
+        from timm.models.csatv2 import _DCT_MEAN, _DCT_VAR, LearnableDct2d
+    except Exception:
+        _DCT_MEAN, _DCT_VAR, LearnableDct2d = None, None, type(None)
 
 
 def _maybe_reinit_non_persistent_buffer(module):
