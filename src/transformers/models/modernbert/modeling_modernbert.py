@@ -43,10 +43,10 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_triton_available
+from ...utils.import_utils import is_kernels_available, is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
 
@@ -54,6 +54,19 @@ if is_flash_attn_2_available():
     from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
     from flash_attn.layers.rotary import RotaryEmbedding
     from flash_attn.ops.triton.rotary import apply_rotary
+# Fallback to hub kernels if available
+elif is_kernels_available():
+    try:
+        import importlib
+
+        from ...integrations.hub_kernels import get_kernel
+
+        flash_attn = get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+        flash_attn_varlen_qkvpacked_func = flash_attn.flash_attn_varlen_qkvpacked_func
+        RotaryEmbedding = importlib.import_module(f"{flash_attn.__name__}.layers.rotary").RotaryEmbedding
+        apply_rotary = importlib.import_module(f"{flash_attn.__name__}.ops.triton.rotary").apply_rotary
+    except Exception:
+        RotaryEmbedding = object
 else:
     RotaryEmbedding = object
 
@@ -361,6 +374,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def _is_flash_attn2_or_kernel_fallback(attn_implementation: str) -> bool:
+    """Check if attention implementation is flash_attention_2 or its kernel fallback."""
+    return attn_implementation in ("flash_attention_2", FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+
+
 def eager_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
@@ -480,6 +498,9 @@ def sdpa_attention_forward(
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
+    FLASH_ATTN_KERNEL_FALLBACK[
+        "flash_attention_2"
+    ]: flash_attention_forward,  # Support kernel fallback implementations
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -520,7 +541,7 @@ class ModernBertAttention(nn.Module):
             self.local_attention = (-1, -1)
             max_position_embeddings = config.max_position_embeddings
 
-        if config._attn_implementation == "flash_attention_2":
+        if _is_flash_attn2_or_kernel_fallback(config._attn_implementation):
             rope_parameters_dict = (
                 self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
             )
@@ -544,7 +565,7 @@ class ModernBertAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
-        if self.config._attn_implementation == "flash_attention_2":
+        if _is_flash_attn2_or_kernel_fallback(self.config._attn_implementation):
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
         else:
             qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
@@ -907,7 +928,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         repad = False
-        if self.config._attn_implementation == "flash_attention_2":
+        if _is_flash_attn2_or_kernel_fallback(self.config._attn_implementation):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if inputs_embeds is None:
@@ -969,7 +990,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
         # dimension missing
         elif (
-            self.config._attn_implementation == "flash_attention_2"
+            _is_flash_attn2_or_kernel_fallback(self.config._attn_implementation)
             and all_hidden_states is not None
             and all_hidden_states[-1].dim() == 2
         ):
@@ -1097,7 +1118,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if _is_flash_attn2_or_kernel_fallback(self.config._attn_implementation):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 if batch_size is None and seq_len is None:
                     if inputs_embeds is not None:
@@ -1156,7 +1177,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if _is_flash_attn2_or_kernel_fallback(self.config._attn_implementation):
             # Logits padding
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
