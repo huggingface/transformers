@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import random
 import unittest
 
 from transformers import PeVideoConfig, PeVideoEncoderConfig
@@ -104,7 +103,6 @@ class PeVideoEncoderTester:
                 self.config_kwargs["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        random.seed(0)
         # Generate valid_lengths in range [1, num_frames] to ensure at least one valid frame
         valid_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
         padding_mask_videos = torch.arange(self.num_frames, device=torch_device).unsqueeze(0) < valid_lengths[:, None]
