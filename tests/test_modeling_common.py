@@ -1216,7 +1216,7 @@ class ModelTesterMixin:
 
             # Prepare inputs to correct device
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            inputs = {k: v.to(device="cpu") for k,v in inputs.items()}
+            inputs = {k: v.to(device="cpu") for k, v in inputs.items()}
 
             # Try running a forward, to see if a tensor stayed on meta somewhere
             _ = model(**inputs)
