@@ -1,6 +1,6 @@
 # python test_file/convert_asr.py \
 #   --src zai-org/GLM-ASR-Nano-2512/model.safetensors \
-#   --dst GLM-ASR-Nano-2512-change/model.safetensors
+#   --dst GLM-ASR-Nano-2512-HF/model.safetensors
 
 import argparse
 import os
