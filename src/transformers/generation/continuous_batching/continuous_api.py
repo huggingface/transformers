@@ -619,8 +619,10 @@ class ContinuousBatchProcessor:
                 self.scheduler.active_requests[new_request.request_id] = new_request
             # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
 
-        # The copy induced by the fork is done in one go
-        self.cache.copy_cache(copy_source, copy_destination)
+        # The copy induced by the fork is done in one go (if it's even needed)
+        if copy_source:
+            self.cache.copy_cache(copy_source, copy_destination)
+
         if self.cache.get_num_free_blocks() == 0:
             raise ValueError("No more free blocks")
 
