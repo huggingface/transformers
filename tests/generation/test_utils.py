@@ -4802,6 +4802,25 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = model.generate(**generation_kwargs, **model_inputs)
         self.assertEqual(output.sequences.shape, (1, 9))
 
+    def test_model_generation_config_can_override_defaults(self):
+        """Sanity check that the model samples, not ignoring the model's generation config"""
+        torch.manual_seed(42)  # make it deterministic
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM").eval()
+        model = model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model_inputs = tokenizer(["Write a poem about the market crashing in summer"], return_tensors="pt")
+        model_inputs = model_inputs.to(model.device)
+
+        # Overwrite default value or sampling
+        model.generation_config.do_sample = True
+        output = model.generate(**model_inputs, max_new_tokens=32)
+
+        EXPECTED_TEXT = 'Write a poem about the market crashing in summersong contradictionPr aucitated realiz Comicsflutterąc inventминцій Glad:` Raymond moreover KulturMillteger мартаTEXT CFщая Русбе Świ Sendlink heuresListener Luigiaceae'  # fmt: skip
+        output = tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(output == EXPECTED_TEXT)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
