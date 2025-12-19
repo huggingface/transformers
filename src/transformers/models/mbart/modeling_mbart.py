@@ -45,6 +45,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    check_with,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
@@ -1270,8 +1271,11 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        check_with(
+            ValueError,
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
+            lambda: "All examples must have the same number of <eos> tokens.",
+        )
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
         ]

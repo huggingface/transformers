@@ -216,6 +216,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
     test_missing_keys = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)

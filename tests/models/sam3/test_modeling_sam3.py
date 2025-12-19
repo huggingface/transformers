@@ -148,7 +148,6 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Sam3VisionModelTester(self)
@@ -428,7 +427,6 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
