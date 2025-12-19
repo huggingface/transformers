@@ -173,7 +173,7 @@ class BitLinear(nn.Module):
         Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
         -----------
-        x : torch.Tensor
+        input : torch.Tensor
             Input activations to be quantized.
         num_bits : int, optional (default=8)
             Number of bits to use for quantization, determining the quantization range.
