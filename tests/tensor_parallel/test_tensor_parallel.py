@@ -492,7 +492,7 @@ def _test_model_moe_forward_impl(rank, mode):
     inputs = tokenizer(prompt, return_tensors="pt")
 
     # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -501,7 +501,7 @@ def _test_model_moe_forward_impl(rank, mode):
 
     # Load non-TP model and move to same device as TP model
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
     model = model.to(device)
 
     if mode == "eval":
@@ -596,7 +596,7 @@ def _test_model_moe_forward_compile_impl(rank, mode):
     prompt = "Can I help"
     inputs = tokenizer(prompt, return_tensors="pt")
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -604,7 +604,7 @@ def _test_model_moe_forward_compile_impl(rank, mode):
         model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
     model = model.to(device)
 
     if mode == "eval":
