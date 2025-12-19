@@ -119,8 +119,7 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -143,7 +142,6 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
-    _can_compile_fullgraph = False
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,

@@ -166,7 +166,6 @@ class OlmoePreTrainedModel(PreTrainedModel):
         "attentions": OlmoeAttention,
     }
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
-
     _supports_attention_backend = True
 
     @torch.no_grad()
