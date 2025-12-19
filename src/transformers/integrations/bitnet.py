@@ -92,7 +92,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     Explanation of the example:
     ---------------------------
-    Let's take the first value for example 0b10100001, we we will only focus on the first column,
+    Let's take the first value for example 0b10100001, we will only focus on the first column,
     because every element is unpacked across the first dimension
     - First 2 bits: `01` → 0 at [0][0]
     - Second 2 bits: `00` → -1 at [0][2]
