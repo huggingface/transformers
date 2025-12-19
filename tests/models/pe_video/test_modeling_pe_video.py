@@ -103,9 +103,12 @@ class PeVideoEncoderTester:
                 self.config_kwargs["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        # Set all padding_mask_videos to 1 to avoid NaN values in outputs
-        # which can cause test instability in disk offload tests
-        padding_mask_videos = torch.ones([self.batch_size, self.num_frames], device=torch_device, dtype=torch.int)
+        torch.manual_seed(0)
+        valid_lengths = ids_tensor([self.batch_size], self.num_frames)
+        padding_mask_videos = (
+            torch.arange(self.num_frames, device=torch_device).unsqueeze(0) < valid_lengths[:, None]
+        )
+        padding_mask_videos = padding_mask_videos.int()
         config = self.get_config()
 
         return config, pixel_values_videos, padding_mask_videos
