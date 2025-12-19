@@ -245,6 +245,10 @@ class GenerationConfig(PushToHubMixin):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
             details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+        safety_config (`SafetyConfig` or `dict`, *optional*):
+            Configuration for content safety filtering during generation. Enables real-time detection and suppression
+            of unsafe content like toxicity, hate speech, etc. See [`SafetyConfig`] for more details. If passed as
+            `Dict`, it will be converted to a `SafetyConfig` internally.
 
         > Parameters that define the output variables of generate
 
@@ -382,6 +386,22 @@ class GenerationConfig(PushToHubMixin):
         self.watermarking_config = kwargs.pop("watermarking_config", None)
         if isinstance(self.watermarking_config, dict):
             self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+
+        # Safety configuration for content filtering during generation
+        safety_config = kwargs.pop("safety_config", None)
+        if safety_config is None:
+            self.safety_config = None
+        elif hasattr(safety_config, "enabled"):  # Duck typing for SafetyConfig
+            self.safety_config = safety_config
+        else:
+            # Lazy import to avoid circular dependencies
+            try:
+                from .safety import SafetyConfig
+
+                self.safety_config = SafetyConfig.from_dict(safety_config)
+            except ImportError:
+                logger.warning("SafetyConfig requested but safety module not available")
+                self.safety_config = None
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)

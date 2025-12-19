@@ -1139,6 +1139,65 @@ class GenerationMixin(ContinuousMixin):
             )
         return candidate_generator
 
+    def _create_safety_processor(self, safety_config, processor_type="logits"):
+        """
+        Create safety processor from configuration.
+
+        Args:
+            safety_config: SafetyConfig object containing safety settings
+            processor_type: Type of processor to create ("logits" or "stopping")
+
+        Returns:
+            SafetyLogitsProcessor or SafetyStoppingCriteria, or None if creation fails
+        """
+        if not safety_config or not getattr(safety_config, "enabled", False):
+            return None
+
+        # Ensure we have a tokenizer
+        if not hasattr(self, "tokenizer") or self.tokenizer is None:
+            logger.warning("Cannot create safety processor: tokenizer not available")
+            return None
+
+        try:
+            from .safety import SafetyLogitsProcessor, SafetyStoppingCriteria
+
+            # Get checker from configuration
+            try:
+                safety_checker = safety_config.construct_checker()
+            except ValueError as e:
+                raise ValueError(
+                    f"Safety configuration error: {e}\n"
+                    "You must provide a SafetyChecker instance in SafetyConfig. "
+                    "See examples/safe_generation/ for reference implementations."
+                ) from e
+
+            if processor_type == "logits":
+                return SafetyLogitsProcessor(
+                    safety_checker=safety_checker,
+                    tokenizer=self.tokenizer,
+                    safety_config=safety_config,
+                    check_interval=getattr(safety_config, "check_interval", 1),
+                )
+            elif processor_type == "stopping":
+                return SafetyStoppingCriteria(
+                    safety_checker=safety_checker,
+                    tokenizer=self.tokenizer,
+                    safety_config=safety_config,
+                    check_final_only=getattr(safety_config, "check_final_only", False),
+                )
+            else:
+                raise ValueError(f"processor_type must be 'logits' or 'stopping', got '{processor_type}'")
+
+        except ImportError:
+            logger.warning("Safety module not available - cannot create safety processors")
+            return None
+        except ValueError:
+            # Re-raise ValueError for input validation errors (like invalid processor_type or missing checker)
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to create safety {processor_type} processor: {e}")
+            return None
+
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
@@ -1296,6 +1355,12 @@ class GenerationMixin(ContinuousMixin):
                 )
             )
 
+        # Add safety processor if enabled
+        if hasattr(generation_config, "safety_config") and generation_config.safety_config is not None:
+            safety_processor = self._create_safety_processor(generation_config.safety_config, "logits")
+            if safety_processor is not None:
+                processors.append(safety_processor)
+
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)
 
@@ -1397,6 +1462,13 @@ class GenerationMixin(ContinuousMixin):
             criteria.append(
                 ConfidenceCriteria(assistant_confidence_threshold=generation_config.assistant_confidence_threshold)
             )
+
+        # Add safety stopping criteria if enabled
+        if hasattr(generation_config, "safety_config") and generation_config.safety_config is not None:
+            safety_stopping = self._create_safety_processor(generation_config.safety_config, "stopping")
+            if safety_stopping is not None:
+                criteria.append(safety_stopping)
+
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
