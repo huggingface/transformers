@@ -16,6 +16,7 @@
 
 import copy
 import json
+import math
 import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
@@ -49,6 +50,9 @@ logger = logging.get_logger(__name__)
 
 # type hinting: specifying the type of config class that inherits from PreTrainedConfig
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
+
+_FLOAT_TAG_KEY = "__float__"
+_FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
@@ -812,7 +816,56 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
-        return json.loads(text)
+        config_dict = json.loads(text)
+
+        return cls._decode_special_floats(config_dict)
+
+    @classmethod
+    def _encode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and encode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        It serializes floats like `Infinity` as an object: `{'__float__': Infinity}`.
+        """
+        if isinstance(obj, float):
+            if math.isnan(obj):
+                return {_FLOAT_TAG_KEY: "NaN"}
+            if obj == float("inf"):
+                return {_FLOAT_TAG_KEY: "Infinity"}
+            if obj == float("-inf"):
+                return {_FLOAT_TAG_KEY: "-Infinity"}
+            return obj
+
+        if isinstance(obj, dict):
+            return {k: cls._encode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, (list, tuple)):
+            return [cls._encode_special_floats(v) for v in obj]
+
+        return obj
+
+    @classmethod
+    def _decode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and decode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        This method deserializes objects like `{'__float__': Infinity}` to their float values like `Infinity`.
+        """
+        if isinstance(obj, dict):
+            if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(obj[_FLOAT_TAG_KEY], str):
+                tag = obj[_FLOAT_TAG_KEY]
+                if tag in _FLOAT_TAG_VALUES:
+                    return _FLOAT_TAG_VALUES[tag]
+                return obj
+
+            return {k: cls._decode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [cls._decode_special_floats(v) for v in obj]
+
+        return obj
 
     def __eq__(self, other):
         return isinstance(other, PreTrainedConfig) and (self.__dict__ == other.__dict__)
@@ -932,6 +985,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        # Handle +/-Infinity and NaNs
+        config_dict = self._encode_special_floats(config_dict)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: str | os.PathLike, use_diff: bool = True):
