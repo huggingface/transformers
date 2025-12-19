@@ -140,6 +140,7 @@ def _get_feat_extract_output_lengths(input_lengths):
 
 class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
+    _can_compile_fullgraph = False
 
     def _prepare_4d_causal_attention_mask_with_cache_position(
         self,
