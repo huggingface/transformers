@@ -176,7 +176,7 @@ class CausalLMModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=40,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
