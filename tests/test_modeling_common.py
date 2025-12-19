@@ -1219,7 +1219,21 @@ class ModelTesterMixin:
             inputs = {k: v.to(device="cpu") for k, v in inputs.items()}
 
             # Try running a forward, to see if a tensor stayed on meta somewhere
-            _ = model(**inputs)
+            try:
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+            except (RuntimeError, NotImplementedError) as e:
+                # Re-raise a more friendly exception (unfortunately, we cannot know which tensor it was...)
+                if "Cannot copy out of meta tensor; no data!" in str(
+                    e
+                ) or "Tensor on device meta is not on the expected device cpu!" in str(e):
+                    raise ValueError(
+                        "A tensor is still on meta device. It means it was not properly registered as a Parameter or "
+                        "Buffer.\nMost of the time, it should be added as a non-persistent buffer if you don't want to include "
+                        "it in the model's state dict. It can also be a scalar that was added as a torch.Tensor, consider making it "
+                        "a Python scalar in this case and use it as such in forward"
+                    ) from e
+                else:
+                    raise e
 
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
