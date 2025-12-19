@@ -78,9 +78,8 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config._attn_implementation = "flash_attention_2"
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
-            model = GptOssModel(config)
+            config._attn_implementation = "flash_attention_2"
 
         config._attn_implementation = "kernels-community/vllm-flash-attn3"
         model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
@@ -90,10 +89,9 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
             output = model(**inputs_dict)
         self.assertIsNotNone(output)
 
-        model.config._attn_implementation = "flash_attention_2"
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
-            with torch.no_grad():
-                model(**inputs_dict)
+            model.config._attn_implementation = "flash_attention_2"
+
 
         model.config._attn_implementation = "kernels-community/vllm-flash-attn3"
         with torch.no_grad():
