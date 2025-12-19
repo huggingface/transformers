@@ -301,6 +301,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
+
+        kwargs.setdefault("bos_token", "<s>")
+        kwargs.setdefault("eos_token", "</s>")
+
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
         self._add_eos_token = kwargs.get("add_eos_token", False)
