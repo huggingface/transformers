@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from packaging import version
 
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -94,19 +94,19 @@ class TorchAoHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-        if isinstance(self.quantization_config.quant_type, str):
-            is_int_4 = "int4" in self.quantization_config.quant_type
+        self.quantized_param_size = None
+        quant_type = self.quantization_config.quant_type
+        if isinstance(quant_type, str):
+            map_to_param_size = {
+                "int4_weight_only": 0.5,
+                "int8_weight_only": 1,
+                "int8_dynamic_activation_int8_weight": 1,
+            }
+            if quant_type in map_to_param_size:
+                self.quantized_param_size = map_to_param_size[quant_type]
         else:
-            config_name = self.quantization_config.quant_type.__class__.__name__
-            is_int_4 = fuzzy_match_size(config_name) == "4"
-
-        # TODO: better way to get the serialized key names? Hard to read from torchao codebase
-        if is_int_4:
-            self.weight_ao_keys = ["qdata", "scale", "zero_point"]
-        else:
-            self.weight_ao_keys = ["qdata", "scale"]
-        # Instead of serializing the simple torch.Tensor like usual, torchao adds a `:_data` suffix so we need this
-        self.full_ao_keys = self.weight_ao_keys + ["_data"]
+            size_digit = fuzzy_match_size(quant_type.__class__.__name__)
+            self.quantized_param_size = 0.5 if size_digit == "4" else 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -152,40 +152,12 @@ class TorchAoHfQuantizer(HfQuantizer):
                 f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
             )
 
-    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
+            return self.quantized_param_size
 
-        # Import AOBaseConfig directly since we know we have the right version
-        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-            from torchao.core.config import AOBaseConfig
-
-            quant_type = self.quantization_config.quant_type
-            if isinstance(quant_type, AOBaseConfig):
-                # Extract size digit using fuzzy match on the class name
-                config_name = quant_type.__class__.__name__
-                size_digit = fuzzy_match_size(config_name)
-
-                # Map the extracted digit to appropriate dtype
-                if size_digit == "4":
-                    return CustomDtype.INT4
-                else:
-                    # Default to int8
-                    return torch.int8
-
-            # Original mapping for non-AOBaseConfig types
-            map_to_target_dtype = {
-                "int4_weight_only": CustomDtype.INT4,
-                "int8_weight_only": torch.int8,
-                "int8_dynamic_activation_int8_weight": torch.int8,
-                "autoquant": None,
-            }
-            return map_to_target_dtype[self.quantization_config.quant_type]
-        else:
-            raise ValueError(
-                "You are using `device_map='auto'` on a torchao quantized model. To automatically compute"
-                " the appropriate device map, you should upgrade your `accelerate` library with "
-                "`pip install --upgrade accelerate`"
-            )
+        return super().param_element_size(model, param_name, param)
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
@@ -209,13 +181,11 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.set_metadata(checkpoint_files)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        if self.pre_quantized:
-            return False
         if self.quantization_config.quant_type == "autoquant":
             return False
 
         # check if the param_name is not in self.modules_to_not_convert
-        if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
+        if not should_convert_module(param_name, self.modules_to_not_convert):
             return False
 
         # we only quantize the weight of nn.Linear and nn.Embedding
@@ -266,45 +236,6 @@ class TorchAoHfQuantizer(HfQuantizer):
                 "your version to save the quantized model"
             )
         return _is_torchao_serializable
-
-    def get_accelerator_warm_up_factor(self):
-        """
-        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for accelerator warmup.
-        - A factor of 2 means we pre-allocate the full memory footprint of the model.
-        - A factor of 4 means we pre-allocate half of that, and so on
-
-        However, when using TorchAO, calculating memory usage with param.numel() * param.element_size() doesn't give the correct size for quantized weights (like int4 or int8)
-        That's because TorchAO internally represents quantized tensors using subtensors and metadata, and the reported element_size() still corresponds to the dtype
-        not the actual bit-width of the quantized data.
-
-        To correct for this:
-        - Use a division factor of 8 for int4 weights
-        - Use a division factor of 4 for int8 weights
-        """
-        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-            from torchao.core.config import AOBaseConfig
-
-            quant_type = self.quantization_config.quant_type
-            # For autoquant case, it will be treated in the string implementation below in map_to_target_dtype
-            if isinstance(quant_type, AOBaseConfig):
-                # Extract size digit using fuzzy match on the class name
-                config_name = quant_type.__class__.__name__
-                size_digit = fuzzy_match_size(config_name)
-
-                if size_digit == "4":
-                    return 8
-                else:
-                    return 4
-
-        # Original mapping for non-AOBaseConfig types
-        map_to_target_dtype = {
-            "int4_weight_only": 8,
-            "int8_weight_only": 4,
-            "int8_dynamic_activation_int8_weight": 4,
-            "autoquant": 4,
-        }
-
-        return map_to_target_dtype[self.quantization_config.quant_type]
 
     @property
     def is_trainable(self) -> bool:

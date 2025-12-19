@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
@@ -59,7 +60,7 @@ class RTDetrV2Config(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -564,7 +565,11 @@ class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
 
 
 class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            n_points_scale = [1 / n for n in module.n_points_list for _ in range(n)]
+            init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
 class RTDetrV2Decoder(RTDetrDecoder):

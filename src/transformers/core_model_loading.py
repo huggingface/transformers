@@ -464,6 +464,8 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
+            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+            pattern = pattern.removesuffix("$")
             # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
             # Qwen2.5, Sam3, Ernie4.5 VL MoE!
             pattern = re.sub(r"\(\?.+\)", "", pattern)
