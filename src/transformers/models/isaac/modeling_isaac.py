@@ -344,14 +344,7 @@ class IsaacVisionAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
 
-        # Align projection inputs with parameter dtype to avoid mixed-dtype matmul errors
-        out_proj_dtype = self.out_proj.weight.dtype
-        if attn_output.dtype != out_proj_dtype:
-            attn_output = attn_output.to(out_proj_dtype)
-
         attn_output = self.out_proj(attn_output)
-        if attn_output.dtype != hidden_states.dtype:
-            attn_output = attn_output.to(hidden_states.dtype)
 
         return attn_output, attn_weights
 
