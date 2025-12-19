@@ -117,5 +117,18 @@ class GptOssConfig(PreTrainedConfig):
             **kwargs,
         )
 
+    @property
+    def _attn_implementation(self):
+        return self._attn_implementation_internal
+
+    @_attn_implementation.setter
+    def _attn_implementation(self, value):
+        if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
+            raise ValueError(
+                f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
+                "Only 'kernels-community/vllm-flash-attn3' is supported."
+            )
+
+        super(GptOssConfig, self.__class__)._attn_implementation.fset(self, value)
 
 __all__ = ["GptOssConfig"]

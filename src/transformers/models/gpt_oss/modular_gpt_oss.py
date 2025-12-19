@@ -380,19 +380,6 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 class GptOssModel(MixtralModel):
     _no_split_modules = ["GptOssDecoderLayer"]
 
-    def __init__(self, config: GptOssConfig):
-        super().__init__(config)
-
-        if (
-            "flash" in config._attn_implementation
-            and config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
-        ):
-            raise ValueError(
-                f"GPT-OSS model does not support the specified "
-                f"flash attention implementation: {config._attn_implementation}. "
-                f"Only 'kernels-community/vllm-flash-attn3' is supported."
-            )
-
     @check_model_inputs
     @auto_docstring
     def forward(
@@ -408,16 +395,6 @@ class GptOssModel(MixtralModel):
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if (
-            "flash" in self.config._attn_implementation
-            and self.config._attn_implementation.removeprefix("paged|") != "kernels-community/vllm-flash-attn3"
-        ):
-            raise ValueError(
-                f"GPT-OSS model does not support the specified "
-                f"flash attention implementation: {self.config._attn_implementation}. "
-                f"Only 'kernels-community/vllm-flash-attn3' is supported."
-            )
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
