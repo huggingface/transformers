@@ -858,7 +858,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             )
             # train with base loss
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
