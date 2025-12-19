@@ -20,11 +20,18 @@ won't need to reinit them.
 Do not rely on it, as we will work to integrate it directly in `timm`, to then remove this file without warning.
 """
 
+from math import comb
+
+import torch
+
 from .. import initialization as init
 from ..utils import is_timm_available
 
 
 if is_timm_available():
+    from timm.layers import ndgrid
+    from timm.layers.blur_pool import BlurPool2d
+    from timm.layers.lambda_layer import LambdaLayer, rel_pos_indices
     from timm.layers.pos_embed_rel import (
         RelPosBias,
         RelPosBiasTf,
@@ -42,6 +49,18 @@ if is_timm_available():
         freq_bands,
         pixel_freq_bands,
     )
+    from timm.models.beit import Attention
+    from timm.models.beit import gen_relative_position_index as beit_gen_relative_position_index
+    from timm.models.csatv2 import _DCT_MEAN, _DCT_VAR, LearnableDct2d
+    from timm.models.efficientformer_v2 import Attention2d, Attention2dDownsample
+    from timm.models.eva import EvaAttention
+    from timm.models.levit import AttentionDownsample
+    from timm.models.swin_transformer import SwinTransformerBlock, get_relative_position_index
+    from timm.models.swin_transformer import WindowAttention as SwinWindowAttention
+    from timm.models.swin_transformer_v2 import SwinTransformerV2Block
+    from timm.models.swin_transformer_v2 import WindowAttention as Swin2WindowAttention
+    from timm.models.swin_transformer_v2_cr import SwinTransformerV2CrBlock, WindowMultiHeadAttention
+    from timm.models.vision_transformer import ParallelScalingBlock
 
 
 def _maybe_reinit_non_persistent_buffer(module):
@@ -99,3 +118,94 @@ def _maybe_reinit_non_persistent_buffer(module):
     elif isinstance(module, RelPosBiasTf):
         init.copy_(module.height_lookup, generate_lookup_tensor(module.window_size[0]))
         init.copy_(module.width_lookup, generate_lookup_tensor(module.window_size[1]))
+    elif isinstance(module, LearnableDct2d):
+        init.copy_(module.mean, torch.tensor(_DCT_MEAN))
+        init.copy_(module.var, torch.tensor(_DCT_VAR))
+        init.copy_(module.imagenet_mean, torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1))
+        init.copy_(module.imagenet_std, torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1))
+    elif isinstance(module, LambdaLayer):
+        if module.rel_pos_indices is not None:
+            rel_size = module.pos_enb.shape[:2]
+            feat_size = [(s + 1) // 2 for s in rel_size]
+            init.copy_(module.rel_pos_indices, rel_pos_indices(feat_size))
+    elif isinstance(module, AttentionDownsample):
+        k_pos = torch.stack(
+            ndgrid(
+                torch.arange(module.resolution[0], dtype=torch.long),
+                torch.arange(module.resolution[1], dtype=torch.long),
+            )
+        ).flatten(1)
+        q_pos = torch.stack(
+            ndgrid(
+                torch.arange(0, module.resolution[0], step=module.stride, dtype=torch.long),
+                torch.arange(0, module.resolution[1], step=module.stride, dtype=torch.long),
+            )
+        ).flatten(1)
+        rel_pos = (q_pos[..., :, None] - k_pos[..., None, :]).abs()
+        rel_pos = (rel_pos[0] * module.resolution[1]) + rel_pos[1]
+        init.copy_(module.attention_bias_idxs, rel_pos)
+    elif isinstance(
+        module,
+        EvaAttention,
+    ):
+        if module.k_bias is not None:
+            init.zeros_(module.k_bias)
+    elif isinstance(module, ParallelScalingBlock):
+        if module.qkv_bias is not None:
+            init.zeros_(module.qkv_bias)
+    elif isinstance(module, Attention):
+        if module.k_bias is not None:
+            init.zeros_(module.k_bias)
+        if module.relative_position_index is not None:
+            init.copy_(module.relative_position_index, beit_gen_relative_position_index(module.window_size))
+    elif isinstance(module, SwinTransformerV2CrBlock):
+        if module.attn_mask is not None:
+            init.copy_(module.attn_mask, module.get_attn_mask())
+    elif isinstance(module, WindowMultiHeadAttention):
+        module._make_pair_wise_relative_positions()
+    elif isinstance(module, BlurPool2d):
+        coeffs = torch.tensor(
+            [comb(module.filt_size - 1, k) for k in range(module.filt_size)], dtype=torch.float32
+        ) / (2 ** (module.filt_size - 1))
+        blur_filter = (coeffs[:, None] * coeffs[None, :])[None, None, :, :]
+        if module.channels is not None:
+            blur_filter = blur_filter.repeat(module.channels, 1, 1, 1)
+        init.copy_(module.filt, blur_filter)
+    elif isinstance(module, Swin2WindowAttention):
+        module._make_pair_wise_relative_positions()
+        if module.k_bias is not None:
+            init.zeros_(module.k_bias)
+    elif isinstance(module, SwinTransformerV2Block):
+        if module.attn_mask is not None:
+            init.copy_(module.attn_mask, module.get_attn_mask())
+    elif isinstance(module, SwinWindowAttention):
+        init.copy_(module.relative_position_index, get_relative_position_index(*module.window_size))
+    elif isinstance(module, SwinTransformerBlock):
+        if module.attn_mask is not None:
+            init.copy_(module.attn_mask, module.get_attn_mask())
+    elif isinstance(module, Attention2d):
+        pos = torch.stack(
+            ndgrid(
+                torch.arange(module.resolution[0], dtype=torch.long),
+                torch.arange(module.resolution[1], dtype=torch.long),
+            )
+        ).flatten(1)
+        rel_pos = (pos[..., :, None] - pos[..., None, :]).abs()
+        rel_pos = (rel_pos[0] * module.resolution[1]) + rel_pos[1]
+        init.copy_(module.attention_bias_idxs, rel_pos)
+    elif isinstance(module, Attention2dDownsample):
+        k_pos = torch.stack(
+            ndgrid(
+                torch.arange(module.resolution[0], dtype=torch.long),
+                torch.arange(module.resolution[1], dtype=torch.long),
+            )
+        ).flatten(1)
+        q_pos = torch.stack(
+            ndgrid(
+                torch.arange(0, module.resolution[0], step=2, dtype=torch.long),
+                torch.arange(0, module.resolution[1], step=2, dtype=torch.long),
+            )
+        ).flatten(1)
+        rel_pos = (q_pos[..., :, None] - k_pos[..., None, :]).abs()
+        rel_pos = (rel_pos[0] * module.resolution[1]) + rel_pos[1]
+        init.copy_(module.attention_bias_idxs, rel_pos)
