@@ -365,7 +365,7 @@ def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None =
 
     if not has_been_replaced:
         logger.warning(
-            "You are loading your model using eetq but no linear modules were found in your model."
+            "You are loading your model using bitnet but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
