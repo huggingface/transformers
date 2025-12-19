@@ -39,9 +39,9 @@ from transformers.image_utils import load_image
 from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
-    document_mask_function_from_cu_seqlens,
     IsaacVisionAttention,
     IsaacVisionConfig,
+    document_mask_function_from_cu_seqlens,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
