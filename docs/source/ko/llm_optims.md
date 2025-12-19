@@ -152,7 +152,7 @@ def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_valu
 `StaticCache` 메서드를 사용하여 정적 kv-cache와 `torch.compile`을 활성화하려면 몇 가지 중요한 작업을 수행해야 합니다:
 1. 추론에 모델을 사용하기 전에 [`StaticCache`] 인스턴스를 초기화합니다. 여기서 최대 배치 크기와 시퀀스 길이와 같은 매개변수를 설정할 수 있습니다.
 2. 정적 kv-cache와 함께 순전파를 컴파일하기 위해 모델에 `torch.compile`을 호출합니다.
-3. [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자에서 `enable_math=True`를 설정하여 네이티브 PyTorch C++ 구현된 스케일된 점곱 어텐션(scaled dot product attention)을 활성화하여 추론 속도를 더욱 높입니다.
+3. [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) 컨텍스트 관리자에서 `SDPBackend.MATH`를 설정하여 네이티브 PyTorch C++ 구현된 스케일된 점곱 어텐션(scaled dot product attention)을 활성화하여 추론 속도를 더욱 높입니다.
 
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
@@ -175,7 +175,7 @@ with torch.no_grad():
     decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
     cache_position = torch.tensor([seq_length + 1], device=torch_device)
     for _ in range(1, NUM_TOKENS_TO_GENERATE):
-        with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+        with torch.nn.attention.sdpa_kernel([torch.nn.attention.SDPBackend.MATH]):
             next_token = decode_one_tokens(model, next_token.clone(), None, cache_position, past_key_values)
             generated_ids[:, cache_position] = next_token.int()
         cache_position += 1
@@ -352,7 +352,7 @@ model = AutoModelForCausalLM.from_pretrained(
 > [!TIP]
 > SDPA는 최신 PyTorch 버전이 설치되어 있으면 FlashAttention-2도 지원합니다.
 
-세 가지 어텐션 알고리즘 중 하나를 명시적으로 활성화하거나 비활성화하려면 [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) 컨텍스트 관리자를 사용하십시오. 예를 들어 FlashAttention을 활성화하려면 `enable_flash=True`로 설정하십시오.
+세 가지 어텐션 알고리즘 중 하나를 명시적으로 활성화하거나 비활성화하려면 [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) 컨텍스트 관리자를 사용하십시오. 예를 들어 FlashAttention을 활성화하려면 `SDPBackend.FLASH_ATTENTION`을 사용하십시오.
 
 ```py
 import torch
@@ -363,7 +363,7 @@ model = AutoModelForCausalLM.from_pretrained(
     dtype=torch.bfloat16,
 )
 
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+with torch.nn.attention.sdpa_kernel([torch.nn.attention.SDPBackend.FLASH_ATTENTION]):
     outputs = model.generate(**inputs)
 ```
 

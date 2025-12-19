@@ -38,6 +38,23 @@ if is_torch_available():
     import torch
 
 
+def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
+    """Helper to use the appropriate SDPA kernel API based on PyTorch version."""
+    if version.parse(torch.__version__).release < version.parse("2.3").release:
+        return torch.backends.cuda.sdp_kernel(
+            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
+        )
+
+    backends = []
+    if enable_flash:
+        backends += [torch.nn.attention.SDPBackend.FLASH_ATTENTION]
+    if enable_math:
+        backends += [torch.nn.attention.SDPBackend.MATH]
+    if enable_mem_efficient:
+        backends += [torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION]
+    return torch.nn.attention.sdpa_kernel(backends)
+
+
 @require_torch_accelerator
 class AqlmConfigTest(unittest.TestCase):
     def test_to_dict(self):
@@ -250,7 +267,7 @@ class AqlmTest(unittest.TestCase):
             # Generate tokens one by one
             cache_position = torch.tensor([seq_length + 1], device=torch_device)
             for _ in range(1, self.max_new_tokens):
-                with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
+                with sdpa_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
                     next_token = decode_one_tokens(
                         self.quantized_model, next_token.clone(), None, cache_position, past_key_values
                     )
