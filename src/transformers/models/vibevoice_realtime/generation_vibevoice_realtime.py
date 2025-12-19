@@ -474,7 +474,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         first_text_window_size = TTS_TEXT_WINDOW_SIZE if input_ids.shape[1] >= TTS_TEXT_WINDOW_SIZE else input_ids.shape[1]
 
         # Initialize kwargs from prefilled outputs
-        # model_kwargs = self._update_model_kwargs_for_generation(lm_outputs, model_kwargs, num_new_tokens=first_text_window_size)
         lm_model_kwargs = self._update_model_kwargs_for_generation(lm_outputs, lm_model_kwargs, num_new_tokens=first_text_window_size)
         tts_lm_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_outputs, tts_lm_model_kwargs, num_new_tokens=first_text_window_size)
         tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
@@ -507,6 +506,9 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             next_text_window_size = input_ids[:, (tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+2)*TTS_TEXT_WINDOW_SIZE].shape[1]
             tts_text_window_index += 1
 
+            # TODO use for batching (not done by original)
+            cur_input_attention_mask = model_kwargs["attention_mask"][:, tts_text_window_index*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE]
+
             # Process text window if available
             if cur_input_tts_text_ids.shape[1] > 0:
                 lm_input_ids = torch.cat([lm_input_ids, cur_input_tts_text_ids], dim=-1)
@@ -521,10 +523,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 total_prefilled_text_tokens += cur_input_tts_text_ids.shape[1]
 
                 # Forward pass through LM
-                # model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                # lm_outputs = self.forward_lm(**model_inputs, return_dict=True)
-                # model_kwargs = self._update_model_kwargs_for_generation(lm_outputs, model_kwargs, num_new_tokens=next_text_window_size)
-
                 lm_model_inputs = self.prepare_inputs_for_generation(lm_input_ids, **lm_model_kwargs)
                 lm_outputs = self.forward_lm(**lm_model_inputs, return_dict=True)
                 lm_model_kwargs = self._update_model_kwargs_for_generation(lm_outputs, lm_model_kwargs, num_new_tokens=next_text_window_size)

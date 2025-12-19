@@ -63,12 +63,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
 
-        if not hasattr(tokenizer, "pad_id"):
-            # NOTE original used <image_pad>: https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/modular/modular_vibevoice_text_tokenizer.py#L181
-            self.pad_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
-        else:
-            self.pad_id = tokenizer.pad_id
-
     def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
         for key in ["lm", "tts_lm", "neg_tts_lm"]:
             if key not in voice_preset:
@@ -125,7 +119,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
 
         text_kwargs = output_kwargs["text_kwargs"]
         return_tensors = text_kwargs.get("return_tensors", None)
-        return_attention_mask = text_kwargs.get("return_attention_mask", True)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
         
@@ -146,17 +139,10 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         # TODO mimic their preprocessing but maybe not necessary?
         # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
         text_preprocessed = [t.strip() + "\n" for t in text]
-        # NOTE (ebezzam) this will create "inputs_id" and "attention_mask" according to Transformers convention
         encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
-        # TODO (ebezzam) hacks to imitate original, `tts_attention_mask` of below doesn't seem to be used by original?
-        del encoded_text["attention_mask"]      # original doesn't use this, but manually creates it, and manual has different shape
 
-        lm_input_ids = None    # input_ids in original
         if voice_preset is not None:
-            lm_input_ids = []
-
-            # TODO how to handle batching? Bark doesn't
-            # make batch
+            # TODO how to handle batching? Bark doesn't make batch
             if isinstance(voice_preset, (str, dict)):
                 voice_preset = [voice_preset]
             elif not isinstance(voice_preset, (list, tuple)):
@@ -169,16 +155,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
                 elif not isinstance(_preset, dict):
                     raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {_preset}")
                 self._validate_voice_preset_dict(voice_preset[i])
-
-                lm_input_ids.append([self.pad_id] * voice_preset[i]['lm']['last_hidden_state'].size(1))
-
-            lm_attention_masks = [[1] * len(ids) for ids in lm_input_ids] if return_attention_mask else None
-
-            # TODO (ebezzam) proper batching
-            encoded_text.update({
-                # NOTE (ebezzam) original seems to use this as the attention mask and NOT from tokenizer...
-                "attention_mask": torch.tensor(lm_attention_masks, dtype=torch.long) if lm_attention_masks is not None else None,
-            })
 
             # NOTE (ebezzam) like in Bark: https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
             # TODO should we batch? not done in Bark
