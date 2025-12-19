@@ -1805,7 +1805,7 @@ class GenerationMixin(ContinuousMixin):
                 for k, v in self.generation_config.to_dict().items()
                 if isinstance(v, bool)
                 and hasattr(default_generation_config, k)
-                and getattr(generation_config, k) == getattr(default_generation_config, k)
+                and getattr(generation_config, k, None) == getattr(default_generation_config, k)
             }
         )
 
