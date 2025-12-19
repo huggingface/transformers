@@ -98,11 +98,11 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3OmniMoeDecoderLayer", "Qwen3OmniMoeVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_grouped_mm = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
+    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1623,7 +1623,6 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -1631,6 +1630,7 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
+    _supports_grouped_mm = True
     config_class = Qwen3OmniMoeTextConfig
 
     @torch.no_grad()

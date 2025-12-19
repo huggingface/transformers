@@ -583,6 +583,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
+    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

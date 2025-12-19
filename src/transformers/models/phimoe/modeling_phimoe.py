@@ -623,7 +623,6 @@ class PhimoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -631,6 +630,7 @@ class PhimoePreTrainedModel(PreTrainedModel):
         "hidden_states": PhimoeDecoderLayer,
         "attentions": PhimoeAttention,
     }
+    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

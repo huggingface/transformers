@@ -487,13 +487,13 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Glm4MoeDecoderLayer,
         "attentions": Glm4MoeAttention,
     }
+    _supports_grouped_mm = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()

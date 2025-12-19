@@ -368,7 +368,6 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -376,6 +375,7 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3VLMoeTextDecoderLayer,
         "attentions": Qwen3VLMoeTextAttention,
     }
+    _supports_grouped_mm = True
 
     @torch.no_grad()
     def _init_weights(self, module):

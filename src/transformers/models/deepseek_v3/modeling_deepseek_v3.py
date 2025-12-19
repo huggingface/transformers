@@ -543,13 +543,13 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
         "attentions": DeepseekV3Attention,
     }
+    _supports_grouped_mm = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()

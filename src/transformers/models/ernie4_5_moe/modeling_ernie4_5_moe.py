@@ -477,7 +477,6 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _supports_grouped_mm = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -485,6 +484,7 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
+    _supports_grouped_mm = True
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
