@@ -249,12 +249,39 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Gemma3Vision2TextModelTester(VLMModelTester):
-    base_model_class = Gemma3Model
-    config_class = Gemma3Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
-    conditional_generation_class = Gemma3ForConditionalGeneration
-    sequence_classification_class = Gemma3ForSequenceClassification
+    if is_torch_available():
+        base_model_class = Gemma3Model
+        config_class = Gemma3Config
+        text_config_class = Gemma3TextConfig
+        vision_config_class = SiglipVisionConfig
+        conditional_generation_class = Gemma3ForConditionalGeneration
+        sequence_classification_class = Gemma3ForSequenceClassification
+
+    def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=4, image_token_index=4, **kwargs):
+        super().__init__(parent, image_size=image_size, patch_size=patch_size, num_key_value_heads=1, **kwargs)
+        self.mm_tokens_per_image = mm_tokens_per_image
+        self.image_token_index = image_token_index
+        # Actual tokens per image after pooling: int(sqrt(mm_tokens_per_image))^2
+        self.tokens_per_side = int(mm_tokens_per_image**0.5)
+        self.actual_tokens_per_image = self.tokens_per_side * self.tokens_per_side
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = super().prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"]
+
+        # Replace any accidental image tokens with a safe value
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+
+        # Insert the correct number of image tokens at the start of each sequence
+        # Each batch item has one image, and each image needs actual_tokens_per_image tokens
+        input_ids[:, : self.actual_tokens_per_image] = config.image_token_index
+
+        # Set up token_type_ids for bidirectional attention on image tokens
+        token_type_ids = torch.zeros_like(input_ids)
+        token_type_ids[input_ids == config.image_token_index] = 1
+        inputs_dict["token_type_ids"] = token_type_ids
+
+        return config, inputs_dict
 
 
 @require_torch
