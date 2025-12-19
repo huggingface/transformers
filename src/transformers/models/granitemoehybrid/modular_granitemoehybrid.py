@@ -276,25 +276,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             1. Cached forward
             2. Attending to all inputs
         """
-        # eager exit with no mask
-        if attention_mask is None:
-            return None
-    
-        cached = cache_position[0] > 0
-        all_attend = (attention_mask == 1).all()
-        pred = cached | all_attend  # 0-d bool tensor
-
-        # original implementation if not compiling
-        if not is_torchdynamo_compiling():
-            return None if bool(pred) else attention_mask
-    
-        ones = torch.ones_like(attention_mask)
-    
-        # pred as 0/1 in mask dtype, broadcastable
-        p = pred.to(dtype=attention_mask.dtype).reshape((1,) * attention_mask.ndim)
-    
-        # out = ones if pred else attention_mask
-        return ones * p + attention_mask * (1 - p)
+        mamba_mask = attention_mask
+        if not is_torchdynamo_compiling() and (cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1))):
+            mamba_mask = None
+        return mamba_mask
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
