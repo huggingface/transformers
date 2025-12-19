@@ -30,7 +30,7 @@ class DeepseekVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         return tokenizer_class.from_pretrained(
-            get_tests_dir("fixtures"),
+            SAMPLE_VOCAB,
             extra_special_tokens={
                 "pad_token": "<｜end▁of▁sentence｜>",
                 "image_token": "<image_placeholder>",
