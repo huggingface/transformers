@@ -241,7 +241,7 @@ class FalconH1RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -1187,26 +1187,6 @@ class FalconH1DecoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-@auto_docstring
-class FalconH1PreTrainedModel(PreTrainedModel):
-    config: FalconH1Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["FalconH1DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _is_stateful = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, FalconH1Mixer):
-            init.ones_(module.dt_bias)
-            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
-            init.ones_(module.D)
-
-
 def compute_mup_vector(config):
     """
     Computes the MuP vector based on model configuration.
@@ -1245,6 +1225,30 @@ def compute_mup_vector(config):
 
 
 @auto_docstring
+class FalconH1PreTrainedModel(PreTrainedModel):
+    config: FalconH1Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["FalconH1DecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _is_stateful = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FalconH1Mixer):
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
+        elif isinstance(module, FalconH1Model):
+            mup_vector = compute_mup_vector(module.config)
+            for layer in module.layers:
+                init.copy_(layer.mamba.mup_vector, mup_vector)
+
+
+@auto_docstring
 # Adapted from transformers.models.jamba.modeling_jamba.JambaModel
 class FalconH1Model(FalconH1PreTrainedModel):
     def __init__(self, config: FalconH1Config):
@@ -1269,7 +1273,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         # Compute the MuP vector once and register it for all layers
         mup_vector = compute_mup_vector(config)
         for layer in self.layers:
-            layer.mamba.register_buffer("mup_vector", mup_vector, persistent=False)
+            layer.mamba.register_buffer("mup_vector", mup_vector.clone(), persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()

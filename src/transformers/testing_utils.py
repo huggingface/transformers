@@ -118,6 +118,7 @@ from .utils import (
     is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
+    is_numba_available,
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
@@ -221,7 +222,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file
 
-    from .modeling_utils import PreTrainedModel
+    from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 
     IS_ROCM_SYSTEM = torch.version.hip is not None
     IS_CUDA_SYSTEM = torch.version.cuda is not None
@@ -620,7 +621,7 @@ def require_flash_attn(test_case):
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn2")
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
     except Exception as _:
         kernels_available = False
 
@@ -1091,17 +1092,20 @@ def require_torch_large_gpu(test_case, memory: float = 20):
     )(test_case)
 
 
-def require_torch_large_accelerator(test_case, memory: float = 20):
+def require_torch_large_accelerator(test_case=None, *, memory: float = 20):
     """Decorator marking a test that requires an accelerator with more than `memory` GiB of memory."""
-    if torch_device != "cuda" and torch_device != "xpu":
-        return unittest.skip(reason=f"test requires a GPU or XPU with more than {memory} GiB of memory")(test_case)
 
-    torch_accelerator_module = getattr(torch, torch_device)
+    def memory_decorator(tc):
+        if torch_device not in ("cuda", "xpu"):
+            return unittest.skip(f"test requires a GPU or XPU with more than {memory} GiB of memory")(tc)
 
-    return unittest.skipUnless(
-        torch_accelerator_module.get_device_properties(0).total_memory / 1024**3 > memory,
-        f"test requires a GPU or XPU with more than {memory} GiB of memory",
-    )(test_case)
+        torch_accel = getattr(torch, torch_device)
+        return unittest.skipUnless(
+            torch_accel.get_device_properties(0).total_memory / 1024**3 > memory,
+            f"test requires a GPU or XPU with more than {memory} GiB of memory",
+        )(tc)
+
+    return memory_decorator if test_case is None else memory_decorator(test_case)
 
 
 def require_torch_accelerator(test_case):
@@ -1379,6 +1383,13 @@ def require_pyctcdecode(test_case):
     Decorator marking a test that requires pyctcdecode
     """
     return unittest.skipUnless(is_pyctcdecode_available(), "test requires pyctcdecode")(test_case)
+
+
+def require_numba(test_case):
+    """
+    Decorator marking a test that requires numba
+    """
+    return unittest.skipUnless(is_numba_available(), "test requires numba")(test_case)
 
 
 def require_librosa(test_case):

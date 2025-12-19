@@ -302,6 +302,8 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
+            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+            pattern = pattern.removesuffix("$")
             # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
             pattern = re.sub(r"\(\?!.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
@@ -885,7 +887,7 @@ def convert_and_load_state_dict_in_model(
             elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
-                    _dtype = dtype_plan[matched_dtype_pattern.group()]
+                    _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 

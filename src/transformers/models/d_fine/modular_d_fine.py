@@ -33,6 +33,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderOutput,
     RTDetrEncoder,
     RTDetrForObjectDetection,
+    RTDetrFrozenBatchNorm2d,
     RTDetrHybridEncoder,
     RTDetrMLPPredictionHead,
     RTDetrModel,
@@ -66,7 +67,7 @@ class DFineConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -307,8 +308,7 @@ class DFineConfig(PreTrainedConfig):
             )
             backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create HGNetV2Config
+            # this will map it to HGNetV2Config
             # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
@@ -628,6 +628,9 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.attention_weights.weight, 0.0)
             init.constant_(module.attention_weights.bias, 0.0)
 
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -638,6 +641,10 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -849,6 +856,10 @@ class DFineDecoder(RTDetrDecoder):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+
+class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
+    pass
 
 
 class DFineModel(RTDetrModel):
