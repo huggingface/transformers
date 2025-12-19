@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -31,7 +32,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -487,6 +488,12 @@ class Qwen3VLPreTrainedModel(Qwen2VLPreTrainedModel):
         "hidden_states": Qwen3VLTextDecoderLayer,
         "attentions": Qwen3VLTextAttention,
     }
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Qwen3VLVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):

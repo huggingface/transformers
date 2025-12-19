@@ -20,11 +20,7 @@ import torch
 from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -32,6 +28,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -43,7 +40,7 @@ from .image_processing_convnext import ConvNextImageProcessorKwargs
 
 @auto_docstring
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"shortest_edge": 384}
@@ -98,23 +95,23 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             resize_size = get_resize_output_image_size(
                 image, size=resize_shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
             )
-            image = F.resize(
+            image = super().resize(
                 image,
-                resize_size,
+                SizeDict(height=resize_size[0], width=resize_size[1]),
                 interpolation=interpolation,
                 **kwargs,
             )
             # then crop to (shortest_edge, shortest_edge)
-            return F.center_crop(
+            return self.center_crop(
                 image,
-                (shortest_edge, shortest_edge),
+                SizeDict(height=shortest_edge, width=shortest_edge),
                 **kwargs,
             )
         else:
             # warping (no cropping) when evaluated at 384 or larger
-            return F.resize(
+            return super().resize(
                 image,
-                (shortest_edge, shortest_edge),
+                SizeDict(height=shortest_edge, width=shortest_edge),
                 interpolation=interpolation,
                 **kwargs,
             )
