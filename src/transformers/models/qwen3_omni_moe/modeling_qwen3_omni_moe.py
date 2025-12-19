@@ -100,7 +100,8 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -1629,7 +1630,6 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
-
     config_class = Qwen3OmniMoeTextConfig
 
     @torch.no_grad()

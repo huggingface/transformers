@@ -484,7 +484,6 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
