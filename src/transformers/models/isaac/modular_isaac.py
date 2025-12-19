@@ -1541,14 +1541,6 @@ class IsaacModel(Qwen3PreTrainedModel):
     def vision_model(self) -> nn.Module:
         return self.vision_embedding.vision_tower
 
-    @property
-    def vision_model(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
-    @property
-    def vision_tower(self) -> nn.Module:
-        return self.vision_embedding.vision_tower
-
     def embed_text_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         """Embed text tokens, squeezing singleton dimensions."""
         # Text events are shaped as (..., 1); squeeze the singleton index dim
