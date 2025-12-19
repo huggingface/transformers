@@ -44,6 +44,13 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantoConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        map_to_param_size = {
+            "int8": 1,
+            "float8": 1,
+            "int4": 0.5,
+            "int2": 0.25,
+        }
+        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights, None)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():
@@ -83,17 +90,12 @@ class QuantoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
+            return self.quantized_param_size
 
-        mapping = {
-            "int8": torch.int8,
-            "float8": CustomDtype.FP8,
-            "int4": CustomDtype.INT4,
-            "int2": CustomDtype.INT2,
-        }
-        target_dtype = mapping[self.quantization_config.weights]
-        return target_dtype
+        return super().param_element_size(model, param_name, param)
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers

@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,6 +45,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
     Gemma3RMSNorm,
+    Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
 )
@@ -882,6 +883,16 @@ class Gemma3nAudioAttention(nn.Module):
         r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
         self.register_buffer("q_scale", (q_scale * r_softplus_0).clone().detach(), persistent=False)
 
+        local_causal_valid_mask = self.create_local_causal_valid_mask()
+        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
+
+        self.register_buffer(
+            "softcap",
+            torch.tensor(self.attention_logits_soft_cap).float(),
+            persistent=False,
+        )
+
+    def create_local_causal_valid_mask(self):
         lower_causal_mask = torch.tril(
             torch.ones((self.context_size, self.chunk_size), dtype=torch.bool),
             diagonal=0,
@@ -892,13 +903,7 @@ class Gemma3nAudioAttention(nn.Module):
         )
         local_causal_valid_mask = torch.ones((self.chunk_size, self.context_size), dtype=torch.bool)
         local_causal_valid_mask = local_causal_valid_mask * lower_causal_mask * upper_causal_mask
-        self.register_buffer("local_causal_valid_mask", local_causal_valid_mask, persistent=False)
-
-        self.register_buffer(
-            "softcap",
-            torch.tensor(self.attention_logits_soft_cap).float(),
-            persistent=False,
-        )
+        return local_causal_valid_mask
 
     def _pad_dim1(self, x: torch.Tensor, pad_left: int, pad_right: int) -> torch.Tensor:
         batch, _, *tail_shape = x.shape
@@ -1893,8 +1898,42 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, Gemma3nAudioAttention):
             init.zeros_(module.per_dim_scale)
+            q_scale = module.head_dim**-0.5
+            r_softplus_0 = 1.0 / torch.nn.functional.softplus(torch.tensor(0.0))
+            init.copy_(module.q_scale, q_scale * r_softplus_0)
+            init.constant_(module.softcap, module.attention_logits_soft_cap)
+            init.copy_(module.local_causal_valid_mask, module.create_local_causal_valid_mask())
+        elif isinstance(module, Gemma3nTextScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
         elif isinstance(module, Gemma3nTextAltUp):
             init.zeros_(module.correct_output_scale)
+            init.constant_(module.router_input_scale, self.config.hidden_size**-1.0)
+        elif isinstance(module, Gemma3nAudioRelativePositionEmbedding):
+            min_timescale, max_timescale = 1.0, 1.0e4
+            num_timescales = module.channels // 2
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
+            init.copy_(module.inv_timescales, inv_timescales.float().unsqueeze(0).unsqueeze(0))
+        elif isinstance(module, Gemma3nTextModel):
+            init.constant_(module.per_layer_projection_scale, self.hidden_size**-0.5)
+            init.constant_(module.per_layer_input_scale, 1 / math.sqrt(2.0))
+        elif isinstance(module, Gemma3nRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
+        if hasattr(module, "gradient_clipping"):
+            init.constant_(module.gradient_clipping, self.config.gradient_clipping)
+
+
+class Gemma3nRotaryEmbedding(Gemma3RotaryEmbedding):
+    pass
 
 
 @auto_docstring(custom_intro="The base Gemma 3n language model without a language modeling head.")

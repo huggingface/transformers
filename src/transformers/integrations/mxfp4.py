@@ -12,22 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
     import torch
     from torch import nn
+from contextlib import contextmanager
 from typing import Optional
 
 from ..core_model_loading import ConversionOps
-
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
-
-from contextlib import contextmanager
-
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
@@ -620,7 +614,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            with init_empty_weights():
+            with torch.device("meta"):
                 model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
