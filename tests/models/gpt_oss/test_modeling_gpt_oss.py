@@ -92,7 +92,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
             model.config._attn_implementation = "flash_attention_2"
 
-
         model.config._attn_implementation = "kernels-community/vllm-flash-attn3"
         with torch.no_grad():
             output = model(**inputs_dict)
