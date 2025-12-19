@@ -21,20 +21,37 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
-
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_vibevoice_realtime import VibeVoiceRealTimeAcousticDecoderConfig, VibeVoiceRealTimeConfig
 from .generation_vibevoice_realtime import VibeVoiceRealTimeGenerationMixin
+
+
+@dataclass
+class VibeVoiceRealTimeCausalLMOutputWithPast(BaseModelOutputWithPast):
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
+
+
+class VibeVoiceRealTimeBinaryClassifier(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 1)
+
+    def forward(self, hidden_states):
+        hidden_states = torch.relu(self.fc1(hidden_states))
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -56,150 +73,6 @@ class VibeVoiceRealTimeRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
-        self.act = ACT2FN[config.hidden_act]
-        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.frequency_embedding_size = config.frequency_embedding_size
-
-    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_diffusion_head.py#L66
-    @staticmethod
-    def timestep_embedding(timesteps, dim, max_period=10000):
-        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
-        device_type = (
-            timesteps.device.type
-            if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
-            else "cpu"
-        )
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = torch.exp(
-                -math.log(max_period) * torch.arange(start=0, end=dim // 2, dtype=torch.float32) / (dim // 2)
-            ).to(timesteps.device)
-            args = timesteps[:, None].float() * freqs[None]
-            embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding.to(timesteps.dtype)
-
-    def forward(self, timesteps):
-        t_freq = self.timestep_embedding(timesteps, dim=self.frequency_embedding_size)
-        return self.layer_2(self.act(self.layer_1(t_freq)))
-
-
-class VibeVoiceRealTimeMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-# NOTE (ebezzam) Qwen 2.5 Omni has most similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
-class VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.ffn_ratio = config.head_ffn_ratio
-        ffn_dim = config.hidden_size * config.head_ffn_ratio
-        self.ffn = VibeVoiceRealTimeMLP(config)
-        self.norm = VibeVoiceRealTimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)
-
-    def forward(self, hidden_states, condition):
-        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
-        modulated_hidden_states = self.norm(hidden_states) * (1 + scale_ffn) + shift_ffn
-        hidden_states = hidden_states + gate_ffn * self.ffn(modulated_hidden_states)
-        return hidden_states
-
-
-class VibeVoiceRealTimeDiffusionHeadFinalLayer(nn.Module):
-    def __init__(self, config, output_size, ffn_ratio=2):
-        super().__init__()
-        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRealTimeRMSNorm`)
-        self.norm_eps = config.rms_norm_eps
-        self.ffn_ratio = ffn_ratio
-        self.linear_1 = nn.Linear(config.hidden_size, ffn_ratio * config.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
-
-    def forward(self, hidden_states, condition):
-        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
-        hidden_states = hidden_states * (1 + scale) + shift
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
-class VibeVoiceRealTimeDiffusionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.noisy_images_proj = nn.Linear(config.acoustic_hidden_size, config.hidden_size, bias=False)
-        self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.timestep_embedder = VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(config)
-        self.layers = nn.ModuleList(
-            [VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
-        )
-        self.final_layer = VibeVoiceRealTimeDiffusionHeadFinalLayer(config, output_size=config.acoustic_hidden_size)
-
-    def forward(self, noisy_images, timesteps, condition):
-        """
-        Forward pass of the prediction head.
-
-        Args:
-            noisy_images (`torch.Tensor`): Noisy images/latents to denoise
-            timesteps (`torch.Tensor`): Timesteps for diffusion
-            condition (`torch.Tensor`): Conditioning information
-
-        Returns:
-            `torch.Tensor`: The predicted noise/velocity
-        """
-        hidden_states = self.noisy_images_proj(noisy_images)
-        embedded_timesteps = self.timestep_embedder(timesteps)
-        condition = self.cond_proj(condition)
-        condition = condition + embedded_timesteps
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, condition)
-
-        hidden_states = self.final_layer(hidden_states, condition)
-        return hidden_states
-
-
-class VibeVoiceRealTimeMultiModelProjector(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, output_dim)
-        self.norm = VibeVoiceRealTimeRMSNorm(output_dim, eps=1e-6)
-        self.fc2 = nn.Linear(output_dim, output_dim)
-
-    def forward(self, features):
-        x = self.fc1(features)
-        x = self.norm(x)
-        x = self.fc2(x)
-        return x
-
-
-class VibeVoiceRealTimeBinaryClassifier(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-        self.fc1 = nn.Linear(hidden_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, 1)
-
-    def forward(self, hidden_states):
-        hidden_states = torch.relu(self.fc1(hidden_states))
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
 
 
 class VibeVoiceRealTimeEncoderFeedForward(nn.Module):
@@ -756,6 +629,138 @@ class VibeVoiceRealTimeAcousticDecoder(VibeVoiceRealTimePreTrainedModel):
         return VibeVoiceRealTimeDecoderOutput(audio=audio, padding_cache=padding_cache)
 
 
+class VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.act = ACT2FN[config.hidden_act]
+        self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.frequency_embedding_size = config.frequency_embedding_size
+
+    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice_realtime/modular_vibevoice_realtime_diffusion_head.py#L66
+    @staticmethod
+    def timestep_embedding(timesteps, dim, max_period=10000):
+        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
+        device_type = (
+            timesteps.device.type
+            if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
+            else "cpu"
+        )
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = torch.exp(
+                -math.log(max_period) * torch.arange(start=0, end=dim // 2, dtype=torch.float32) / (dim // 2)
+            ).to(timesteps.device)
+            args = timesteps[:, None].float() * freqs[None]
+            embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding.to(timesteps.dtype)
+
+    def forward(self, timesteps):
+        t_freq = self.timestep_embedding(timesteps, dim=self.frequency_embedding_size)
+        return self.layer_2(self.act(self.layer_1(t_freq)))
+
+
+class VibeVoiceRealTimeMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+# NOTE (ebezzam) Qwen 2.5 Omni has most similar, but hardcoded fnn ratio: https://github.com/huggingface/transformers/blob/82451cbb30fde5ede89308ea2328f89c61d5a831/src/transformers/models/qwen2_5_omni/modeling_qwen2_5_omni.py#L2927
+class VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.ffn_ratio = config.head_ffn_ratio
+        ffn_dim = config.hidden_size * config.head_ffn_ratio
+        self.ffn = VibeVoiceRealTimeMLP(config)
+        self.norm = VibeVoiceRealTimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear = nn.Linear(config.hidden_size, ffn_dim, bias=False)
+
+    def forward(self, hidden_states, condition):
+        shift_ffn, scale_ffn, gate_ffn = self.linear(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
+        modulated_hidden_states = self.norm(hidden_states) * (1 + scale_ffn) + shift_ffn
+        hidden_states = hidden_states + gate_ffn * self.ffn(modulated_hidden_states)
+        return hidden_states
+
+
+class VibeVoiceRealTimeDiffusionHeadFinalLayer(nn.Module):
+    def __init__(self, config, output_size, ffn_ratio=2):
+        super().__init__()
+        # Inline RMS normalization since there is no weight scaling (unlike `VibeVoiceRealTimeRMSNorm`)
+        self.norm_eps = config.rms_norm_eps
+        self.ffn_ratio = ffn_ratio
+        self.linear_1 = nn.Linear(config.hidden_size, ffn_ratio * config.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.linear_2 = nn.Linear(config.hidden_size, output_size, bias=False)
+
+    def forward(self, hidden_states, condition):
+        shift, scale = self.linear_1(self.act_fn(condition)).chunk(self.ffn_ratio, dim=-1)
+        hidden_states = hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.norm_eps)
+        hidden_states = hidden_states * (1 + scale) + shift
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class VibeVoiceRealTimeDiffusionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.noisy_images_proj = nn.Linear(config.acoustic_hidden_size, config.hidden_size, bias=False)
+        self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.timestep_embedder = VibeVoiceRealTimeDiffusionHeadTimestepEmbedder(config)
+        self.layers = nn.ModuleList(
+            [VibeVoiceRealTimeDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
+        )
+        self.final_layer = VibeVoiceRealTimeDiffusionHeadFinalLayer(config, output_size=config.acoustic_hidden_size)
+
+    def forward(self, noisy_images, timesteps, condition):
+        """
+        Forward pass of the prediction head.
+
+        Args:
+            noisy_images (`torch.Tensor`): Noisy images/latents to denoise
+            timesteps (`torch.Tensor`): Timesteps for diffusion
+            condition (`torch.Tensor`): Conditioning information
+
+        Returns:
+            `torch.Tensor`: The predicted noise/velocity
+        """
+        hidden_states = self.noisy_images_proj(noisy_images)
+        embedded_timesteps = self.timestep_embedder(timesteps)
+        condition = self.cond_proj(condition)
+        condition = condition + embedded_timesteps
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, condition)
+
+        hidden_states = self.final_layer(hidden_states, condition)
+        return hidden_states
+
+
+class VibeVoiceRealTimeMultiModelProjector(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, output_dim)
+        self.norm = VibeVoiceRealTimeRMSNorm(output_dim, eps=1e-6)
+        self.fc2 = nn.Linear(output_dim, output_dim)
+
+    def forward(self, features):
+        x = self.fc1(features)
+        x = self.norm(x)
+        x = self.fc2(x)
+        return x
+
+
 @auto_docstring(
     custom_intro="""
     The VibeVoice model which consists of an audio decoder and an LLM backbone, without a language modeling head.
@@ -776,25 +781,12 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
         # NOTE: Marks the text that needs to be spoken by the TTS model.
         self.tts_input_types = nn.Embedding(num_embeddings=2, embedding_dim=config.text_config.hidden_size)
         self.post_init()
-    
+
     def get_input_embeddings(self):
-        # return self.language_model.embed_tokens   # TODO original but doesn't seem necessary
         return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    # TODO eventually remove / merge into forward?
-    @can_return_tuple
-    def forward_lm(
-        self,
-        input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        **kwargs,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
 
     def forward(
         self,
@@ -810,12 +802,17 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
         inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
-
-# NOTE (ebezzam) copied from original
-@dataclass
-class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
+    # TODO eventually remove / merge into forward?
+    @can_return_tuple
+    def forward_lm(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        **kwargs,
+    ) -> Union[tuple, BaseModelOutputWithPast]:
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
 
 
 @auto_docstring(
@@ -824,7 +821,6 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel, VibeVoiceRealTimeGenerationMixin):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = VibeVoiceRealTimeModel(config)
@@ -832,9 +828,6 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
         self.register_buffer("latent_bias_factor", torch.tensor(0.0))
         self.tts_eos_classifier = VibeVoiceRealTimeBinaryClassifier(config.text_config.hidden_size)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
 
     @property
     def language_model(self):
@@ -868,25 +861,20 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
         labels: Optional[torch.LongTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
-    ) -> Union[Tuple, VibeVoiceCausalLMOutputWithPast]:
+    ) -> Union[tuple, VibeVoiceRealTimeCausalLMOutputWithPast]:
         """
         tts_text_masks (`torch.FloatTensor`, *optional*):
             Mask marking current position as text(1)/speech(0)
         """
-        outputs = self.model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds, 
-            tts_text_masks=tts_text_masks, 
-            **kwargs
-        )
+        outputs = self.model(input_ids=input_ids, inputs_embeds=inputs_embeds, tts_text_masks=tts_text_masks, **kwargs)
         last_hidden_state = outputs.last_hidden_state
         logits = self.tts_eos_classifier(last_hidden_state[:, -1, :])
-                
+
         loss = None
         if labels is not None:
             raise NotImplementedError("Loss computation is not implemented in this version.")
 
-        return VibeVoiceCausalLMOutputWithPast(
+        return VibeVoiceRealTimeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,

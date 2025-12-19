@@ -13,27 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
-
+from typing import Optional, Union, Tuple
+from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
-from ..vibevoice.modeling_vibevoice import VibeVoiceDiffusionHead, VibeVoiceMultiModelProjector, VibeVoicePreTrainedModel, VibeVoiceModel
+from ..vibevoice.modeling_vibevoice import VibeVoicePreTrainedModel, VibeVoiceModel, VibeVoiceCausalLMOutputWithPast
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerModel
 from .configuration_vibevoice_realtime import VibeVoiceRealTimeConfig, VibeVoiceRealTimeAcousticDecoderConfig
 from .generation_vibevoice_realtime import VibeVoiceRealTimeGenerationMixin
 
 
-class VibeVoiceRealTimeDiffusionHead(VibeVoiceDiffusionHead):
-    pass
-
-
-class VibeVoiceRealTimeMultiModelProjector(VibeVoiceMultiModelProjector):
-    pass
+@dataclass
+class VibeVoiceRealTimeCausalLMOutputWithPast(BaseModelOutputWithPast):
+    loss: Optional[torch.FloatTensor] = None
+    logits: Optional[torch.FloatTensor] = None
 
 
 class VibeVoiceRealTimeBinaryClassifier(nn.Module):
@@ -96,29 +94,30 @@ class VibeVoiceRealTimeModel(VibeVoiceModel):
     def get_audio_features(self, input_features, input_features_mask, latent_scaling_factor, latent_bias_factor):
         raise NotImplementedError("get_audio_features method is not implemented for VibeVoiceRealTimeModel.")
 
+    # TODO eventually remove / merge into forward?
+    @can_return_tuple
+    def forward_lm(
+        self,
+        input_ids: torch.LongTensor = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        **kwargs,
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+        return self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        lm_last_hidden_state: Optional[torch.FloatTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPast]:
-        """
-        replicate forward_tts_lm code path
-        """
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            # TODO can input embeds be computed by self.language model if only input_ids is provided?
+            raise ValueError("Input embeds should be computed by with `self.forward_lm`")
 
-        # NOTE (ebezzam) why not just call language_model here too? for lm_last_hidden_state
-
-        # Replace the last part of inputs_embeds with lm_last_hidden_state
-        start_idx = inputs_embeds.shape[1] - lm_last_hidden_state.shape[1]
-        inputs_embeds[:, start_idx:, :] = lm_last_hidden_state
-        
-        # Adds type embedding via `tts_text_masks`.
         inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
-
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
 
@@ -128,7 +127,6 @@ class VibeVoiceRealTimeModel(VibeVoiceModel):
     """
 )
 class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel, VibeVoiceRealTimeGenerationMixin):
-    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -157,42 +155,42 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     @property
     def diffusion_head(self):
         return self.model.diffusion_head
-
-    @property
-    def tts_input_types(self):
-        return self.model.tts_input_types
+    
+    # TODO eventually remove / merge into forward?
+    def forward_lm(self, *args, **kwargs):
+        return self.model.forward_lm(*args, **kwargs)
 
     @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        lm_last_hidden_state: Optional[torch.FloatTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
-
+    ) -> Union[Tuple, VibeVoiceRealTimeCausalLMOutputWithPast]:
+        """
+        tts_text_masks (`torch.FloatTensor`, *optional*):
+            Mask marking current position as text(1)/speech(0)
+        """
         outputs = self.model(
-            input_ids=input_ids, 
-            inputs_embeds=inputs_embeds,
-            lm_last_hidden_state=lm_last_hidden_state,
-            tts_text_masks=tts_text_masks,
-            **kwargs,
+            input_ids=input_ids,
+            inputs_embeds=inputs_embeds, 
+            tts_text_masks=tts_text_masks, 
+            **kwargs
         )
-        hidden_states = outputs.last_hidden_state
-        logits = self.tts_eos_classifier(hidden_states[:, -1, :])
-    
+        last_hidden_state = outputs.last_hidden_state
+        logits = self.tts_eos_classifier(last_hidden_state[:, -1, :])
+                
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            raise NotImplementedError("Loss computation is not implemented in this version.")
 
-        return CausalLMOutputWithPast(
+        return VibeVoiceRealTimeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=hidden_states,
+            last_hidden_state=last_hidden_state,
             attentions=outputs.attentions,
         )
 
