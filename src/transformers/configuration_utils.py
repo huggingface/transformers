@@ -822,6 +822,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     @classmethod
     def _encode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and encode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        It serializes floats like `Infinity` as an object: `{'__float__': Infinity}`.
+        """
         if isinstance(obj, float):
             if math.isnan(obj):
                 return {_FLOAT_TAG_KEY: "NaN"}
@@ -841,13 +847,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     @classmethod
     def _decode_special_floats(cls, obj: Any) -> Any:
-        # Only treat dicts that are *exactly* {"__float__": "..."} as tagged floats.
+        """
+        Iterates over the passed object and decode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        This method deserializes objects like `{'__float__': Infinity}` to their float values like `Infinity`.
+        """
         if isinstance(obj, dict):
             if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(obj[_FLOAT_TAG_KEY], str):
                 tag = obj[_FLOAT_TAG_KEY]
                 if tag in _FLOAT_TAG_VALUES:
                     return _FLOAT_TAG_VALUES[tag]
-                # Unknown tag: leave as-is (or raise if you prefer strictness)
                 return obj
 
             return {k: cls._decode_special_floats(v) for k, v in obj.items()}
