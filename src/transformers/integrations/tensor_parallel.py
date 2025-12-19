@@ -767,6 +767,16 @@ class LocalColwiseParallel(ColwiseParallel):
         super().__init__(use_dtensor=False, **kwargs)
 
 
+class LocalPackedColwiseParallel(PackedColwiseParallel):
+    """
+    Packed colwise parallel with use_dtensor=False for local tensor operations.
+    Used for packed weights like gate_up_proj in MoE models.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
 class ColwiseParallelReplicate(ColwiseParallel):
     """
     Colwise parallel with output layouts replicated.
@@ -1221,6 +1231,7 @@ class ParallelInterface(GeneralInterface):
             "local_rowwise": LocalRowwiseParallel(),
             "local": IsolatedParallel(),
             "gather": GatherParallel(),
+            "local_packed_colwise": LocalPackedColwiseParallel(),
             "local_packed_rowwise": LocalPackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
