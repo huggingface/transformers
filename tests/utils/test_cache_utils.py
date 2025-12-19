@@ -115,6 +115,35 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
+    def test_static_cache_variable_batch_size(self):
+        """
+        Tests that StaticCache works with variable batch sizes.
+        Regression test for https://github.com/huggingface/transformers/issues/42454
+        """
+        config = LlamaConfig(num_attention_heads=32, num_key_value_heads=8)
+        max_cache_len = 10
+        head_dim = config.hidden_size // config.num_attention_heads
+
+        static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
+
+        # Initialize cache with batch_size=8
+        keys_1 = torch.rand((8, config.num_key_value_heads, 1, head_dim), device=torch_device)
+        values_1 = torch.rand((8, config.num_key_value_heads, 1, head_dim), device=torch_device)
+        cached_keys, cached_values = static_cache.update(
+            keys_1, values_1, 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
+        )
+        self.assertEqual(cached_keys.shape, (8, config.num_key_value_heads, max_cache_len, head_dim))
+
+        static_cache.reset()
+
+        # Use smaller batch_size=4 (this used to crash)
+        keys_2 = torch.rand((4, config.num_key_value_heads, 1, head_dim), device=torch_device)
+        values_2 = torch.rand((4, config.num_key_value_heads, 1, head_dim), device=torch_device)
+        cached_keys, cached_values = static_cache.update(
+            keys_2, values_2, 0, cache_kwargs={"cache_position": torch.arange(1).to(torch_device)}
+        )
+        self.assertEqual(cached_keys.shape, (4, config.num_key_value_heads, max_cache_len, head_dim))
+
 
 def _skip_on_failed_cache_prerequisites(test, cache_implementation):
     """Function to skip tests on failed cache prerequisites, given a cache implementation"""

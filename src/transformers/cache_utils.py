@@ -332,15 +332,15 @@ class StaticLayer(CacheLayerMixin):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
 
-        # Update the cache
-        try:
-            self.keys.index_copy_(2, cache_position, key_states)
-            self.values.index_copy_(2, cache_position, value_states)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            self.keys[:, :, cache_position] = key_states
-            self.values[:, :, cache_position] = value_states
-        return self.keys, self.values
+        # Get the actual batch size from key_states to support variable batch sizes
+        batch_size = key_states.shape[0]
+
+        # Update the cache using slicing to support batch sizes smaller than max_batch_size
+        self.keys[:batch_size, :, cache_position] = key_states
+        self.values[:batch_size, :, cache_position] = value_states
+
+        # Return only the batch slice that was actually used
+        return self.keys[:batch_size], self.values[:batch_size]
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -407,6 +407,9 @@ class StaticSlidingWindowLayer(StaticLayer):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
 
+        # Get the actual batch size from key_states to support variable batch sizes
+        batch_size = key_states.shape[0]
+
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
         # Update it now that we saved the value above
@@ -416,9 +419,9 @@ class StaticSlidingWindowLayer(StaticLayer):
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
             # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
             if key_states.shape[-2] == 1:
-                # Roll all values to the left by 1 position
-                new_keys = self.keys.roll(-1, dims=-2)
-                new_values = self.values.roll(-1, dims=-2)
+                # Roll all values to the left by 1 position (only for the used batch entries)
+                new_keys = self.keys[:batch_size].roll(-1, dims=-2)
+                new_values = self.values[:batch_size].roll(-1, dims=-2)
                 # Overwrite the last position with new states
                 # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
                 index = torch.tensor([-1], dtype=int, device=self.device)
@@ -426,14 +429,15 @@ class StaticSlidingWindowLayer(StaticLayer):
                 new_values[:, :, index] = value_states
 
                 # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys.copy_(new_keys)
-                self.values.copy_(new_values)
+                self.keys[:batch_size].copy_(new_keys)
+                self.values[:batch_size].copy_(new_values)
                 # Very important to return the `self` tensors here, as they have the static dynamo address
-                return self.keys, self.values
+                # Return only the batch slice that was actually used
+                return self.keys[:batch_size], self.values[:batch_size]
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
             else:
-                full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
+                full_key_states = torch.cat((self.keys[:batch_size, :, 1:, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:batch_size, :, 1:, :], value_states), dim=-2)
         # Not yet full, but becoming full on this update
         elif cumulative_length + key_states.shape[2] > self.max_cache_len:
             # Fast prefill path, no need to cat() in this case, as the cache is currently empty
@@ -441,22 +445,20 @@ class StaticSlidingWindowLayer(StaticLayer):
                 full_key_states = key_states
                 full_value_states = value_states
             else:
-                full_key_states = torch.cat((self.keys[:, :, :cumulative_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, :cumulative_length, :], value_states), dim=-2)
+                full_key_states = torch.cat((self.keys[:batch_size, :, :cumulative_length, :], key_states), dim=-2)
+                full_value_states = torch.cat((self.values[:batch_size, :, :cumulative_length, :], value_states), dim=-2)
         else:
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
+            # Update the cache using slicing to support batch sizes smaller than max_batch_size
+            self.keys[:batch_size, :, cache_position] = key_states
+            self.values[:batch_size, :, cache_position] = value_states
 
             # Very important to return the `self` tensors here, as they have the static dynamo address
-            return self.keys, self.values
+            # Return only the batch slice that was actually used
+            return self.keys[:batch_size], self.values[:batch_size]
 
         # We only cache the last `sliding_window` tokens
-        self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
-        self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
+        self.keys[:batch_size].copy_(full_key_states[:, :, -self.max_cache_len :, :])
+        self.values[:batch_size].copy_(full_value_states[:, :, -self.max_cache_len :, :])
         # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
         return full_key_states, full_value_states
 
