@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import nullcontext
-
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
@@ -28,7 +26,7 @@ if is_torch_available():
     from torch.nn import functional as F
 
 if is_accelerate_available():
-    from accelerate import init_empty_weights
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -574,7 +572,9 @@ class FP8Expert(nn.Module):
         # Note: We create new Parameters because copy_() doesn't change dtype
         gate_up_f32 = torch.empty_like(self.gate_up_proj, dtype=torch.float32)
         nn.init.xavier_uniform_(gate_up_f32)
-        self.gate_up_proj = nn.Parameter(gate_up_f32.clamp(min=torch.finfo(dtype).min, max=torch.finfo(dtype).max).to(dtype))
+        self.gate_up_proj = nn.Parameter(
+            gate_up_f32.clamp(min=torch.finfo(dtype).min, max=torch.finfo(dtype).max).to(dtype)
+        )
 
         # Initialize down_proj in float32, clamp to FP8 range, then convert to FP8
         down_f32 = torch.empty_like(self.down_proj, dtype=torch.float32)
@@ -691,7 +691,7 @@ def replace_with_fp8_linear(
                 block_size=quantization_config.weight_block_size,
                 **module_kwargs,
             )
-        if new_module is not None :
+        if new_module is not None:
             model.set_submodule(module_name, new_module)
             has_been_replaced = True
 
