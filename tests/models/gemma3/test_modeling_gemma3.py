@@ -49,6 +49,7 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from transformers.trainer_utils import set_seed
 
 
 if is_torch_available():
@@ -323,6 +324,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         Tests that each image can attend to itself bidirectionally. However an image
         cannot attend to future images, even within the same batch.
         """
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config._attn_implementation = "eager"
         model = Gemma3Model(config).to(torch_device)
