@@ -14,7 +14,7 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Optional
+from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -37,7 +37,7 @@ class OneFormerConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PreTrainedConfig`, *optional*, defaults to `SwinConfig`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -151,7 +151,7 @@ class OneFormerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[dict] = None,
+        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,

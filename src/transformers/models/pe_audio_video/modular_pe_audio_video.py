@@ -619,24 +619,32 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
             raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
 
         if pixel_values_videos is None:
-            audio_outputs = self.audio_model(
+            outputs = self.audio_model(
                 input_ids=input_ids,
                 input_values=input_values,
                 attention_mask=attention_mask,
                 padding_mask=padding_mask,
                 return_dict=True,
             )
-            return PeAudioVideoOutput(**audio_outputs)
+            audio_plus_text_embeds = torch.cat(
+                [outputs.audio_outputs.pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
+            )
+            audio_plus_text_embeds = self.audio_plus_text_head(audio_plus_text_embeds)
+            return PeAudioVideoOutput(audio_plus_text_embeds=audio_plus_text_embeds, **outputs)
 
         if input_values is None:
-            video_outputs = self.video_model(
+            outputs = self.video_model(
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 attention_mask=attention_mask,
                 padding_mask_videos=padding_mask_videos,
                 return_dict=True,
             )
-            return PeAudioVideoOutput(**video_outputs)
+            video_plus_text_embeds = torch.cat(
+                [outputs.video_outputs.pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
+            )
+            video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
+            return PeAudioVideoOutput(video_plus_text_embeds=video_plus_text_embeds, **outputs)
 
         audio_video_outputs = self.audio_video_encoder(
             input_values=input_values,
@@ -669,8 +677,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         kwargs["output_hidden_states"] = True
         text_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         text_embeds = text_outputs.hidden_states[-1][:, 0]
-        audio_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.audio_model_output.pooler_output], dim=-1)
-        video_plus_text_embeds = torch.cat([text_embeds, audio_video_outputs.video_model_output.pooler_output], dim=-1)
+        audio_plus_text_embeds = torch.cat([audio_video_outputs.audio_model_output.pooler_output, text_embeds], dim=-1)
+        video_plus_text_embeds = torch.cat([audio_video_outputs.video_model_output.pooler_output, text_embeds], dim=-1)
 
         text_audio_embeds = self.audio_model.text_audio_head(text_embeds)
         text_video_embeds = self.video_model.text_video_head(text_embeds)
@@ -682,8 +690,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         logits_video_text = video_embeds @ text_video_embeds.T
         logits_audio_video_text = audio_video_embeds @ text_audio_video_embeds.T
 
-        logits_audio_plus_text_video = audio_plus_text_embeds @ video_embeds.T  # TODO: check this
-        logits_video_plus_text_audio = video_plus_text_embeds @ audio_embeds.T  # TODO: check this
+        logits_audio_plus_text_video = audio_plus_text_embeds @ video_embeds.T
+        logits_video_plus_text_audio = video_plus_text_embeds @ audio_embeds.T
 
         logits_audio_text = (
             logits_audio_text * self.audio_model.text_audio_logit_scale + self.audio_model.text_audio_logit_bias
