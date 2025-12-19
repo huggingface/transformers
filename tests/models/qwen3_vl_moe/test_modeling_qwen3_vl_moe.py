@@ -191,7 +191,6 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    has_experts = True
 
     def setUp(self):
         self.model_tester = Qwen3VLMoeVisionText2TextModelTester(self)

@@ -430,6 +430,7 @@ class OlmoePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["OlmoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_grouped_mm = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_record_outputs = {

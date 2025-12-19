@@ -536,8 +536,8 @@ def _get_output_tensors(outputs):
 
 
 def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-    if not self.has_experts:
-        self.skipTest(reason="Model architecture does not support setting experts implementation")
+    if not self.all_model_classes[0]._supports_grouped_mm:
+        self.skipTest(f"{self.all_model_classes[0].__name__} does not support grouped_mm")
 
     # convert shorthand name to torch.dtype
     if dtype == "fp16":
@@ -665,7 +665,6 @@ class ModelTesterMixin:
     test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
-    has_experts = False
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
 

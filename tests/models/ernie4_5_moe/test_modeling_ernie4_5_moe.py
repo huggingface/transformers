@@ -53,7 +53,6 @@ class Ernie4_5_MoeModelTester(CausalLMModelTester):
 class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_tester_class = Ernie4_5_MoeModelTester
-    has_experts = True
 
     @require_flash_attn
     @require_torch_accelerator

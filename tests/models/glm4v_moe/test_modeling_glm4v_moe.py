@@ -185,7 +185,6 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
-    has_experts = True
 
     def setUp(self):
         self.model_tester = Glm4vMoeVisionText2TextModelTester(self)

@@ -61,7 +61,6 @@ class Dots1ModelTester(CausalLMModelTester):
 @require_torch
 class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Dots1ModelTester
-    has_experts = True
 
 
 @require_torch_accelerator

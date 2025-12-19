@@ -1198,6 +1198,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # Flex Attention support
     _supports_flex_attn = False
 
+    # Grouped MM support
+    _supports_grouped_mm = False
+
     _can_compile_fullgraph = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For

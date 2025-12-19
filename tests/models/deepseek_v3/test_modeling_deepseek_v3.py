@@ -239,7 +239,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV3ForCausalLM if is_torch_available() else None
-    has_experts = True
 
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)

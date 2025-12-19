@@ -587,6 +587,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _supports_grouped_mm = True
     _can_compile_fullgraph = False
     _supports_attention_backend = True
 
