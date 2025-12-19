@@ -458,7 +458,12 @@ def create_document_attention_mask(
 
 
 class IsaacVisionEmbeddings(nn.Module):
-    """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences."""
+    """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences.
+
+    Isaac accepts variable-resolution vision inputs as a single packed sequence with per-image
+    `token_grids`; packing/unpacking here reconstructs per-image shapes so we can resize positional
+    embeddings and build `cu_seqlens` for variable-length attention (not generic generation packing).
+    """
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__()
@@ -476,6 +481,8 @@ class IsaacVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
     def forward(self, seq_patches: torch.Tensor, spatial_shapes: torch.Tensor) -> torch.Tensor:
+        # Rebatch packed variable-resolution patches to resize per-image position embeddings
+        # and track lengths for varlen attention metadata.
         packed_pixel_values, seq_lengths = self._pack_to_batch(seq_patches, spatial_shapes)
         if packed_pixel_values is None:
             return seq_patches.new_zeros((0, self.embed_dim))
@@ -559,6 +566,17 @@ class IsaacVisionEmbeddings(nn.Module):
         seq_patches: torch.Tensor,
         spatial_shapes: torch.Tensor,
     ) -> tuple[Optional[torch.Tensor], torch.Tensor]:
+        """Rebatch a packed patch sequence using per-image grids to align embeddings.
+
+        Args:
+            seq_patches (`torch.Tensor`): Packed patches of shape `(total_patches, patch_dim)`.
+            spatial_shapes (`torch.Tensor`): Per-image patch grids of shape `(num_images, 2)` as `(H_tokens, W_tokens)`.
+
+        Returns:
+            `tuple[Optional[torch.Tensor], torch.Tensor]`: A padded batch tensor shaped
+            `(batch, max_len, patch_dim)` plus `seq_lengths` used to form `cu_seqlens` for
+            variable-length attention.
+        """
         if seq_patches.ndim != 2:
             raise ValueError("`seq_patches` is expected to be 2D (total_patches, patch_dim).")
         if spatial_shapes.ndim != 2 or spatial_shapes.size(-1) != 2:
@@ -593,6 +611,7 @@ class IsaacVisionEmbeddings(nn.Module):
         return packed_pixel_values, seq_lengths
 
     def _unpack_from_batch(self, embeddings: torch.Tensor, seq_lengths: torch.Tensor) -> torch.Tensor:
+        """Flatten a padded batch back to packed sequence order using `seq_lengths`."""
         output_chunks: list[torch.Tensor] = []
         for batch_idx, length in enumerate(seq_lengths.tolist()):
             if length == 0:
