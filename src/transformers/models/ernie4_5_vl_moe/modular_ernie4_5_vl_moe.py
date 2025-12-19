@@ -297,12 +297,7 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         # Default to MoE from the second layer and on
         self.mlp_layer_types = mlp_layer_types
         if self.mlp_layer_types is None:
-            self.mlp_layer_types = []
-            for i in range(self.num_hidden_layers):
-                if i == 0:
-                    self.mlp_layer_types.append("dense")
-                else:
-                    self.mlp_layer_types.append("sparse")
+            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         self.moe_intermediate_size = moe_intermediate_size
