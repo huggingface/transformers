@@ -3,7 +3,6 @@ import json
 import datasets
 
 from tests.trainer.test_trainer import StoreLossCallback
-from transformers import is_torch_available
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -11,6 +10,7 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    is_torch_available,
     set_seed,
 )
 from transformers.testing_utils import (
