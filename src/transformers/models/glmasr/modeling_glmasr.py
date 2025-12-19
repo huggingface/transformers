@@ -83,29 +83,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
-
-
-def apply_rotary_pos_emb_audio(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(1).float(), sin.unsqueeze(1).float()
-    cos = torch.cat([cos, cos], dim=-1)
-    sin = torch.cat([sin, sin], dim=-1)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
-
-
 class GlmasrAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
