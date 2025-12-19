@@ -1773,6 +1773,7 @@ class GenerationMixin(ContinuousMixin):
         # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
+        default_generation_config = GenerationConfig()
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1788,16 +1789,23 @@ class GenerationMixin(ContinuousMixin):
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
-        # Due to some values being boolean and not `None`, we need additional logic to overwrite
-        # them explicitly (`defaults_only=False`)
-        generation_config.update(**{k: v for k, v in self.generation_config.to_dict().items() if isinstance(v, bool)})
-
         # First set values from the loaded `self.generation_config`, then set default values (BC)
         # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
         # to `generate()`. Thus the `defaults_only=True` is used
         global_defaults = self.generation_config._get_default_generation_params()
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
+
+        # Due to some values being boolean and not `None`, we need additional logic to overwrite
+        # them explicitly (`defaults_only=False`) on the condition that it is something different
+        # than the default value of that item
+        generation_config.update(
+            **{
+                k: v
+                for k, v in self.generation_config.to_dict().items()
+                if isinstance(v, bool) and getattr(generation_config, k) == getattr(default_generation_config, k)
+            }
+        )
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
