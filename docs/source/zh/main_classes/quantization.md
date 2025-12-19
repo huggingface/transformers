@@ -113,22 +113,22 @@ model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", att
 
 [[autodoc]] AwqConfig
 
-## `AutoGPTQ` 集成
+## GPT-QModel 集成
 
 🤗 Transformers已经整合了`optimum` API，用于对语言模型执行GPTQ量化。您可以以8、4、3甚至2位加载和量化您的模型，而性能无明显下降，并且推理速度更快！这受到大多数GPU硬件的支持。
 
 要了解更多关于量化模型的信息，请查看：
 - [GPTQ](https://huggingface.co/papers/2210.17323)论文
 - `optimum`关于GPTQ量化的[指南](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization)
-- 用作后端的[`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ)库
+- 用作后端的`GPT-QModel` (https://github.com/ModelCloud/GPTQModel)库
 
 
 ### 要求
 
 为了运行下面的代码，您需要安装：
 
-- 安装最新版本的 `AutoGPTQ` 库
-`pip install auto-gptq`
+- 安装最新版本的 `GPT-QModel` 库
+`pip install gptqmodel --no-build-isolation`
 
 - 从源代码安装最新版本的`optimum`
 `pip install git+https://github.com/huggingface/optimum.git`
@@ -162,7 +162,7 @@ gptq_config = GPTQConfig(bits=4, dataset = "c4", tokenizer=tokenizer)
 
 
 ```python
-dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+dataset = ["gptqmodel is an easy-to-use model quantization library with user-friendly apis, based on the GPTQ algorithm."]
 quantization = GPTQConfig(bits=4, dataset = dataset, tokenizer=tokenizer)
 ```
 

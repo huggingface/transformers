@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -82,22 +83,10 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
-            if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, Data2VecTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring
@@ -119,7 +108,10 @@ class Data2VecTextClassificationHead(RobertaClassificationHead):
     """
 )
 class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "data2vec_text.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -218,7 +210,10 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "data2vec_text.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
 
     def __init__(self, config):
         super().__init__(config)

@@ -32,6 +32,7 @@ from transformers.models.dinov2.modeling_dinov2 import (
 from transformers.models.llama.modeling_llama import LlamaMLP
 from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
 
+from ... import initialization as init
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -39,7 +40,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -162,7 +163,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
             # the model was trained with random_scale, so it can process images of varying sizes.
             # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
@@ -343,36 +344,26 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
         "attentions": DINOv3ViTAttention,
     }
 
-    def _init_weights(self, module):
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
-                module.register_tokens.data = nn.init.trunc_normal_(
-                    module.register_tokens.data.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.register_tokens.dtype)
-            module.mask_token.data.zero_()
+                init.trunc_normal_(module.register_tokens, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
-            module.lambda1.data.fill_(self.config.layerscale_value)
+            init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -439,7 +430,7 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     def forward(
         self,

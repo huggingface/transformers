@@ -21,7 +21,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...masking_utils import eager_mask, padding_mask_function
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -60,6 +60,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         self,
         input_features: torch.Tensor,
         input_features_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -73,20 +74,10 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
                 - 0 for tokens that are **masked**.
         """
 
-        # Prepare attention mask for transformer layers
-        batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
         input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
-        attention_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=torch.arange(seq_len, device=input_features.device),
-            kv_length=seq_len,
-            mask_function=padding_mask_function(input_features_mask),
-            dtype=self.conv1.weight.dtype,
-        )
 
         # Conv front-end
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -96,6 +87,12 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         # Add positions, dropout
         hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
 
         # Transformer stack
         for layer in self.layers:
@@ -136,16 +133,12 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-    _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
     def __init__(self, config):
         super().__init__(config)
-        # Similar to Qwen2Audio
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
     def get_audio_features(
         self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor

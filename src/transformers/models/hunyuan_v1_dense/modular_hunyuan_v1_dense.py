@@ -120,16 +120,7 @@ class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+    pass
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
@@ -157,7 +148,7 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
             inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
 
 class HunYuanDenseV1Model(LlamaModel):

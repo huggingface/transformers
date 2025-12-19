@@ -130,6 +130,10 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = MllamaText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MllamaTextConfig, has_text_modality=True)
 
+    @unittest.skip("Mllama needs a different model prefix to loadd saved checkpoints")
+    def test_model_base_model_prefix(self):
+        pass
+
 
 class MllamaVisionText2TextModelTester:
     def __init__(

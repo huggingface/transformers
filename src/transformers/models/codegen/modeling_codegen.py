@@ -14,11 +14,13 @@
 # limitations under the License.
 """PyTorch CodeGen model."""
 
+import math
 from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -69,7 +71,7 @@ class CodeGenAttention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
 
-        max_positions = config.max_position_embeddings
+        self.max_positions = config.max_position_embeddings
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
         self.layer_idx = layer_idx
@@ -88,13 +90,15 @@ class CodeGenAttention(nn.Module):
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
+        self.scale_attn = math.sqrt(self.head_dim)
         self.qkv_proj = nn.Linear(self.embed_dim, self.embed_dim * 3, bias=False)
 
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
+        self.pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.register_buffer(
+            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
@@ -277,25 +281,12 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
     _skip_keys_device_placement = "past_key_values"
-
     _can_compile_fullgraph = True
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, CodeGenAttention):
+            init.copy_(module.embed_positions, create_sinusoidal_positions(module.max_positions, module.pos_embd_dim))
 
 
 @auto_docstring
@@ -560,7 +551,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
     """
 )
 class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(self, config):
         super().__init__(config)

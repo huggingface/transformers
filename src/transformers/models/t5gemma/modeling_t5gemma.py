@@ -25,9 +25,11 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -43,7 +45,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_t5gemma import T5GemmaConfig, T5GemmaModuleConfig
 
 
@@ -106,7 +108,7 @@ class T5GemmaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -145,7 +147,7 @@ class T5GemmaRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -161,6 +163,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -234,6 +237,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class T5GemmaSelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -310,6 +314,7 @@ class T5GemmaSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class T5GemmaCrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -570,22 +575,23 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+            init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+                init.zeros_(module.out_proj.bias)
         elif isinstance(module, T5GemmaLMHead):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
-                module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+                init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
     def _shift_right(self, input_ids):
         """
@@ -679,7 +685,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -773,7 +779,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -882,9 +888,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
@@ -990,7 +993,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.out_proj.weight"]
+    _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
@@ -1010,17 +1013,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def _tie_weights(self):
-        # Decoder input and output embeddings are tied.
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @can_return_tuple
     @auto_docstring

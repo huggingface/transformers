@@ -27,8 +27,9 @@ import torch.distributions
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -38,7 +39,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_blt import (
     BltConfig,
     BltGlobalTransformerConfig,
@@ -102,7 +103,7 @@ class BltRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -141,7 +142,7 @@ class BltRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
             cos = emb.cos() * self.attention_scaling
@@ -320,7 +321,6 @@ class BltSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        use_cache: bool = False,
         past_key_values=None,
         cache_position=None,
         **kwargs,
@@ -392,9 +392,7 @@ class BltCrossAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cross_attention_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -403,27 +401,13 @@ class BltCrossAttention(nn.Module):
         query_states = self.q_proj(query_states)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if cross_attention_states is not None:
-            cross_attention_states = self.k_norm(cross_attention_states)
-            key_states = self.k_proj(cross_attention_states)
-            value_states = self.v_proj(cross_attention_states)
-            key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-        elif cache_position[0] != 0:
-            key_states, value_states = (
-                past_key_values.layers[self.layer_idx].keys,
-                past_key_values.layers[self.layer_idx].values,
-            )
-        else:
-            raise ValueError(
-                "Cross attention layer can't find neither `cross_attn_states` nor cached values for key/values!"
-            )
-        attention_interface: Callable = eager_attention_forward
+        cross_attention_states = self.k_norm(cross_attention_states)
+        key_states = self.k_proj(cross_attention_states)
+        value_states = self.v_proj(cross_attention_states)
+        key_states = key_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -446,8 +430,8 @@ class BltCrossAttention(nn.Module):
 @auto_docstring
 class BltPreTrainedModel(PreTrainedModel):
     config: BltConfig
-    base_model_prefix = ""
-    input_modalities = ["image", "text"]
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["BltTransformerLayer"]
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
@@ -459,6 +443,163 @@ class BltPreTrainedModel(PreTrainedModel):
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0, layer_name="local_decoder"),
         "attentions": OutputRecorder(BltSelfAttention, index=1, layer_name="local_decoder"),
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """
+        Initialize BLT weights following the original ByteLatentTransformer:
+
+        - Most weights are drawn from a truncated normal.
+        - Scale is ~ 1 / sqrt(model_dim) (or 1 / sqrt(hidden_dim) for FFN outputs).
+        - Norm layers are set to weight = 1, bias = 0.
+        """
+        class_name = module.__class__.__name__
+
+        # Norms: RMSNorm / LayerNorm
+        if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
+            if getattr(module, "weight", None) is not None:
+                init.ones_(module.weight)
+            if getattr(module, "bias", None) is not None:
+                init.zeros_(module.bias)
+            return
+
+        # Embeddings (encoder / patcher / hash embeddings)
+        if isinstance(module, nn.Embedding):
+            hidden_size = getattr(self.config, "hidden_size", None)
+            if hidden_size is None and hasattr(self.config, "encoder_config"):
+                hidden_size = getattr(self.config.encoder_config, "hidden_size", None)
+            if hidden_size is None:
+                hidden_size = module.embedding_dim
+
+            std = hidden_size**-0.5
+            init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-3 * std,
+                b=3 * std,
+            )
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
+            return
+
+        # Self-attention / cross-attention projections
+        if isinstance(module, (BltSelfAttention, BltCrossAttention)) or class_name in (
+            "MllamaTextSelfAttention",
+            "MllamaTextCrossAttention",
+        ):
+            dim = getattr(self.config, "hidden_size", None)
+            if dim is None and hasattr(module, "hidden_size"):
+                dim = module.hidden_size
+            if dim is None:
+                for name in ("q_proj", "k_proj", "v_proj", "o_proj", "dense"):
+                    proj = getattr(module, name, None)
+                    if proj is not None and hasattr(proj, "weight"):
+                        dim = proj.weight.shape[-1]
+                        break
+            if dim is None:
+                return
+
+            std = dim**-0.5
+
+            # Input projections (q, k, v)
+            for proj_name in ("q_proj", "k_proj", "v_proj"):
+                proj = getattr(module, proj_name, None)
+                if proj is not None and hasattr(proj, "weight"):
+                    init.trunc_normal_(
+                        proj.weight,
+                        mean=0.0,
+                        std=std,
+                        a=-3 * std,
+                        b=3 * std,
+                    )
+                    if getattr(proj, "bias", None) is not None:
+                        init.zeros_(proj.bias)
+
+            # Output projection: o_proj or dense
+            o_proj = getattr(module, "o_proj", getattr(module, "dense", None))
+            if o_proj is not None and hasattr(o_proj, "weight"):
+                init.trunc_normal_(
+                    o_proj.weight,
+                    mean=0.0,
+                    std=std,
+                    a=-3 * std,
+                    b=3 * std,
+                )
+                if getattr(o_proj, "bias", None) is not None:
+                    init.zeros_(o_proj.bias)
+            return
+
+        # MLP / FFN blocks
+        if isinstance(module, BltMLP) or class_name == "MllamaTextMLP":
+            hidden_size = getattr(self.config, "hidden_size", None)
+            if hidden_size is None and hasattr(self.config, "decoder_config"):
+                hidden_size = getattr(self.config.decoder_config, "hidden_size", None)
+            if hidden_size is None and hasattr(self.config, "encoder_config"):
+                hidden_size = getattr(self.config.encoder_config, "hidden_size", None)
+
+            # Input-side std
+            in_std = None
+            if hidden_size is not None:
+                in_std = hidden_size**-0.5
+
+            gate_proj = getattr(module, "gate_proj", getattr(module, "fc1", None))
+            up_proj = getattr(module, "up_proj", None)
+            down_proj = getattr(module, "down_proj", getattr(module, "fc2", None))
+
+            # gate / input projections
+            for proj in (gate_proj, up_proj):
+                if proj is not None and hasattr(proj, "weight"):
+                    std = in_std or (proj.weight.shape[1] ** -0.5)
+                    init.trunc_normal_(
+                        proj.weight,
+                        mean=0.0,
+                        std=std,
+                        a=-3 * std,
+                        b=3 * std,
+                    )
+                    if getattr(proj, "bias", None) is not None:
+                        init.zeros_(proj.bias)
+
+            # output/ down projections
+            if down_proj is not None and hasattr(down_proj, "weight"):
+                hidden_dim = down_proj.weight.shape[1]
+                out_std = hidden_dim**-0.5
+                init.trunc_normal_(
+                    down_proj.weight,
+                    mean=0.0,
+                    std=out_std,
+                    a=-3 * out_std,
+                    b=3 * out_std,
+                )
+                if getattr(down_proj, "bias", None) is not None:
+                    init.zeros_(down_proj.bias)
+            return
+
+        # Generic Linear layers (projections, lm_head, etc.)
+        if isinstance(module, nn.Linear):
+            fan_in = module.in_features
+            std = fan_in**-0.5
+            init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-3 * std,
+                b=3 * std,
+            )
+            if module.bias is not None:
+                init.zeros_(module.bias)
+            return
+
+        if isinstance(module, BltRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class BltLocalEncoder(BltPreTrainedModel):
@@ -603,7 +744,7 @@ class BltLocalDecoder(BltPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -768,6 +909,8 @@ class BltPatcher(BltPreTrainedModel):
             self.config.vocab_size,
             bias=False,
         )
+
+        self.post_init()
 
     def forward(
         self,
@@ -968,7 +1111,7 @@ def compute_hash_embeddings(
             hash_ids = byte_group_hash_function(local_encoder_tokens, group_size, prime, encoder_hash_byte_group_vocab)
             # Apply offset to get the correct slice of the fused embedding
             offset_hash_ids = hash_ids + embedding_idx * encoder_hash_byte_group_vocab
-            embeddings += encoder_hash_tok_embedding(offset_hash_ids)
+            embeddings += encoder_hash_tok_embedding(offset_hash_ids).to(embeddings.device)
             embedding_idx += 1
 
     return embeddings
@@ -1073,7 +1216,7 @@ class BltModel(BltPreTrainedModel):
             self.patcher = None
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1088,6 +1231,9 @@ class BltModel(BltPreTrainedModel):
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         # Extract input embeddings as early as possible
         if inputs_embeds is not None:
@@ -1137,7 +1283,7 @@ class BltModel(BltPreTrainedModel):
             input_embeds=encoder_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
             position_ids=position_ids,
         )
 
@@ -1157,6 +1303,7 @@ class BltModel(BltPreTrainedModel):
             encoder_attention_mask=cross_attn_mask_enc,
             num_patches=patch_lengths.shape[1],
             patch_ids=patch_ids,
+            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
             **kwargs,
         )
         encoder_cross_states = encoder_cross_states.view(batch_size, patch_lengths.shape[1], -1)
@@ -1192,7 +1339,7 @@ class BltModel(BltPreTrainedModel):
             patch_embeds=global_hidden_states,
             attention_mask=causal_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values.cross_attention_cache if past_key_values is not None else None,
             cache_position=cache_position,
             encoder_attention_mask=cross_attn_mask_dec,
             **kwargs,
@@ -1230,7 +1377,7 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
     config: BltConfig
     _can_compile_fullgraph = False
     base_model_prefix = "model"
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"model.local_encoder.embed_tokens.weight": "lm_head.weight"}
 
     def __init__(self, config: BltConfig):
         super().__init__(config.get_text_config())

@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -42,9 +43,9 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchdynamo_compiling,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from ..qwen2.modeling_qwen2 import (
     Qwen2RMSNorm,
 )
@@ -125,7 +126,7 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -165,7 +166,7 @@ class Qwen2VLRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -246,6 +247,8 @@ class VisionRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
+        self.dim = dim
+        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -654,7 +657,7 @@ class Qwen2VLDecoderLayer(GradientCheckpointingLayer):
 class Qwen2VLPreTrainedModel(PreTrainedModel):
     config: Qwen2VLConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2VLVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
@@ -664,12 +667,19 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 @auto_docstring
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config: Qwen2VLVisionConfig
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2VLVisionBlock"]
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -690,6 +700,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             dim=config.hidden_size, context_dim=config.embed_dim, spatial_merge_size=config.spatial_merge_size
         )
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def get_dtype(self) -> torch.dtype:
         return self.blocks[0].mlp.fc2.weight.dtype
@@ -766,7 +778,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
 @auto_docstring
 class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
     config: Qwen2VLTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Qwen2VLTextConfig):
         super().__init__(config)
@@ -922,7 +934,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
 
 @auto_docstring
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {"^model": "language_model"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -941,12 +953,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_rope_index(
         self,
@@ -1226,7 +1232,8 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if position_ids is None:
-            if self.rope_deltas is None or cache_position is None or cache_position[0] == 0:
+            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+            if self.rope_deltas is None or past_key_values_length == 0:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids, image_grid_thw, video_grid_thw, attention_mask
                 )
@@ -1236,10 +1243,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 batch_size, seq_length, _ = inputs_embeds.shape
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1)
-                if cache_position is not None:
-                    delta = (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                else:
-                    delta = torch.zeros((batch_size, seq_length), device=inputs_embeds.device)
+                delta = (past_key_values_length + self.rope_deltas).to(inputs_embeds.device)
                 delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids + delta.to(position_ids.device)
 
@@ -1272,7 +1276,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         "^visual": "model.visual",
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -1287,12 +1291,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1300,15 +1298,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def visual(self):
-        return self.model.visual
 
     @can_return_tuple
     @auto_docstring
@@ -1462,15 +1451,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             # When compiling, we can't check tensor values thus we check only input length
             # It is safe to assume that `length!=1` means we're in pre-fill because compiled
             # models currently cannot do asssisted decoding
-            prefill_compiled_stage = is_torchdynamo_compiling() and (
-                (input_ids is not None and input_ids.shape[1] != 1)
-                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
-            )
-            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-                (cache_position is not None and cache_position[0] == 0)
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.model.rope_deltas is None:
+            if model_inputs["cache_position"][0] == 0 or self.model.rope_deltas is None:
                 vision_positions, rope_deltas = self.model.get_rope_index(
                     model_inputs.get("input_ids", None),
                     image_grid_thw=image_grid_thw,

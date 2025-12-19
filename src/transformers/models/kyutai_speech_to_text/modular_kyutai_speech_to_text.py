@@ -20,6 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
@@ -213,7 +214,13 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
 
 
 class KyutaiSpeechToTextPreTrainedModel(MoshiPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KyutaiSpeechToTextEmbeddings):
+            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
+            audio_tokens_offsets += module.config.vocab_size
+            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
+            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -223,6 +230,7 @@ class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -251,8 +259,9 @@ class KyutaiSpeechToTextModel(MoshiModel):
 
 
 class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
-    output_modalities = ["audio", "text"]
+    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)

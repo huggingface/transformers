@@ -345,7 +345,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         v, reloaded_state[k], msg=lambda x: f"{model_class.__name__}: Tensor {k}: {x}"
                     )
                 # Checking there was no complain of missing weights
-                self.assertEqual(infos["missing_keys"], [])
+                self.assertEqual(infos["missing_keys"], set())
 
     # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
     def test_hidden_states_output(self):
@@ -406,6 +406,10 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Kosmos2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     @pytest.mark.generate

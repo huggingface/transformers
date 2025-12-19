@@ -19,6 +19,7 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
@@ -113,7 +114,7 @@ class T5GemmaModuleConfig(Gemma2Config):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -602,22 +603,23 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, T5GemmaClassificationHead):
             scale = module.out_proj.weight.shape[0] ** -0.5
-            module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+            init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
             if hasattr(module.out_proj, "bias") and module.out_proj.bias is not None:
-                module.out_proj.bias.data.zero_()
+                init.zeros_(module.out_proj.bias)
         elif isinstance(module, T5GemmaLMHead):
             if not self.config.tie_word_embeddings:
                 scale = module.out_proj.weight.shape[0] ** -0.5
-                module.out_proj.weight.data.normal_(mean=0.0, std=std * scale)
+                init.normal_(module.out_proj.weight, mean=0.0, std=std * scale)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
     def _shift_right(self, input_ids):
         """
@@ -687,7 +689,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -781,7 +783,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -890,9 +892,6 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
@@ -998,7 +997,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight", "lm_head.out_proj.weight"]
+    _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
     _tp_plan = {"lm_head.out_proj": "colwise_rep"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
@@ -1018,17 +1017,6 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
-
-    def _tie_weights(self):
-        # Decoder input and output embeddings are tied.
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.lm_head.out_proj, self.get_decoder().get_input_embeddings())
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_decoder(self):
-        return self.model.decoder
 
     @can_return_tuple
     @auto_docstring

@@ -62,7 +62,7 @@ class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -145,7 +145,8 @@ class GPTNeoXAttention(nn.Module):
         self.config = config
         self.head_size = config.hidden_size // config.num_attention_heads
         self.attention_dropout = config.attention_dropout
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        self.rotary_ndims = int(self.head_size * partial_rotary_factor)
         self.scaling = self.head_size**-0.5
         self.is_causal = True
         self.layer_idx = layer_idx
@@ -389,7 +390,7 @@ class GPTNeoXModel(LlamaModel):
     """
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["embed_out.weight"]
+    _tied_weights_keys = {"embed_out.weight": "gpt_neox.embed_in.weight"}
     _tp_plan = {"embed_out": "colwise_rep"}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
@@ -516,6 +517,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> SequenceClassifierOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -595,6 +597,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -654,6 +657,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,

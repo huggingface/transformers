@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -514,22 +515,21 @@ class BrosPreTrainedModel(PreTrainedModel):
     config: BrosConfig
     base_model_prefix = "bros"
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
+        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, BrosRelationExtractor):
-            nn.init.normal_(module.dummy_node, std=std)
+        if isinstance(module, BrosRelationExtractor):
+            init.normal_(module.dummy_node, std=std)
+        elif isinstance(module, BrosTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
+        elif isinstance(module, BrosPositionalEmbedding1D):
+            inv_freq = 1 / (
+                10000 ** (torch.arange(0.0, module.dim_bbox_sinusoid_emb_1d, 2.0) / module.dim_bbox_sinusoid_emb_1d)
+            )
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -548,7 +548,7 @@ class BrosModel(BrosPreTrainedModel):
 
         self.pooler = BrosPooler(config) if add_pooling_layer else None
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -571,6 +571,7 @@ class BrosModel(BrosPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
@@ -692,7 +693,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -709,6 +710,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
@@ -811,7 +813,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         # Subsequent token classification for Entity Extraction (NER)
         self.subsequent_token_classifier = BrosRelationExtractor(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -829,6 +831,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BrosSpadeOutput]:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
@@ -948,7 +951,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
 
         self.entity_linker = BrosRelationExtractor(config)
 
-        self.init_weights()
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -965,6 +968,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):

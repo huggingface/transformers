@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -475,22 +476,12 @@ class MBartPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, MBartForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):
@@ -513,7 +504,7 @@ class MBartEncoder(MBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -527,9 +518,6 @@ class MBartEncoder(MBartPreTrainedModel):
         self.embed_tokens = MBartScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -557,6 +545,7 @@ class MBartEncoder(MBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -669,7 +658,7 @@ class MBartDecoder(MBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -680,9 +669,6 @@ class MBartDecoder(MBartPreTrainedModel):
         self.embed_tokens = MBartScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -711,6 +697,7 @@ class MBartDecoder(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -897,7 +884,10 @@ class MBartDecoder(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartModel(MBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "decoder.embed_tokens.weight": "shared.weight",
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: MBartConfig):
         super().__init__(config)
@@ -906,8 +896,8 @@ class MBartModel(MBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = MBartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = MBartEncoder(config, self.shared)
-        self.decoder = MBartDecoder(config, self.shared)
+        self.encoder = MBartEncoder(config)
+        self.decoder = MBartDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -919,14 +909,6 @@ class MBartModel(MBartPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.get_input_embeddings())
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.get_input_embeddings())
 
     @auto_docstring
     def forward(
@@ -944,6 +926,7 @@ class MBartModel(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqModelOutput, tuple[torch.FloatTensor]]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1033,7 +1016,7 @@ class MBartModel(MBartPreTrainedModel):
 class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.shared.weight"}
 
     def __init__(self, config: MBartConfig):
         super().__init__(config)
@@ -1043,12 +1026,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1083,6 +1060,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1206,8 +1184,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
     """
 )
 class MBartForSequenceClassification(MBartPreTrainedModel):
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
-
     def __init__(self, config: MBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = MBartModel(config)
@@ -1238,6 +1214,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1341,8 +1318,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartForQuestionAnswering(MBartPreTrainedModel):
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1373,6 +1348,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1471,6 +1447,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = MBartDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -1478,7 +1455,9 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
@@ -1497,12 +1476,6 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1519,6 +1492,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

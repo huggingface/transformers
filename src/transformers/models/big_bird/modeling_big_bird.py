@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -1464,15 +1465,8 @@ class BigBirdLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -1521,21 +1515,15 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, BigBirdLMPredictionHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, BigBirdLMPredictionHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, BigBirdEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @dataclass
@@ -1899,7 +1887,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
 
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1930,6 +1921,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BigBirdForPreTrainingOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1999,7 +1991,10 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -2037,6 +2032,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2141,7 +2137,10 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     """
 )
 class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -2283,6 +2282,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2400,6 +2400,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[MultipleChoiceModelOutput, tuple[torch.FloatTensor]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -2506,6 +2507,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[TokenClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2597,6 +2599,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BigBirdForQuestionAnsweringModelOutput, tuple[torch.FloatTensor]]:
         r"""
         question_lengths (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):

@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
@@ -147,7 +148,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -158,6 +159,11 @@ class Ovis2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Ovis2VisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
@@ -175,6 +181,8 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
             bias=False,
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
+
+        self.post_init()
 
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
@@ -337,10 +345,6 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-    @property
-    def multi_modal_projector(self):
-        raise AttributeError("Not needed for Ovis2")
 
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)

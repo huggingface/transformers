@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -89,6 +90,7 @@ class RotaryEmbedding(torch.nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -550,22 +552,17 @@ class EsmPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, EsmLMHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, EsmLMHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, EsmEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, RotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
     def get_output_embeddings(self):
         # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
@@ -613,7 +610,7 @@ class EsmModel(EsmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -726,7 +723,7 @@ class EsmModel(EsmPreTrainedModel):
 
 @auto_docstring
 class EsmForMaskedLM(EsmPreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight"]
+    _tied_weights_keys = {"lm_head.decoder.weight": "esm.embeddings.word_embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -739,8 +736,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
 
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.lm_head = EsmLMHead(config)
-
-        self.init_weights()
 
         self.post_init()
 
@@ -836,8 +831,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.classifier = EsmClassificationHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     @can_return_tuple
@@ -910,8 +903,6 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
 
         self.post_init()
 

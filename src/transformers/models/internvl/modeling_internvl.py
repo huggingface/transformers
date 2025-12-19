@@ -28,6 +28,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -206,11 +207,10 @@ class InternVLVisionPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        embeddings = self.projection(pixel_values)
-        patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 # Based on timm implementation, which can be found here:
@@ -289,7 +289,7 @@ class InternVLVisionEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -306,7 +306,7 @@ class InternVLVisionEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 class InternVLVisionMLP(nn.Module):
@@ -397,7 +397,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "video"]
+    input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -410,18 +410,19 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -446,15 +447,13 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None, **kwargs
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
@@ -470,8 +469,8 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 @auto_docstring
 class InternVLPreTrainedModel(PreTrainedModel):
     config: InternVLConfig
-    base_model_prefix = ""
-    input_modalities = ["image", "text", "video"]
+    base_model_prefix = "model"
+    input_modalities = ("image", "text", "video")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -528,7 +527,9 @@ class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class InternVLModel(InternVLPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
@@ -543,12 +544,6 @@ class InternVLModel(InternVLPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_image_features(
         self,
@@ -760,12 +755,12 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
 )
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
@@ -782,12 +777,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -801,19 +790,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
             vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring

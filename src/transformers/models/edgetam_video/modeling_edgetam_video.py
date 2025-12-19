@@ -34,6 +34,7 @@ from tqdm import tqdm
 
 from transformers.utils.generic import OutputRecorder
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -151,24 +152,17 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
 
     def __init__(self, config: EdgeTamVideoConfig, end_x: Optional[int] = None, end_y: Optional[int] = None):
         super().__init__()
-        dim = config.memory_attention_hidden_size // (
+        self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
         # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
+        if self.dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        end_x, end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
-        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes if end_x is None else (end_x, end_y)
+        self.memory_attention_rope_theta = config.memory_attention_rope_theta
 
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = flattened_indices % end_x
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
         # directly register the cos and sin embeddings as we have a fixed feature shape
+        inv_freq = self.create_inv_freq()
         self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
         self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
 
@@ -176,6 +170,20 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
     def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
         # As the feature map size is fixed, we can just return the pre-computed embeddings.
         return self.rope_embeddings_cos, self.rope_embeddings_sin
+
+    def create_inv_freq(self):
+        freqs = 1.0 / (
+            self.memory_attention_rope_theta ** (torch.arange(0, self.dim, 4)[: (self.dim // 4)].float() / self.dim)
+        )
+        # Generate 2D position indices for axial rotary embedding
+        flattened_indices = torch.arange(self.end_x * self.end_y, dtype=torch.long)
+        x_positions = flattened_indices % self.end_x
+        y_positions = torch.div(flattened_indices, self.end_x, rounding_mode="floor")
+        freqs_x = torch.outer(x_positions, freqs).float()
+        freqs_y = torch.outer(y_positions, freqs).float()
+        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+        return inv_freq
 
 
 def eager_attention_forward(
@@ -768,6 +776,31 @@ class EdgeTamVideoFeedForward(nn.Module):
         return hidden_states
 
 
+class EdgeTamVideoPositionalEmbedding(nn.Module):
+    def __init__(self, config: EdgeTamVideoPromptEncoderConfig):
+        super().__init__()
+        self.scale = config.scale
+        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
+        self.register_buffer("positional_embedding", positional_embedding)
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates.to(torch.float32)
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 @auto_docstring
 class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     config_class = EdgeTamVideoConfig
@@ -778,31 +811,31 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamVideoLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, EdgeTamVideoModel):
+        super()._init_weights(module)
+        if isinstance(module, EdgeTamVideoModel):
             if module.no_memory_positional_encoding is not None:
-                module.no_memory_positional_encoding.data.zero_()
+                init.zeros_(module.no_memory_positional_encoding)
             if module.memory_temporal_positional_encoding is not None:
-                module.memory_temporal_positional_encoding.data.zero_()
+                init.zeros_(module.memory_temporal_positional_encoding)
             if module.no_object_pointer is not None:
-                module.no_object_pointer.data.zero_()
+                init.zeros_(module.no_object_pointer)
             if module.occlusion_spatial_embedding_parameter is not None:
-                module.occlusion_spatial_embedding_parameter.data.zero_()
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
         if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
             if module.scale is not None:
-                module.scale.data.zero_()
+                init.zeros_(module.scale)
+        elif isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
+            inv_freq = module.create_inv_freq()
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
+        elif isinstance(module, EdgeTamVideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        if isinstance(module, EdgeTamVideoVisionRotaryEmbedding):
+            inv_freq = module.create_inv_freq()
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 class EdgeTamVideoInferenceCache:
@@ -1540,39 +1573,20 @@ class EdgeTamVideoImageSegmentationOutput(ModelOutput):
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
 class EdgeTamVideoSegmentationOutput(ModelOutput):
     r"""
+    object_ids (`list[int]`, *optional*):
+        List of object IDs being tracked in the current frame.
     pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
         The predicted masks stored at the model's resolution.
+    object_score_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        Logits for the object scores, indicating if objects are present.
     frame_idx (`int`):
         The frame index of the video.
     """
 
+    object_ids: Optional[list[int]] = None
     pred_masks: Optional[torch.FloatTensor] = None
+    object_score_logits: Optional[torch.FloatTensor] = None
     frame_idx: Optional[int] = None
-
-
-class EdgeTamVideoPositionalEmbedding(nn.Module):
-    def __init__(self, config: EdgeTamVideoPromptEncoderConfig):
-        super().__init__()
-        self.scale = config.scale
-        positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-        coordinates.to(torch.float32)
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 class EdgeTamVideoMaskEmbedding(nn.Module):
@@ -1976,10 +1990,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 
 @auto_docstring
 class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
-    input_modalities = ["video", "text"]
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamVideoTwoWayAttentionBlock, index=2)}
     _keys_to_ignore_on_load_unexpected = []
 
@@ -2033,11 +2044,6 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         self.spatial_perceiver = EdgeTamVideoPerceiverResampler(config)
 
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()
@@ -2123,6 +2129,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         frame_idx: Optional[int] = None,
         frame: Optional[torch.Tensor] = None,
         reverse: bool = False,
+        **kwargs,
     ) -> EdgeTamVideoSegmentationOutput:
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):
@@ -2143,6 +2150,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
 
         num_objects = inference_session.get_obj_num()
         pred_masks_per_obj = [None] * num_objects
+        object_score_logits_per_obj = [None] * num_objects
         # Note: We avoid batched inference here because per-object inputs (clicks/masks)
         # can differ across objects.
         for obj_idx in range(num_objects):
@@ -2153,6 +2161,9 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             # conditioning output, reuse the cached masks instead of recomputing.
             if (not has_new_inputs) and has_cond_output:
                 pred_masks = inference_session.get_output(obj_idx, frame_idx, "pred_masks", is_conditioning_frame=True)
+                object_score_logits = inference_session.get_output(
+                    obj_idx, frame_idx, "object_score_logits", is_conditioning_frame=True
+                )
                 is_init_cond_frame = True
             else:
                 # Defaults when there are no new inputs
@@ -2185,8 +2196,10 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
                     obj_idx, frame_idx, output_value=current_out, is_conditioning_frame=is_init_cond_frame
                 )
                 pred_masks = current_out["pred_masks"]
+                object_score_logits = current_out["object_score_logits"]
 
             pred_masks_per_obj[obj_idx] = pred_masks
+            object_score_logits_per_obj[obj_idx] = object_score_logits.squeeze(-1)
             if not is_init_cond_frame:
                 # only for tracked frames, not for initial conditioning frames
                 inference_session.frames_tracked_per_obj[obj_idx][frame_idx] = {"reverse": reverse}
@@ -2195,10 +2208,17 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         # the mask scores on GPU for output to avoid any CPU conversion in between)
         if len(pred_masks_per_obj) > 1:
             all_pred_masks = torch.cat(pred_masks_per_obj, dim=0)
+            all_object_score_logits = torch.cat(object_score_logits_per_obj, dim=0)
         else:
             all_pred_masks = pred_masks_per_obj[0]
+            all_object_score_logits = object_score_logits_per_obj[0]
 
-        return EdgeTamVideoSegmentationOutput(pred_masks=all_pred_masks, frame_idx=frame_idx)
+        return EdgeTamVideoSegmentationOutput(
+            object_ids=inference_session.obj_ids.copy(),
+            pred_masks=all_pred_masks,
+            object_score_logits=all_object_score_logits,
+            frame_idx=frame_idx,
+        )
 
     def get_image_features(
         self,
@@ -2519,6 +2539,46 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             image_embeddings=high_res_features + [backbone_features],
         )
 
+    def _select_closest_cond_frames(self, frame_idx, cond_frame_outputs, max_cond_frame_num):
+        """
+        Select up to `max_cond_frame_num` conditioning frames from `cond_frame_outputs`
+        that are temporally closest to the current frame at `frame_idx`. Here, we take
+        - a) the closest conditioning frame before `frame_idx` (if any);
+        - b) the closest conditioning frame after `frame_idx` (if any);
+        - c) any other temporally closest conditioning frames until reaching a total
+            of `max_cond_frame_num` conditioning frames.
+
+        Outputs:
+        - selected_outputs: selected items (keys & values) from `cond_frame_outputs`.
+        - unselected_outputs: items (keys & values) not selected in `cond_frame_outputs`.
+        """
+        if max_cond_frame_num == -1 or len(cond_frame_outputs) <= max_cond_frame_num:
+            selected_outputs = cond_frame_outputs
+            unselected_outputs = {}
+        else:
+            selected_outputs = {}
+            # the closest conditioning frame before `frame_idx` (if any)
+            idx_before = max((t for t in cond_frame_outputs if t < frame_idx), default=None)
+            if idx_before is not None:
+                selected_outputs[idx_before] = cond_frame_outputs[idx_before]
+
+            # the closest conditioning frame after `frame_idx` (if any)
+            idx_after = min((t for t in cond_frame_outputs if t >= frame_idx), default=None)
+            if idx_after is not None:
+                selected_outputs[idx_after] = cond_frame_outputs[idx_after]
+
+            # add other temporally closest conditioning frames until reaching a total
+            # of `max_cond_frame_num` conditioning frames.
+            num_remain = max_cond_frame_num - len(selected_outputs)
+            inds_remain = sorted(
+                (t for t in cond_frame_outputs if t not in selected_outputs),
+                key=lambda x: abs(x - frame_idx),
+            )[:num_remain]
+            selected_outputs.update((t, cond_frame_outputs[t]) for t in inds_remain)
+            unselected_outputs = {t: v for t, v in cond_frame_outputs.items() if t not in selected_outputs}
+
+        return selected_outputs, unselected_outputs
+
     def _gather_memory_frame_outputs(
         self,
         inference_session: EdgeTamVideoInferenceSession,
@@ -2534,12 +2594,15 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         """
         temporal_positions_and_previous_outputs = []
 
-        # Add conditioning frame outputs (no limit here, as is the case in the original checkpoints)
+        # Add conditioning frame outputs (limited by max_cond_frame_num)
         conditioning_outputs = inference_session.output_dict_per_obj[obj_idx]["cond_frame_outputs"]
         if not conditioning_outputs:
             raise ValueError(
                 "maskmem_features in conditioning outputs cannot be empty when not is_initial_conditioning_frame"
             )
+        conditioning_outputs, unselected_conditioning_outputs = self._select_closest_cond_frames(
+            frame_idx, conditioning_outputs, max_cond_frame_num=self.config.max_cond_frame_num
+        )
 
         # Store (temporal_position, output_data) tuples
         temporal_positions_and_previous_outputs = [(0, out) for out in conditioning_outputs.values()]
@@ -2556,7 +2619,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
 
             # check if the output is already stored without using get_output to avoid unnecessary memory transfers between CPU and GPU
             output_data = inference_session.output_dict_per_obj[obj_idx]["non_cond_frame_outputs"].get(
-                previous_frame_idx, None
+                previous_frame_idx, unselected_conditioning_outputs.get(previous_frame_idx, None)
             )
 
             temporal_positions_and_previous_outputs.append((relative_temporal_offset, output_data))
@@ -3015,6 +3078,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         start_frame_idx: Optional[int] = None,
         max_frame_num_to_track: Optional[int] = None,
         reverse: bool = False,
+        show_progress_bar: bool = False,
     ) -> Iterator[EdgeTamVideoSegmentationOutput]:
         r"""
         inference_session (`EdgeTamVideoInferenceSession`):
@@ -3027,6 +3091,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             The maximum number of frames to track.
         reverse (`bool`, *optional*, defaults to `False`):
             Whether to propagate in reverse.
+        show_progress_bar (`bool`, *optional*, defaults to `False`):
+            Whether to show a progress bar during propagation.
         """
         num_frames = inference_session.num_frames
 
@@ -3056,7 +3122,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             end_frame_idx = min(start_frame_idx + max_frame_num_to_track, num_frames - 1)
             processing_order = range(start_frame_idx, end_frame_idx + 1)
 
-        for frame_idx in tqdm(processing_order, desc="propagate in video"):
+        for frame_idx in tqdm(processing_order, desc="propagate in video", disable=not show_progress_bar):
             edgetam_video_output = self(inference_session, frame_idx=frame_idx, reverse=reverse)
             yield edgetam_video_output
 

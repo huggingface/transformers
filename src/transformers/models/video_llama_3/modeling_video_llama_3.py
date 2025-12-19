@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -43,6 +44,8 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
+        self.dim = dim
+        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -369,7 +372,7 @@ class VideoLlama3VisionEncoder(nn.Module):
 class VideoLlama3PreTrainedModel(PreTrainedModel):
     config: VideoLlama3Config
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -379,11 +382,17 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,
@@ -516,7 +525,7 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -535,12 +544,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def get_video_features(
         self,
@@ -744,7 +747,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -760,12 +763,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -773,11 +770,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
 
     @can_return_tuple
     @auto_docstring
@@ -1101,10 +1093,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
 
 
 __all__ = [

@@ -508,16 +508,16 @@ BERT `_init_weights` Methode:
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
     elif isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
     elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+        module.bias.zero_()
+        module.weight.fill_(1.0)
 ```
 
 Sie können weitere benutzerdefinierte Schemata verwenden, wenn Sie eine spezielle Initialisierung für einige Module benötigen. Zum Beispiel in
@@ -533,9 +533,9 @@ def _init_weights(self, module):
         module.project_hid._is_hf_initialized = True
         module.project_q._is_hf_initialized = True
     elif isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 ```
 
 Das Flag `_is_hf_initialized` wird intern verwendet, um sicherzustellen, dass wir ein Submodul nur einmal initialisieren. Wenn Sie es auf
