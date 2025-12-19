@@ -215,6 +215,13 @@ class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if hasattr(module, "latent_scaling_factor"):
+            module.latent_scaling_factor.fill_(1.0)
+        if hasattr(module, "latent_bias_factor"):
+            module.latent_bias_factor.fill_(0.0)
+
 
 @dataclass
 @auto_docstring
@@ -275,7 +282,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
         raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
     def forward(self, audio, padding_cache=None, use_cache=None, **kwargs: Unpack[TransformersKwargs]):
-        raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
+        raise NotImplementedError("Forward method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
 
 @auto_docstring(

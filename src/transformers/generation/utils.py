@@ -1795,6 +1795,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
+        # add custom keys not in global defaults
+        for key, value in self.generation_config.to_dict().items():
+            if not hasattr(generation_config, key):
+                setattr(generation_config, key, value)
+
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
 

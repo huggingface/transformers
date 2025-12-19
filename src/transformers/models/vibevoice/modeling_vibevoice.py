@@ -413,6 +413,10 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
         elif isinstance(module, VibeVoiceConvNext1dLayer):
             nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
             nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
+        if hasattr(module, "latent_scaling_factor"):
+            module.latent_scaling_factor.fill_(1.0)
+        if hasattr(module, "latent_bias_factor"):
+            module.latent_bias_factor.fill_(0.0)
 
 
 @dataclass
