@@ -1218,7 +1218,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             final_inputs = {}
             for k, v in inputs.items():
-                if isinstance(v, torch.Tenor):
+                if isinstance(v, torch.Tensor):
                     final_inputs[k] = v.to(device="cpu")
                 else:
                     final_inputs[k] = v
