@@ -1773,7 +1773,6 @@ class GenerationMixin(ContinuousMixin):
         # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
-        default_generation_config = GenerationConfig()
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1797,13 +1796,16 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**global_defaults, defaults_only=True)
 
         # Due to some values being boolean and not `None`, we need additional logic to overwrite
-        # them explicitly (`defaults_only=False`) on the condition that it is something different
-        # than the default value of that item
+        # them explicitly (`defaults_only=False`) on the condition that it's only a previous
+        # default value
+        default_generation_config = GenerationConfig()
         generation_config.update(
             **{
                 k: v
                 for k, v in self.generation_config.to_dict().items()
-                if isinstance(v, bool) and getattr(generation_config, k) == getattr(default_generation_config, k)
+                if isinstance(v, bool)
+                and hasattr(default_generation_config, k)
+                and getattr(generation_config, k) == getattr(default_generation_config, k)
             }
         )
 
