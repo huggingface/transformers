@@ -614,7 +614,6 @@ src/transformers/models/stablelm/modeling_stablelm.py
 src/transformers/models/starcoder2/modeling_starcoder2.py
 src/transformers/models/swiftformer/configuration_swiftformer.py
 src/transformers/models/swiftformer/convert_swiftformer_original_to_hf.py
-src/transformers/models/swiftformer/modeling_swiftformer.py
 src/transformers/models/swin/convert_swin_simmim_to_pytorch.py
 src/transformers/models/swin/convert_swin_timm_to_pytorch.py
 src/transformers/models/swin2sr/configuration_swin2sr.py

@@ -434,6 +434,24 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        r"""
+        Example:
+        ```python
+        >>> from transformers import AutoImageProcessor, SwiftFormerModel
+        >>> import torch
+        >>> from datasets import load_dataset
+        >>> dataset = load_dataset("huggingface/cats-image", split="test")
+        >>> image = dataset[0]["image"]
+        >>> image_processor = AutoImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> model = SwiftFormerModel.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> print(list(last_hidden_states.shape))
+        [1, 220, 7, 7]
+        ```
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -490,6 +508,24 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Example:
+        ```python
+        >>> from transformers import AutoImageProcessor, SwiftFormerForImageClassification
+        >>> import torch
+        >>> from datasets import load_dataset
+        >>> dataset = load_dataset("huggingface/cats-image", split="test")
+        >>> image = dataset[0]["image"]
+        >>> image_processor = AutoImageProcessor.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> model = SwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        tabby, tabby cat
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
