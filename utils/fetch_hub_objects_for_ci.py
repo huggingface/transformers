@@ -1,11 +1,13 @@
 import os
 
 import httpx
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import get_session, hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
 
+
+session = get_session()
 
 URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000139.jpg",
@@ -207,7 +209,7 @@ if __name__ == "__main__":
         print(f"Downloading {filename}...")
         try:
             with open(filename, "wb") as f:
-                with httpx.stream("GET", url) as resp:
+                with session.stream("GET", url) as resp:
                     resp.raise_for_status()
                     f.writelines(resp.iter_bytes(chunk_size=8192))
             print(f"Successfully downloaded: {filename}")

@@ -20,14 +20,15 @@ from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -37,27 +38,42 @@ rename_keys = []
 for i in range(6):
     # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
     rename_keys.append(
-        (f"transformer.encoder.layers.{i}.self_attn.out_proj.weight", f"encoder.layers.{i}.self_attn.out_proj.weight")
+        (
+            f"transformer.encoder.layers.{i}.self_attn.out_proj.weight",
+            f"encoder.layers.{i}.self_attn.out_proj.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.encoder.layers.{i}.self_attn.out_proj.bias", f"encoder.layers.{i}.self_attn.out_proj.bias")
+        (
+            f"transformer.encoder.layers.{i}.self_attn.out_proj.bias",
+            f"encoder.layers.{i}.self_attn.out_proj.bias",
+        )
     )
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"encoder.layers.{i}.fc1.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"encoder.layers.{i}.fc1.bias"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"encoder.layers.{i}.fc2.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"encoder.layers.{i}.fc2.bias"))
     rename_keys.append(
-        (f"transformer.encoder.layers.{i}.norm1.weight", f"encoder.layers.{i}.self_attn_layer_norm.weight")
+        (
+            f"transformer.encoder.layers.{i}.norm1.weight",
+            f"encoder.layers.{i}.self_attn_layer_norm.weight",
+        )
     )
     rename_keys.append((f"transformer.encoder.layers.{i}.norm1.bias", f"encoder.layers.{i}.self_attn_layer_norm.bias"))
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
     # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.self_attn.out_proj.weight", f"decoder.layers.{i}.self_attn.out_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.self_attn.out_proj.weight",
+            f"decoder.layers.{i}.self_attn.out_proj.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.self_attn.out_proj.bias", f"decoder.layers.{i}.self_attn.out_proj.bias")
+        (
+            f"transformer.decoder.layers.{i}.self_attn.out_proj.bias",
+            f"decoder.layers.{i}.self_attn.out_proj.bias",
+        )
     )
     rename_keys.append(
         (
@@ -76,14 +92,23 @@ for i in range(6):
     rename_keys.append((f"transformer.decoder.layers.{i}.linear2.weight", f"decoder.layers.{i}.fc2.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.linear2.bias", f"decoder.layers.{i}.fc2.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.norm1.weight", f"decoder.layers.{i}.self_attn_layer_norm.weight")
+        (
+            f"transformer.decoder.layers.{i}.norm1.weight",
+            f"decoder.layers.{i}.self_attn_layer_norm.weight",
+        )
     )
     rename_keys.append((f"transformer.decoder.layers.{i}.norm1.bias", f"decoder.layers.{i}.self_attn_layer_norm.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.encoder_attn_layer_norm.weight")
+        (
+            f"transformer.decoder.layers.{i}.norm2.weight",
+            f"decoder.layers.{i}.encoder_attn_layer_norm.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.encoder_attn_layer_norm.bias")
+        (
+            f"transformer.decoder.layers.{i}.norm2.bias",
+            f"decoder.layers.{i}.encoder_attn_layer_norm.bias",
+        )
     )
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
@@ -171,7 +196,7 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

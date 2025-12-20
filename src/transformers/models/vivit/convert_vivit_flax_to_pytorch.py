@@ -21,21 +21,23 @@ import json
 import os.path
 from collections import OrderedDict
 
-import httpx
 import numpy as np
 import torch
 from flax.training.checkpoints import restore_checkpoint
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 
 from transformers import VivitConfig, VivitForVideoClassification, VivitImageProcessor
 from transformers.image_utils import PILImageResampling
+
+
+session = get_session()
 
 
 def download_checkpoint(path):
     url = "https://storage.googleapis.com/scenic-bucket/vivit/kinetics_400/vivit_base_16x2_unfactorized/checkpoint"
 
     with open(path, "wb") as f:
-        with httpx.stream("GET", url) as resp:
+        with session.stream("GET", url) as resp:
             resp.raise_for_status()
             f.writelines(resp.iter_bytes(chunk_size=2048))
 

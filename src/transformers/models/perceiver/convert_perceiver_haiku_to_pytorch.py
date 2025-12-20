@@ -22,10 +22,9 @@ from io import BytesIO
 from pathlib import Path
 
 import haiku as hk
-import httpx
 import numpy as np
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -44,6 +43,7 @@ from transformers.utils import logging
 from ...utils import strtobool
 
 
+session = get_session()
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 def prepare_img():
     # We will verify our results on an image of a dog
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -427,7 +427,11 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
 
     if architecture == "MLM":
         expected_slice = torch.tensor(
-            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
+            [
+                [-11.8336, -11.6850, -11.8483],
+                [-12.8149, -12.5863, -12.7904],
+                [-12.8440, -12.6410, -12.8646],
+            ]
         )
         assert torch.allclose(logits[0, :3, :3], expected_slice)
         masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()

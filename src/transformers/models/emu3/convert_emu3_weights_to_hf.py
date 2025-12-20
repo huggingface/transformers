@@ -18,9 +18,9 @@ import re
 from io import BytesIO
 from typing import Optional
 
-import httpx
 import torch
 from accelerate import init_empty_weights
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -37,6 +37,7 @@ from transformers import (
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 
 
+session = get_session()
 """
 Sample usage:
 
@@ -336,7 +337,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
         url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
 
-        with httpx.stream("GET", url) as response:
+        with session.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
         length = inputs.input_ids.shape[1]

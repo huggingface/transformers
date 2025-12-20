@@ -18,19 +18,20 @@ import functools
 import json
 import operator
 import os
+import pathlib
 import re
 import sys
 import time
 from typing import Any
 
-import httpx
 from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, get_session
 from slack_sdk import WebClient
 
 
+session = get_session()
 # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
 # `additional_files`.
 job_to_test_map = {
@@ -484,8 +485,7 @@ class Message:
             to_truncate=False,
         )
         file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt")
-        with open(file_path, "w", encoding="UTF-8") as fp:
-            fp.write(model_failures_report)
+        pathlib.Path(file_path).write_text(model_failures_report, encoding="UTF-8")
 
         module_failures_report = prepare_reports(
             title=f"The following {label} modules had failures",
@@ -494,8 +494,7 @@ class Message:
             to_truncate=False,
         )
         file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt")
-        with open(file_path, "w", encoding="UTF-8") as fp:
-            fp.write(module_failures_report)
+        pathlib.Path(file_path).write_text(module_failures_report, encoding="UTF-8")
 
         if self.prev_ci_artifacts is not None:
             # if the last run produces artifact named `ci_results_{job_name}`
@@ -515,8 +514,7 @@ class Message:
                         to_truncate=False,
                     )
                     file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/changed_model_failures_report.txt")
-                    with open(file_path, "w", encoding="UTF-8") as fp:
-                        fp.write(diff_report)
+                    pathlib.Path(file_path).write_text(diff_report, encoding="UTF-8")
 
                     # To be sent to Slack channels
                     diff_report = prepare_reports(
@@ -602,8 +600,7 @@ class Message:
 
                 failure_text = extra_blocks[-1]["text"]["text"]
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
-                with open(file_path, "w", encoding="UTF-8") as fp:
-                    fp.write(failure_text)
+                pathlib.Path(file_path).write_text(failure_text, encoding="UTF-8")
 
                 # upload results to Hub dataset
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
@@ -784,7 +781,7 @@ class Message:
         MAX_ERROR_TEXT = 3000 - len("[Truncated]")
 
         failure_text = ""
-        for idx, error in enumerate(failures):
+        for error in failures:
             new_text = failure_text + f"*{error['line']}*\n_{error['trace']}_\n\n"
             if len(new_text) > MAX_ERROR_TEXT:
                 # `failure_text` here has length <= 3000
@@ -886,7 +883,10 @@ class Message:
         if failure_text:
             if with_header:
                 blocks.append(
-                    {"type": "header", "text": {"type": "plain_text", "text": "New failures", "emoji": True}}
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": "New failures", "emoji": True},
+                    }
                 )
             else:
                 failure_text = f"{failure_text}"
@@ -1092,7 +1092,7 @@ if __name__ == "__main__":
         # Retrieve the PR title and author login to complete the report
         commit_number = ci_url.split("/")[-1]
         ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/commits/{commit_number}"
-        ci_details = httpx.get(ci_detail_url).json()
+        ci_details = session.get(ci_detail_url).json()
         ci_author = ci_details["author"]["login"]
 
         merged_by = None
@@ -1101,7 +1101,7 @@ if __name__ == "__main__":
         if len(numbers) > 0:
             pr_number = numbers[0]
             ci_detail_url = f"https://api.github.com/repos/{repository_full_name}/pulls/{pr_number}"
-            ci_details = httpx.get(ci_detail_url).json()
+            ci_details = session.get(ci_detail_url).json()
 
             ci_author = ci_details["user"]["login"]
             ci_url = f"https://github.com/{repository_full_name}/pull/{pr_number}"
@@ -1269,7 +1269,10 @@ if __name__ == "__main__":
 
                         trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
                         matrix_job_results[matrix_name]["failures"][artifact_gpu].append(
-                            {"line": line, "trace": trace}
+                            {
+                                "line": line,
+                                "trace": trace,
+                            }
                         )
 
                         # TODO: How to deal wit this
@@ -1587,8 +1590,7 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
-                fp.write(report)
+            pathlib.Path(f"ci_results_{job_name}/test_results_diff.json").write_text(report)
 
             # upload
             commit_info = api.upload_file(

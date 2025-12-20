@@ -14,6 +14,7 @@
 from typing import Any, Union, overload
 
 import numpy as np
+from huggingface_hub import get_session
 
 from ..utils import (
     add_end_docstrings,
@@ -33,6 +34,7 @@ if is_vision_available():
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
 
+session = get_session()
 logger = logging.get_logger(__name__)
 
 
@@ -52,7 +54,7 @@ class ImageToImagePipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> img = Image.open(io.BytesIO(httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
+    >>> img = Image.open(io.BytesIO(session.get("http://images.cocodataset.org/val2017/000000039769.jpg").content))
     >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size

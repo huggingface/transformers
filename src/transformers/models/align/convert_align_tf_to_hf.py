@@ -19,10 +19,10 @@ import os
 from io import BytesIO
 
 import align
-import httpx
 import numpy as np
 import tensorflow as tf
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 from tokenizer import Tokenizer
 
@@ -37,6 +37,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -64,7 +66,7 @@ def get_align_config():
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

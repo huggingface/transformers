@@ -22,10 +22,9 @@ import collections
 import os
 from io import BytesIO
 
-import httpx
 import numpy as np
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from numpy import load
 from PIL import Image
 
@@ -39,6 +38,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -360,7 +361,7 @@ def read_in_q_k_v_head(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -417,10 +418,10 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # Verify forward pass on dummy images and texts
     url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
-    with httpx.stream("GET", url_1) as response:
+    with session.stream("GET", url_1) as response:
         image_1 = Image.open(BytesIO(response.read())).convert("RGB")
     url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
-    with httpx.stream("GET", url_2) as response:
+    with session.stream("GET", url_2) as response:
         image_2 = Image.open(BytesIO(response.read())).convert("RGB")
     texts = ["an apple", "a picture of an apple"]
 

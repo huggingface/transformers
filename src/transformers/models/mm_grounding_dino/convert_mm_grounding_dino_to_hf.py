@@ -16,8 +16,8 @@ import argparse
 import re
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers.models.bert.tokenization_bert import BertTokenizer
@@ -28,6 +28,7 @@ from transformers.models.mm_grounding_dino.modeling_mm_grounding_dino import MMG
 from transformers.models.swin.configuration_swin import SwinConfig
 
 
+session = get_session()
 MODEL_NAME_TO_CHECKPOINT_URL_MAPPING = {
     "mm_grounding_dino_tiny_o365v1_goldg": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg/grounding_dino_swin-t_pretrain_obj365_goldg_20231122_132602-4ea751ce.pth",
     "mm_grounding_dino_tiny_o365v1_goldg_grit": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_20231128_200818-169cc352.pth",
@@ -422,7 +423,7 @@ def convert_mm_to_hf_state(original_state: dict, hf_cfg: MMGroundingDinoConfig) 
 
 def prepare_test_inputs():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     text = [["cat", "remote"]]
     return image, text

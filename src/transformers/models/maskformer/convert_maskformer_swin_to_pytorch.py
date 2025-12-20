@@ -22,9 +22,8 @@ import pickle
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, SwinConfig
@@ -32,6 +31,8 @@ from transformers.utils import logging
 
 from ...utils import strtobool
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -226,7 +227,7 @@ def read_in_decoder_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -299,7 +300,11 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-swin-tiny-ade":
         expected_logits = torch.tensor(
-            [[3.6353, -4.4770, -2.6065], [0.5081, -4.2394, -3.5343], [2.1909, -5.0353, -1.9323]]
+            [
+                [3.6353, -4.4770, -2.6065],
+                [0.5081, -4.2394, -3.5343],
+                [2.1909, -5.0353, -1.9323],
+            ]
         )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")

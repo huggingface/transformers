@@ -25,7 +25,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import typer
 import yaml
-from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
+from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput, get_session
 
 from transformers import GenerationConfig
 from transformers.utils import is_rich_available
@@ -45,6 +45,7 @@ if is_rich_available():
     from rich.live import Live
     from rich.markdown import Markdown
 
+session = get_session()
 DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
@@ -276,7 +277,7 @@ class Chat:
     def check_health(url):
         health_url = urljoin(url + "/", "health")
         try:
-            output = httpx.get(health_url)
+            output = session.get(health_url)
             if output.status_code != 200:
                 raise ValueError(
                     f"The server running on {url} returned status code {output.status_code} on health check (/health)."

@@ -21,12 +21,14 @@ import argparse
 import json
 from io import BytesIO
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import SegformerImageProcessor, SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
+
+
+session = get_session()
 
 
 def get_upernet_config(model_name):
@@ -109,8 +111,8 @@ def create_rename_keys(config):
             rename_keys.append((f"backbone.stages.{i}.downsample.reduction.weight", f"backbone.encoder.layers.{i}.downsample.reduction.weight"))
             rename_keys.append((f"backbone.stages.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
             rename_keys.append((f"backbone.stages.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
-        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i+1}.weight"))
-        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i+1}.bias"))
+        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i + 1}.weight"))
+        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i + 1}.bias"))
 
     # decode head
     rename_keys.extend(
@@ -233,7 +235,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     processor = SegformerImageProcessor()
@@ -248,19 +250,35 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # assert values
     if model_name == "upernet-swin-tiny":
         expected_slice = torch.tensor(
-            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
+            [
+                [-7.5958, -7.5958, -7.4302],
+                [-7.5958, -7.5958, -7.4302],
+                [-7.4797, -7.4797, -7.3068],
+            ]
         )
     elif model_name == "upernet-swin-small":
         expected_slice = torch.tensor(
-            [[-7.1921, -7.1921, -6.9532], [-7.1921, -7.1921, -6.9532], [-7.0908, -7.0908, -6.8534]]
+            [
+                [-7.1921, -7.1921, -6.9532],
+                [-7.1921, -7.1921, -6.9532],
+                [-7.0908, -7.0908, -6.8534],
+            ]
         )
     elif model_name == "upernet-swin-base":
         expected_slice = torch.tensor(
-            [[-6.5851, -6.5851, -6.4330], [-6.5851, -6.5851, -6.4330], [-6.4763, -6.4763, -6.3254]]
+            [
+                [-6.5851, -6.5851, -6.4330],
+                [-6.5851, -6.5851, -6.4330],
+                [-6.4763, -6.4763, -6.3254],
+            ]
         )
     elif model_name == "upernet-swin-large":
         expected_slice = torch.tensor(
-            [[-7.5297, -7.5297, -7.3802], [-7.5297, -7.5297, -7.3802], [-7.4044, -7.4044, -7.2586]]
+            [
+                [-7.5297, -7.5297, -7.3802],
+                [-7.5297, -7.5297, -7.3802],
+                [-7.4044, -7.4044, -7.2586],
+            ]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)

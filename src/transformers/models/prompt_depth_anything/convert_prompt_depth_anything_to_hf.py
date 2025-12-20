@@ -21,9 +21,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -34,6 +33,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -205,13 +206,13 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         image_std=[0.229, 0.224, 0.225],
     )
     url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
 
     prompt_depth_url = (
         "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
     )
-    with httpx.stream("GET", prompt_depth_url) as response:
+    with session.stream("GET", prompt_depth_url) as response:
         prompt_depth = Image.open(BytesIO(response.read()))
 
     inputs = processor(image, return_tensors="pt", prompt_depth=prompt_depth)
@@ -229,15 +230,27 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 756, 1008])
         if model_name == "prompt-depth-anything-vits":
             expected_slice = torch.tensor(
-                [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
+                [
+                    [3.0100, 3.0016, 3.0219],
+                    [3.0046, 3.0137, 3.0275],
+                    [3.0083, 3.0191, 3.0292],
+                ]
             )
         elif model_name == "prompt-depth-anything-vits-transparent":
             expected_slice = torch.tensor(
-                [[3.0058, 3.0397, 3.0460], [3.0314, 3.0393, 3.0504], [3.0326, 3.0465, 3.0545]]
+                [
+                    [3.0058, 3.0397, 3.0460],
+                    [3.0314, 3.0393, 3.0504],
+                    [3.0326, 3.0465, 3.0545],
+                ]
             )
         elif model_name == "prompt-depth-anything-vitl":
             expected_slice = torch.tensor(
-                [[3.1336, 3.1358, 3.1363], [3.1368, 3.1267, 3.1414], [3.1397, 3.1385, 3.1448]]
+                [
+                    [3.1336, 3.1358, 3.1363],
+                    [3.1368, 3.1267, 3.1414],
+                    [3.1397, 3.1385, 3.1448],
+                ]
             )
         else:
             raise ValueError("Not supported")

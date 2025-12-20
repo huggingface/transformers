@@ -10,14 +10,16 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-import httpx
 from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
+from huggingface_hub import get_session
 from packaging import version
 
 from transformers import CONFIG_MAPPING, logging
 from transformers import __version__ as current_version
 
+
+session = get_session()
 
 REPO_PATH = Path(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 repo = Repo(REPO_PATH)
@@ -28,7 +30,7 @@ logger = logging.get_logger(__name__)
 def get_last_stable_minor_release():
     # Get the last stable release of transformers
     url = "https://pypi.org/pypi/transformers/json"
-    release_data = httpx.get(url).json()
+    release_data = session.get(url).json()
 
     # Find the last stable release of transformers (version below current version)
     major_version, minor_version, patch_version, _ = current_version.split(".")
@@ -58,8 +60,7 @@ You can do so by running the following command: `pip install -U transformers=={l
 def insert_tip_to_model_doc(model_doc_path, tip_message):
     tip_message_lines = tip_message.split("\n")
 
-    with open(model_doc_path, "r") as f:
-        model_doc = f.read()
+    model_doc = Path(model_doc_path).read_text()
 
     # Add the tip message to the model doc page directly underneath the title
     lines = model_doc.split("\n")
@@ -72,8 +73,7 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         else:
             new_model_lines.append(line)
 
-    with open(model_doc_path, "w") as f:
-        f.write("\n".join(new_model_lines))
+    Path(model_doc_path).write_text("\n".join(new_model_lines))
 
 
 def get_model_doc_path(model: str) -> tuple[str | None, str | None]:
@@ -109,8 +109,7 @@ def extract_model_info(model):
 
 
 def update_relative_imports(filename, model):
-    with open(filename, "r") as f:
-        filelines = f.read()
+    filelines = Path(filename).read_text()
 
     new_file_lines = []
     for line in filelines.split("\n"):
@@ -119,8 +118,7 @@ def update_relative_imports(filename, model):
         else:
             new_file_lines.append(line)
 
-    with open(filename, "w") as f:
-        f.write("\n".join(new_file_lines))
+    Path(filename).write_text("\n".join(new_file_lines))
 
 
 def remove_copied_from_statements(model):
@@ -129,8 +127,7 @@ def remove_copied_from_statements(model):
         if file == "__pycache__":
             continue
         file_path = model_path / file
-        with open(file_path, "r") as f:
-            file_lines = f.read()
+        file_lines = Path(file_path).read_text()
 
         new_file_lines = []
         for line in file_lines.split("\n"):
@@ -138,8 +135,7 @@ def remove_copied_from_statements(model):
                 continue
             new_file_lines.append(line)
 
-        with open(file_path, "w") as f:
-            f.write("\n".join(new_file_lines))
+        Path(file_path).write_text("\n".join(new_file_lines))
 
 
 def move_model_files_to_deprecated(model):
@@ -177,16 +173,14 @@ def update_main_init_file(models):
         models (List[str]): The models to mark as deprecated
     """
     filename = REPO_PATH / "src/transformers/__init__.py"
-    with open(filename, "r") as f:
-        init_file = f.read()
+    init_file = Path(filename).read_text()
 
     # 1. For each model, find all the instances of model.model_name and replace with model.deprecated.model_name
     for model in models:
         init_file = init_file.replace(f'models.{model}"', f'models.deprecated.{model}"')
         init_file = init_file.replace(f"models.{model} import", f"models.deprecated.{model} import")
 
-    with open(filename, "w") as f:
-        f.write(init_file)
+    Path(filename).write_text(init_file)
 
     # 2. Resort the imports
     sort_imports_in_all_inits(check_only=False)
@@ -202,8 +196,7 @@ def remove_model_references_from_file(filename, models, condition):
         condition (Callable): A function that takes the line and model and returns True if the line should be removed
     """
     filename = REPO_PATH / filename
-    with open(filename, "r") as f:
-        init_file = f.read()
+    init_file = Path(filename).read_text()
 
     new_file_lines = []
     for i, line in enumerate(init_file.split("\n")):
@@ -211,8 +204,7 @@ def remove_model_references_from_file(filename, models, condition):
             continue
         new_file_lines.append(line)
 
-    with open(filename, "w") as f:
-        f.write("\n".join(new_file_lines))
+    Path(filename).write_text("\n".join(new_file_lines))
 
 
 def remove_model_config_classes_from_config_check(model_config_classes):
@@ -223,8 +215,7 @@ def remove_model_config_classes_from_config_check(model_config_classes):
         model_config_classes (List[str]): The model config classes to remove e.g. ["BertConfig", "DistilBertConfig"]
     """
     filename = REPO_PATH / "utils/check_config_attributes.py"
-    with open(filename, "r") as f:
-        check_config_attributes = f.read()
+    check_config_attributes = Path(filename).read_text()
 
     # Keep track as we have to delete comment above too
     in_special_cases_to_allow = False
@@ -261,8 +252,7 @@ def remove_model_config_classes_from_config_check(model_config_classes):
 
         new_file_lines.append(line)
 
-    with open(filename, "w") as f:
-        f.write("\n".join(new_file_lines))
+    Path(filename).write_text("\n".join(new_file_lines))
 
 
 def add_models_to_deprecated_models_in_config_auto(models):
@@ -271,8 +261,7 @@ def add_models_to_deprecated_models_in_config_auto(models):
     to be in alphabetical order.
     """
     filepath = REPO_PATH / "src/transformers/models/auto/configuration_auto.py"
-    with open(filepath, "r") as f:
-        config_auto = f.read()
+    config_auto = Path(filepath).read_text()
 
     new_file_lines = []
     deprecated_models_list = []
@@ -295,8 +284,7 @@ def add_models_to_deprecated_models_in_config_auto(models):
         else:
             new_file_lines.append(line)
 
-    with open(filepath, "w") as f:
-        f.write("\n".join(new_file_lines))
+    Path(filepath).write_text("\n".join(new_file_lines))
 
 
 def deprecate_models(models):

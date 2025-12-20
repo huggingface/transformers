@@ -24,8 +24,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -35,6 +35,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -119,7 +121,7 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -191,16 +193,32 @@ def write_model(model_name, output_dir, push_to_hub, verify_logits):
 
         expected_slices = {
             "ijepa_vith14_1k": torch.Tensor(
-                [[-0.0621, -0.0054, -2.7513], [-0.1952, 0.0909, -3.9536], [0.0942, -0.0331, -1.2833]]
+                [
+                    [-0.0621, -0.0054, -2.7513],
+                    [-0.1952, 0.0909, -3.9536],
+                    [0.0942, -0.0331, -1.2833],
+                ]
             ),
             "ijepa_vith14_22k": torch.Tensor(
-                [[0.0358, -0.0045, -0.2154], [0.0418, -0.0246, 0.0108], [0.2529, -0.0345, -0.0246]]
+                [
+                    [0.0358, -0.0045, -0.2154],
+                    [0.0418, -0.0246, 0.0108],
+                    [0.2529, -0.0345, -0.0246],
+                ]
             ),
             "ijepa_vith16_1k": torch.Tensor(
-                [[0.5145, -0.1259, 0.0615], [0.1132, 0.0028, -0.0496], [1.1586, -0.0056, -0.0387]]
+                [
+                    [0.5145, -0.1259, 0.0615],
+                    [0.1132, 0.0028, -0.0496],
+                    [1.1586, -0.0056, -0.0387],
+                ]
             ),
             "ijepa_vitg16_22k": torch.Tensor(
-                [[0.0512, -0.0510, -0.0649], [0.1972, 0.0380, -0.0790], [0.1667, -0.0834, -0.1240]]
+                [
+                    [0.0512, -0.0510, -0.0649],
+                    [0.1972, 0.0380, -0.0790],
+                    [0.1667, -0.0834, -0.1240],
+                ]
             ),
         }
 

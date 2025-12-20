@@ -23,9 +23,9 @@ import os
 import re
 from io import BytesIO
 
-import httpx
 import numpy as np
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import CLIPImageProcessor
@@ -34,6 +34,8 @@ from ...utils import logging
 from .configuration_mlcd import MLCDVisionConfig
 from .modeling_mlcd import MLCDVisionModel
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -69,18 +71,18 @@ MODEL_NAME_TO_CHECKPOINT_PATH = {
 # fmt: off
 EXPECTED_OUTPUTS = {
     "mlcd-vit-bigG-patch14-336": torch.tensor([
-        [-0.8921, -0.1069,  0.2989,  0.6018, -0.5892],
-        [ 0.4093, -1.4592,  0.6048, -0.5147, -0.5929],
-        [ 0.7796, -0.7133, -0.5649, -0.7843, -0.5548],
-        [ 0.0041,  0.0286,  0.4310, -0.1403, -0.2399],
-        [ 0.0839,  0.2152, -0.3822, -0.1668, -0.7886]
+        [-0.8921, -0.1069, 0.2989, 0.6018, -0.5892],
+        [0.4093, -1.4592, 0.6048, -0.5147, -0.5929],
+        [0.7796, -0.7133, -0.5649, -0.7843, -0.5548],
+        [0.0041, 0.0286, 0.4310, -0.1403, -0.2399],
+        [0.0839, 0.2152, -0.3822, -0.1668, -0.7886]
     ]),
     "mlcd-vit-bigG-patch14-448": torch.tensor([
-        [-0.8978, -0.1181,  0.4769,  0.4761, -0.5779],
-        [ 0.2640, -2.6150,  0.4853,  0.5743, -1.1003],
-        [ 0.3314, -0.3328, -0.4305, -0.1874, -0.7701],
-        [-1.5174, -1.0238, -1.1854,  0.1749, -0.8786],
-        [ 0.2323, -0.8346, -0.9680, -0.2951,  0.0867],
+        [-0.8978, -0.1181, 0.4769, 0.4761, -0.5779],
+        [0.2640, -2.6150, 0.4853, 0.5743, -1.1003],
+        [0.3314, -0.3328, -0.4305, -0.1874, -0.7701],
+        [-1.5174, -1.0238, -1.1854, 0.1749, -0.8786],
+        [0.2323, -0.8346, -0.9680, -0.2951, 0.0867],
     ]),
 }
 # fmt: on
@@ -282,7 +284,7 @@ def convert_mlcd_checkpoint(model_name, input_dir, output_dir, verify_hidden_sta
     if verify_hidden_state:
         print("Verifying hidden state for {model_name}...")
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        with httpx.stream("GET", url) as response:
+        with session.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
         pixel_values = image_processor(image, return_tensors="pt")["pixel_values"]
         last_hidden_state = model(pixel_values, output_hidden_states=True).last_hidden_state[0, :5, :5]

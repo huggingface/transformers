@@ -35,6 +35,7 @@ from huggingface_hub import (
     create_branch,
     create_commit,
     create_repo,
+    get_session,
     hf_hub_download,
     hf_hub_url,
     is_offline_mode,
@@ -52,7 +53,6 @@ from huggingface_hub.utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     build_hf_headers,
-    get_session,
     hf_raise_for_status,
 )
 
@@ -64,6 +64,8 @@ from .import_utils import (
     is_training_run_on_sagemaker,
 )
 
+
+session = get_session()
 
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
@@ -159,7 +161,7 @@ def list_repo_templates(
 
 def define_sagemaker_information():
     try:
-        instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        instance_data = session.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
         dlc_tag = instance_data["Image"].split(":")[1]
     except Exception:
@@ -383,7 +385,7 @@ def cached_files(
             existing_files.append(resolved_file)
 
     if os.path.isdir(path_or_repo_id):
-        return existing_files if existing_files else None
+        return existing_files or None
 
     if cache_dir is None:
         cache_dir = constants.HF_HUB_CACHE

@@ -21,14 +21,16 @@ import math
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 from torchvision import transforms
 
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -184,7 +186,7 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "https://dl.fbaipublicfiles.com/dinov2/images/example.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -334,7 +336,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         if model_name == "dpt-dinov2-small-nyu":
             expected_shape = torch.Size([1, 576, 736])
             expected_slice = torch.tensor(
-                [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
+                [
+                    [3.3576, 3.4741, 3.4345],
+                    [3.4324, 3.5012, 3.2775],
+                    [3.2560, 3.3563, 3.2354],
+                ]
             )
 
         assert predicted_depth.shape == torch.Size(expected_shape)

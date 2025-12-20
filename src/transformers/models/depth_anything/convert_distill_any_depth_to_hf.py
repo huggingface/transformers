@@ -20,15 +20,16 @@ import re
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 from safetensors.torch import load_file
 
 from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -134,7 +135,7 @@ def convert_keys(state_dict, config):
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -172,7 +173,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     )
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -190,15 +191,27 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
         if model_name == "distill-any-depth-small":
             expected_slice = torch.tensor(
-                [[2.5653, 2.5249, 2.5570], [2.4897, 2.5235, 2.5355], [2.5255, 2.5261, 2.5422]]
+                [
+                    [2.5653, 2.5249, 2.5570],
+                    [2.4897, 2.5235, 2.5355],
+                    [2.5255, 2.5261, 2.5422],
+                ]
             )
         elif model_name == "distill-any-depth-base":
             expected_slice = torch.tensor(
-                [[4.8976, 4.9075, 4.9403], [4.8872, 4.8906, 4.9448], [4.8712, 4.8898, 4.8838]]
+                [
+                    [4.8976, 4.9075, 4.9403],
+                    [4.8872, 4.8906, 4.9448],
+                    [4.8712, 4.8898, 4.8838],
+                ]
             )
         elif model_name == "distill-any-depth-large":
             expected_slice = torch.tensor(
-                [[55.1067, 51.1828, 51.6803], [51.9098, 50.7529, 51.4494], [50.1745, 50.5491, 50.8818]]
+                [
+                    [55.1067, 51.1828, 51.6803],
+                    [51.9098, 50.7529, 51.4494],
+                    [50.1745, 50.5491, 50.8818],
+                ]
             )
         else:
             raise ValueError("Not supported")

@@ -22,9 +22,8 @@ import pickle
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, ResNetConfig
@@ -32,6 +31,8 @@ from transformers.utils import logging
 
 from ...utils import strtobool
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -257,7 +258,7 @@ def read_in_decoder_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -316,35 +317,67 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-resnet50-ade":
         expected_logits = torch.tensor(
-            [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
+            [
+                [6.7710, -0.1452, -3.5687],
+                [1.9165, -1.0010, -1.8614],
+                [3.6209, -0.2950, -1.3813],
+            ]
         )
     elif model_name == "maskformer-resnet101-ade":
         expected_logits = torch.tensor(
-            [[4.0381, -1.1483, -1.9688], [2.7083, -1.9147, -2.2555], [3.4367, -1.3711, -2.1609]]
+            [
+                [4.0381, -1.1483, -1.9688],
+                [2.7083, -1.9147, -2.2555],
+                [3.4367, -1.3711, -2.1609],
+            ]
         )
     elif model_name == "maskformer-resnet50-coco-stuff":
         expected_logits = torch.tensor(
-            [[3.2309, -3.0481, -2.8695], [5.4986, -5.4242, -2.4211], [6.2100, -5.2279, -2.7786]]
+            [
+                [3.2309, -3.0481, -2.8695],
+                [5.4986, -5.4242, -2.4211],
+                [6.2100, -5.2279, -2.7786],
+            ]
         )
     elif model_name == "maskformer-resnet101-coco-stuff":
         expected_logits = torch.tensor(
-            [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
+            [
+                [4.7188, -3.2585, -2.8857],
+                [6.6871, -2.9181, -1.2487],
+                [7.2449, -2.2764, -2.1874],
+            ]
         )
     elif model_name == "maskformer-resnet101-cityscapes":
         expected_logits = torch.tensor(
-            [[-1.8861, -1.5465, 0.6749], [-2.3677, -1.6707, -0.0867], [-2.2314, -1.9530, -0.9132]]
+            [
+                [-1.8861, -1.5465, 0.6749],
+                [-2.3677, -1.6707, -0.0867],
+                [-2.2314, -1.9530, -0.9132],
+            ]
         )
     elif model_name == "maskformer-resnet50-vistas":
         expected_logits = torch.tensor(
-            [[-6.3917, -1.5216, -1.1392], [-5.5335, -4.5318, -1.8339], [-4.3576, -4.0301, 0.2162]]
+            [
+                [-6.3917, -1.5216, -1.1392],
+                [-5.5335, -4.5318, -1.8339],
+                [-4.3576, -4.0301, 0.2162],
+            ]
         )
     elif model_name == "maskformer-resnet50-ade20k-full":
         expected_logits = torch.tensor(
-            [[3.6146, -1.9367, -3.2534], [4.0099, 0.2027, -2.7576], [3.3913, -2.3644, -3.9519]]
+            [
+                [3.6146, -1.9367, -3.2534],
+                [4.0099, 0.2027, -2.7576],
+                [3.3913, -2.3644, -3.9519],
+            ]
         )
     elif model_name == "maskformer-resnet101-ade20k-full":
         expected_logits = torch.tensor(
-            [[3.2211, -1.6550, -2.7605], [2.8559, -2.4512, -2.9574], [2.6331, -2.6775, -2.1844]]
+            [
+                [3.2211, -1.6550, -2.7605],
+                [2.8559, -2.4512, -2.9574],
+                [2.6331, -2.6775, -2.1844],
+            ]
         )
 
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)

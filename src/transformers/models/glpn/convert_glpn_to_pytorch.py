@@ -18,13 +18,15 @@ import argparse
 from collections import OrderedDict
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import GLPNConfig, GLPNForDepthEstimation, GLPNImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -116,7 +118,7 @@ def read_in_k_v(state_dict, config):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
 
     return image
@@ -162,11 +164,19 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     if model_name is not None:
         if "nyu" in model_name:
             expected_slice = torch.tensor(
-                [[4.4147, 4.0873, 4.0673], [3.7890, 3.2881, 3.1525], [3.7674, 3.5423, 3.4913]]
+                [
+                    [4.4147, 4.0873, 4.0673],
+                    [3.7890, 3.2881, 3.1525],
+                    [3.7674, 3.5423, 3.4913],
+                ]
             )
         elif "kitti" in model_name:
             expected_slice = torch.tensor(
-                [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
+                [
+                    [3.4291, 2.7865, 2.5151],
+                    [3.2841, 2.7021, 2.3502],
+                    [3.1147, 2.4625, 2.2481],
+                ]
             )
         else:
             raise ValueError(f"Unknown model name: {model_name}")

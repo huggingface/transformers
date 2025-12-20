@@ -20,13 +20,14 @@ import re
 from collections import OrderedDict
 from io import BytesIO
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
 
+
+session = get_session()
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
@@ -42,7 +43,7 @@ rename_key_mappings = {
 
 
 def prepare_config(size_config_url, size):
-    config_dict = httpx.get(size_config_url).json()
+    config_dict = session.get(size_config_url).json()
 
     backbone_config = {}
     for stage_ix in range(1, 5):
@@ -125,17 +126,50 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(tiny_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
+            [
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.5300,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                1.1221,
+            ]
         )
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(small_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
+            [
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.1394,
+            ]
         )
     else:
         config = prepare_config(base_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
+            [
+                0.9210,
+                0.6099,
+                0.0000,
+                0.0000,
+                0.0000,
+                0.0000,
+                3.2207,
+                2.6602,
+                1.8925,
+                0.0000,
+            ]
         )
 
     model = TextNetBackbone(config)
@@ -163,11 +197,22 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     model.eval()
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     original_pixel_values = torch.tensor(
-        [0.1939, 0.3481, 0.4166, 0.3309, 0.4508, 0.4679, 0.4851, 0.4851, 0.3309, 0.4337]
+        [
+            0.1939,
+            0.3481,
+            0.4166,
+            0.3309,
+            0.4508,
+            0.4679,
+            0.4851,
+            0.4851,
+            0.3309,
+            0.4337,
+        ]
     )
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 

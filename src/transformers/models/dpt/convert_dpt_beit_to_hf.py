@@ -18,13 +18,15 @@ import argparse
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import BeitConfig, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -98,7 +100,7 @@ def create_rename_keys(config):
     # activation postprocessing (readout projections + resize blocks)
     for i in range(4):
         rename_keys.append((f"pretrained.act_postprocess{i + 1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
-        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
+        rename_keys.append((f"pretrained.act_postprocess{i + 1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
 
         rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
         rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
@@ -167,7 +169,7 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -224,7 +226,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     from torchvision import transforms
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
 
     transforms = transforms.Compose(
@@ -250,7 +252,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         # OK, checked
         expected_shape = torch.Size([1, 512, 512])
         expected_slice = torch.tensor(
-            [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+            [
+                [2804.6260, 2792.5708, 2812.9263],
+                [2772.0288, 2780.1118, 2796.2529],
+                [2748.1094, 2766.6558, 2766.9834],
+            ]
         )
     elif model_name == "dpt-beit-large-384":
         # OK, checked

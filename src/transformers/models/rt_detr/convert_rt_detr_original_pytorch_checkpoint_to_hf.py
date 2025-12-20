@@ -19,15 +19,16 @@ import json
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
 from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -244,7 +245,10 @@ def create_rename_keys(config):
         # encoder layers: hybridencoder parts
         for j in range(1, block_levels):
             rename_keys.append(
-                (f"encoder.fpn_blocks.{i}.conv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight")
+                (
+                    f"encoder.fpn_blocks.{i}.conv{j}.conv.weight",
+                    f"model.encoder.fpn_blocks.{i}.conv{j}.conv.weight",
+                )
             )
             for last in last_key:
                 rename_keys.append(
@@ -257,7 +261,10 @@ def create_rename_keys(config):
         rename_keys.append((f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight"))
         for last in last_key:
             rename_keys.append(
-                (f"encoder.lateral_convs.{i}.norm.{last}", f"model.encoder.lateral_convs.{i}.norm.{last}")
+                (
+                    f"encoder.lateral_convs.{i}.norm.{last}",
+                    f"model.encoder.lateral_convs.{i}.norm.{last}",
+                )
             )
 
         for j in range(3):
@@ -278,7 +285,10 @@ def create_rename_keys(config):
 
         for j in range(1, block_levels):
             rename_keys.append(
-                (f"encoder.pan_blocks.{i}.conv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight")
+                (
+                    f"encoder.pan_blocks.{i}.conv{j}.conv.weight",
+                    f"model.encoder.pan_blocks.{i}.conv{j}.conv.weight",
+                )
             )
             for last in last_key:
                 rename_keys.append(
@@ -305,11 +315,17 @@ def create_rename_keys(config):
                     )
 
         rename_keys.append(
-            (f"encoder.downsample_convs.{i}.conv.weight", f"model.encoder.downsample_convs.{i}.conv.weight")
+            (
+                f"encoder.downsample_convs.{i}.conv.weight",
+                f"model.encoder.downsample_convs.{i}.conv.weight",
+            )
         )
         for last in last_key:
             rename_keys.append(
-                (f"encoder.downsample_convs.{i}.norm.{last}", f"model.encoder.downsample_convs.{i}.norm.{last}")
+                (
+                    f"encoder.downsample_convs.{i}.norm.{last}",
+                    f"model.encoder.downsample_convs.{i}.norm.{last}",
+                )
             )
 
     for i in range(config.decoder_layers):
@@ -375,26 +391,44 @@ def create_rename_keys(config):
             )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.weight", f"model.decoder.layers.{i}.self_attn_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm1.weight",
+                f"model.decoder.layers.{i}.self_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.bias", f"model.decoder.layers.{i}.self_attn_layer_norm.bias")
+            (
+                f"decoder.decoder.layers.{i}.norm1.bias",
+                f"model.decoder.layers.{i}.self_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm2.weight", f"model.decoder.layers.{i}.encoder_attn_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm2.weight",
+                f"model.decoder.layers.{i}.encoder_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
+            (
+                f"decoder.decoder.layers.{i}.norm2.bias",
+                f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias",
+            )
         )
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear2.bias", f"model.decoder.layers.{i}.fc2.bias"))
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.weight", f"model.decoder.layers.{i}.final_layer_norm.weight")
+            (
+                f"decoder.decoder.layers.{i}.norm3.weight",
+                f"model.decoder.layers.{i}.final_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.bias", f"model.decoder.layers.{i}.final_layer_norm.bias")
+            (
+                f"decoder.decoder.layers.{i}.norm3.bias",
+                f"model.decoder.layers.{i}.final_layer_norm.bias",
+            )
         )
 
     for i in range(config.decoder_layers):
@@ -539,7 +573,7 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

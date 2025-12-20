@@ -25,8 +25,8 @@ from collections.abc import Sequence
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-import httpx
 import numpy as np
+from huggingface_hub import get_session
 from packaging import version
 
 from .utils import (
@@ -55,6 +55,7 @@ if is_torchcodec_available():
     TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
+session = get_session()
 
 
 def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -133,7 +134,7 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
     if audio.startswith("http://") or audio.startswith("https://"):
         audio = librosa.load(
-            BytesIO(httpx.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
+            BytesIO(session.get(audio, follow_redirects=True, timeout=timeout).content), sr=sampling_rate
         )[0]
     elif os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
@@ -176,7 +177,7 @@ def load_audio_as(
         # Load audio bytes from URL or file
         audio_bytes = None
         if audio.startswith(("http://", "https://")):
-            response = httpx.get(audio, follow_redirects=True, timeout=timeout)
+            response = session.get(audio, follow_redirects=True, timeout=timeout)
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):

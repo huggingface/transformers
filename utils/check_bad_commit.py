@@ -17,11 +17,15 @@
 import argparse
 import json
 import os
+import pathlib
 import re
 import subprocess
 
 import git
-import httpx
+from huggingface_hub import get_session
+
+
+session = get_session()
 
 
 def create_script(target_test):
@@ -73,8 +77,7 @@ print(f"pytest runs successfully.")
 exit(0)
 """
 
-    with open("target_script.py", "w") as fp:
-        fp.write(script.strip())
+    pathlib.Path("target_script.py").write_text(script.strip())
 
 
 def is_bad_commit(target_test, commit):
@@ -155,8 +158,7 @@ git bisect start --first-parent {start_commit} {end_commit}
 git bisect run python3 target_script.py
 """
 
-    with open("run_git_bisect.sh", "w") as fp:
-        fp.write(bash.strip())
+    pathlib.Path("run_git_bisect.sh").write_text(bash.strip())
 
     result = subprocess.run(
         ["bash", "run_git_bisect.sh"],
@@ -195,19 +197,19 @@ def get_commit_info(commit):
     merged_author = None
 
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}/pulls"
-    pr_info_for_commit = httpx.get(url).json()
+    pr_info_for_commit = session.get(url).json()
 
     if len(pr_info_for_commit) > 0:
         pr_number = pr_info_for_commit[0]["number"]
 
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = httpx.get(url).json()
+        pr_for_commit = session.get(url).json()
         author = pr_for_commit["user"]["login"]
         if pr_for_commit["merged_by"] is not None:
             merged_author = pr_for_commit["merged_by"]["login"]
 
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = httpx.get(url).json()
+    commit_info = session.get(url).json()
     parent = commit_info["parents"][0]["sha"]
     if author is None:
         author = commit_info["author"]["login"]
@@ -227,7 +229,7 @@ if __name__ == "__main__":
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
-    # `get_commit_info` uses `httpx.get()` to request info. via `api.github.com` without using token.
+    # `get_commit_info` uses `session.get()` to request info. via `api.github.com` without using token.
     # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
     # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
     # Let's cache the commit info. and reuse them whenever possible.
@@ -240,8 +242,7 @@ if __name__ == "__main__":
         commit, status = find_bad_commit(
             target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit
         )
-        with open(args.output_file, "w", encoding="UTF-8") as fp:
-            fp.write(f"{args.test}\n{commit}\n{status}")
+        pathlib.Path(args.output_file).write_text(f"{args.test}\n{commit}\n{status}", encoding="UTF-8")
     elif os.path.isfile(args.file):
         with open(args.file, "r", encoding="UTF-8") as fp:
             reports = json.load(fp)

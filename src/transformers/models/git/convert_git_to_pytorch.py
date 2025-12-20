@@ -21,10 +21,9 @@ from io import BytesIO
 from pathlib import Path
 
 import av
-import httpx
 import numpy as np
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
@@ -39,6 +38,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -75,7 +76,10 @@ def create_rename_keys(config, prefix=""):
     # image encoder
     # ftm: off
     rename_keys.append(
-        (f"{prefix}image_encoder.class_embedding", "git.image_encoder.vision_model.embeddings.class_embedding")
+        (
+            f"{prefix}image_encoder.class_embedding",
+            "git.image_encoder.vision_model.embeddings.class_embedding",
+        )
     )
     rename_keys.append(
         (
@@ -84,12 +88,18 @@ def create_rename_keys(config, prefix=""):
         )
     )
     rename_keys.append(
-        (f"{prefix}image_encoder.conv1.weight", "git.image_encoder.vision_model.embeddings.patch_embedding.weight")
+        (
+            f"{prefix}image_encoder.conv1.weight",
+            "git.image_encoder.vision_model.embeddings.patch_embedding.weight",
+        )
     )
     rename_keys.append((f"{prefix}image_encoder.ln_pre.weight", "git.image_encoder.vision_model.pre_layrnorm.weight"))
     rename_keys.append((f"{prefix}image_encoder.ln_pre.bias", "git.image_encoder.vision_model.pre_layrnorm.bias"))
     rename_keys.append(
-        (f"{prefix}image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight")
+        (
+            f"{prefix}image_encoder.ln_post.weight",
+            "git.image_encoder.vision_model.post_layernorm.weight",
+        )
     )
     rename_keys.append((f"{prefix}image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
     # fmt: on
@@ -189,7 +199,7 @@ def prepare_img(model_name):
         image = Image.open(filepath).convert("RGB")
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        with httpx.stream("GET", url) as response:
+        with session.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
 
     return image

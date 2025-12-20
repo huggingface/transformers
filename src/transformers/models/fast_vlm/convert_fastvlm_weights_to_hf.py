@@ -17,9 +17,8 @@ import os
 import re
 from io import BytesIO
 
-import httpx
 import torch
-from huggingface_hub import snapshot_download
+from huggingface_hub import get_session, snapshot_download
 from PIL import Image
 from safetensors import safe_open
 
@@ -33,6 +32,8 @@ from transformers import (
     LlavaProcessor,
 )
 
+
+session = get_session()
 
 os.environ["TIMM_FUSED_ATTN"] = (
     "0"  # to avoid logits diverging, needed because the original implementation uses regular (not fused) atteniton
@@ -185,7 +186,7 @@ def convert_fastvlm_to_hf(text_model_id, vision_model_id, output_hub_path, old_s
     prompt = tokenizer.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read()))
     inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to("cuda")
     inputs = {k: (v.to(torch.bfloat16) if v.dtype == torch.float32 else v) for k, v in inputs.items()}

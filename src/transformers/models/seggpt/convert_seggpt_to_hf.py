@@ -20,13 +20,15 @@ URL: https://github.com/baaivision/Painter/tree/main/SegGPT
 import argparse
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import SegGptConfig, SegGptForImageSegmentation, SegGptImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -101,11 +103,11 @@ def prepare_input():
         "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
     )
 
-    with httpx.stream("GET", image_input_url) as response:
+    with session.stream("GET", image_input_url) as response:
         image_input = Image.open(BytesIO(response.read()))
-    with httpx.stream("GET", image_prompt_url) as response:
+    with session.stream("GET", image_prompt_url) as response:
         image_prompt = Image.open(BytesIO(response.read()))
-    with httpx.stream("GET", mask_prompt_url) as response:
+    with session.stream("GET", mask_prompt_url) as response:
         mask_prompt = Image.open(BytesIO(response.read()))
 
     return image_input, image_prompt, mask_prompt

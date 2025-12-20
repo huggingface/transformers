@@ -19,15 +19,16 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import numpy as np
 import torch
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, get_session
 from PIL import Image
 
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
 from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
+
+session = get_session()
 
 HUB_REPO = "https://github.com/facebookresearch/vjepa2"
 HUB_SOURCE = "github"
@@ -198,7 +199,7 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 

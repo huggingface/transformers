@@ -2,13 +2,15 @@ import argparse
 import json
 from io import BytesIO
 
-import httpx
 import timm
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import AutoImageProcessor, SwinConfig, SwinForImageClassification
+
+
+session = get_session()
 
 
 def get_swin_config(swin_name):
@@ -142,7 +144,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 

@@ -18,8 +18,8 @@ import argparse
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -35,6 +35,8 @@ from transformers import (
 from transformers.utils import logging
 
 
+session = get_session()
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -45,27 +47,48 @@ def create_rename_keys(encoder_config, decoder_config):
     for i in range(encoder_config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.norm1.weight", f"encoder.encoder.layer.{i}.layernorm_before.weight")
+            (
+                f"encoder.deit.blocks.{i}.norm1.weight",
+                f"encoder.encoder.layer.{i}.layernorm_before.weight",
+            )
         )
         rename_keys.append((f"encoder.deit.blocks.{i}.norm1.bias", f"encoder.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.attn.proj.weight", f"encoder.encoder.layer.{i}.attention.output.dense.weight")
+            (
+                f"encoder.deit.blocks.{i}.attn.proj.weight",
+                f"encoder.encoder.layer.{i}.attention.output.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.attn.proj.bias", f"encoder.encoder.layer.{i}.attention.output.dense.bias")
+            (
+                f"encoder.deit.blocks.{i}.attn.proj.bias",
+                f"encoder.encoder.layer.{i}.attention.output.dense.bias",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.norm2.weight", f"encoder.encoder.layer.{i}.layernorm_after.weight")
+            (
+                f"encoder.deit.blocks.{i}.norm2.weight",
+                f"encoder.encoder.layer.{i}.layernorm_after.weight",
+            )
         )
         rename_keys.append((f"encoder.deit.blocks.{i}.norm2.bias", f"encoder.encoder.layer.{i}.layernorm_after.bias"))
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc1.weight", f"encoder.encoder.layer.{i}.intermediate.dense.weight")
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc1.weight",
+                f"encoder.encoder.layer.{i}.intermediate.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc1.bias", f"encoder.encoder.layer.{i}.intermediate.dense.bias")
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc1.bias",
+                f"encoder.encoder.layer.{i}.intermediate.dense.bias",
+            )
         )
         rename_keys.append(
-            (f"encoder.deit.blocks.{i}.mlp.fc2.weight", f"encoder.encoder.layer.{i}.output.dense.weight")
+            (
+                f"encoder.deit.blocks.{i}.mlp.fc2.weight",
+                f"encoder.encoder.layer.{i}.output.dense.weight",
+            )
         )
         rename_keys.append((f"encoder.deit.blocks.{i}.mlp.fc2.bias", f"encoder.encoder.layer.{i}.output.dense.bias"))
 
@@ -116,7 +139,7 @@ def prepare_img(checkpoint_url):
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     elif "printed" in checkpoint_url or "stage1" in checkpoint_url:
         url = "https://www.researchgate.net/profile/Dinh-Sang/publication/338099565/figure/fig8/AS:840413229350922@1577381536857/An-receipt-example-in-the-SROIE-2019-dataset_Q640.jpg"
-    with httpx.stream("GET", url) as response:
+    with session.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
@@ -197,19 +220,63 @@ def convert_tr_ocr_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     expected_shape = torch.Size([1, 1, 50265])
     if "trocr-base-handwritten" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
+            [
+                -1.4502,
+                -4.6683,
+                -0.5347,
+                -2.9291,
+                9.1435,
+                -3.0571,
+                8.9764,
+                1.7560,
+                8.7358,
+                -1.5311,
+            ]
         )
     elif "trocr-large-handwritten" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-2.6437, -1.3129, -2.2596, -5.3455, 6.3539, 1.7604, 5.4991, 1.4702, 5.6113, 2.0170]
+            [
+                -2.6437,
+                -1.3129,
+                -2.2596,
+                -5.3455,
+                6.3539,
+                1.7604,
+                5.4991,
+                1.4702,
+                5.6113,
+                2.0170,
+            ]
         )
     elif "trocr-base-printed" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-5.6816, -5.8388, 1.1398, -6.9034, 6.8505, -2.4393, 1.2284, -1.0232, -1.9661, -3.9210]
+            [
+                -5.6816,
+                -5.8388,
+                1.1398,
+                -6.9034,
+                6.8505,
+                -2.4393,
+                1.2284,
+                -1.0232,
+                -1.9661,
+                -3.9210,
+            ]
         )
     elif "trocr-large-printed" in checkpoint_url:
         expected_slice = torch.tensor(
-            [-6.0162, -7.0959, 4.4155, -5.1063, 7.0468, -3.1631, 2.6466, -0.3081, -0.8106, -1.7535]
+            [
+                -6.0162,
+                -7.0959,
+                4.4155,
+                -5.1063,
+                7.0468,
+                -3.1631,
+                2.6466,
+                -0.3081,
+                -0.8106,
+                -1.7535,
+            ]
         )
 
     if "stage1" not in checkpoint_url:

@@ -12,11 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pathlib
 from collections import UserDict
 from typing import Any
 
-import httpx
 import numpy as np
+from huggingface_hub import get_session
 
 from ..utils import (
     add_end_docstrings,
@@ -25,6 +26,8 @@ from ..utils import (
 from .audio_classification import ffmpeg_read
 from .base import Pipeline, build_pipeline_init_args
 
+
+session = get_session()
 
 logger = logging.get_logger(__name__)
 
@@ -107,10 +110,9 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                audio = httpx.get(audio, follow_redirects=True).content
+                audio = session.get(audio, follow_redirects=True).content
             else:
-                with open(audio, "rb") as f:
-                    audio = f.read()
+                audio = pathlib.Path(audio).read_bytes()
 
         if isinstance(audio, bytes):
             audio = ffmpeg_read(audio, self.feature_extractor.sampling_rate)
