@@ -1089,7 +1089,7 @@ class TrackioCallback(TrainerCallback):
         if getattr(model, "model_tags", None) is not None:
             if "trackio" not in model.model_tags:
                 model.model_tags.append("trackio")
-                model.model_tags.append(f"trackio::{space_url}")
+                model.model_tags.append(f"trackio:{space_url}")
         else:
             model.model_tags = ["trackio", f"trackio:{space_url}"]
 
