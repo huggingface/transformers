@@ -1093,6 +1093,21 @@ class TrackioCallback(TrainerCallback):
         else:
             model.model_tags = trackio_tags
 
+
+class CometCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.com/site/).
+    """
+
+    def __init__(self):
+        if _is_comet_installed is False or _is_comet_recent_enough is False:
+            raise RuntimeError(
+                f"CometCallback requires comet-ml>={_MIN_COMET_VERSION} to be installed. Run `pip install comet-ml>={_MIN_COMET_VERSION}`."
+            )
+        self._initialized = False
+        self._log_assets = False
+        self._experiment = None
+
     def setup(self, args, state, model):
         """
         Setup the optional Comet integration.
