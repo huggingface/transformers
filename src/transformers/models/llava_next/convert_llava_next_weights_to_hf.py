@@ -148,7 +148,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         image_token_id=image_token_id,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaNextForConditionalGeneration(config)
 
     # load original state dict

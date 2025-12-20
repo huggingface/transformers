@@ -451,6 +451,8 @@ class MarianPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MarianSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
+        elif isinstance(module, MarianMTModel):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):
@@ -1248,6 +1250,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = MarianDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)

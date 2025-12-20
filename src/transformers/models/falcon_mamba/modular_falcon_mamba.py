@@ -19,6 +19,7 @@ from typing import Optional
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
@@ -357,7 +358,7 @@ class FalconMambaMixer(MambaMixer):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            if hasattr(self.config, "quantization_config"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
@@ -529,7 +530,11 @@ class FalconMambaBlock(MambaBlock):
 
 @auto_docstring
 class FalconMambaPreTrainedModel(MambaPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FalconMambaMixer):
+            init.ones_(module.b_c_rms)
+            init.ones_(module.dt_rms)
 
 
 class FalconMambaOutput(MambaOutput):

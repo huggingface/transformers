@@ -39,6 +39,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
+    "Ernie4_5_VL_MoeTextConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
     "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
