@@ -1,6 +1,3 @@
-# coding=utf-8
-# Copyright 2025 The HumanV Team. All rights reserved.
-
 from typing import Optional, List
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, standardize_rope_params
@@ -30,11 +27,8 @@ class HumanVConfig(PreTrainedConfig):
         rope_parameters: Optional[dict] = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
-        
-        # تنظیمات اختصاصی HumanV
-        layer_types: Optional[List[str]] = None,  # لیست ["full_attention", "sparse_attention", ...]
-        sparse_window_size: int = 512,            # سایز پنجره برای لایه‌های Sparse
-        
+        layer_types: Optional[List[str]] = None,
+        sparse_window_size: int = 512,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -58,13 +52,11 @@ class HumanVConfig(PreTrainedConfig):
         
         self.sparse_window_size = sparse_window_size
         
-        # تنظیم پیش‌فرض لایه‌ها: همه Full اگر مشخص نشده باشد
         if layer_types is None:
             self.layer_types = ["full_attention"] * num_hidden_layers
         else:
             self.layer_types = layer_types
             
-        # Rope setup
         self.rope_parameters = rope_parameters
         rope_theta = kwargs.get("rope_theta", 10000.0)
         standardize_rope_params(self, rope_theta=rope_theta)
