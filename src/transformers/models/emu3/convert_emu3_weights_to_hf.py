@@ -19,7 +19,6 @@ from io import BytesIO
 from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import get_session
 from PIL import Image
 
@@ -136,17 +135,15 @@ def convert_tiktoken(tokenizer, output_dir):
     reserved_token_id = vocab["<|extra_0|>"]
     vocab["<image>"] = reserved_token_id
     del vocab["<|extra_0|>"]
-    added_tokens.append(
-        {
-            "id": reserved_token_id,
-            "content": "<image>",
-            "single_word": False,
-            "lstrip": False,
-            "rstrip": False,
-            "normalized": False,
-            "special": True,
-        }
-    )
+    added_tokens.append({
+        "id": reserved_token_id,
+        "content": "<image>",
+        "single_word": False,
+        "lstrip": False,
+        "rstrip": False,
+        "normalized": False,
+        "special": True,
+    })
 
     os.makedirs(output_dir, exist_ok=True)
 

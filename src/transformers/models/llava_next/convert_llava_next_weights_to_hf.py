@@ -31,7 +31,6 @@ from io import BytesIO
 from pathlib import Path
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import get_session, hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
