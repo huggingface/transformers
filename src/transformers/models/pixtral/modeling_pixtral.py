@@ -28,6 +28,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.generic import maybe_autocast
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -73,7 +74,7 @@ class PixtralRotaryEmbedding(nn.Module):
 
         inv_freq, attention_scaling = rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -125,7 +126,7 @@ class PixtralRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         freqs = self.inv_freq[position_ids]
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             emb = freqs
             cos = emb.cos()
             sin = emb.sin()
@@ -433,7 +434,7 @@ class PixtralPreTrainedModel(PreTrainedModel):
     config: PixtralVisionConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True

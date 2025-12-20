@@ -270,8 +270,8 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
 
         # Preprocess the examples
-        batch_images = self.processor(images=ds["image"]).to(torch_device)
-        batch_queries = self.processor(text=ds["query"]).to(torch_device)
+        batch_images = self.processor(images=ds["image"][:]).to(torch_device)
+        batch_queries = self.processor(text=ds["query"][:]).to(torch_device)
 
         # Run inference
         with torch.inference_mode():

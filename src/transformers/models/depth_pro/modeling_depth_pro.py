@@ -603,7 +603,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
     config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = ["DepthProPreActResidualLayer"]
@@ -645,6 +645,7 @@ class DepthProModel(DepthProPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, DepthProOutput]:
         r"""
         Examples:
@@ -1027,6 +1028,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], DepthProDepthEstimatorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

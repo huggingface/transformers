@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import enum
-from collections.abc import Iterable
 from typing import Any, Union, overload
 
 from ..generation import GenerationConfig
@@ -26,6 +25,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
+from ..utils.chat_template_utils import Chat
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -48,67 +48,6 @@ class ReturnType(enum.Enum):
     TENSORS = 0
     NEW_TEXT = 1
     FULL_TEXT = 2
-
-
-class Chat:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
-    to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
-
-    def __init__(
-        self, messages: dict, images: Union[str, list[str], "Image.Image", list["Image.Image"]] | None = None
-    ):
-        for message in messages:
-            if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        messages = add_images_to_messages(messages, images)
-
-        self.messages = messages
-
-
-def add_images_to_messages(messages: dict, images: Union[str, list[str], "Image.Image", list["Image.Image"]] | None):
-    """
-    Retrieve and combine images from the chat and the images passed as input.
-    """
-    if images is None:
-        images = []
-    elif not isinstance(images, Iterable) or isinstance(images, str):
-        images = [images]
-    idx_images = 0
-    for message in messages:
-        for content in message["content"]:
-            if not isinstance(content, dict):
-                continue
-            content_type = content.get("type")
-            if content_type == "image":
-                if not any(key in content for key in ["image", "url", "path", "base64"]):
-                    if idx_images < len(images):
-                        # Insert the image passed as argument in the chat message
-                        content["image"] = images[idx_images]
-                        idx_images += 1
-                    else:
-                        raise ValueError(
-                            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-                        )
-            # Add support for OpenAI/TGI chat format
-            elif content_type == "image_url":
-                if isinstance(content.get("image_url"), dict) and "url" in content["image_url"]:
-                    # Rewrite content to be in the Transformers chat format
-                    content["type"] = "image"
-                    content["image"] = content["image_url"]["url"]
-                    del content["image_url"]
-                else:
-                    raise ValueError(
-                        "Wrong format for 'image_url' content type. The content should have an 'image_url' dict with a 'url' key."
-                    )
-
-    # The number of images passed should be consistent with the number of images in the chat without an image key
-    if idx_images != len(images):
-        raise ValueError(
-            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-        )
-
-    return messages
 
 
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
@@ -332,13 +271,19 @@ class ImageTextToTextPipeline(Pipeline):
             return isinstance(arg, (list, tuple, KeyDataset)) and isinstance(arg[0], (list, tuple, dict))
 
         if _is_chat(text):
+            if images is not None:
+                raise ValueError(
+                    "Invalid input: you passed `chat` and `images` as separate input arguments. "
+                    "Images must be placed inside the chat message's `content`. For example, "
+                    "'content': ["
+                    "      {'type': 'image', 'url': 'image_url'}, {'type': 'text', 'text': 'Describe the image.'}}"
+                    "]"
+                )
             # We have one or more prompts in list-of-dicts format, so this is chat mode
             if isinstance(text[0], dict):
-                return super().__call__(Chat(text, images), **kwargs)
+                return super().__call__(Chat(text), **kwargs)
             else:
-                if images is None:
-                    images = [None] * len(text)
-                chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
+                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
                 return super().__call__(chats, **kwargs)
 
         # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a

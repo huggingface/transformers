@@ -680,7 +680,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,
@@ -913,6 +913,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
     }
+    _input_embed_layer = "shared"
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -931,9 +932,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
@@ -1241,7 +1239,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

@@ -730,7 +730,7 @@ def main(*args):
         variant,
         type(model).__name__,
     )
-    model.save_pretrained(output_path, state_dict=state_tree, safe_serialization=True)
+    model.save_pretrained(output_path, state_dict=state_tree)
     logging.info(
         "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
         variant,

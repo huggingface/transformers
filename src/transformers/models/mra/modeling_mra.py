@@ -54,7 +54,7 @@ def load_cuda_kernels():
     global mra_cuda_kernel
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
-    from kernels import get_kernel
+    from ...integrations.hub_kernels import get_kernel
 
     mra_cuda_kernel = get_kernel("kernels-community/mra")
 
@@ -796,6 +796,9 @@ class MraPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MraLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, MraEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)) + 2)
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring
@@ -826,6 +829,7 @@ class MraModel(MraPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -919,6 +923,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1007,6 +1012,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1086,6 +1092,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
@@ -1189,6 +1196,7 @@ class MraForTokenClassification(MraPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1263,6 +1271,7 @@ class MraForQuestionAnswering(MraPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -20,7 +20,7 @@ from typing import Optional
 
 import regex
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging, requires_backends
 
 
@@ -79,6 +79,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             should_strip_spaces=should_strip_spaces,
+            special_tokens_pattern="none",
             **kwargs,
         )
 

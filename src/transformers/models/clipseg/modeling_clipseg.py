@@ -425,7 +425,7 @@ class CLIPSegEncoderLayer(GradientCheckpointingLayer):
 class CLIPSegPreTrainedModel(PreTrainedModel):
     config: CLIPSegConfig
     base_model_prefix = "clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -435,11 +435,13 @@ class CLIPSegPreTrainedModel(PreTrainedModel):
         if isinstance(module, CLIPSegTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, CLIPSegVisionEmbeddings):
             factor = self.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, CLIPSegAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -651,7 +653,7 @@ class CLIPSegTextTransformer(nn.Module):
 
 class CLIPSegTextModel(CLIPSegPreTrainedModel):
     config: CLIPSegTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer"]
 
@@ -676,6 +678,7 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -757,7 +760,7 @@ class CLIPSegVisionTransformer(nn.Module):
 class CLIPSegVisionModel(CLIPSegPreTrainedModel):
     config: CLIPSegVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: CLIPSegVisionConfig):
         super().__init__(config)
@@ -776,6 +779,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -933,6 +937,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, CLIPSegOutput]:
         r"""
         return_loss (`bool`, *optional*):
@@ -1118,6 +1123,8 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         decoder_config.hidden_act = "relu"
         self.layers = nn.ModuleList([CLIPSegDecoderLayer(decoder_config) for _ in range(len(config.extract_layers))])
 
+        self.post_init()
+
     def forward(
         self,
         hidden_states: tuple[torch.Tensor],
@@ -1125,6 +1132,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
+        **kwargs,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1239,6 +1247,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = True,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, CLIPSegOutput]:
         r"""
         conditional_pixel_values (`torch.FloatTensor`, *optional*):

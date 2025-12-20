@@ -97,9 +97,9 @@ class ColQwen2Processor(ColPaliProcessor):
         wrapper around the Qwen2VLProcessor's [`~Qwen2VLProcessor.__call__`] method adapted for the ColQwen2 model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's
         [`~Qwen2TokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's
         [`~Qwen2VLImageProcessor.__call__`].
         Please refer to the doctsring of the above two methods for more information.
 
@@ -322,6 +322,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):

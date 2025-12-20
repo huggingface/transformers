@@ -258,7 +258,7 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     config: ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["ConvNextV2Layer"]
 
     @torch.no_grad()
@@ -289,7 +289,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None
+        self, pixel_values: Optional[torch.FloatTensor] = None, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
@@ -393,9 +393,7 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:

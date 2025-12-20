@@ -90,6 +90,7 @@ class RotaryEmbedding(torch.nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -558,6 +559,11 @@ class EsmPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, EsmLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, EsmEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, RotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
     def get_output_embeddings(self):
         # NOTE: get_output_embeddings() must return None to prevent accidental weight tying.
@@ -605,7 +611,7 @@ class EsmModel(EsmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -732,8 +738,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.lm_head = EsmLMHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     def get_output_embeddings(self):
@@ -828,8 +832,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.classifier = EsmClassificationHead(config)
 
-        self.init_weights()
-
         self.post_init()
 
     @can_return_tuple
@@ -902,8 +904,6 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.esm = EsmModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
 
         self.post_init()
 

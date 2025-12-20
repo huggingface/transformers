@@ -1,10 +1,9 @@
 import enum
-import itertools
-import types
 from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_torch_available
+from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -12,27 +11,12 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-    from .pt_utils import KeyDataset
-
-ChatType = list[dict[str, str]]
 
 
 class ReturnType(enum.Enum):
     TENSORS = 0
     NEW_TEXT = 1
     FULL_TEXT = 2
-
-
-class Chat:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
-    to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
-
-    def __init__(self, messages: dict):
-        for message in messages:
-            if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        self.messages = messages
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -126,8 +110,6 @@ class TextGenerationPipeline(Pipeline):
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
                 "TransfoXLLMHeadModel",
-                "TFXLNetLMHeadModel",
-                "TFTransfoXLLMHeadModel",
             ]:
                 # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                 prefix = self.XL_PREFIX
@@ -263,7 +245,7 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
+            text_inputs (`str`, `list[str]`, `ChatType`, or `list[ChatType]`):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
@@ -308,27 +290,6 @@ class TextGenerationPipeline(Pipeline):
             - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
               ids of the generated text.
         """
-        if isinstance(
-            text_inputs,
-            (list, tuple, types.GeneratorType, KeyDataset)
-            if is_torch_available()
-            else (list, tuple, types.GeneratorType),
-        ):
-            if isinstance(text_inputs, types.GeneratorType):
-                text_inputs, _ = itertools.tee(text_inputs)
-                text_inputs, first_item = (x for x in text_inputs), next(_)
-            else:
-                first_item = text_inputs[0]
-            if isinstance(first_item, (list, tuple, dict)):
-                # We have one or more prompts in list-of-dicts format, so this is chat mode
-                if isinstance(first_item, dict):
-                    return super().__call__(Chat(text_inputs), **kwargs)
-                else:
-                    chats = (Chat(chat) for chat in text_inputs)  # 🐈 🐈 🐈
-                    if isinstance(text_inputs, types.GeneratorType):
-                        return super().__call__(chats, **kwargs)
-                    else:
-                        return super().__call__(list(chats), **kwargs)
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(
@@ -525,7 +486,7 @@ class TextGenerationPipeline(Pipeline):
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            if self.tokenizer.response_schema:
+                            if getattr(self.tokenizer, "response_schema", False):
                                 assistant_message = self.tokenizer.parse_response(all_text)
                             else:
                                 # If there's no schema, then we have to assume it's all content

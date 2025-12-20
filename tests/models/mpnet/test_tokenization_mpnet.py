@@ -13,12 +13,10 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
-from transformers import MPNetTokenizerFast
-from transformers.models.mpnet.tokenization_mpnet import VOCAB_FILES_NAMES, MPNetTokenizer
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.models.mpnet.tokenization_mpnet import MPNetTokenizer
+from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -27,56 +25,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "microsoft/mpnet-base"
     tokenizer_class = MPNetTokenizer
-    rust_tokenizer_class = MPNetTokenizerFast
-    test_rust_tokenizer = True
-    space_between_special_tokens = True
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-
-    def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00e9d,running"
-        output_text = "unwanted, running"
-        return input_text, output_text
-
-    def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
-
-        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
-
-    @slow
-    def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("microsoft/mpnet-base")
-
-        text = tokenizer.encode("sequence builders", add_special_tokens=False)
-        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
-
-        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
-        encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
-
-        assert encoded_sentence == [0] + text + [2]
-        assert encoded_pair == [0] + text + [2] + [2] + text_2 + [2]
+    integration_expected_tokens = ['[UNK]', 'is', 'a', 'test', '[UNK]', '[UNK]', 'was', 'born', 'in', '92', '##00', '##0', ',', 'and', 'this', 'is', '[UNK]', '.', '生', '[UNK]', '的', '真', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '<s>', 'hi', '<s>', 'there', '[UNK]', 'following', 'string', 'should', 'be', 'properly', 'encoded', ':', '[UNK]', '.', '[UNK]', 'ir', '##d', 'and', '[UNK]', 'ir', '##d', '[UNK]', '[UNK]', 'how', 'are', 'you', 'doing']  # fmt: skip
+    integration_expected_token_ids = [104, 2007, 1041, 3235, 104, 104, 2005, 2145, 2003, 6231, 8893, 2696, 1014, 2002, 2027, 2007, 104, 1016, 1914, 104, 1920, 1925, 104, 104, 104, 104, 104, 104, 104, 0, 7636, 0, 2049, 104, 2210, 5168, 2327, 2026, 7923, 12363, 1028, 104, 1016, 104, 20872, 2098, 2002, 104, 20872, 2098, 104, 104, 2133, 2028, 2021, 2729]  # fmt: skip
+    expected_tokens_from_ids = ['[UNK]', 'is', 'a', 'test', '[UNK]', '[UNK]', 'was', 'born', 'in', '92', '##00', '##0', ',', 'and', 'this', 'is', '[UNK]', '.', '生', '[UNK]', '的', '真', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '[UNK]', '<s>', 'hi', '<s>', 'there', '[UNK]', 'following', 'string', 'should', 'be', 'properly', 'encoded', ':', '[UNK]', '.', '[UNK]', 'ir', '##d', 'and', '[UNK]', 'ir', '##d', '[UNK]', '[UNK]', 'how', 'are', 'you', 'doing']  # fmt: skip
+    integration_expected_decoded_text = "[UNK] is a test [UNK] [UNK] was born in 92000, and this is [UNK]. 生 [UNK] 的 真 [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] [UNK] <s> hi <s> there [UNK] following string should be properly encoded : [UNK]. [UNK] ird and [UNK] ird [UNK] [UNK] how are you doing"

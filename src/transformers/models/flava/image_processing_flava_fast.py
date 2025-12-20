@@ -306,7 +306,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return processed_images
 
@@ -397,7 +396,6 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
                 mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
             )
             masks = [mask_generator() for _ in range(len(images))]
-            masks = torch.stack(masks, dim=0) if return_tensors else masks
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)

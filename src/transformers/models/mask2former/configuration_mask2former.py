@@ -14,7 +14,7 @@
 # limitations under the License.
 """Mask2Former model configuration"""
 
-from typing import Optional
+from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -39,7 +39,7 @@ class Mask2FormerConfig(PreTrainedConfig):
     Currently, Mask2Former only supports the [Swin Transformer](swin) as backbone.
 
     Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model. If unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
         backbone (`str`, *optional*):
@@ -134,7 +134,7 @@ class Mask2FormerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[dict] = None,
+        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
         feature_size: int = 256,
         mask_feature_size: int = 256,
         hidden_dim: int = 256,

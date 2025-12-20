@@ -1,0 +1,245 @@
+name: CircleCI Failure Summary Comment
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  comment:
+    runs-on: ubuntu-22.04
+    permissions:
+      pull-requests: write
+    env:
+      TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+      TARGET_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install requests huggingface_hub
+
+      - name: Wait for CircleCI check suite completion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Exit on error, undefined variables, or pipe failures
+          set -euo pipefail
+          
+          echo "Waiting for CircleCI check suite to complete..."
+          # Timeout after 30 minutes (1800 seconds)
+          end=$((SECONDS + 1800))
+          
+          while [ $SECONDS -lt $end ]; do
+            # Query GitHub API for check suites associated with this commit
+            # || echo "" allows retry on transient API failures instead of exiting
+            suite_json=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${COMMIT_SHA}/check-suites" \
+              --jq '.check_suites[] | select(.app.slug == "circleci-checks")' || echo "")
+            
+            if [ -z "$suite_json" ]; then
+              echo "CircleCI check suite not found yet, retrying..."
+            else
+              status=$(echo "$suite_json" | jq -r '.status')
+              conclusion=$(echo "$suite_json" | jq -r '.conclusion // empty')
+              echo "CircleCI status: $status, conclusion: $conclusion"
+              
+              # Check suite is done when status is "completed" AND conclusion is set
+              if [ "$status" = "completed" ] && [ -n "$conclusion" ]; then
+                echo "Check suite completed successfully"
+                exit 0
+              fi
+            fi
+            
+            # Poll every 20 seconds
+            sleep 20
+          done
+    
+          echo "ERROR: Timed out waiting for CircleCI check suite"
+          exit 1
+
+      - name: Get CircleCI run's artifacts and upload them to Hub
+        id: circleci
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Step 1: Get CircleCI check suite ID
+          echo "Getting check suites for commit ${COMMIT_SHA}..."
+          check_suites=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}/check-suites")
+          
+          circleci_suite_id=$(echo "$check_suites" | jq -r '.check_suites[] | select(.app.slug == "circleci-checks") | .id' | head -n 1)
+          echo "CircleCI check suite ID: ${circleci_suite_id}"
+          
+          # Step 2: Get check runs from the CircleCI suite
+          echo "Getting check runs for suite ${circleci_suite_id}..."
+          check_runs=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/check-suites/${circleci_suite_id}/check-runs")
+          
+          # Step 3: Extract workflow ID from the "run_tests" check run
+          workflow_id=$(echo "$check_runs" | jq -r '.check_runs[] | select(.name == "run_tests") | .details_url' | grep -oP 'workflows/\K[a-f0-9-]+')
+          echo "CircleCI Workflow ID: ${workflow_id}"
+          
+          # Step 4: Get all jobs in the workflow
+          echo "Getting jobs for workflow ${workflow_id}..."
+          jobs=$(curl -s \
+            "https://circleci.com/api/v2/workflow/${workflow_id}/job")
+          
+          # Step 5: Extract collection_job details
+          collection_job_number=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .job_number')
+          collection_job_id=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .id')
+          echo "CircleCI Collection job number: ${collection_job_number}"
+          echo "CircleCI Collection job ID: ${collection_job_id}"
+          
+          # Step 6: Get artifacts list
+          echo "Getting artifacts for job ${collection_job_number}..."
+          artifacts=$(curl -s \
+            "https://circleci.com/api/v2/project/gh/${REPO}/${collection_job_number}/artifacts")
+          
+          echo "$artifacts" | jq '.'
+          
+          # Step 7: Download failure_summary.json specifically
+          failure_summary_url=$(echo "$artifacts" | jq -r '.items[] | select(.path == "outputs/failure_summary.json") | .url')
+          
+          if [ -z "$failure_summary_url" ]; then
+            echo "failure_summary.json not found in artifacts - PR may not have latest main merged. Skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Downloading failure_summary.json from: ${failure_summary_url}"
+          mkdir -p outputs
+          curl -s -L "${failure_summary_url}" -o outputs/failure_summary.json
+          ls -la outputs
+          
+          echo "Downloaded failure_summary.json successfully"
+          
+          # Verify the file was downloaded
+          if [ ! -f outputs/failure_summary.json ]; then
+            echo "Failed to download failure_summary.json - skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "File size: $(wc -c < outputs/failure_summary.json) bytes"
+          
+          # Export variables for next steps
+          echo "artifact_found=true" >> $GITHUB_OUTPUT
+          echo "workflow_id=${workflow_id}" >> $GITHUB_OUTPUT
+          echo "collection_job_number=${collection_job_number}" >> $GITHUB_OUTPUT
+
+      - name: Upload summaries to Hub
+        if: steps.circleci.outputs.artifact_found == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_CI_WRITE_TOKEN }}
+          CIRCLECI_RESULTS_DATASET_ID: "transformers-community/circleci-test-results"
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python << 'EOF'
+          import os
+          from pathlib import Path
+          from huggingface_hub import HfApi
+          
+          # Setup paths
+          pr_number = os.environ["PR_NUMBER"]
+          commit_short = os.environ["COMMIT_SHA"][:12]
+          folder_path = f"pr-{pr_number}/sha-{commit_short}"
+          
+          # Create folder and move file
+          Path(folder_path).mkdir(parents=True, exist_ok=True)
+          Path("outputs/failure_summary.json").rename(f"{folder_path}/failure_summary.json")
+          
+          # Upload to Hub
+          dataset_id = os.environ["CIRCLECI_RESULTS_DATASET_ID"]
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.upload_folder(
+              commit_message=f"Update CircleCI artifacts for PR {pr_number} ({commit_short})",
+              folder_path=folder_path,
+              path_in_repo=folder_path,
+              repo_id=dataset_id,
+              repo_type="dataset",
+          )
+          
+          print(f"Uploaded {folder_path} to {dataset_id}")
+          EOF
+
+      - name: Delete existing CircleCI summary comments
+        if: steps.circleci.outputs.artifact_found == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER
+            });
+            
+            // Find existing bot comments that start with "View the CircleCI Test Summary for this PR:"
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith('View the CircleCI Test Summary for this PR:')
+            );
+
+            // Delete all matching comments
+            for (const comment of existingComments) {
+              console.log(`Deleting comment #${comment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id
+              });
+            }
+            
+            console.log(`Deleted ${existingComments.length} old CircleCI summary comment(s)`);
+
+      - name: Post comment with helper link
+        if: steps.circleci.outputs.artifact_found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          COMMIT_SHORT="${PR_SHA:0:12}"
+          SUMMARY_FILE="pr-${PR_NUMBER}/sha-${COMMIT_SHORT}/failure_summary.json"
+          
+          if [ ! -f "$SUMMARY_FILE" ]; then
+            echo "failure_summary.json missing, skipping comment."
+            exit 0
+          fi
+          
+          failures=$(jq '.failures | length' "$SUMMARY_FILE")
+          if [ "$failures" -eq 0 ]; then
+            echo "No failures detected, skipping PR comment."
+            exit 0
+          fi
+          
+          # Build Space URL with encoded parameters
+          repo_enc=$(jq -rn --arg v "$GITHUB_REPOSITORY" '$v|@uri')
+          pr_enc=$(jq -rn --arg v "$PR_NUMBER" '$v|@uri')
+          sha_short="${PR_SHA:0:6}"
+          sha_enc=$(jq -rn --arg v "$sha_short" '$v|@uri')
+          SPACE_URL="https://huggingface.co/spaces/transformers-community/circle-ci-viz?pr=${pr_enc}&sha=${sha_enc}"
+
+          # Post comment (using printf for proper newlines)
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="$(printf "View the CircleCI Test Summary for this PR:\n\n%s" "$SPACE_URL")"

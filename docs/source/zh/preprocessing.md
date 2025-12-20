@@ -323,7 +323,7 @@ pip install datasets
 
 </Tip>
 
-加载[food101](https://huggingface.co/datasets/food101)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何在计算机视觉数据集中使用图像处理器：
+加载[food101](https://huggingface.co/datasets/ethz/food101)数据集（有关如何加载数据集的更多详细信息，请参阅🤗 [Datasets教程](https://huggingface.co/docs/datasets/load_hub)）以了解如何在计算机视觉数据集中使用图像处理器：
 
 <Tip>
 
@@ -335,7 +335,7 @@ pip install datasets
 ```py
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("food101", split="train[:100]")
+>>> dataset = load_dataset("ethz/food101", split="train[:100]")
 ```
 
 接下来，使用🤗 Datasets的[`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image)功能查看图像：

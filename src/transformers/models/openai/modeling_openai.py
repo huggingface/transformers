@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
@@ -46,6 +47,7 @@ ACT_FNS = {"relu": nn.ReLU(), "silu": silu, "gelu": gelu_new, "swish": silu}
 class Attention(nn.Module):
     def __init__(self, nx, n_positions, config, scale=False):
         super().__init__()
+        self.n_positions = n_positions
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
@@ -259,6 +261,16 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config: OpenAIGPTConfig
     base_model_prefix = "transformer"
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Attention):
+            n_positions = module.n_positions
+            init.copy_(
+                module.bias, torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+            )
+        elif isinstance(module, OpenAIGPTModel):
+            init.copy_(module.position_ids, torch.arange(module.config.n_positions))
+
 
 @dataclass
 @auto_docstring(
@@ -317,6 +329,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -514,6 +527,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], OpenAIGPTDoubleHeadsModelOutput]:
         r"""
         mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
@@ -624,6 +638,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

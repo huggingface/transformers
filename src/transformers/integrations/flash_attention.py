@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
@@ -22,8 +20,8 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
                 else torch.get_autocast_gpu_dtype()
             )
         # Handle the case where the model is quantized
-        elif hasattr(module.config, "_pre_quantization_dtype"):
-            return module.config._pre_quantization_dtype
+        elif hasattr(module.config, "quantization_config"):
+            return module.config.dtype
         else:
             return next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
     return None
@@ -34,12 +32,12 @@ def flash_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    sliding_window: Optional[int] = None,
-    softcap: Optional[float] = None,
-    is_causal: Optional[bool] = None,
+    scaling: float | None = None,
+    sliding_window: int | None = None,
+    softcap: float | None = None,
+    is_causal: bool | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):

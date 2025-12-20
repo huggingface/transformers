@@ -387,10 +387,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_pixel_masks = reorder_images(processed_pixel_masks_grouped, grouped_images_index)
         encoded_inputs = BatchFeature(
-            data={
-                "pixel_values": torch.stack(processed_images, dim=0) if return_tensors else processed_images,
-                "pixel_mask": torch.stack(processed_pixel_masks, dim=0) if return_tensors else processed_pixel_masks,
-            },
+            data={"pixel_values": processed_images, "pixel_mask": processed_pixel_masks},
             tensor_type=return_tensors,
         )
         if segmentation_maps is not None:

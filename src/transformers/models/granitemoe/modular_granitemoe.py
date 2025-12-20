@@ -166,7 +166,7 @@ class GraniteMoeModel(MixtralModel):
         self.norm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.embedding_multiplier = config.embedding_multiplier
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -295,8 +295,6 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
             # Flatten the tokens
             loss = self.loss_function(
                 logits,

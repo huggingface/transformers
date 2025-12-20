@@ -121,9 +121,6 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, strict=False, assign=True)
 
-    # print("Saving models")
-    # model.save_pretrained("local_aria", safe_serialization=False)
-    # processor.save_pretrained("local_aria")
     print("Pushing to hub")
     model.push_to_hub(output_hub_path, create_pr=True)
     processor.push_to_hub(output_hub_path, create_pr=True)

@@ -460,7 +460,7 @@ def main(*args):
     model.load_state_dict(result.state_tree, assign=True, strict=True)
     model.config.dtype = dtype
     logging.info("Loaded Shieldgemma2 in Hugging Face Transformers.")
-    model.save_pretrained(output_path, safe_serialization=True)
+    model.save_pretrained(output_path)
     logging.info("Saved Shieldgemma2 to SafeTensors in %s", output_path)
     del model
     del result

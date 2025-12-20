@@ -677,7 +677,7 @@ class Emu3VQVAE(PreTrainedModel):
     config: Emu3VQVAEConfig
     base_model_prefix = "emuvideovq"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -706,6 +706,10 @@ class Emu3VQVAE(PreTrainedModel):
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
             init.constant_(module.weight, 1.0)
             init.constant_(module.bias, 0.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -1038,7 +1042,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
-    output_modalities = ["image", "text"]
+    output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",

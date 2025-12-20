@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_t5 import *
     from .modeling_t5 import *
     from .tokenization_t5 import *
-    from .tokenization_t5_fast import *
 else:
     import sys
 

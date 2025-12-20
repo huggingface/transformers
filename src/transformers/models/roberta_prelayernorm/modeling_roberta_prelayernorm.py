@@ -561,6 +561,9 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, RobertaPreLayerNormLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, RobertaPreLayerNormEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring(
@@ -603,7 +606,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

@@ -26,7 +26,6 @@ from pathlib import Path
 
 import requests
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
@@ -153,7 +152,7 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         use_image_newline_parameter=True,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaOnevisionForConditionalGeneration(config)
 
     # load original state dict

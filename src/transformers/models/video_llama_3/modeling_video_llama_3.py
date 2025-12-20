@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -43,6 +44,8 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
+        self.dim = dim
+        self.theta = theta
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -370,7 +373,7 @@ class VideoLlama3VisionEncoder(nn.Module):
 class VideoLlama3PreTrainedModel(PreTrainedModel):
     config: VideoLlama3Config
     base_model_prefix = "model"
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
@@ -380,11 +383,17 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,

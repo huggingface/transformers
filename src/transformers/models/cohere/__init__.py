@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_cohere import *
     from .modeling_cohere import *
-    from .tokenization_cohere_fast import *
+    from .tokenization_cohere import *
 else:
     import sys
 

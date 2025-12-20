@@ -127,18 +127,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] MT5Config
 
-## MT5Tokenizer
-
-[[autodoc]] MT5Tokenizer
-
-See [`T5Tokenizer`] for all details.
-
-## MT5TokenizerFast
-
-[[autodoc]] MT5TokenizerFast
-
-See [`T5TokenizerFast`] for all details.
-
 ## MT5Model
 
 [[autodoc]] MT5Model

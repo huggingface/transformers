@@ -423,7 +423,7 @@ class WhisperGenerationMixin(GenerationMixin):
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 
@@ -658,6 +658,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
         # 1. prepare generation config
+        generation_config = self.generation_config if generation_config is None else generation_config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables

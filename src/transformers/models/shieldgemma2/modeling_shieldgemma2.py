@@ -44,7 +44,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _checkpoint_conversion_mapping = {
         "model.language_model.model": "model.model.language_model",
         "model.vision_tower": "model.model.vision_tower",
@@ -57,6 +57,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.yes_token_index = getattr(config, "yes_token_index", 10_784)
         self.no_token_index = getattr(config, "no_token_index", 3771)
         self.model = AutoModelForImageTextToText.from_config(config=config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()

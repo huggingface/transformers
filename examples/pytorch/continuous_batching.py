@@ -25,7 +25,7 @@ import torch
 from torch.profiler import ProfilerActivity, profile
 from tqdm import tqdm
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
 from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
@@ -45,9 +45,7 @@ def generate_without_cb(
         key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
         attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(
-            input_ids, attention_mask=attention_mask, generation_config=generation_config, use_model_defaults=False
-        )
+        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
     return decoded_outputs
@@ -172,7 +170,7 @@ if __name__ == "__main__":
 
     # Model parameters
     parser.add_argument("--sliding-window", type=int, default=0)
-    parser.add_argument("--attn", type=str, default="kernels-community/flash-attn", help="Attention implementation")
+    parser.add_argument("--attn", type=str, default=None, help="Attention implementation")
 
     # Performance parameters
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
@@ -182,11 +180,16 @@ if __name__ == "__main__":
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
+    parser.add_argument(
+        "--input-length", type=int, default=None, help="Length of input sequences. Leave to None to mimic real eval."
+    )
+    parser.add_argument("--max-new-tokens", type=int, default=512, help="Maximum number of new tokens to generate")
+    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
+
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
-    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -194,6 +197,18 @@ if __name__ == "__main__":
     parser.add_argument("--output-file", type=str, default=None)
 
     args = parser.parse_args()
+
+    # Choose attention implementation
+    if args.attn is None:
+        if args.compile:
+            args.attn = "kernels-community/flash-attn3@fake-ops-return-probs"
+            logger.warning(
+                "No attention implementation was provided and compile is enabled. Using experimental kernel: "
+                "kernels-community/flash-attn3@fake-ops-return-probs because compile is not supported on main. Change "
+                "this when main supports it."  # TODO: cf comment
+            )
+        else:
+            args.attn = "kernels-community/flash-attn3"
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
@@ -221,9 +236,6 @@ if __name__ == "__main__":
         "no": False, "n": False, "false": False, "f": False, "0": False,
     }[cuda_graph_arg]  # fmt: skip
 
-    if args.compile:
-        model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
-
     # Prepare tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
@@ -240,6 +252,12 @@ if __name__ == "__main__":
     else:
         possible_prefixes = [None]
 
+    tokenizer_kwargs = {"add_generation_prompt": True}
+    if args.input_length is not None:
+        tokenizer_kwargs["max_length"] = args.input_length
+        tokenizer_kwargs["truncation"] = True
+        tokenizer_kwargs["padding"] = True
+
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
         messages = []
@@ -250,12 +268,13 @@ if __name__ == "__main__":
             else:
                 question = prefix + "\n\n" + question
         messages.append({"role": "user", "content": question})
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
-        batched_inputs.append(inputs["input_ids"])
+        inputs = tokenizer.apply_chat_template(messages, **tokenizer_kwargs)
+        inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
+        batched_inputs.append(inputs)
 
     # Prepare generation config
     generation_cfg = GenerationConfig(
-        max_new_tokens=512,
+        max_new_tokens=args.max_new_tokens,
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
@@ -265,6 +284,14 @@ if __name__ == "__main__":
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
+
+    # Add a compile config if requested
+    if args.compile:
+        generation_cfg.compile_config = CompileConfig(
+            fullgraph=True,
+            mode="max-autotune-no-cudagraphs",
+            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
+        )
 
     # If we need to compare, we need to generate the reference outputs
     if args.compare:
@@ -313,3 +340,4 @@ if __name__ == "__main__":
 # Example usage:
 # python examples/pytorch/continuous_batching.py --attn sdpa --add-prefix --samples 10 --compare
 # python examples/pytorch/continuous_batching.py --attn flash_attention_2 -mp none --add-prefix --samples 500
+# python examples/pytorch/continuous_batching.py -mp none -cg yes --samples 10 --max-new-tokens 32 --profile profile_wip.json

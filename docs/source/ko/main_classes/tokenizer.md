@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 1. 특히 배치 토큰화를 수행할 때 속도가 크게 향상됩니다.
 2. 원본 문자열(문자 및 단어)과 토큰 공간 사이를 매핑하는 추가적인 메소드를 제공합니다. (예: 특정 문자를 포함하는 토큰의 인덱스를 얻거나, 특정 토큰에 해당하는 문자 범위를 가져오는 등).
 
-기본 클래스인 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 문자열 입력을 인코딩하는 메소드를 구현하며(아래 참조), 로컬 파일이나 디렉토리, 또는 라이브러리에서 제공하는 사전 훈련된 토크나이저(HuggingFace의 AWS S3 저장소에서 다운로드된)로부터 파이썬 및 "Fast" 토크나이저를 인스턴스화하거나 저장하는 기능을 제공합니다. 이 두 클래스는 공통 메소드를 포함하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`]와 [`~tokenization_utils_base.SpecialTokensMixin`]에 의존합니다.
+기본 클래스인 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 문자열 입력을 인코딩하는 메소드를 구현하며(아래 참조), 로컬 파일이나 디렉토리, 또는 라이브러리에서 제공하는 사전 훈련된 토크나이저(HuggingFace의 AWS S3 저장소에서 다운로드된)로부터 파이썬 및 "Fast" 토크나이저를 인스턴스화하거나 저장하는 기능을 제공합니다. 이 두 클래스는 공통 메소드를 포함하는 [`~tokenization_utils_base.PreTrainedTokenizerBase`]에 의존합니다.
 
 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 모든 토크나이저에서 사용되는 주요 메소드들을 구현합니다:
 

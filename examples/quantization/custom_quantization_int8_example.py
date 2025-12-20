@@ -216,7 +216,7 @@ class Int8SymmetricQuantizer(HfQuantizer):
         """
         return True
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     @property

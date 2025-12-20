@@ -44,7 +44,7 @@ if is_torch_available():
     import torch
 
 if TYPE_CHECKING:
-    from .modeling_superglue import KeypointMatchingOutput
+    from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
 if is_vision_available():
     import PIL
@@ -345,15 +345,15 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
+        outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: Union[TensorType, list[tuple]],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`SuperGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
@@ -394,8 +394,8 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             matches0 = matches[mask0]
             scores0 = scores[mask0]
 
-            # Filter out matches with low scores
-            valid_matches = torch.logical_and(scores0 > threshold, matches0 > -1)
+            # Filter out matches with low scores, invalid matches, and out-of-bounds indices
+            valid_matches = (scores0 > threshold) & (matches0 > -1) & (matches0 < keypoints1.shape[0])
 
             matched_keypoints0 = keypoints0[valid_matches]
             matched_keypoints1 = keypoints1[matches0[valid_matches]]

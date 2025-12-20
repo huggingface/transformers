@@ -160,7 +160,7 @@ class InstructBlipVideoConfig(PreTrainedConfig):
 
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
 
 
 class InstructBlipVideoVisionModel(InstructBlipVisionModel):

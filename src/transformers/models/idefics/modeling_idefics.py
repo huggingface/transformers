@@ -818,7 +818,7 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
 class IdeficsPreTrainedModel(PreTrainedModel):
     config: IdeficsConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
@@ -840,6 +840,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, IdeficsVisionEmbeddings):
             init.normal_(module.class_embedding)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, IdeficsGatedCrossAttentionLayer):
             if self.config.alpha_initializer == "zeros":
                 init.zeros_(module.alpha_cross_attn)
@@ -852,6 +853,15 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 init.normal_(module.alpha_dense, mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
             init.normal_(module.latents)
+        elif isinstance(module, IdeficsEmbedding):
+            inv_freq = 1.0 / (module.base ** (torch.arange(0, module.dim, 2) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+            t = torch.arange(module.max_position_embeddings).type_as(inv_freq)
+            freqs = torch.einsum("i,j->ij", t, inv_freq)
+            # Different from paper, but it uses a different permutation in order to obtain the same calculation
+            emb = torch.cat((freqs, freqs), dim=-1)
+            init.copy_(module.cos_cached, emb.cos())
+            init.copy_(module.sin_cached, emb.sin())
 
 
 @auto_docstring
@@ -930,7 +940,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
     def freeze_vision_layers(self, module_exceptions=[]):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1107,30 +1117,14 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             bias=False,
             partially_freeze=config.freeze_lm_head,
         )
+        if config.additional_vocab_size > 0:
+            self._tied_weights_keys = {
+                "lm_head.weight": "model.embed_tokens.weight",
+                "lm_head.additional_fc.weight": "model.embed_tokens.additional_embedding.weight",
+            }
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def tie_weights(self, missing_keys=None):
-        """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
-        IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
-
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings.weight = input_embeddings.weight
-            if input_embeddings.num_additional_embeddings > 0:
-                assert output_embeddings.out_additional_features == input_embeddings.num_additional_embeddings
-                output_embeddings.additional_fc.weight = input_embeddings.additional_embedding.weight
-
-        if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
-            output_embeddings.out_features = input_embeddings.num_embeddings
-            if hasattr(output_embeddings, "out_additional_features") and hasattr(
-                input_embeddings, "num_additional_embeddings"
-            ):
-                output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @can_return_tuple
     @auto_docstring

@@ -27,6 +27,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -418,7 +419,7 @@ class Ovis2VisualEmbeddingTable(nn.Embedding):
 class Ovis2PreTrainedModel(PreTrainedModel):
     config: Ovis2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -429,6 +430,11 @@ class Ovis2PreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Ovis2VisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 def hard_softmax(logits: torch.Tensor, dim: int):
@@ -456,6 +462,8 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
             bias=False,
         )
         self.head_norm = nn.LayerNorm(self.vocab_size - self.num_visual_indicator_tokens)
+
+        self.post_init()
 
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)

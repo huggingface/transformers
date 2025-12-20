@@ -19,7 +19,6 @@ from typing import Optional
 
 import requests
 import torch
-from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -288,7 +287,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Emu3ForConditionalGeneration(config=config)
         model.generation_config = GenerationConfig(
             do_sample=True,
@@ -303,7 +302,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     state_dict = convert_state_dict_to_hf(model_vqgan.state_dict(), state_dict)
 
     model.load_state_dict(state_dict, assign=True, strict=True)
-    model.save_pretrained(output_dir, safe_serialization=True)
+    model.save_pretrained(output_dir)
 
     if hub_model_id is not None:
         model.push_to_hub(hub_model_id)

@@ -62,7 +62,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, tokenizer_path=None, safe_serialization=True, fix_eos_token_id=True):
+def write_model(model_path, input_base_path, tokenizer_path=None, fix_eos_token_id=True):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -179,7 +179,7 @@ def write_model(model_path, input_base_path, tokenizer_path=None, safe_serializa
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     print("Saving in the Transformers format.")
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
     shutil.rmtree(tmp_model_path)
 
 
@@ -232,13 +232,11 @@ def main():
         dest="fix_eos_token_id",
         help="If set, does not change eos token id from 0 to 50279 if it is 0. Changing 0 to 50279 is a bug fix, so use this option with care.",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     # Different OLMo versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         tokenizer_path=args.tokenizer_json_path,
         fix_eos_token_id=args.fix_eos_token_id,
     )

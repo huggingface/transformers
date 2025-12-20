@@ -130,7 +130,7 @@ class Cohere2VisionCausalLMOutputWithPast(ModelOutput):
 class Cohere2VisionPreTrainedModel(PreTrainedModel):
     config: Cohere2VisionConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -208,7 +208,7 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
             )
         return special_image_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -282,7 +282,7 @@ class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, Genera
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

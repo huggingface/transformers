@@ -365,7 +365,7 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.config.pad_token_id = model.config.eos_token_id
 
         # use different length sentences to test batching
-        sentences = ["def hello_world():", "def greet(name):"]
+        sentences = ["def greetings(name):", "def hello_world():"]
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
@@ -380,20 +380,21 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=13,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
+            max_new_tokens=13,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_new_tokens=13)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=13)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
@@ -401,8 +402,8 @@ class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            'def hello_world():\n    print("Hello World")\n\nhellow_world()',
-            'def greet(name):\n    print(f"Hello {name}")\n\ng',
+            'def greetings(name):\n    print(f"Hello {name}")\n\n',
+            'def hello_world():\n    print("Hello World")\n\nhello_world()',
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -440,7 +441,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
             inputs = tokenizer("def hello_world():", return_tensors="pt").to(torch_device)
             expected_output = 'def hello_world():\n    print("Hello World")\n\nhello_world()\n\n'
 
-            output_ids = model.generate(**inputs, do_sample=False)
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=15)
             output_str = tokenizer.batch_decode(output_ids)[0]
 
             self.assertEqual(output_str, expected_output)
@@ -456,7 +457,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
 
         tokenized = tokenizer("def hello_world():", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
+        output_ids = model.generate(input_ids, do_sample=True, max_new_tokens=15)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         token_type_ids = tokenized.token_type_ids.to(torch_device)

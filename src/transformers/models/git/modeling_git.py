@@ -386,7 +386,7 @@ class GitEncoder(nn.Module):
 class GitPreTrainedModel(PreTrainedModel):
     config: GitConfig
     base_model_prefix = "git"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -396,6 +396,7 @@ class GitPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
             init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -408,6 +409,8 @@ class GitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, GitEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Git
@@ -807,7 +810,7 @@ class GitVisionTransformer(nn.Module):
 class GitVisionModel(GitPreTrainedModel):
     config: GitVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
     def __init__(self, config: GitVisionConfig):
@@ -827,6 +830,7 @@ class GitVisionModel(GitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Examples:
@@ -972,6 +976,7 @@ class GitModel(GitPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
         Examples:

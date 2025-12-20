@@ -17,7 +17,7 @@
 
 import copy
 import types
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
 from transformers.integrations.hub_kernels import (
@@ -43,6 +43,8 @@ from transformers.utils.import_utils import is_kernels_available
 if is_kernels_available():
     import kernels as kernels_pkg
     from kernels import Device, Mode, kernelize
+
+    import transformers.integrations.hub_kernels as hub_kernels_pkg
 
 
 @require_kernels
@@ -95,6 +97,7 @@ class TestHubKernels(TestCasePlus):
 
         self.EXPECTED_OUTPUT = set()
         self.EXPECTED_OUTPUT.add("Hello, I'm looking for a reliable and trustworthy online")
+        self.EXPECTED_OUTPUT.add("Hello! I'm excited to be a part of this")
 
         self.assertTrue(output in self.EXPECTED_OUTPUT)
 
@@ -249,7 +252,7 @@ class TestKernelUtilities(TestCasePlus):
                 self.assertIn(repo_id, {"kernels-community/causal-conv1d"})
                 return sentinel
 
-            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
             _KERNEL_MODULE_MAPPING.pop("causal-conv1d", None)
 
             mod1 = lazy_load_kernel("causal-conv1d")
@@ -286,7 +289,7 @@ class TestKernelUtilities(TestCasePlus):
             HUB[name] = {"repo_id": "kernels-community/causal-conv1d", "version": version_spec}  # type: ignore[assignment]
             _KERNEL_MODULE_MAPPING.pop(name, None)
 
-            def fake_get_kernel(repo_id, revision=None, version=None, user_agent=None):
+            def fake_get_kernel(repo_id, revision=None, version=None):
                 call_count["n"] += 1
                 self.assertEqual(repo_id, "kernels-community/causal-conv1d")
                 self.assertIsNone(revision, "revision must not be set when version is provided")
@@ -294,7 +297,7 @@ class TestKernelUtilities(TestCasePlus):
                 return sentinel_mod
 
             # Patch kernels.get_kernel so lazy_load_kernel picks it up on import
-            setattr(kernels_pkg, "get_kernel", fake_get_kernel)
+            setattr(hub_kernels_pkg, "get_kernel", fake_get_kernel)
 
             # Act
             mod1 = lazy_load_kernel(name)
@@ -321,7 +324,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
         with (
             patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj),
-            patch("transformers.integrations.hub_kernels.lazy_import_flash_attention", return_value=None),
+            patch("transformers.modeling_flash_attention_utils.lazy_import_flash_attention", return_value=None),
         ):
             attn_impl = "org/model"
             load_and_register_attn_kernel(attn_impl)
@@ -401,3 +404,74 @@ class TestUseKernelsLifecycle(TestCasePlus):
             self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
+
+
+@require_kernels
+class TestKernelMappingDeviceFiltering(TestCasePlus):
+    """Test that kernel mappings correctly filter by current device."""
+
+    def test_multi_device_mapping_filters_correctly(self):
+        """
+        Test that when a kernel_mapping contains multiple devices (cuda, rocm),
+        only the current device's kernel is registered.
+        Regression test for issue where ROCm overwrote CUDA mapping.
+        """
+        kernel_mapping = {
+            "RMSNorm": {
+                "cuda": "kernels-community/layer_norm:LlamaRMSNorm",
+                "rocm": "kernels-community/layer_norm:LlamaRMSNorm",
+            }
+        }
+
+        kernel_config = KernelConfig(kernel_mapping)
+
+        # Create a mock model on CUDA device
+        mock_model = MagicMock()
+        mock_model.training = False
+
+        # Mock parameter with CUDA device
+        mock_param = MagicMock()
+        mock_param.device.type = "cuda"
+        mock_model.parameters.return_value = iter([mock_param])
+
+        # Mock named_modules with RMSNorm layer
+        mock_layer = MagicMock()
+        mock_layer.kernel_layer_name = "RMSNorm"
+        mock_model.named_modules.return_value = [("layers.0", mock_layer)]
+
+        # Trigger the mapping creation
+        kernel_config.create_compatible_mapping(mock_model)
+
+        # Verify results
+        result_mapping = kernel_config.kernel_mapping
+
+        self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
+        backends = list(result_mapping["RMSNorm"].keys())
+
+        # Assert only CUDA is present, not ROCm
+        self.assertIn("cuda", backends, "CUDA backend should be registered")
+        self.assertNotIn("rocm", backends, "ROCm backend should NOT be registered on CUDA device")
+
+    def test_single_device_mapping_still_works(self):
+        """
+        Test that single-device mappings continue to work as expected.
+        """
+        kernel_mapping = {"RMSNorm": "kernels-community/layer_norm:LlamaRMSNorm"}
+
+        kernel_config = KernelConfig(kernel_mapping)
+
+        # Create a mock model
+        mock_model = MagicMock()
+        mock_model.training = False
+
+        mock_param = MagicMock()
+        mock_param.device.type = "cuda"
+        mock_model.parameters.return_value = iter([mock_param])
+
+        mock_layer = MagicMock()
+        mock_layer.kernel_layer_name = "RMSNorm"
+        mock_model.named_modules.return_value = [("layers.0", mock_layer)]
+        kernel_config.create_compatible_mapping(mock_model)
+
+        result_mapping = kernel_config.kernel_mapping
+        self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")

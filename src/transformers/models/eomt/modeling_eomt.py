@@ -988,7 +988,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
@@ -1020,6 +1020,13 @@ class EomtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=std)
             init.zeros_(module.register_tokens)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, EomtLoss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+        elif isinstance(module, EomtForUniversalSegmentation):
+            init.ones_(module.attn_mask_probs)
 
 
 @auto_docstring(
@@ -1085,7 +1092,7 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

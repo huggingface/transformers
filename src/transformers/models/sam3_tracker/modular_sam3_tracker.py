@@ -136,7 +136,12 @@ class Sam3TrackerFeedForward(Sam2FeedForward):
     pass
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model 3 (SAM 3) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
+    """
+)
 class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
@@ -144,6 +149,8 @@ class Sam3TrackerPreTrainedModel(Sam2PreTrainedModel):
         if isinstance(module, Sam3TrackerModel):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
+        elif isinstance(module, Sam3TrackerPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class Sam3TrackerPositionalEmbedding(Sam2PositionalEmbedding):
@@ -180,7 +187,7 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 class Sam3TrackerModel(Sam2Model):
     _checkpoint_conversion_mapping = {
-        "tracker_model.": "",
+        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
         "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
         "tracker_neck.": "vision_encoder.neck.",
     }

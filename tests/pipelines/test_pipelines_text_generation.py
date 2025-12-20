@@ -220,8 +220,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_chat_model_with_iterator_pt(self):
-        from transformers.pipelines.pt_utils import PipelineIterator
-
         text_generator = pipeline(
             task="text-generation",
             model="hf-internal-testing/tiny-gpt2-with-chatml-template",
@@ -253,7 +251,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             yield from [chat1, chat2]
 
         outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
-        assert isinstance(outputs, PipelineIterator)
         outputs = list(outputs)
         self.assertEqual(
             outputs,

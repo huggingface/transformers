@@ -56,6 +56,8 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am in Paris, but I am not in Paris\nToday I am")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am at the Luxembourg Congress Center\nToday I am in Paris and I")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -103,14 +105,10 @@ class QuarkTest(unittest.TestCase):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
 
-    def test_original_dtype(self):
+    def test_quantized_layers_class(self):
         r"""
-        A simple test to check if the model successfully stores the original dtype
+        A simple test to check if the model successfully changes the class type of the linear layers
         """
-        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
-
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
 
     def check_inference_correctness(self, model):

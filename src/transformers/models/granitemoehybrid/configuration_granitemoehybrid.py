@@ -18,7 +18,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -74,7 +74,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -92,6 +92,8 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
             allow the model to output the auxiliary loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001): router auxiliary loss coefficient
         shared_intermediate_size (`int`, *optional*, defaults to 1024): intermediate size for shared experts.
+        position_embedding_type (`str`, *optional*):
+            Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
         layer_types (`List`, *optional*): list of strings to be used as layer types.
             Allowed choices: "mamba", "attention".
         mamba_n_heads (`int`, *optional*, defaults to 128):
@@ -159,6 +161,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         shared_intermediate_size: Optional[int] = 1024,
+        position_embedding_type: Optional[str] = None,
         layer_types: Optional[list[str]] = None,
         mamba_n_heads: Optional[int] = 128,
         mamba_n_groups: Optional[int] = 1,
@@ -198,14 +201,8 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.shared_intermediate_size = shared_intermediate_size
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.position_embedding_type = position_embedding_type
+        self.rope_parameters = rope_parameters
 
         mamba_intermediate = mamba_expand * hidden_size
 

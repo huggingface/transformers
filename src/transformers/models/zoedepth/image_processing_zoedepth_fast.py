@@ -171,9 +171,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
             if do_normalize:
                 stacked_images = self.normalize(stacked_images, image_mean, image_std)
             resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        processed_images = torch.stack(resized_images, dim=0) if return_tensors else resized_images
+        processed_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

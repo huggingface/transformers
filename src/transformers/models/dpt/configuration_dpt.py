@@ -102,7 +102,7 @@ class DPTConfig(PreTrainedConfig):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
         neck_ignore_stages (`list[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
-        backbone_config (`Union[dict[str, Any], PreTrainedConfig]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `BitConfig()`):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
         backbone (`str`, *optional*):

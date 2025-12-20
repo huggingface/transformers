@@ -463,6 +463,8 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, BertGenerationOnlyLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, BertGenerationEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring(
@@ -504,7 +506,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

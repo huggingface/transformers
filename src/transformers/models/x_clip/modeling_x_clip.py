@@ -502,7 +502,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
 class XCLIPPreTrainedModel(PreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -512,11 +512,13 @@ class XCLIPPreTrainedModel(PreTrainedModel):
         if isinstance(module, XCLIPTextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -714,7 +716,7 @@ class XCLIPTextTransformer(nn.Module):
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
     config: XCLIPTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -737,6 +739,7 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -909,7 +912,7 @@ class XCLIPVisionTransformer(nn.Module):
 class XCLIPVisionModel(XCLIPPreTrainedModel):
     config: XCLIPVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)
@@ -927,6 +930,7 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
@@ -1340,6 +1344,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, XCLIPOutput]:
         r"""
         return_loss (`bool`, *optional*):

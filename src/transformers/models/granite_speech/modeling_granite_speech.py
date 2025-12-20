@@ -282,7 +282,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechConfig
-    input_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
@@ -293,6 +293,12 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GraniteSpeechEncoderProjector):
             init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
 
 
 @auto_docstring(
@@ -321,6 +327,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         self.post_init()
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
@@ -539,20 +551,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         self._hf_peft_config_loaded = False
         super().save_pretrained(save_directory, *args, **kwargs)
         self._hf_peft_config_loaded = prev_val
-
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        # save the model with the original weights format
-        return key.replace(".base_layer", ""), False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        if is_peft_available and self._hf_peft_config_loaded:
-            # state dict is only adapter, should keep the same
-            return state_dict
-        # rename back the base model state dict
-        return {
-            self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items() if ".lora_" not in key
-        }
 
     def _get_adapter_name(self):
         return list(self.peft_config.keys())[0]

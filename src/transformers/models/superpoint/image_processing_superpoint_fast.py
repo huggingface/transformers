@@ -110,8 +110,7 @@ class SuperPointImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.rescale(stacked_images, rescale_factor)
             processed_images_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(data={"pixel_values": processed_images})
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
         self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, list[tuple]]

@@ -474,6 +474,20 @@ class EncodecPreTrainedModel(PreTrainedAudioTokenizerBase):
                     init.xavier_uniform_(param)
                 elif "bias" in name:
                     init.constant_(param, 0.0)
+        elif isinstance(module, EncodecConv1d):
+            kernel_size = module.conv.kernel_size[0]
+            stride = torch.tensor(module.conv.stride[0], dtype=torch.int64)
+            dilation = module.conv.dilation[0]
+            # Effective kernel size with dilations.
+            kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
+            init.copy_(module.stride, stride)
+            init.copy_(module.kernel_size, kernel_size)
+            init.copy_(module.padding_total, kernel_size - stride)
+        elif isinstance(module, EncodecEuclideanCodebook):
+            init.copy_(module.inited, torch.Tensor([True]))
+            init.zeros_(module.cluster_size)
+            init.zeros_(module.embed)
+            init.zeros_(module.embed_avg)
 
 
 @auto_docstring(

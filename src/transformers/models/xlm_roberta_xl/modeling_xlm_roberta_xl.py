@@ -542,6 +542,9 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, XLMRobertaXLLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, XLMRobertaXLEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class XLMRobertaXLPooler(nn.Module):
@@ -597,7 +600,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

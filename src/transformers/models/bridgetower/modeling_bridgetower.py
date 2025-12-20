@@ -915,7 +915,7 @@ class BridgeTowerTextEmbeddings(nn.Module):
 class BridgeTowerPreTrainedModel(PreTrainedModel):
     config: BridgeTowerConfig
     base_model_prefix = "bridgetower"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
     _skip_keys_device_placement = "past_key_values"
@@ -943,6 +943,11 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, BridgeTowerForContrastiveLearning):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
+        elif isinstance(module, BridgeTowerVisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
+        elif isinstance(module, BridgeTowerTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
         if isinstance(module, (nn.Linear, BridgeTowerMLMHead)) and module.bias is not None:
             init.zeros_(module.bias)
@@ -950,17 +955,18 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
 
 class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerVisionConfig
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = BridgeTowerVisionTransformer(config)
+        self.post_init()
 
     @property
     def dtype(self):
         return self.visual.embeddings.patch_embedding.weight.dtype
 
-    def forward(self, image, image_mask=None, interpolate_pos_encoding=False):
+    def forward(self, image, image_mask=None, interpolate_pos_encoding=False, **kwargs):
         return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding)
 
 
@@ -980,7 +986,7 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
 )
 class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config: BridgeTowerTextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1223,6 +1229,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -1530,6 +1537,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -1630,6 +1638,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
@@ -1742,6 +1751,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BridgeTowerContrastiveOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):

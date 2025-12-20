@@ -18,11 +18,14 @@ import operator
 import os
 import re
 from functools import partial, reduce
-from typing import Optional
 
-import torch
-import torch.distributed as dist
-from torch import nn
+from ..utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed as dist
+    from torch import nn
 
 from ..distributed import DistributedConfig
 from ..utils import is_torch_greater_or_equal, logging
@@ -31,12 +34,12 @@ from ..utils.generic import GeneralInterface
 
 logger = logging.get_logger(__name__)
 
-# Cache this result has it's a C FFI call which can be pretty time-consuming
-_torch_distributed_available = torch.distributed.is_available()
+if is_torch_available():
+    # Cache this result has it's a C FFI call which can be pretty time-consuming
+    _torch_distributed_available = torch.distributed.is_available()
 
-
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+    if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+        from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
 
 
 def initialize_tensor_parallelism(
@@ -169,19 +172,20 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     return None
 
 
-str_to_dtype = {
-    "BOOL": torch.bool,
-    "U8": torch.uint8,
-    "I8": torch.int8,
-    "I16": torch.int16,
-    "F16": torch.float16,
-    "BF16": torch.bfloat16,
-    "I32": torch.int32,
-    "F32": torch.float32,
-    "F64": torch.float64,
-    "I64": torch.int64,
-    "F8_E4M3": torch.float8_e4m3fn,
-}
+if is_torch_available():
+    str_to_dtype = {
+        "BOOL": torch.bool,
+        "U8": torch.uint8,
+        "I8": torch.int8,
+        "I16": torch.int16,
+        "F16": torch.float16,
+        "BF16": torch.bfloat16,
+        "I32": torch.int32,
+        "F32": torch.float32,
+        "F64": torch.float64,
+        "I64": torch.int64,
+        "F8_E4M3": torch.float8_e4m3fn,
+    }
 
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
@@ -317,7 +321,7 @@ def repack_weights(
     return final_ordered_tensor
 
 
-def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: Optional[int] = None):
+def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
@@ -754,6 +758,24 @@ class PackedColwiseParallel(ColwiseParallel):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
+class LocalColwiseParallel(ColwiseParallel):
+    """
+    Colwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class ColwiseParallelReplicate(ColwiseParallel):
+    """
+    Colwise parallel with output layouts replicated.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(output_layouts=Replicate(), **kwargs)
+
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Partition a compatible nn.Module in a row-wise fashion. Currently supports nn.Linear and nn.Embedding.
@@ -778,7 +800,7 @@ class RowwiseParallel(TensorParallelLayer):
         input_layouts: Placement | None = None,
         output_layouts: Placement | None = None,
         use_local_output: bool = True,
-        use_dtensor=True,
+        use_dtensor: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -907,6 +929,33 @@ class PackedRowwiseParallel(RowwiseParallel):
         if self.use_dtensor:
             parameter = DTensor.from_local(parameter, device_mesh, [Shard(-1)], run_check=False)
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
+
+
+class LocalRowwiseParallel(RowwiseParallel):
+    """
+    Rowwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class LocalPackedRowwiseParallel(PackedRowwiseParallel):
+    """
+    Packed rowwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class RowwiseParallelReplicate(RowwiseParallel):
+    """
+    Rowwise parallel with input layouts replicated.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(input_layouts=Replicate(), **kwargs)
 
 
 class SequenceParallel(TensorParallelLayer):
@@ -1060,10 +1109,10 @@ class RouterParallel(TensorParallelLayer):
     Allows to reshape the router scores to support running expert parallel.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, use_dtensor: bool = False, *args, **kwargs):
         super().__init__(**kwargs)
         self.args = args
-        self.use_dtensor = False
+        self.use_dtensor = use_dtensor
 
     @staticmethod
     def _prepare_input_fn(input_layouts, desired_input_layouts, mod, inputs, device_mesh):
@@ -1114,7 +1163,7 @@ class RouterParallel(TensorParallelLayer):
                 f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
             )
         num_local_experts = mod.num_experts // ep_size
-        router_scores, router_indices = outputs
+        router_logits, router_scores, router_indices = outputs
         router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
         router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
         # As -1 % 1 is 0, we can only use mask fill when num_local_experts is 1
@@ -1125,7 +1174,7 @@ class RouterParallel(TensorParallelLayer):
         router_indices = router_indices.masked_fill(
             router_indices == -1, num_local_experts
         )  # masking class for one hot
-        return router_scores, router_indices
+        return router_logits, router_scores, router_indices
 
     def shard_tensor(
         self,
@@ -1165,13 +1214,13 @@ class ParallelInterface(GeneralInterface):
         {
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
-            "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
-            "rowwise_rep": RowwiseParallel(input_layouts=Replicate()),
-            "local_colwise": ColwiseParallel(use_dtensor=False),
-            "local_rowwise": RowwiseParallel(use_dtensor=False),
+            "colwise_rep": ColwiseParallelReplicate(),
+            "rowwise_rep": RowwiseParallelReplicate(),
+            "local_colwise": LocalColwiseParallel(),
+            "local_rowwise": LocalRowwiseParallel(),
             "local": IsolatedParallel(),
             "gather": GatherParallel(),
-            "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
+            "local_packed_rowwise": LocalPackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
             "grouped_gemm": GroupedGemmParallel(),

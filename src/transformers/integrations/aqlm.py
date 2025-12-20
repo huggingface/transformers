@@ -13,88 +13,58 @@
 # limitations under the License.
 "AQLM (Additive Quantization of Language Model) integration file"
 
-from ..utils import ACCELERATE_MIN_VERSION, is_accelerate_available, is_aqlm_available, is_torch_available
+from ..quantizers.quantizers_utils import should_convert_module
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
+    import torch
     import torch.nn as nn
 
+logger = logging.get_logger(__name__)
 
-def replace_with_aqlm_linear(
-    model,
-    quantization_config=None,
-    linear_weights_not_to_quantize=None,
-    current_key_name=None,
-    has_been_replaced=False,
-):
+
+def replace_with_aqlm_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
     """
     Public method that recursively replaces the Linear layers of the given model with AQLM quantized layers.
-    `accelerate` is needed to use this method. Returns the converted model and a boolean that indicates if the
-    conversion has been successful or not.
 
     Args:
         model (`torch.nn.Module`):
             The model to convert, can be any `torch.nn.Module` instance.
-        quantization_config (`AqlmConfig`):
-            The quantization config object that contains the quantization parameters.
-        linear_weights_not_to_quantize (`list[str]`, *optional*):
+        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
             A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
             converted.
-        current_key_name (`list`, *optional*):
-            A list that contains the current key name. This is used for recursion and should not be passed by the user.
-        has_been_replaced (`bool`, *optional*):
-            A boolean that indicates if the conversion has been successful or not. This is used for recursion and
-            should not be passed by the user.
+        quantization_config (`AqlmConfig`):
+            The quantization config object that contains the quantization parameters.
     """
-    if not is_aqlm_available():
-        raise ValueError("AQLM is not available. Please install it with `pip install aqlm[cpu,gpu]`")
-
-    if not is_accelerate_available():
-        raise ValueError(
-            f"AQLM requires Accelerate to be installed: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-        )
-
-    if linear_weights_not_to_quantize is None:
-        linear_weights_not_to_quantize = []
-
-    from accelerate import init_empty_weights
     from aqlm import QuantizedLinear
 
-    for name, module in model.named_children():
-        if current_key_name is None:
-            current_key_name = []
-        current_key_name.append(name)
+    has_been_replaced = False
+    # we need this to correctly materialize the weights during quantization
+    for module_name, module in model.named_modules():
+        if not should_convert_module(module_name, modules_to_not_convert):
+            continue
+        with torch.device("meta"):
+            if isinstance(module, nn.Linear):
+                new_module = QuantizedLinear(
+                    module.in_features,
+                    module.out_features,
+                    bias=module.bias is not None,
+                    in_group_size=quantization_config.in_group_size,
+                    out_group_size=quantization_config.out_group_size,
+                    num_codebooks=quantization_config.num_codebooks,
+                    nbits_per_codebook=quantization_config.nbits_per_codebook,
+                )
+                new_module.source_cls = type(module)
+                new_module.requires_grad_(False)
+                model.set_submodule(module_name, new_module)
+                has_been_replaced = True
 
-        if isinstance(module, nn.Linear):
-            # Check if the current key is not in the `linear_weights_not_to_quantize`
-            if ".".join(current_key_name) + ".weight" not in linear_weights_not_to_quantize:
-                with init_empty_weights():
-                    in_features = module.in_features
-                    out_features = module.out_features
+    if not has_been_replaced:
+        logger.warning(
+            "You are loading your model using eetq but no linear modules were found in your model."
+            " Please double check your model architecture, or submit an issue on github if you think this is"
+            " a bug."
+        )
 
-                    model._modules[name] = QuantizedLinear(
-                        in_features,
-                        out_features,
-                        bias=module.bias is not None,
-                        in_group_size=quantization_config.in_group_size,
-                        out_group_size=quantization_config.out_group_size,
-                        num_codebooks=quantization_config.num_codebooks,
-                        nbits_per_codebook=quantization_config.nbits_per_codebook,
-                    )
-                    has_been_replaced = True
-
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
-        if len(list(module.children())) > 0:
-            _, has_been_replaced = replace_with_aqlm_linear(
-                module,
-                quantization_config=quantization_config,
-                linear_weights_not_to_quantize=linear_weights_not_to_quantize,
-                current_key_name=current_key_name,
-                has_been_replaced=has_been_replaced,
-            )
-        # Remove the last key for recursion
-        current_key_name.pop(-1)
-    return model, has_been_replaced
+    return model

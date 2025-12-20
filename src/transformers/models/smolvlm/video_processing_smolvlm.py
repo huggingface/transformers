@@ -331,7 +331,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
             pixel_attention_mask = reorder_videos(processed_padded_mask_grouped, grouped_videos_index)
 
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
         data = {"pixel_values": processed_videos}
 
         if do_pad:

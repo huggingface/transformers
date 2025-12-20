@@ -249,11 +249,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
-    input_modalities = "image"
+    input_modalities = ("image",)
 
 
 class GotOcr2MultiModalProjector(nn.Module):

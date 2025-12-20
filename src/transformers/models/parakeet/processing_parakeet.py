@@ -28,6 +28,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
+            "return_attention_mask": True,
         },
         "text_kwargs": {
             "padding": True,

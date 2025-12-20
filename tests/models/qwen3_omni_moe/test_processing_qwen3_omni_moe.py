@@ -14,20 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
-import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
-    Qwen2TokenizerFast,
     Qwen3OmniMoeProcessor,
-    WhisperFeatureExtractor,
 )
 from transformers.testing_utils import (
     require_av,
@@ -37,16 +31,13 @@ from transformers.testing_utils import (
     require_torchvision,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from transformers import Qwen2VLImageProcessorFast
 
 
 @require_vision
@@ -55,271 +46,26 @@ if is_vision_available():
 @require_torchvision
 class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3OmniMoeProcessor
+    model_id = "Qwen/Qwen2.5-Omni-7B"
 
-    #  text + audio kwargs testing
-    @require_torch
-    def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-        feature_extractor = self.get_component("feature_extractor")
-        if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer(max_length=800, padding="max_length")
-        elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer", max_length=800, padding="max_length")
-        else:
-            self.assertTrue(False, "Processor doesn't have get_tokenizer or get_component defined")
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
-        raw_speech = self.prepare_audio_inputs()
-        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
-        if "input_ids" in inputs:
-            self.assertEqual(len(inputs["input_ids"][0]), 800)
-        elif "labels" in inputs:
-            self.assertEqual(len(inputs["labels"][0]), 800)
-
-    @require_torch
-    @require_vision
-    def test_structured_kwargs_audio_nested(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-        feature_extractor = self.get_component("feature_extractor")
-        if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer()
-        elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer")
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer"]
-        raw_speech = self.prepare_audio_inputs()
-
-        # Define the kwargs for each modality
-        all_kwargs = {
-            "common_kwargs": {"return_tensors": "pt"},
-            "audio_kwargs": {"max_length": 800},
-        }
-
-        inputs = processor(text=input_str, audio=raw_speech, **all_kwargs)
-        if "input_ids" in inputs:
-            self.assertEqual(len(inputs["input_ids"][0]), 2)
-        elif "labels" in inputs:
-            self.assertEqual(len(inputs["labels"][0]), 2)
-
-    @require_torch
-    def test_unstructured_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-        feature_extractor = self.get_component("feature_extractor")
-        if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer(max_length=117)
-        elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer", max_length=117)
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = "lower newer"
-        raw_speech = self.prepare_audio_inputs()
-        inputs = processor(
-            text=input_str,
-            audio=raw_speech,
-            return_tensors="pt",
-            padding="max_length",
-            max_length=800,
-        )
-
-        if "input_ids" in inputs:
-            self.assertEqual(len(inputs["input_ids"][0]), 800)
-        elif "labels" in inputs:
-            self.assertEqual(len(inputs["labels"][0]), 800)
-
-    @require_torch
-    def test_doubly_passed_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-        feature_extractor = self.get_component("feature_extractor")
-        if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer()
-        elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer")
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        _ = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )  # Why delete test? TODO: raushan double check tests after cleaning model
-
-    @require_torch
-    def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.get_attributes():
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-        feature_extractor = self.get_component("feature_extractor")
-        if hasattr(self, "get_tokenizer"):
-            tokenizer = self.get_tokenizer(max_length=117)
-        elif hasattr(self, "get_component"):
-            tokenizer = self.get_component("tokenizer", max_length=117)
-        if not tokenizer.pad_token:
-            tokenizer.pad_token = "[TEST_PAD]"
-        if "image_processor" not in self.processor_class.get_attributes():
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        image_processor = self.get_component("image_processor")
-        video_processor = self.get_component("video_processor")
-        _ = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class.from_pretrained(
+            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
         )
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-        processor.image_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
-        processor.video_processor.size = {"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_video_processor(cls):
+        video_processor_class = cls._get_component_class_from_processor("video_processor")
+        return video_processor_class.from_pretrained(
+            cls.model_id, size={"shortest_edge": 28 * 28, "longest_edge": 56 * 56}
+        )
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_feature_extractor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    def prepare_audio_inputs(self):
+    def prepare_audio_inputs(self, batch_size: int = 3):
         """This function prepares a list of numpy audios."""
-        audio_inputs = [np.random.rand(160000) * 2 - 1] * 3  # batch-size=3
+        audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
         return audio_inputs
-
-    def test_save_load_pretrained_default(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        video_processor = self.get_video_processor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        processor.save_pretrained(self.tmpdirname)
-        processor = Qwen3OmniMoeProcessor.from_pretrained(self.tmpdirname, use_fast=True)
-
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.tokenizer, Qwen2TokenizerFast)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessorFast)
-        self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
-
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        video_processor = self.get_video_processor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        image_input = self.prepare_image_inputs()
-
-        input_image_proc = image_processor(image_input, return_tensors="pt")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
-
-        for key in input_image_proc:
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
-        video_processor = self.get_video_processor()
-        processor = self.processor_class(
-            tokenizer=tokenizer,
-            video_processor=video_processor,
-            feature_extractor=feature_extractor,
-            image_processor=image_processor,
-        )
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-        audio_input = self.prepare_audio_inputs()
-        inputs = processor(text=input_str, images=image_input, audio=audio_input)
-        keys = list(inputs.keys())
-        self.assertListEqual(
-            keys,
-            [
-                "input_ids",
-                "attention_mask",
-                "pixel_values",
-                "image_grid_thw",
-                "feature_attention_mask",
-                "input_features",
-            ],
-        )
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
-        # test if it raises when no text is passed
-        with pytest.raises(ValueError):
-            processor(images=image_input)
 
     @require_torch
     def _test_apply_chat_template(

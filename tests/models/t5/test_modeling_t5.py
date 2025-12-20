@@ -47,6 +47,7 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
+        GenerationConfig,
         T5EncoderModel,
         T5ForConditionalGeneration,
         T5ForQuestionAnswering,
@@ -932,7 +933,17 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
 
 def use_task_specific_params(model, task):
-    model.config.update(model.config.task_specific_params[task])
+    task_params = model.config.task_specific_params[task]
+
+    # Get all valid GenerationConfig attributes
+    temp_config = GenerationConfig()
+    generation_config_attrs = set(temp_config.to_dict().keys())
+
+    for key, value in task_params.items():
+        if key in generation_config_attrs:
+            setattr(model.generation_config, key, value)
+        else:
+            setattr(model.config, key, value)
 
 
 @require_torch
@@ -1032,14 +1043,11 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_generation(self):
         model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
-        model.config.max_length = 8
-        model.config.num_beams = 1
-        model.config.do_sample = False
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="pt").input_ids.to(torch_device)
 
-        sequences = model.generate(input_ids)
+        sequences = model.generate(input_ids, max_length=8, num_beams=1, do_sample=False)
 
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
         self.assertTrue(output_str == "Hello there!")

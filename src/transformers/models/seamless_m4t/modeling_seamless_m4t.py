@@ -287,18 +287,17 @@ class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
         super().__init__()
         self.max_len = config.max_source_positions
         self.d_model = config.hidden_size
-        self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
+        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
 
-    def extend_pe(self, x):
+    def extend_pe(self, x, pe=None):
         # Reset the positional encodings
-        if self.pe is not None:
+        if pe is not None:
             # self.pe contains both positive and negative parts
             # the length of self.pe is 2 * input_len - 1
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
-                if self.pe.dtype != x.dtype or self.pe.device != x.device:
-                    self.pe = self.pe.to(dtype=x.dtype, device=x.device)
-                return
+            if pe.size(1) >= x.size(1) * 2 - 1:
+                if pe.dtype != x.dtype or pe.device != x.device:
+                    pe = pe.to(dtype=x.dtype, device=x.device)
+                return pe
         # Suppose `i` is the position of query vector and `j` is the
         # position of key vector. We use positive relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
@@ -319,10 +318,10 @@ class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
         pe_negative = pe_negative[1:].unsqueeze(0)
         pe = torch.cat([pe_positive, pe_negative], dim=1)
-        self.pe = pe.to(device=x.device, dtype=x.dtype)
+        return pe.to(device=x.device, dtype=x.dtype)
 
     def forward(self, hidden_states: torch.Tensor):
-        self.extend_pe(hidden_states)
+        self.pe = self.extend_pe(hidden_states, self.pe)
         start_idx = self.pe.size(1) // 2 - hidden_states.size(1) + 1
         end_idx = self.pe.size(1) // 2 + hidden_states.size(1)
         relative_position_embeddings = self.pe[:, start_idx:end_idx]
@@ -884,13 +883,14 @@ class SeamlessM4TScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale
 
 
-# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
+# Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding with M2M100->SeamlessM4T
 class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -1375,11 +1375,27 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, SeamlessM4TSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
+        elif isinstance(module, SeamlessM4TConformerRotaryPositionalEmbedding):
+            dim = self.config.hidden_size // self.config.speech_encoder_attention_heads
+            base = self.config.rotary_embedding_base
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, SeamlessM4TConformerRelPositionalEmbedding):
+            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
@@ -1770,6 +1786,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1914,6 +1931,7 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2035,6 +2053,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel, 
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2354,7 +2373,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         return input_lengths
 
     def forward(
-        self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor
+        self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor, **kwargs
     ) -> tuple[torch.Tensor]:
         """
         Args:
@@ -2940,7 +2959,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -2996,6 +3015,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3259,7 +3279,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 )
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     input_modalities = "audio"
-    output_modalities = "audio"
+    output_modalities = ("audio",)
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -3581,8 +3601,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
     """
 )
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
-    input_modalities = ["audio", "text"]
-    output_modalities = ["audio", "text"]
+    input_modalities = ("audio", "text")
+    output_modalities = ("audio", "text")
     _tied_weights_keys = {
         "lm_head.weight": "shared.weight",
         "text_encoder.embed_tokens.weight": "shared.weight",
