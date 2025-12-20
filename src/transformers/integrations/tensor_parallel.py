@@ -39,7 +39,7 @@ if is_torch_available():
     _torch_distributed_available = torch.distributed.is_available()
 
     if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-        from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+        from torch.distributed.tensor import DTensor, Partial, Placement, Replicate, Shard
 
 
 def initialize_tensor_parallelism(
@@ -487,7 +487,7 @@ class TensorParallelLayer:
 # you name it. Whatever you want to do that is a bit unconventional, you need local tensors
 class GatherParallel(TensorParallelLayer):
     """
-    Simple class used to define the hooks to add to a layer when we just want to gather the outputs
+    Simple class used to define the hooks to add to a layer when we just want to gather the outputs.
     """
 
     def __init__(
@@ -499,7 +499,7 @@ class GatherParallel(TensorParallelLayer):
     ):
         super().__init__(**kwargs)
         self.input_layouts = (input_layouts or Replicate(),)
-        self.output_layouts = output_layouts
+        self.output_layouts = (output_layouts or Replicate(),)
         self.desired_input_layouts = (Replicate(),)
         self.use_local_output = use_local_output
 
@@ -512,10 +512,19 @@ class GatherParallel(TensorParallelLayer):
 
     @staticmethod
     def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+        use_local_output = use_local_output if use_local_output is not None else True
         if isinstance(outputs, torch.Tensor):
-            dist.all_reduce(outputs, op=dist.ReduceOp.SUM, async_op=False)
+            outputs = DTensor.from_local(outputs, device_mesh, [Partial()], run_check=False)
+            outputs = outputs.redistribute(placements=(Replicate(),), async_op=False)
+            if use_local_output:
+                outputs = outputs.to_local()
         else:
-            dist.all_reduce(outputs[0], op=dist.ReduceOp.SUM, async_op=False)
+            output_tensor = outputs[0]
+            output_tensor = DTensor.from_local(output_tensor, device_mesh, [Partial()], run_check=False)
+            output_tensor = output_tensor.redistribute(placements=(Replicate(),), async_op=False)
+            if use_local_output:
+                output_tensor = output_tensor.to_local()
+            outputs = (output_tensor,) + outputs[1:]
         return outputs
 
     def shard_tensor(
