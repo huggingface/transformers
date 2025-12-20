@@ -16,14 +16,14 @@ jobs:
     name: "Add new model like template tests"
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache
         with:
           path: ~/venv/
@@ -74,7 +74,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: run_all_tests_new_models_test_reports
           path: reports/tests_new_models

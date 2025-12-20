@@ -56,7 +56,7 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
@@ -77,7 +77,7 @@ jobs:
             echo "process=false" >> $GITHUB_OUTPUT
           fi
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         if: ${{ env.process == 'true' }}
         with:
           pattern: setup_values*
@@ -113,7 +113,7 @@ jobs:
       - name: Extract the base commit on `main` (of the merge commit created by Github) if it is a PR
         id: pr_info
         if: ${{ env.process == 'true' && inputs.pr_number != '' }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |            
             const { data: pr } = await github.rest.pulls.get({
@@ -194,7 +194,7 @@ jobs:
           cat "new_failures_with_bad_commit_${job}_${run_idx}.json"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}_${{ matrix.run_idx }}.json
@@ -211,12 +211,12 @@ jobs:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: ci_results_${{ inputs.job }}
           path: /transformers/ci_results_${{ inputs.job }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: new_failures_with_bad_commit_${{ inputs.job }}*
           path: /transformers/new_failures_with_bad_commit_${{ inputs.job }}
@@ -280,7 +280,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: new_failures_with_bad_commit_${{ inputs.job }}
           path: /transformers/new_failures_with_bad_commit.json

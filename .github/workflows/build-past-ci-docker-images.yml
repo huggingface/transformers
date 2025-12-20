@@ -24,7 +24,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         id: get-base-image
         name: Get Base Image
@@ -69,7 +69,7 @@ jobs:
         uses: docker/setup-buildx-action@v2
       -
         name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       -
         id: get-base-image
         name: Get Base Image
