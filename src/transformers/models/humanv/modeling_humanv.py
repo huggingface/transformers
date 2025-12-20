@@ -16,31 +16,30 @@ logger = logging.get_logger(__name__)
 class HumanVRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.weight = nn.Parameter(torch.ones(hidden_size, dtype=torch.float32))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return self.weight * hidden_states
 
 class HumanVRotaryEmbedding(nn.Module):
     def __init__(self, config: HumanVConfig, device=None):
         super().__init__()
         dim = config.head_dim
         base = config.rope_parameters.get("rope_theta", 10000.0) if config.rope_parameters else 10000.0
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float32) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-        freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+        inv_freq_expanded = self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].to(device=x.device, dtype=torch.float32)
+        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+        return emb.cos().to(dtype=torch.float32, device=x.device), emb.sin().to(dtype=torch.float32, device=x.device)
 
 def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
@@ -63,6 +62,7 @@ class HumanVMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        x = x.to(torch.float32)
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -112,13 +112,16 @@ class HumanVAttention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.to(torch.float32)
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
+        key_states = self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
+        value_states = self.v_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
 
         cos, sin = position_embeddings
+        cos = cos.to(dtype=torch.float32, device=query_states.device)
+        sin = sin.to(dtype=torch.float32, device=query_states.device)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -127,19 +130,19 @@ class HumanVAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_scores = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scaling
+        attn_scores = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
         if attention_mask is not None:
-            attn_scores = attn_scores + attention_mask.to(dtype=torch.float32)
+            attn_scores = attn_scores + attention_mask.to(dtype=torch.float32, device=attn_scores.device)
 
         attn_probs = nn.functional.softmax(attn_scores, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.attention_dropout, training=self.training)
 
-        attn_output = torch.matmul(attn_probs, value_states.float()).to(dtype=query_states.dtype)
+        attn_output = torch.matmul(attn_probs, value_states)
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
-        return self.o_proj(attn_output), attn_probs.to(dtype=query_states.dtype)
+        return self.o_proj(attn_output), attn_probs
 
 class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
@@ -158,7 +161,8 @@ class HumanVDecoderLayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ) -> torch.Tensor:
-        
+        hidden_states = hidden_states.to(torch.float32)
+
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -208,22 +212,23 @@ class HumanVModel(HumanVPreTrainedModel):
         self.post_init()
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # SAFE MASKING FOR TPU: Use -1e9 instead of -inf
-        batch_size, seq_length = input_shape
+        batch_size, tgt_len = input_shape
         device = inputs_embeds.device
-        
+        dtype = torch.float32
+        src_len = tgt_len + past_key_values_length
+
         causal_mask = torch.triu(
-            torch.full((seq_length, seq_length), -1e9, device=device), diagonal=1
+            torch.full((tgt_len, src_len), -1e9, device=device, dtype=dtype),
+            diagonal=1 + past_key_values_length,
         )
-        
+
         expanded_mask = causal_mask[None, None, :, :]
-        
+
         if attention_mask is not None:
-            expanded_attn_mask = attention_mask[:, None, None, :].to(device)
-            # Invert and scale with safe negative number
+            expanded_attn_mask = attention_mask[:, None, None, :].to(device=device, dtype=dtype)
             inverted_mask = (1.0 - expanded_attn_mask) * -1e9
             expanded_mask = expanded_mask + inverted_mask
-            
+
         return expanded_mask
 
     def forward(
@@ -235,20 +240,21 @@ class HumanVModel(HumanVPreTrainedModel):
         use_cache: Optional[bool] = None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
-        
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            
+
+        inputs_embeds = inputs_embeds.to(torch.float32)
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
         batch_size, seq_length = inputs_embeds.shape[:2]
-        
+
         if past_key_values is not None:
             past_length = past_key_values.get_seq_length()
         else:
             past_length = 0
-            
+
         position_ids = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=inputs_embeds.device)
         position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
@@ -298,16 +304,14 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
-        
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
-        # Force FP32 casting for Logits to avoid Loss NaN
-        logits = self.lm_head(hidden_states).float()
+        hidden_states = outputs.last_hidden_state.to(torch.float32)
+        logits = self.lm_head(hidden_states).to(torch.float32)
 
         loss = None
         if labels is not None:
@@ -322,7 +326,7 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
         )
-    
+
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
