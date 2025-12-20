@@ -133,7 +133,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
 
-    # Method for resize bicubic interpolation
+
     def resize(
         self,
         image: np.ndarray,
