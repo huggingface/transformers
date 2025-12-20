@@ -16,14 +16,15 @@ logger = logging.get_logger(__name__)
 class HumanVRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size, dtype=torch.float32))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states
+        return self.weight * hidden_states.to(input_dtype)
 
 class HumanVRotaryEmbedding(nn.Module):
     def __init__(self, config: HumanVConfig, device=None):
@@ -39,7 +40,7 @@ class HumanVRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].to(device=x.device, dtype=torch.float32)
         freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        return emb.cos().to(dtype=torch.float32, device=x.device), emb.sin().to(dtype=torch.float32, device=x.device)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
@@ -62,7 +63,6 @@ class HumanVMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        x = x.to(torch.float32)
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -112,16 +112,13 @@ class HumanVAttention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.to(torch.float32)
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
-        key_states = self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
-        value_states = self.v_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2).to(torch.float32)
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        cos = cos.to(dtype=torch.float32, device=query_states.device)
-        sin = sin.to(dtype=torch.float32, device=query_states.device)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -131,18 +128,21 @@ class HumanVAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_scores = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_scores = attn_scores.to(torch.float32)
 
         if attention_mask is not None:
-            attn_scores = attn_scores + attention_mask.to(dtype=torch.float32, device=attn_scores.device)
+            attn_scores = attn_scores + attention_mask.to(dtype=torch.float32)
 
         attn_probs = nn.functional.softmax(attn_scores, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.attention_dropout, training=self.training)
 
-        attn_output = torch.matmul(attn_probs, value_states)
+        attn_probs_bf16 = attn_probs.to(dtype=query_states.dtype)
+        attn_output = torch.matmul(attn_probs_bf16, value_states)
+
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, -1)
 
-        return self.o_proj(attn_output), attn_probs
+        return self.o_proj(attn_output), attn_probs_bf16
 
 class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
@@ -161,8 +161,6 @@ class HumanVDecoderLayer(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ) -> torch.Tensor:
-        hidden_states = hidden_states.to(torch.float32)
-
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
@@ -215,7 +213,8 @@ class HumanVModel(HumanVPreTrainedModel):
         batch_size, tgt_len = input_shape
         device = inputs_embeds.device
         dtype = torch.float32
-        src_len = tgt_len + past_key_values_length
+
+        src_len = attention_mask.shape[-1] if attention_mask is not None else (tgt_len + past_key_values_length)
 
         causal_mask = torch.triu(
             torch.full((tgt_len, src_len), -1e9, device=device, dtype=dtype),
@@ -242,8 +241,6 @@ class HumanVModel(HumanVPreTrainedModel):
     ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        inputs_embeds = inputs_embeds.to(torch.float32)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -310,8 +307,8 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state.to(torch.float32)
-        logits = self.lm_head(hidden_states).to(torch.float32)
+        hidden_states = outputs.last_hidden_state
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:
@@ -337,9 +334,14 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             "use_cache": kwargs.get("use_cache", True),
         }
 
-class HumanVForSequenceClassification(HumanVPreTrainedModel): pass
-class HumanVForTokenClassification(HumanVPreTrainedModel): pass
-class HumanVForQuestionAnswering(HumanVPreTrainedModel): pass
+class HumanVForSequenceClassification(HumanVPreTrainedModel):
+    pass
+
+class HumanVForTokenClassification(HumanVPreTrainedModel):
+    pass
+
+class HumanVForQuestionAnswering(HumanVPreTrainedModel):
+    pass
 
 __all__ = [
     "HumanVForCausalLM",
