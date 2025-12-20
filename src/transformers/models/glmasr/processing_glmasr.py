@@ -29,14 +29,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "audio_kwargs": {
-            "max_source_positions": 1500,
-        },
-    }
+    _defaults = {}
 
 
 class GlmasrProcessor(ProcessorMixin):

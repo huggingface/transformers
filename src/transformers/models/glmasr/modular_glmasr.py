@@ -20,7 +20,6 @@ import numpy as np
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -29,12 +28,14 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoConfig
 from ..glm4.modeling_glm4 import apply_rotary_pos_emb
+from ..glm4v.modeling_glm4v import Glm4vVisionRotaryEmbedding
 from ..voxtral.configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 from ..voxtral.modeling_voxtral import (
     VoxtralAttention,
     VoxtralEncoder,
     VoxtralEncoderLayer,
     VoxtralForConditionalGeneration,
+    VoxtralMultiModalProjector,
     VoxtralPreTrainedModel,
     eager_attention_forward,
 )
@@ -43,18 +44,8 @@ from ..voxtral.modeling_voxtral import (
 logger = logging.get_logger(__name__)
 
 
-class GlmasrAudioRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+class GlmasrAudioRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+    pass
 
 
 class GlmasrEncoderConfig(VoxtralEncoderConfig):
@@ -437,18 +428,11 @@ class GlmasrEncoder(VoxtralEncoder):
         )
 
 
-class GlmasrMultiModalProjector(nn.Module):
+class GlmasrMultiModalProjector(VoxtralMultiModalProjector):
     def __init__(self, config: GlmasrConfig):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.hidden_size * 4, config.text_config.hidden_size * 2)
-        self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
-
-    def forward(self, audio_features):
-        hidden_states = self.linear_1(audio_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
 
 
 class GlmasrForConditionalGeneration(VoxtralForConditionalGeneration):
@@ -456,14 +440,7 @@ class GlmasrForConditionalGeneration(VoxtralForConditionalGeneration):
 
 
 class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "audio_kwargs": {
-            "max_source_positions": 1500,
-        },
-    }
+    _defaults = {}
 
 
 class GlmasrProcessor(ProcessorMixin):
