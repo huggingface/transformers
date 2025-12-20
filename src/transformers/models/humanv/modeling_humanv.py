@@ -112,18 +112,14 @@ class HumanVAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
-
+        attn_scores = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scaling
         if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        # FORCE FLOAT32 FOR SOFTMAX (Critical for TPU)
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+            attn_scores = attn_scores + attention_mask  # مطمئن باش attention_mask هم float32 باشه
+        attn_probs = torch.softmax(attn_scores, dim=-1)  # float32
+        attn_probs = nn.functional.dropout(attn_probs, p=self.attention_dropout, training=self.training)
         
-        attn_output = torch.matmul(attn_weights, value_states)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = torch.matmul(attn_probs, value_states.float())  # float32
+        attn_output = attn_output.to(query_states.dtype)
         
         return self.o_proj(attn_output), attn_weights
 
