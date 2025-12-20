@@ -83,10 +83,26 @@ class HumanVAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
+        )
 
     def forward(
         self,
@@ -96,9 +112,8 @@ class HumanVAttention(nn.Module):
         past_key_values: Optional[Cache] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        
         bsz, q_len, _ = hidden_states.size()
-        
+
         query_states = self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
@@ -113,15 +128,18 @@ class HumanVAttention(nn.Module):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         attn_scores = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scaling
+
         if attention_mask is not None:
-            attn_scores = attn_scores + attention_mask  # مطمئن باش attention_mask هم float32 باشه
-        attn_probs = torch.softmax(attn_scores, dim=-1)  # float32
+            attn_scores = attn_scores + attention_mask.to(dtype=torch.float32)
+
+        attn_probs = nn.functional.softmax(attn_scores, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.attention_dropout, training=self.training)
-        
-        attn_output = torch.matmul(attn_probs, value_states.float())  # float32
-        attn_output = attn_output.to(query_states.dtype)
-        
-        return self.o_proj(attn_output), attn_weights
+
+        attn_output = torch.matmul(attn_probs, value_states.float()).to(dtype=query_states.dtype)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+
+        return self.o_proj(attn_output), attn_probs.to(dtype=query_states.dtype)
 
 class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
