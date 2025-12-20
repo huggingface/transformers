@@ -989,9 +989,10 @@ def pipeline(
                     feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
                 )
 
+                feature_extractor_type = feature_extractor.to_dict().get("feature_extractor_type", None)
                 if (
-                    feature_extractor._processor_class
-                    and feature_extractor._processor_class.endswith("WithLM")
+                    feature_extractor_type
+                    and feature_extractor_type.endswith("WithLM")
                     and isinstance(model_name, str)
                 ):
                     try:
