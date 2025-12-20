@@ -81,7 +81,8 @@ class HumanVAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        
+        self.is_causal = True
+
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -111,14 +112,12 @@ class HumanVAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # 1. Attention Scores
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
 
-        # 2. Apply Mask (Standard Llama/Qwen Style: Mask is prepared in Model)
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
-        # 3. Softmax (Force Float32 for TPU Stability)
+        # FORCE FLOAT32 FOR SOFTMAX (Critical for TPU)
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         
@@ -194,33 +193,21 @@ class HumanVModel(HumanVPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    # =========================================================================
-    # STANDARD MASK PREPARATION (Llama Style, TPU Safe)
-    # =========================================================================
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # 1. Create Causal Mask (Triangular)
-        # Using standard torch.triu which works everywhere
+        # SAFE MASKING FOR TPU: Use -1e9 instead of -inf
         batch_size, seq_length = input_shape
         device = inputs_embeds.device
         
-        # [Seq, Seq]
         causal_mask = torch.triu(
-            torch.full((seq_length, seq_length), float("-inf"), device=device), diagonal=1
+            torch.full((seq_length, seq_length), -1e9, device=device), diagonal=1
         )
         
-        # [1, 1, Seq, Seq] for broadcasting
         expanded_mask = causal_mask[None, None, :, :]
         
-        # 2. Combine with Padding Mask (if provided)
         if attention_mask is not None:
-            # attention_mask comes as [Batch, Seq] where 1 is keep, 0 is mask
-            # Expand to [Batch, 1, 1, Seq]
             expanded_attn_mask = attention_mask[:, None, None, :].to(device)
-            # Invert: 1.0 (keep) becomes 0.0, 0.0 (mask) becomes -inf
-            inverted_mask = (1.0 - expanded_attn_mask) * torch.finfo(inputs_embeds.dtype).min
-            
-            # Combine: Causal + Padding
-            # Note: causal mask is already -inf in upper triangle.
+            # Invert and scale with safe negative number
+            inverted_mask = (1.0 - expanded_attn_mask) * -1e9
             expanded_mask = expanded_mask + inverted_mask
             
         return expanded_mask
@@ -251,11 +238,9 @@ class HumanVModel(HumanVPreTrainedModel):
         position_ids = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=inputs_embeds.device)
         position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
-        # Create RoPE embeddings
         cos, sin = self.rotary_emb(inputs_embeds, position_ids)
         position_embeddings = (cos, sin)
 
-        # Prepare Mask (Centralized Standard Logic)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_length
         )
@@ -307,7 +292,8 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states)
+        # Force FP32 casting for Logits to avoid Loss NaN
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:
