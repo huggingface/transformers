@@ -49,6 +49,7 @@ class HumanVRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
+        # TPU Optimization: Ensure device consistency
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
@@ -118,6 +119,7 @@ class HumanVAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        # Qwen3 Norm
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
@@ -135,6 +137,7 @@ class HumanVAttention(nn.Module):
         curr_seq_len = query_states.shape[-2]
         kv_seq_len = key_states.shape[-2]
         
+        # Ensure mask is on the same device as weights (Crucial for TPU)
         causal_mask = torch.triu(
             torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool), 
             diagonal=kv_seq_len - curr_seq_len + 1
@@ -150,8 +153,15 @@ class HumanVAttention(nn.Module):
         else:
             final_mask = causal_mask
 
+        # ==============================================================
+        # TPU FIX: Use masked_fill instead of torch.where + torch.tensor
+        # ==============================================================
         min_dtype = torch.finfo(attn_weights.dtype).min
-        attn_weights = torch.where(final_mask[None, None, :, :], torch.tensor(min_dtype, dtype=attn_weights.dtype), attn_weights)
+        # Broadcast mask to match attention weights shape [Batch, Heads, Seq, Seq]
+        mask_expanded = final_mask[None, None, :, :]
+        
+        # masked_fill works natively on XLA/TPU without device mismatch errors
+        attn_weights = attn_weights.masked_fill(mask_expanded, min_dtype)
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, curr_seq_len, kv_seq_len):
