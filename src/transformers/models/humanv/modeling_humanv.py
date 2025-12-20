@@ -14,13 +14,14 @@ from .configuration_humanv import HumanVConfig
 logger = logging.get_logger(__name__)
 
 class HumanVRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-5):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
+
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
@@ -40,23 +41,18 @@ class HumanVMLP(nn.Module):
 class HumanVRotaryEmbedding(nn.Module):
     def __init__(self, config: HumanVConfig, device=None):
         super().__init__()
-        self.config = config
-        base = config.rope_parameters.get("rope_theta", 10000.0) if config.rope_parameters else 10000.0
         dim = config.head_dim
+        base = config.rope_parameters.get("rope_theta", 10000.0) if config.rope_parameters else 10000.0
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.attention_scaling = 1.0
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # TPU Optimization: Ensure device consistency
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
         freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
@@ -82,7 +78,6 @@ class HumanVAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx]
         
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -96,9 +91,6 @@ class HumanVAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        
-        self.q_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = HumanVRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -119,10 +111,6 @@ class HumanVAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        # Qwen3 Norm
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -132,44 +120,28 @@ class HumanVAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        query_states_f32 = query_states.to(torch.float32)
+        key_states_f32 = key_states.to(torch.float32)
 
-        curr_seq_len = query_states.shape[-2]
+        attn_weights = torch.matmul(query_states_f32, key_states_f32.transpose(2, 3)) * self.scaling
+
         kv_seq_len = key_states.shape[-2]
-        
-        # Ensure mask is on the same device as weights (Crucial for TPU)
         causal_mask = torch.triu(
-            torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool), 
-            diagonal=kv_seq_len - curr_seq_len + 1
+            torch.ones((q_len, kv_seq_len), device=query_states.device, dtype=torch.bool), 
+            diagonal=kv_seq_len - q_len + 1
         )
         
-        if self.layer_type == "sparse_attention":
-            window_size = self.config.sparse_window_size
-            sparse_mask = torch.tril(
-                torch.ones((curr_seq_len, kv_seq_len), device=query_states.device, dtype=torch.bool),
-                diagonal= (kv_seq_len - curr_seq_len) - window_size - 1
-            )
-            final_mask = causal_mask | sparse_mask
-        else:
-            final_mask = causal_mask
-
-        # ==============================================================
-        # TPU FIX: Use masked_fill instead of torch.where + torch.tensor
-        # ==============================================================
-        min_dtype = torch.finfo(attn_weights.dtype).min
-        # Broadcast mask to match attention weights shape [Batch, Heads, Seq, Seq]
-        mask_expanded = final_mask[None, None, :, :]
-        
-        # masked_fill works natively on XLA/TPU without device mismatch errors
-        attn_weights = attn_weights.masked_fill(mask_expanded, min_dtype)
+        mask_value = -1e9
+        attn_weights = attn_weights.masked_fill(causal_mask[None, None, :, :], mask_value)
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, curr_seq_len, kv_seq_len):
-                 pass 
-            attn_weights = attn_weights + attention_mask
+             attn_weights = attn_weights + attention_mask.to(torch.float32)
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        
+        attn_weights = attn_weights.to(value_states.dtype)
         
         attn_output = torch.matmul(attn_weights, value_states)
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -278,7 +250,7 @@ class HumanVModel(HumanVPreTrainedModel):
         if attention_mask is not None:
             if attention_mask.dim() == 2:
                 attention_mask = attention_mask[:, None, None, :]
-            attention_mask = (1.0 - attention_mask) * torch.finfo(inputs_embeds.dtype).min
+            attention_mask = (1.0 - attention_mask) * -1e9
 
         hidden_states = inputs_embeds
         
