@@ -4472,7 +4472,6 @@ class Trainer:
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
-
             if self.args.max_eval_steps is not None and step >= self.args.max_eval_steps:
                 break
 
