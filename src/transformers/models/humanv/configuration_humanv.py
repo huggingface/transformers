@@ -10,12 +10,12 @@ class HumanVConfig(PreTrainedConfig):
     def __init__(
         self,
         vocab_size: int = 50257,
-        hidden_size: int = 256,        # تغییر به 256 برای سازگاری با TPU
-        intermediate_size: int = 1024, # تغییر به 1024
+        hidden_size: int = 256,        
+        intermediate_size: int = 1024, 
         num_hidden_layers: int = 8,
         num_attention_heads: int = 8,
         num_key_value_heads: Optional[int] = 8,
-        head_dim: int = 32,            # عدد طلایی TPU
+        head_dim: int = 32,          
         hidden_act: str = "silu",
         max_position_embeddings: int = 1024,
         initializer_range: float = 0.02,
