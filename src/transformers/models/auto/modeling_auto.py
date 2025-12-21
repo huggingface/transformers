@@ -908,6 +908,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timm_wrapper", "TimmWrapperForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
+        ("vit_nepa", "ViTNepaForImageClassification"),
     ]
 )
 

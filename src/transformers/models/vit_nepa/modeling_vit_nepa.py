@@ -199,7 +199,6 @@ class ViTNepaEmbeddings(nn.Module):
         self.config = config
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
         self.patch_embeddings = ViTNepaPatchEmbeddings(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -543,13 +542,13 @@ class ViTNepaLayer(GradientCheckpointingLayer):
         self.output = ViTNepaOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        drop_path_rate = config.drop_path_rate
-        self.drop_path = ViTNepaDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        drop_path_prob = config.drop_path_prob
+        self.drop_path = ViTNepaDropPath(drop_path_prob) if drop_path_prob > 0 else nn.Identity()
         self.layer_scale = ViTNepaLayerScale(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, position_embeddings)
         attention_output = self.layer_scale(attention_output)
         attention_output = self.drop_path(attention_output)
 
@@ -569,14 +568,14 @@ class ViTNepaLayer(GradientCheckpointingLayer):
 class ViTNepaEncoder(nn.Module):
     def __init__(self, config: ViTNepaConfig):
         super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList(
-            [ViTNepaLayer(config, drop_path_rate=drop_path_rate) for drop_path_rate in range(drop_path_rates)]
-        )
-        self.gradient_checkpointing = False
         drop_path_rates = [
             x.item() for x in torch.linspace(0, config.drop_path_prob, config.num_hidden_layers, device="cpu")
         ]
+        self.config = config
+        self.layer = nn.ModuleList(
+            [ViTNepaLayer(config, drop_path_rate=drop_path_rate) for drop_path_rate in drop_path_rates]
+        )
+        self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, positional_embeddings: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
@@ -609,11 +608,7 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, ViTNepaEmbeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
@@ -621,7 +616,7 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ViTNepaModel(ViTNepaPreTrainedModel):
-    def __init__(self, config: ViTNepaConfig):
+    def __init__(self, config: ViTNepaConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -665,9 +660,7 @@ class ViTNepaModel(ViTNepaPreTrainedModel):
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_input, embedding_clean = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_input, embedding_clean = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeds = self.rope_embeddings(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.encoder(embedding_input, position_embeds)
@@ -806,9 +799,6 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
         """
         outputs: BaseModelOutputWithEmbedding = self.vit_nepa(
             pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 

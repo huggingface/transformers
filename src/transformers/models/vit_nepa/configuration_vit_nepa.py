@@ -4,20 +4,18 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_vit_nepa.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from typing import Optional
 
-from ...configuration_utils import PreTrainedConfig
+from ... import PreTrainedConfig
 
 
 class ViTNepaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTNepaModel`]. It is used to instantiate an ViTNepa
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ViTNepa
-    [google/vi_t_nepa-base-patch16-224](https://huggingface.co/google/vi_t_nepa-base-patch16-224) architecture.
+    This is the configuration class to store the configuration of a [`ViTNepaModel`]. It is used to instantiate a ViTNepa
+    model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -28,9 +26,11 @@ class ViTNepaConfig(PreTrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        use_gated_mlp (`bool`, *optional*, defaults to `False`):
+            Whether to use a gated MLP instead of a standard feed-forward block.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the encoder and pooler. If string, `"gelu"`, `"relu"`, `"selu"` and
+            `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
@@ -39,6 +39,8 @@ class ViTNepaConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        rope_theta (`float`, *optional*, defaults to 100.0):
+            Base period used for rotary positional embeddings.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
@@ -47,29 +49,45 @@ class ViTNepaConfig(PreTrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, *optional*, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
-        pooler_output_size (`int`, *optional*):
-           Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
-        pooler_act (`str`, *optional*, defaults to `"tanh"`):
-           The activation function to be used by the pooler.
+        qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply normalization to the query and key projections before attention.
+        qk_norm_bias (`bool`, *optional*, defaults to `False`):
+            Whether the query/key normalization layers use a bias term.
+        qk_norm_affine (`bool`, *optional*, defaults to `False`):
+            Whether the query/key normalization layers use learnable affine parameters.
+        layerscale_value (`float`, *optional*, defaults to 1e-5):
+            Initial value for LayerScale factors. A non-positive value typically disables LayerScale.
+        drop_path_prob (`float`, *optional*, defaults to 0.0):
+            Stochastic depth (DropPath) rate used in the encoder blocks.
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+            Whether to add a pooling layer on top of the final hidden state.
+        is_causal (`bool`, *optional*, defaults to `True`):
+            Whether to use a causal attention mask (for autoregressive-style training).
+        pos_embed_shift (`float`, *optional*, defaults to `None`):
+            Maximum magnitude of random positional embedding shift used as a training augmentation.
+        pos_embed_jitter (`float`, *optional*, defaults to `None`):
+            Amount of jitter applied to positional embedding coordinates as a training augmentation.
+        pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+            Rescaling factor applied to positional embedding coordinates (e.g. when interpolating to new resolutions).
+        kwargs:
+            Additional keyword arguments passed to [`PretrainedConfig`].
 
     Example:
 
     ```python
     >>> from transformers import ViTNepaConfig, ViTNepaModel
 
-    >>> # Initializing a ViTNepa vi_t_nepa-base-patch16-224 style configuration
+    >>> # Initializing a ViTNepa vit_nepa-base-patch16-224 style configuration
     >>> configuration = ViTNepaConfig()
 
-    >>> # Initializing a model (with random weights) from the vi_t_nepa-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the vit_nepa-base-patch16-224 style configuration
     >>> model = ViTNepaModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "vi_t_nepa"
+    model_type = "vit_nepa"
 
     def __init__(
         self,
@@ -77,18 +95,27 @@ class ViTNepaConfig(PreTrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
+        use_gated_mlp=False,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        rope_theta=100.0,
         image_size=224,
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        encoder_stride=16,
-        pooler_output_size=None,
-        pooler_act="tanh",
+        qk_norm=False,
+        qk_norm_bias=False,
+        qk_norm_affine=False,
+        layerscale_value=1e-5,
+        drop_path_prob=0.0,
+        add_pooling_layer=False,
+        is_causal=True,
+        pos_embed_shift: Optional[float] = None,
+        pos_embed_jitter: Optional[float] = None,
+        pos_embed_rescale: Optional[float] = 2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -97,18 +124,27 @@ class ViTNepaConfig(PreTrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.use_gated_mlp = use_gated_mlp
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.rope_theta = rope_theta
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.encoder_stride = encoder_stride
-        self.pooler_output_size = pooler_output_size if pooler_output_size else hidden_size
-        self.pooler_act = pooler_act
+        self.qk_norm = qk_norm
+        self.qk_norm_bias = qk_norm_bias
+        self.qk_norm_affine = qk_norm_affine
+        self.layerscale_value = layerscale_value
+        self.drop_path_prob = drop_path_prob
+        self.add_pooling_layer = add_pooling_layer
+        self.is_causal = is_causal
+        self.pos_embed_shift = pos_embed_shift
+        self.pos_embed_jitter = pos_embed_jitter
+        self.pos_embed_rescale = pos_embed_rescale
 
 
 __all__ = ["ViTNepaConfig"]
