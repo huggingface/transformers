@@ -516,7 +516,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_sdpa = True
-    _supports_flash_attn = True
+    _supports_flash_attn = False
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
@@ -1409,8 +1409,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
