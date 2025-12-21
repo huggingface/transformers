@@ -12,7 +12,6 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -22,8 +21,8 @@ from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_vit_nepa import ViTNepaConfig
 
 
@@ -542,8 +541,7 @@ class ViTNepaLayer(GradientCheckpointingLayer):
         self.output = ViTNepaOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        drop_path_prob = config.drop_path_prob
-        self.drop_path = ViTNepaDropPath(drop_path_prob) if drop_path_prob > 0 else nn.Identity()
+        self.drop_path = ViTNepaDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
         self.layer_scale = ViTNepaLayerScale(config)
 
     def forward(self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor) -> torch.Tensor:
@@ -670,40 +668,6 @@ class ViTNepaModel(ViTNepaPreTrainedModel):
         return BaseModelOutputWithEmbedding(last_hidden_state=sequence_output, input_embedding=embedding_clean)
 
 
-def prediction_loss(h_in, h_out, shift: bool = True):
-    """
-    similarity loss between two hidden states.
-
-    Args:
-        h_in:  [B, T, D]  input hidden states
-        h_out: [B, T, D]  output hidden states (prediction)
-        shift: if True, compare h_out[:, :-1] with h_in[:, 1:]
-               else, compare h_out with h_in (position-wise)
-
-    Returns:
-        scalar loss (negative cosine similarity)
-    """
-    # detach target
-    h_in = h_in.detach()
-
-    if shift:
-        # shift one step forward
-        p = h_out[:, :-1, :]  # predict next
-        z = h_in[:, 1:, :]  # target is next hidden state
-    else:
-        # same-position matching
-        p = h_out
-        z = h_in
-
-    # normalize
-    p = F.normalize(p, dim=-1)
-    z = F.normalize(z, dim=-1)
-
-    # negative cosine similarity
-    loss = -(p * z).sum(dim=-1).mean()
-    return loss
-
-
 class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
     def __init__(self, config: ViTNepaConfig):
         super().__init__(config)
@@ -733,20 +697,15 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            is_pretraining=True,
             **kwargs,
         )
 
         sequence_input = outputs.input_embedding
         sequence_output = outputs.last_hidden_state
 
-        embedded_loss = prediction_loss(sequence_input, sequence_output)
+        loss = self.loss_function(sequence_input, sequence_output)
 
-        return EmbeddedModelingOutput(
-            loss=embedded_loss,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return EmbeddedModelingOutput(loss=loss)
 
 
 @auto_docstring(
@@ -768,12 +727,12 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
+        self.vit_nepa = ViTNepaModel(config)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         self.add_pooling_layer = config.add_pooling_layer
         self.num_image_tokens = (config.image_size // config.patch_size) ** 2
-        self.vit_nepa = ViTNepaModel(config)
         self.pooler = lambda hidden_states: hidden_states.mean(dim=1) if config.add_pooling_layer else None
         self.fc_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.add_pooling_layer else None
