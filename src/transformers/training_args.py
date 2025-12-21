@@ -1369,15 +1369,17 @@ class TrainingArguments:
         },
     )
     
-    max_eval_steps: Optional[int] = field(
+    max_eval_steps: int | None = field(
         default=None,
         metadata={
             "help": (
                 "Maximum number of evaluation steps (batches) to run during evaluation. "
-                "Useful for debugging or very large evaluation datasets."
-        )
-    },
-)
+                "If set, evaluation will stop after this many steps even if the evaluation "
+                "dataset has more batches."
+            )
+        },
+    )
+
 
 
     batch_eval_metrics: bool = field(
@@ -1487,7 +1489,9 @@ class TrainingArguments:
                     f"evaluation strategy {self.eval_strategy} requires either non-zero --eval_steps or"
                     " --logging_steps"
                 )
-
+        if self.max_eval_steps is not None:
+            if not isinstance(self.max_eval_steps, int) or self.max_eval_steps <= 0:
+                raise ValueError("`max_eval_steps` must be a positive integer.")
         # logging_steps must be non-zero for logging_strategy that is other than 'no'
         if self.logging_strategy == IntervalStrategy.STEPS and self.logging_steps == 0:
             raise ValueError(f"logging strategy {self.logging_strategy} requires non-zero --logging_steps")
