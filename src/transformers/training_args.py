@@ -1368,6 +1368,17 @@ class TrainingArguments:
             "help": "Target modules for the optimizer defined in the `optim` argument. Only used for the GaLore optimizer at the moment."
         },
     )
+    
+    max_eval_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Maximum number of evaluation steps (batches) to run during evaluation. "
+                "Useful for debugging or very large evaluation datasets."
+        )
+    },
+)
+
 
     batch_eval_metrics: bool = field(
         default=False,

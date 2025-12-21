@@ -4472,6 +4472,10 @@ class Trainer:
 
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
+
+            if self.args.max_eval_steps is not None and step >= self.args.max_eval_steps:
+                break
+
             # Update the observed num examples
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
@@ -4552,6 +4556,12 @@ class Trainer:
         # Number of samples
         if has_length(eval_dataset):
             num_samples = len(eval_dataset)
+        else:
+            num_samples = observed_num_examples
+
+        # NEW: cap by max_eval_steps if set
+        if self.args.max_eval_steps is not None:
+            num_samples = min(num_samples, observed_num_examples)
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
         elif isinstance(eval_dataset, IterableDatasetShard) and getattr(eval_dataset, "num_examples", 0) > 0:
