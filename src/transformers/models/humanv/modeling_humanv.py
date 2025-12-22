@@ -212,6 +212,7 @@ class HumanVAttention(nn.Module):
         k_local = k_local.permute(0, 1, 2, 5, 3, 4).contiguous()
         v_local = v_local.permute(0, 1, 2, 5, 3, 4).contiguous()
 
+        km_local = km_local.permute(0, 1, 3, 2).contiguous()
         km_local = km_local.unsqueeze(1).unsqueeze(3)
 
         g_idx, g_valid = self._build_global_block_indices(n_blocks, global_num_blocks, global_stride, q.device)
@@ -278,6 +279,7 @@ class HumanVAttention(nn.Module):
         out = out.reshape(bsz, n_heads, total_len, d)
         out = out[:, :, q_pad:, :]
         return out, probs
+
 
 
     def forward(
