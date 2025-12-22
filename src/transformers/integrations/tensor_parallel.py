@@ -19,6 +19,9 @@ import os
 import re
 from functools import partial, reduce
 
+from ..distributed import DistributedConfig
+from ..utils import is_torch_greater_or_equal, logging
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
@@ -27,19 +30,14 @@ if is_torch_available():
     import torch.distributed as dist
     from torch import nn
 
-from ..distributed import DistributedConfig
-from ..utils import is_torch_greater_or_equal, logging
-from ..utils.generic import GeneralInterface
-
-
-logger = logging.get_logger(__name__)
-
-if is_torch_available():
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
     if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
         from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+
+
+logger = logging.get_logger(__name__)
 
 
 def initialize_tensor_parallelism(
