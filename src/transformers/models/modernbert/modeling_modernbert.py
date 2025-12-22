@@ -25,7 +25,6 @@ from contextlib import nullcontext
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -33,6 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_func_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -43,156 +43,14 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
 
-if is_flash_attn_2_available():
-    from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
-    from flash_attn.layers.rotary import RotaryEmbedding
-    from flash_attn.ops.triton.rotary import apply_rotary
-else:
-    RotaryEmbedding = object
-
-
 logger = logging.get_logger(__name__)
-
-
-class ApplyRotaryEmbUnpad(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx,
-        qkv,
-        cos,
-        sin,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
-    ):
-        # (total_nnz, 3, nheads, headdim)
-        qkv = qkv.contiguous()
-        total_nnz, _three, _nheads, headdim = qkv.shape
-        # We need qkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
-        # we get the same tensor
-        # qk = rearrange(qkv[:, :2], "b_s t h d -> b_s (t h) d")
-        qk = qkv[:, :2].view(total_nnz, -1, headdim)
-        apply_rotary(
-            qk,
-            cos,
-            sin,
-            seqlen_offsets=0,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            interleaved=False,
-            inplace=True,
-        )
-
-        ctx.save_for_backward(cos, sin, cu_seqlens)
-        ctx.max_seqlen = max_seqlen
-        return qkv
-
-    @staticmethod
-    def backward(ctx, do):
-        cos, sin, cu_seqlens = ctx.saved_tensors
-        do = do.contiguous()
-        total_nnz, _three, _nheads, headdim = do.shape
-        # We need dqkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
-        # we get the same tensor
-        dqk = do[:, :2].view(total_nnz, -1, headdim)
-        apply_rotary(
-            dqk,
-            cos,
-            sin,
-            seqlen_offsets=0,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=ctx.max_seqlen,
-            interleaved=False,
-            inplace=True,
-            conjugate=True,
-        )
-
-        return do, None, None, None, None, None, None
-
-
-def apply_rotary_unpadded(
-    qkv,
-    cos,
-    sin,
-    cu_seqlens: Optional[torch.Tensor] = None,
-    max_seqlen: Optional[int] = None,
-):
-    """
-    Arguments:
-        qkv: (total_nnz, 3, nheads, headdim) - input tensor for packed QKV.
-        cos, sin: (seqlen_rotary, rotary_dim / 2)
-        interleaved: if True, rotate pairs of even and odd dimensions (GPT-J style) instead
-            of 1st half and 2nd half (GPT-NeoX style).
-        inplace: if True, apply rotary embedding in-place.
-        seqlen_offsets: (batch_size,) or int. Each sequence in x is shifted by this amount.
-            Most commonly used in inference when we have KV cache.
-        cu_seqlens: (batch + 1,) or None
-        max_seqlen: int
-    Return:
-        out: (total_nnz, dim)
-    rotary_dim must be <= headdim
-    Apply rotary embedding to the first rotary_dim of x.
-    """
-    return ApplyRotaryEmbUnpad.apply(qkv, cos, sin, cu_seqlens, max_seqlen)
-
-
-class ModernBertUnpaddedRotaryEmbedding(RotaryEmbedding):
-    """
-    The rotary position embeddings applied directly to unpadded sequences.
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        base: float = 10000.0,
-        max_seqlen: Optional[int] = None,
-        device: Optional[torch.device] = None,
-        dtype: Optional[torch.dtype] = None,
-    ):
-        """
-        max_seqlen: if max_seqlen, device, and dtype are provided, we precompute the cos_sin_cache
-            up to max_seqlen. If the max_seqlen, device, or dtype during training/inference differ,
-            the cos_sin_cache will be recomputed during the forward pass.
-        """
-        super().__init__(dim=dim, base=base, device=device, interleaved=False)
-        self.max_seqlen = max_seqlen
-
-        if max_seqlen is not None and device is not None and dtype is not None:
-            self._update_cos_sin_cache(max_seqlen, device=device, dtype=dtype)
-
-    def forward(
-        self,
-        qkv: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        max_seqlen: Optional[int] = None,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Apply rotary embedding *inplace* to qkv.
-        qkv: (total_nnz, 3, nheads, headdim)
-        cu_seqlens: (batch + 1,) cumulative sequence lengths
-        max_seqlen: int max seq length in the batch
-        """
-        if max_seqlen is not None:
-            self._update_cos_sin_cache(max_seqlen, device=qkv.device, dtype=qkv.dtype)
-
-        qkv = apply_rotary_unpadded(
-            qkv,
-            self._cos_cached,
-            self._sin_cached,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-        )
-
-        return qkv
-
-    def extra_repr(self) -> str:
-        return f"dim={self.dim}, base={self.base}, scale_base={self.scale_base}"
 
 
 class ModernBertEmbeddings(nn.Module):
@@ -361,128 +219,95 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def flash_attention_forward(
+    module: "ModernBertAttention",
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    sliding_window: Optional[int] = None,
+    cu_seq_lens_q: Optional[torch.Tensor] = None,
+    cu_seq_lens_k: Optional[torch.Tensor] = None,
+    max_length_q: Optional[int] = None,
+    max_length_k: Optional[int] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, None]:
+    """
+    Flash attention forward for ModernBert with unpadded inputs.
+
+    For unpadded inputs:
+    - query/key/value: [total_nnz, num_heads, head_dim]
+    - cu_seq_lens_q/k: [batch + 1] cumulative sequence lengths
+    - max_length_q/k: maximum sequence length in the batch
+    """
+    # Get flash attention functions for the current implementation
+    attn_impl = module.config._attn_implementation
+    (_, flash_varlen_fn, _, _), _ = lazy_import_flash_attention(attn_impl)
+
+    # Handle dtype conversion - flash attention only supports fp16/bf16
+    target_dtype = torch.bfloat16
+    convert_dtype = query.dtype not in (torch.float16, torch.bfloat16)
+    if convert_dtype:
+        orig_dtype = query.dtype
+        query = query.to(target_dtype)
+        key = key.to(target_dtype)
+        value = value.to(target_dtype)
+
+    # Prepare window size for local attention
+    window_size = (-1, -1)
+    if sliding_window is not None:
+        window_size = (sliding_window, sliding_window)
+
+    # Call flash attention varlen function
+    attn_output = flash_varlen_fn(
+        query,
+        key,
+        value,
+        cu_seqlens_q=cu_seq_lens_q,
+        cu_seqlens_k=cu_seq_lens_k,
+        max_seqlen_q=max_length_q,
+        max_seqlen_k=max_length_k,
+        dropout_p=dropout,
+        softmax_scale=scaling,
+        window_size=window_size,
+        deterministic=module.deterministic_flash_attn,
+    )
+
+    if isinstance(attn_output, tuple):
+        attn_output = attn_output[0]
+
+    if convert_dtype:
+        attn_output = attn_output.to(orig_dtype)
+
+    return attn_output, None
+
+
 def eager_attention_forward(
     module: "ModernBertAttention",
-    qkv: torch.Tensor,
-    attention_mask: torch.Tensor,
-    sliding_window_mask: torch.Tensor,
-    position_ids: Optional[torch.LongTensor],
-    local_attention: tuple[int, int],
-    bs: int,
-    dim: int,
-    position_embeddings: torch.Tensor,
-    output_attentions: Optional[bool] = False,
-    **_kwargs,
-) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-    # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = position_embeddings
-    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
-    # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    sliding_window: Optional[int] = None,
+    **kwargs,
+) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """Eager attention forward for ModernBert with standard attention interface."""
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    scale = module.head_dim**-0.5
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
-
-    if local_attention != (-1, -1):
-        attention_mask = sliding_window_mask
-
-    attn_weights = attn_weights + attention_mask
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-    attn_output = attn_output.view(bs, -1, dim)
-    if output_attentions:
-        return (attn_output, attn_weights)
-    return (attn_output,)
-
-
-def flash_attention_forward(
-    module: "ModernBertAttention",
-    qkv: torch.Tensor,
-    rotary_emb: ModernBertUnpaddedRotaryEmbedding,
-    cu_seqlens: torch.Tensor,
-    max_seqlen: int,
-    local_attention: tuple[int, int],
-    bs: int,
-    dim: int,
-    target_dtype: torch.dtype = torch.bfloat16,
-    **_kwargs,
-) -> tuple[torch.Tensor]:
-    # (total_seqlen, 3, nheads, headdim)
-    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-
-    convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
-    if convert_dtype:
-        # FA2 implementation only supports fp16 and bf16. If FA2 is supported,
-        # bfloat16 must be supported as of FA2 2.5.7. (Turing GPUs not supported)
-        orig_dtype = qkv.dtype
-        qkv = qkv.to(target_dtype)
-
-        attn = flash_attn_varlen_qkvpacked_func(
-            qkv,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            dropout_p=module.attention_dropout if module.training else 0.0,
-            deterministic=module.deterministic_flash_attn,
-            window_size=local_attention,
-        )
-        attn = attn.to(orig_dtype)  # type: ignore
-    else:
-        attn = flash_attn_varlen_qkvpacked_func(
-            qkv,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            dropout_p=module.attention_dropout if module.training else 0.0,
-            deterministic=module.deterministic_flash_attn,
-            window_size=local_attention,
-        )
-    return (attn.view(bs, dim),)
-
-
-def sdpa_attention_forward(
-    module: "ModernBertAttention",
-    qkv: torch.Tensor,
-    attention_mask: torch.Tensor,
-    sliding_window_mask: torch.Tensor,
-    position_ids: Optional[torch.LongTensor],
-    local_attention: tuple[int, int],
-    bs: int,
-    dim: int,
-    position_embeddings: torch.Tensor,
-    **_kwargs,
-) -> tuple[torch.Tensor]:
-    # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = position_embeddings
-    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
-    # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
-
-    if local_attention != (-1, -1):
-        attention_mask = sliding_window_mask
-
-    attn_output = (
-        F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            dropout_p=module.attention_dropout if module.training else 0.0,
-            attn_mask=attention_mask,
-        )
-        .transpose(1, 2)
-        .contiguous()
-    )
-    attn_output = attn_output.view(bs, -1, dim)
-    return (attn_output,)
-
-
-MODERNBERT_ATTENTION_FUNCTION = {
-    "flash_attention_2": flash_attention_forward,
-    "eager": eager_attention_forward,
-    "sdpa": sdpa_attention_forward,
-}
+    return attn_output, attn_weights
 
 
 class ModernBertAttention(nn.Module):
@@ -510,26 +335,15 @@ class ModernBertAttention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.head_dim * self.num_heads
+        self.scaling = self.head_dim**-0.5
         self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
-        layer_type = config.layer_types[layer_id]
 
         if layer_id % config.global_attn_every_n_layers != 0:
-            self.local_attention = (config.local_attention // 2, config.local_attention // 2)
-            max_position_embeddings = config.local_attention
+            self.sliding_window = config.local_attention
         else:
-            self.local_attention = (-1, -1)
-            max_position_embeddings = config.max_position_embeddings
+            self.sliding_window = None
 
-        if config._attn_implementation == "flash_attention_2":
-            rope_parameters_dict = (
-                self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
-            )
-            rope_theta = rope_parameters_dict["rope_theta"]
-            self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
-                dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
-            )
-        else:
-            self.rotary_emb = None
+        self.is_causal = False
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -537,33 +351,91 @@ class ModernBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> torch.Tensor:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
         qkv = self.Wqkv(hidden_states)
+        qkv = qkv.view(*input_shape, 3, self.num_heads, self.head_dim)
+        query_states, key_states, value_states = qkv.unbind(dim=-3)
 
-        bs = hidden_states.shape[0]
-        if self.config._attn_implementation == "flash_attention_2":
-            qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
+        # Apply rotary position embeddings
+        cos, sin = position_embeddings
+
+        # Check if input is unpadded (2D) or padded (3D)
+        is_unpadded = hidden_states.dim() == 2
+        if is_unpadded:
+            # For unpadded inputs: query_states is [total_nnz, num_heads, head_dim]
+            # cos/sin is [1, total_nnz, head_dim], need to reshape to [total_nnz, 1, head_dim]
+            cos_unpad = cos.squeeze(0).unsqueeze(1)
+            sin_unpad = sin.squeeze(0).unsqueeze(1)
+            query_states = (query_states * cos_unpad) + (rotate_half(query_states) * sin_unpad)
+            key_states = (key_states * cos_unpad) + (rotate_half(key_states) * sin_unpad)
         else:
-            qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
+            # For padded inputs: query_states is [batch, seq, num_heads, head_dim]
+            # transpose to [batch, num_heads, seq, head_dim] for standard apply_rotary_pos_emb
+            query_states, key_states = apply_rotary_pos_emb(
+                query_states.transpose(1, 2), key_states.transpose(1, 2), cos, sin
+            )
+            # Also transpose value_states for consistency
+            value_states = value_states.transpose(1, 2)
 
-        attn_outputs = MODERNBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
-            self,
-            qkv=qkv,
-            rotary_emb=self.rotary_emb,
-            local_attention=self.local_attention,
-            bs=bs,
-            dim=self.all_head_size,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
-            **kwargs,
-        )
-        hidden_states = attn_outputs[0]
-        hidden_states = self.out_drop(self.Wo(hidden_states))
+        # Select the appropriate attention mask
+        if self.sliding_window is not None:
+            effective_attention_mask = sliding_window_mask
+        else:
+            effective_attention_mask = attention_mask
 
-        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
+        # Select attention implementation
+        if "flash" in self.config._attn_implementation and cu_seqlens is not None and max_seqlen is not None:
+            # Use custom flash attention for unpadded inputs
+            attention_interface: Callable = flash_attention_forward
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=self.attention_dropout if self.training else 0.0,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+        else:
+            # Use standard attention interface for eager/sdpa
+            attention_interface = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                effective_attention_mask,
+                scaling=self.scaling,
+                dropout=self.attention_dropout if self.training else 0.0,
+                sliding_window=self.sliding_window,
+                is_causal=self.is_causal,
+                **kwargs,
+            )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        hidden_states = self.out_drop(self.Wo(attn_output))
+
+        if output_attentions:
+            return (hidden_states, attn_weights)
+        return (hidden_states,)
 
 
 class ModernBertEncoderLayer(GradientCheckpointingLayer):
@@ -588,7 +460,6 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         position_embeddings: Optional[torch.Tensor] = None,
@@ -598,7 +469,6 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
             self.attn_norm(hidden_states),
             attention_mask=attention_mask,
             sliding_window_mask=sliding_window_mask,
-            position_ids=position_ids,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             position_embeddings=position_embeddings,
@@ -907,7 +777,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         repad = False
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if inputs_embeds is None:
@@ -942,7 +812,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 hidden_states,
                 attention_mask=attention_mask,
                 sliding_window_mask=sliding_window_mask,
-                position_ids=position_ids,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings[encoder_layer.attention_type],
@@ -969,7 +838,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
         # dimension missing
         elif (
-            self.config._attn_implementation == "flash_attention_2"
+            "flash" in self.config._attn_implementation
             and all_hidden_states is not None
             and all_hidden_states[-1].dim() == 2
         ):
@@ -1097,7 +966,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 if batch_size is None and seq_len is None:
                     if inputs_embeds is not None:
@@ -1156,7 +1025,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             # Logits padding
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
