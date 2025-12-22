@@ -20,7 +20,6 @@ from typing import Optional
 
 import regex as re
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import HFValidationError
 from safetensors.torch import load_file
@@ -323,7 +322,7 @@ def convert_model(
     # ------------------------------------------------------------
 
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = DeepseekVLHybridForConditionalGeneration(config)
 
     # Load and convert state dict

@@ -28,7 +28,6 @@ import re
 from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
 from transformers import (
@@ -403,7 +402,7 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = JanusForConditionalGeneration(config)
 
     model.generation_config._from_model_config = False

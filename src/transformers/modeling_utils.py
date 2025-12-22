@@ -25,7 +25,7 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -62,7 +62,6 @@ from .integrations.accelerate import (
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
-    init_empty_weights,
     load_offloaded_parameter,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -153,7 +152,6 @@ logger = logging.get_logger(__name__)
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-_init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 
@@ -170,51 +168,6 @@ def is_local_dist_rank_0():
         and torch.distributed.is_initialized()
         and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
-
-
-TORCH_INIT_FUNCTIONS = {
-    "uniform_": nn.init.uniform_,
-    "normal_": nn.init.normal_,
-    "trunc_normal_": nn.init.trunc_normal_,
-    "constant_": nn.init.constant_,
-    "xavier_uniform_": nn.init.xavier_uniform_,
-    "xavier_normal_": nn.init.xavier_normal_,
-    "kaiming_uniform_": nn.init.kaiming_uniform_,
-    "kaiming_normal_": nn.init.kaiming_normal_,
-    "uniform": nn.init.uniform,
-    "normal": nn.init.normal,
-    "xavier_uniform": nn.init.xavier_uniform,
-    "xavier_normal": nn.init.xavier_normal,
-    "kaiming_uniform": nn.init.kaiming_uniform,
-    "kaiming_normal": nn.init.kaiming_normal,
-    "orthogonal_": nn.init.orthogonal_,
-}
-
-
-@contextmanager
-def no_init_weights():
-    """
-    Context manager to globally disable weight initialization to speed up loading large models.
-    """
-    global _init_weights
-    old_init_weights = _init_weights
-
-    _init_weights = False
-
-    def _skip_init(*args, **kwargs):
-        pass
-
-    # Save the original initialization functions
-    for name, init_func in TORCH_INIT_FUNCTIONS.items():
-        setattr(torch.nn.init, name, _skip_init)
-
-    try:
-        yield
-    finally:
-        _init_weights = old_init_weights
-        # Restore the original initialization functions
-        for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, init_func)
 
 
 @contextmanager
@@ -498,10 +451,13 @@ def remove_tied_weights_from_state_dict(
 
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
-    """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
-    module, param_type = get_module_from_name(model, param_name)
-    # This will check potential shape mismatch if skipped before
-    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+    """Cast a single parameter or buffer `param_name` into the `model`, with value `tensor`."""
+    parent, param_type = get_module_from_name(model, param_name)
+    if param_type in parent._parameters and not isinstance(tensor, nn.Parameter):
+        tensor = nn.Parameter(tensor, requires_grad=tensor.is_floating_point())
+    # We need to use setattr here, as we set non-persistent buffers as well with this function (`load_state_dict`
+    # does not allow to do it)
+    setattr(parent, param_type, tensor)
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -2368,9 +2324,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
-        # If we are not currently under meta device (which would virtually skip `_init_weights`), mark as initialized
-        if get_torch_context_manager_or_global_device() != torch.device("meta"):
-            module._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
@@ -2465,7 +2419,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_mapping = self._tied_weights_keys
         # If the config does not specify any tying, return empty dict
-        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
+        if not self.config.tie_word_embeddings:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
@@ -3102,7 +3056,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        if _init_weights:
+        # If we are initializing on meta device, there is no point in trying to run inits
+        if get_torch_context_manager_or_global_device() != torch.device("meta"):
             # Initialize weights
             self.initialize_weights()
             # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
@@ -3647,15 +3602,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            init_contexts.append(no_init_weights())
             # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+                init_contexts.extend(
+                    [
+                        init.no_init_weights(),
+                        deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                        set_zero3_state(),
+                    ]
+                )
             elif is_quantized:
-                init_contexts.extend([init_empty_weights(), set_quantized_state()])
+                init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.extend([no_init_weights(), init_empty_weights()])
+            init_contexts.append(torch.device("meta"))
 
         return init_contexts
 
@@ -4230,9 +4190,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
                 state_dict = merged_state_dict
-            error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
+            error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            missing_keys, unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set(), set()
+            unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set()
         else:
             all_pointer = set()
             # Checkpoints are safetensors
@@ -4280,7 +4240,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
         # loading the weights as they are not in the loaded state dict)
         miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
+        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, hf_quantizer)
 
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
         model._initialize_missing_keys(is_quantized)
@@ -4517,7 +4477,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return cls._supports_attention_backend
 
     def _move_missing_keys_from_meta_to_cpu(
-        self, missing_keys: list[str], dtype: torch.dtype, hf_quantizer: Optional[HfQuantizer]
+        self, missing_keys: list[str], hf_quantizer: Optional[HfQuantizer]
     ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
         from meta device to cpu.
@@ -4526,22 +4486,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            # We only do it for the parameters, as the buffers are not initialized on the meta device by default
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                value = torch.empty_like(param, device="cpu")
+                _load_parameter_into_model(self, key, value)
+            for key, buffer in self.named_buffers():
+                value = torch.empty_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
-        model_state_dict = self.state_dict()
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
-            param = model_state_dict[key]
-            # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
-            if param.device == torch.device("meta"):
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
-                _load_parameter_into_model(self, key, value)
+            param = self.get_parameter_or_buffer(key)
+            value = torch.empty_like(param, device="cpu")
+            _load_parameter_into_model(self, key, value)
+        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
+        for key, buffer in self.named_non_persistent_buffers():
+            value = torch.empty_like(buffer, device="cpu")
+            _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4628,6 +4591,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return module.get_extra_state()
 
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+
+    def named_non_persistent_buffers(
+        self, recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[tuple[str, torch.Tensor]]:
+        """Similar to `named_buffers`, but only yield non-persistent ones. It is handy as it's not perfectly straightforward
+        to know if they are persistent or not"""
+        for name, tensor in self.named_buffers(recurse=recurse, remove_duplicate=remove_duplicate):
+            # We have to grab the parent here, as the attribute `_non_persistent_buffers_set` is on the immediate
+            # parent only
+            parent, buf_name = name.rsplit(".", 1) if "." in name else ("", name)
+            parent = self.get_submodule(parent)
+            if buf_name in parent._non_persistent_buffers_set:
+                yield name, tensor
 
     def train(self, mode: bool = True):
         out = super().train(mode)

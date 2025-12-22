@@ -109,3 +109,17 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.compressed_tensors import CompressedTensorsMarkInitialize
+
+        return [
+            WeightConverter(
+                source_patterns=[
+                    "compressed",
+                ],
+                target_patterns="compressed",
+                operations=[CompressedTensorsMarkInitialize(self)],
+            ),
+        ]
