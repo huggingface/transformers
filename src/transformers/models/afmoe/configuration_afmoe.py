@@ -158,6 +158,8 @@ class AfmoeConfig(PreTrainedConfig):
         layer_types: Optional[list] = None,
         attention_dropout: Optional[float] = 0.0,
         mup_enabled: Optional[bool] = False,
+        eos_token_id: Optional[bool] = None,
+        pad_token_id: Optional[bool] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -200,11 +202,11 @@ class AfmoeConfig(PreTrainedConfig):
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["AfmoeConfig"]
