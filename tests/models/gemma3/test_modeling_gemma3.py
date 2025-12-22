@@ -305,7 +305,6 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
 class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3Vision2TextModelTester
     config_tester = ConfigTester
-    all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
 
     test_missing_keys = False
     _is_stateful = True
@@ -318,6 +317,28 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
+    )
+    def test_load_with_mismatched_shapes(self):
+        pass
 
     def test_bidirectional_image_attention(self):
         """
