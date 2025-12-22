@@ -8,14 +8,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...processing_utils import Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...utils import ModelOutput, auto_docstring, logging, torch_int, TransformersKwargs
 from ..t5.tokenization_t5 import T5Tokenizer
-from ..t5.tokenization_t5_fast import T5TokenizerFast
+# from ..t5.tokenization_t5_fast import T5TokenizerFast
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
     VivitEmbeddings,
+    VivitAttention,
     VivitEncoder,
     VivitLayer,
     VivitPreTrainedModel,
@@ -124,55 +126,55 @@ class VideoPrismTokenizer(T5Tokenizer):
         return len(token_ids_0 + token_ids_1) * [0]
 
 
-class VideoPrismTokenizerFast(T5TokenizerFast):
+# class VideoPrismTokenizerFast(T5TokenizerFast):
     
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A sequence has the following format:
+#     def build_inputs_with_special_tokens(
+#         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+#     ) -> list[int]:
+#         """
+#         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+#         adding special tokens. A sequence has the following format:
 
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
+#         - single sequence: `X </s>`
+#         - pair of sequences: `A </s> B </s>`
 
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
+#         Args:
+#             token_ids_0 (`list[int]`):
+#                 List of IDs to which the special tokens will be added.
+#             token_ids_1 (`list[int]`, *optional*):
+#                 Optional second list of IDs for sequence pairs.
 
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        # token_ids_0 = token_ids_0 + [self.eos_token_id]
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0
-        else:
-            # token_ids_1 = token_ids_1 + [self.eos_token_id]
-            return self.prefix_tokens + token_ids_0 + token_ids_1
+#         Returns:
+#             `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+#         """
+#         # token_ids_0 = token_ids_0 + [self.eos_token_id]
+#         if token_ids_1 is None:
+#             return self.prefix_tokens + token_ids_0
+#         else:
+#             # token_ids_1 = token_ids_1 + [self.eos_token_id]
+#             return self.prefix_tokens + token_ids_0 + token_ids_1
 
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
-        use of token type ids, therefore a list of zeros is returned.
+#     def create_token_type_ids_from_sequences(
+#         self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+#     ) -> list[int]:
+#         """
+#         Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
+#         use of token type ids, therefore a list of zeros is returned.
 
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
+#         Args:
+#             token_ids_0 (`list[int]`):
+#                 List of IDs.
+#             token_ids_1 (`list[int]`, *optional*):
+#                 Optional second list of IDs for sequence pairs.
 
-        Returns:
-            `list[int]`: List of zeros.
-        """
+#         Returns:
+#             `list[int]`: List of zeros.
+#         """
 
-        if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return len(token_ids_0 + token_ids_1) * [0]
+#         if token_ids_1 is None:
+#             return len(token_ids_0) * [0]
+#         return len(token_ids_0 + token_ids_1) * [0]
 
 
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
@@ -440,6 +442,63 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+class VideoPrismSelfAttention(nn.Module):
+    def __init__(self, config: VideoPrismConfig):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+class VideoPrismAttention(VivitAttention):
+
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, attention_mask)
+        output = self.output(self_attn_output, hidden_states)
+        return output
+
+
 class VideoPrismLayerNorm(nn.LayerNorm):
     def forward(self, hidden_states: torch.Tensor):
         return F.layer_norm(
@@ -457,13 +516,28 @@ class VideoPrismLayer(VivitLayer):
         self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        hidden_states_norm = self.layernorm_before(hidden_states)
+        attention_output = self.attention(hidden_states_norm, attention_mask)
+
+        # first residual connection
+        hidden_states = attention_output + hidden_states
+
+        # in VideoPrism, layernorm is also applied after self-attention
+        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.intermediate(layer_output)
+
+        # second residual connection is done here
+        layer_output = self.output(layer_output, hidden_states)
+
+        return layer_output
 
 class VideoPrismEncoder(VivitEncoder):
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             # layer_head_mask = head_mask if head_mask is not None else None
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, attention_mask)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -589,7 +663,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name patter
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor] = None,  # ? (B, 4096, 768)
-        head_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ) -> AttentionPoolingOutput:
         
         batch_size, seq_length, hidden_size = hidden_states.shape        # ? (B, 4096, 768)
@@ -621,7 +695,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):   # ? same name patter
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            attention_mask,
             is_causal=self.is_causal,         # ? is_causal is set to False obviously, but it can't be modified from the config
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -656,7 +730,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
             self.config.is_causal = True
         self.config.num_hidden_layers = config.num_unimodal_layers
         self.unimodal_encoder = VideoPrismEncoder(self.config)
-        # self.pos_embeddings = PositionalEmbedding(config)
         self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -694,7 +767,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 
         unimodal_encoder_output = self.unimodal_encoder(
             features,
-            head_mask=attention_mask if attention_mask is not None else None,  #!
+            attention_mask,
         )
 
         features = unimodal_encoder_output.last_hidden_state  # ? features shape (B, 65, 768)

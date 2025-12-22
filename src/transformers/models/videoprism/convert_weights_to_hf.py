@@ -6,9 +6,8 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
 
-from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismTokenizerFast
-from transformers import T5TokenizerFast
-from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismFactorizedEncoderModel
+from transformers import VideoPrismConfig, VideoPrismTokenizer
+from transformers.models.videoprism.modeling_videoprism import VideoPrismModel, VideoPrismClipModel
 
 
 def get_checkpoint_info(model_type="backbone", model_size="base"):
@@ -402,7 +401,7 @@ def convert(
 
     if load_model:
         config = VideoPrismConfig(**checkpoint_info["config"])
-        model = VideoPrismFactorizedEncoderModel(config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(config)
+        model = VideoPrismModel(config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(config)
 
         # try:
         state_dict = load_file(path)
@@ -511,12 +510,12 @@ def convert(
                     [262, 266, 768, 267, 1376, 289, 10691, 259],
                     [262, 266, 768, 267, 4605, 259],
                 ]
-                # input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
-                # mask = ids_to_attention_mask(input_ids)
+                input_ids = pad_and_stack(sentences, pad_token_id=0, max_length=64)
+                mask = ids_to_attention_mask(input_ids)
 
 
                 # print(input_vid[0, -1, 0, :3, :3])
-                input_ids, mask = prepare_texts()
+                # input_ids, mask = prepare_texts()
                 
                 outputs = model(input_vid, input_ids, mask)
                 
@@ -597,7 +596,7 @@ def convert(
 
 if __name__ == "__main__":
     convert(
-        model_type="lvt",
+        model_type="backbone",
         model_size="base",
         convert=False,
         upload=False,

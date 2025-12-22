@@ -268,11 +268,6 @@ class VideoPrismTemporalEmbeddings(nn.Module):
         return embeddings
 
 
-class VideoPrismLayerNorm(nn.LayerNorm):
-    def forward(self, hidden_states: torch.Tensor):
-        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -333,7 +328,7 @@ class VideoPrismSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -350,7 +345,7 @@ class VideoPrismSelfAttention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            None,
+            attention_mask,
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -385,10 +380,15 @@ class VideoPrismAttention(nn.Module):
         self.attention = VideoPrismSelfAttention(config)
         self.output = VideoPrismSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, attention_mask)
         output = self.output(self_attn_output, hidden_states)
         return output
+
+
+class VideoPrismLayerNorm(nn.LayerNorm):
+    def forward(self, hidden_states: torch.Tensor):
+        return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
 
 
 class VideoPrismIntermediate(nn.Module):
@@ -434,9 +434,9 @@ class VideoPrismLayer(GradientCheckpointingLayer):
         self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, attention_mask)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -458,10 +458,10 @@ class VideoPrismEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             # layer_head_mask = head_mask if head_mask is not None else None
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, attention_mask)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -483,6 +483,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         "attentions": VideoPrismSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(
         self, module
     ):  # todo this needs the exact initialization as in the original VideoPrism implementation
@@ -595,7 +596,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):  # ? same name pattern
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor] = None,  # ? (B, 4096, 768)
-        head_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ) -> AttentionPoolingOutput:
         batch_size, seq_length, hidden_size = hidden_states.shape  # ? (B, 4096, 768)
         query = self.pooling_attention_query.expand(batch_size, -1, -1)  # ? Expand to (B, 1, dim)
@@ -624,7 +625,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):  # ? same name pattern
             query_layer,
             key_layer,
             value_layer,
-            head_mask,
+            attention_mask,
             is_causal=self.is_causal,  # ? is_causal is set to False obviously, but it can't be modified from the config
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
@@ -669,7 +670,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
             self.config.is_causal = True
         self.config.num_hidden_layers = config.num_unimodal_layers
         self.unimodal_encoder = VideoPrismEncoder(self.config)
-        # self.pos_embeddings = PositionalEmbedding(config)
         self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -707,7 +707,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 
         unimodal_encoder_output = self.unimodal_encoder(
             features,
-            head_mask=attention_mask if attention_mask is not None else None,  #!
+            attention_mask,
         )
 
         features = unimodal_encoder_output.last_hidden_state  # ? features shape (B, 65, 768)
