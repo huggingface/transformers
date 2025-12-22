@@ -865,6 +865,14 @@ def _get_dtype(
                 sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
             else:
                 sub_dtype = main_dtype
+            if main_dtype != sub_dtype:
+                logger.warning_once(
+                    f"The dtype for {sub_config_key}={sub_dtype} is different from the main dtype={main_dtype}. "
+                    "Setting different dtypes per backbone model might cause device errors downstream, setting the "
+                    f"dtype={main_dtype} for all modules. Note, using different dtypes per module is deprecated and will "
+                    "be removed in future versions."
+                )
+                sub_dtype = main_dtype
             sub_config.dtype = sub_dtype
 
     return config, main_dtype
