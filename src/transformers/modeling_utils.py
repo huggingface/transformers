@@ -4375,6 +4375,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             param = self.get_parameter_or_buffer(key)
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
+
                 with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
                     # needed for the sharding
                     param.data.copy_(torch.empty_like(param, device=param.device))
@@ -4386,6 +4387,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for key, cbuffer in self.named_non_persistent_buffers():
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
+
                 with deepspeed.zero.GatheredParameters([buffer], modifier_rank=0):
                     # needed for the sharding
                     param.data.copy_(torch.empty_like(param, device=param.device))
