@@ -74,6 +74,8 @@ PRIVATE_MODELS = [
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
+    "SiglipTextTransformer",
+    "Siglip2TextTransformer",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
@@ -206,6 +208,7 @@ IGNORE_NON_TESTED = (
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "VibeVoiceSemanticTokenizerModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
         "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
+        "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
     ]
@@ -419,6 +422,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "VibeVoiceModel",  # Building part of a bigger model
+    "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
 ]
 

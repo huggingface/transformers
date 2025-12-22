@@ -221,9 +221,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 kept_criteria.append(criterion)
         return kept_criteria
 
-    def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs
-    ):
+    def _prepare_generation_config(self, generation_config: Optional[GenerationConfig], **kwargs):
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
 
@@ -251,9 +249,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         input_features_mask = kwargs.pop("input_features_mask", None)
 
         # Call the base class method to load from default generation_config.json
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
         # try creating VibeVoice noise scheduler
         # TODO (ebezzam) ok with this? so user doesn't need to defined noise scheduler each time?
@@ -392,7 +388,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             "max_new_tokens": generation_config.max_new_tokens,
         }
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
-            generation_config, True, **negative_kwargs
+            generation_config, **negative_kwargs
         )
         _, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
             None, negative_generation_config.bos_token_id, negative_model_kwargs

@@ -86,10 +86,6 @@ class BitNetHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        target_dtype = torch.int8
-        return target_dtype
-
     def is_serializable(self):
         return True
 

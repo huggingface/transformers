@@ -413,6 +413,10 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
         elif isinstance(module, VibeVoiceConvNext1dLayer):
             nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
             nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
+        if hasattr(module, "latent_scaling_factor"):
+            nn.init.constant_(module.latent_scaling_factor, 1.0)
+        if hasattr(module, "latent_bias_factor"):
+            nn.init.constant_(module.latent_bias_factor, 0.0)
 
 
 @dataclass
@@ -641,8 +645,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def __init__(self, config):
         super().__init__(config)
         self.model = VibeVoiceModel(config)
-        self.register_buffer("latent_scaling_factor", torch.tensor(1.0))
-        self.register_buffer("latent_bias_factor", torch.tensor(0.0))
+        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
+        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         if not getattr(self.config.text_config, "tie_word_embeddings", False):
             # Don't tie weights if the text config specifies not to, i.e. 7B model

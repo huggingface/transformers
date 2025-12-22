@@ -215,6 +215,13 @@ class VibeVoicePreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _supports_static_cache = True
     _supports_attention_backend = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if hasattr(module, "latent_scaling_factor"):
+            nn.init.constant_(module.latent_scaling_factor, 1.0)
+        if hasattr(module, "latent_bias_factor"):
+            nn.init.constant_(module.latent_bias_factor, 0.0)
+
 
 @dataclass
 @auto_docstring
@@ -275,7 +282,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
         raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
     def forward(self, audio, padding_cache=None, use_cache=None, **kwargs: Unpack[TransformersKwargs]):
-        raise NotImplementedError("Decode method is not implemented for VibeVoiceSemanticTokenizerModel.")
+        raise NotImplementedError("Forward method is not implemented for VibeVoiceSemanticTokenizerModel.")
 
 
 @auto_docstring(
@@ -373,8 +380,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def __init__(self, config):
         super().__init__(config)
         self.model = VibeVoiceModel(config)
-        self.register_buffer("latent_scaling_factor", torch.tensor(1.0))
-        self.register_buffer("latent_bias_factor", torch.tensor(0.0))
+        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
+        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         if not getattr(self.config.text_config, "tie_word_embeddings", False):
             # Don't tie weights if the text config specifies not to, i.e. 7B model

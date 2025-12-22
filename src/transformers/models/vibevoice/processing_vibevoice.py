@@ -220,7 +220,7 @@ class VibeVoiceProcessor(ProcessorMixin):
 
         audio = make_list_of_audio(audio)
         for idx, item in enumerate(audio):
-            audio[idx] = item.detach().cpu().numpy().squeeze()
+            audio[idx] = item.detach().cpu().float().numpy().squeeze()
 
         if len(audio) == 1:
             if output_path is None:
