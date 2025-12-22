@@ -89,7 +89,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     Explanation of the example:
     ---------------------------
-    Let's take the first value for example 0b10100001, we we will only focus on the first column,
+    Let's take the first value for example 0b10100001, we will only focus on the first column,
     because every element is unpacked across the first dimension
     - First 2 bits: `01` → 0 at [0][0]
     - Second 2 bits: `00` → -1 at [0][2]
@@ -170,7 +170,7 @@ class BitLinear(nn.Module):
         Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
         -----------
-        x : torch.Tensor
+        input : torch.Tensor
             Input activations to be quantized.
         num_bits : int, optional (default=8)
             Number of bits to use for quantization, determining the quantization range.
@@ -362,7 +362,7 @@ def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None =
 
     if not has_been_replaced:
         logger.warning(
-            "You are loading your model using eetq but no linear modules were found in your model."
+            "You are loading your model using bitnet but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
