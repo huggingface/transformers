@@ -44,6 +44,7 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
+    TOKENIZER_MAPPING_NAMES,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -175,6 +176,22 @@ class AutoTokenizerTest(unittest.TestCase):
         for tokenizer_name in tokenizer_names:
             # must find the right class
             tokenizer_class_from_name(tokenizer_name)
+
+    def test_tokenizer_mapping_names_use_single_entries(self):
+        # this is just to ensure tokenizer mapping names are correct and map to strings!
+        invalid_entries = [
+            model_name
+            for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
+            if isinstance(tokenizer_entry, (tuple, list))
+        ]
+        self.assertListEqual(
+            invalid_entries,
+            [],
+            msg=(
+                "TOKENIZER_MAPPING_NAMES should map model types to single tokenizer class names. "
+                f"Found invalid mappings for: {invalid_entries}"
+            ),
+        )
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):

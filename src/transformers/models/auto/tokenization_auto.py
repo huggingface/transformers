@@ -218,11 +218,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("minimax", "GPT2Tokenizer" if is_tokenizers_available() else None),
         (
             "ministral3",
-            (
-                "MistralCommonBackend"
-                if is_mistral_common_available()
-                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
-                "LlamaTokenizer" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else (
+                "LlamaTokenizer"
+                if is_tokenizers_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None)
             ),
         ),
         (
@@ -233,11 +234,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ),
         (
             "mistral3",
-            (
-                "MistralCommonBackend"
-                if is_mistral_common_available()
-                else ("LlamaTokenizer" if is_sentencepiece_available() else None),
-                "LlamaTokenizer" if is_tokenizers_available() and not is_mistral_common_available() else None,
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else (
+                "LlamaTokenizer"
+                if is_tokenizers_available()
+                else ("LlamaTokenizer" if is_sentencepiece_available() else None)
             ),
         ),
         (
