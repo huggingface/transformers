@@ -238,9 +238,13 @@ def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[tor
             and self.config._experts_implementation == "grouped_mm"
             and is_torchdynamo_compiling()
         ):
-            # grouped_mm currently only supports bfloat16 when being compiled with torchdynamo
-            # we dispatch to batched_mm as it behaves better than eager in this case
-            experts_forward = batched_mm_experts_forward
+            # https://github.com/pytorch/pytorch/blob/3e026f2b3b52b72641769964229d32757e9dfdd8/torch/_meta_registrations.py#L7929
+            # we can't change the config._experts_implementation here as it would lead to a graph break due to state change
+            # we also can't log w warning due to torch.compile restrictions on side effects during compilation
+            # torch._grouped_mm currently only supports bfloat16 when being compiled with torch.compile
+            # we dispatch to batched_mm as it behaves better than eager with fullgraph compilation
+            # experts_forward = ALL_EXPERTS_FUNCTIONS["batched_mm"]
+            experts_forward = original_forward
 
         return experts_forward(self, *args, **kwargs)
 

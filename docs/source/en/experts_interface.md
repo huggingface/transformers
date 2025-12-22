@@ -78,10 +78,19 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## torch.compile
 
-All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) support [torch.compile](./perf_torch_compile).
+All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) work with no issues in eager mode. However, there are some important differences to consider when using `torch.compile` with experts implementations:
 
-- `"eager"` and `"batched_mm"` work with all `torch.compile` modes.
-- `"grouped_mm"` does **not** support compilation modes, `"max-autotune"` or `"reduce-overhead"`, that rely on CUDA graphs. To compile `"grouped_mm"`, use `"max-autotune-no-cudagraphs"` to disable CUDA graphs or leave `mode=None`.
+| Implementation | compilation modes                    | dtypes                           | `fullgraph=True` |
+| -------------- | ------------------------------------ | -------------------------------- | ---------------- |
+| `grouped_mm`   | `None`, `max-autotune-no-cudagraphs` | `bfloat16`                       | Yes              |
+| `batched_mm`   | all                                  | `bfloat16`, `float16`, `float32` | Yes              |
+| `eager`        | all                                  | `bfloat16`, `float16`, `float32` | No               |
+
+Notes:
+
+- The `grouped_mm` experts backend currently only supports `bfloat16` when compiled with `torch.compile`. Additionally, it is not compatible with CUDA graphs, so you must use `mode=None` or `mode="max-autotune-no-cudagraphs"` when compiling.
+- The `eager` experts backend uses a data-dependent operation to find which experts are used in a forward pass. This operation is not compatible with full graph compilation (`fullgraph=True`).
+- When using `float16` or `float32` with `grouped_mm`, the model will automatically fall back to `batched_mm` when compiled.
 
 ```py
 import torch
