@@ -27,6 +27,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_humanv import HumanVConfig
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 
 
 logger = logging.get_logger(__name__)
@@ -47,32 +48,39 @@ class HumanVRMSNorm(nn.Module):
 
 
 class HumanVRotaryEmbedding(nn.Module):
-    def __init__(self, config: HumanVConfig, device: Optional[torch.device] = None):
+    def __init__(self, config: HumanVConfig, device=None):
         super().__init__()
         self.config = config
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
 
-        rope_type = None
-        if getattr(config, "rope_scaling", None) is not None:
-            rope_type = config.rope_scaling.get("rope_type") or config.rope_scaling.get("type")
-        rope_init_fn = ROPE_INIT_FUNCTIONS.get(rope_type, ROPE_INIT_FUNCTIONS["default"])
+        rope_type = "default"
+        rope_parameters = getattr(config, "rope_parameters", None)
+        if isinstance(rope_parameters, dict):
+            rope_type = rope_parameters.get("rope_type", rope_type)
+
+        rope_scaling = getattr(config, "rope_scaling", None)
+        if isinstance(rope_scaling, dict):
+            rope_type = rope_scaling.get("rope_type") or rope_scaling.get("type") or rope_type
+
+        rope_init_fn = ROPE_INIT_FUNCTIONS.get(rope_type)
+        if rope_init_fn is None:
+            rope_init_fn = ROPE_INIT_FUNCTIONS.get("default") or next(iter(ROPE_INIT_FUNCTIONS.values()))
 
         inv_freq, self.attention_scaling = rope_init_fn(config, device=device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    @dynamic_rope_update
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        inv_freq_expanded = self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(
-            position_ids.shape[0], -1, 1
-        )
-        position_ids_expanded = position_ids[:, None, :].to(device=x.device, dtype=torch.float32)
-        freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-        emb = torch.cat((freqs, freqs), dim=-1)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
 
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
