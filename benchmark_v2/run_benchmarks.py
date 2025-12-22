@@ -40,6 +40,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", "-b", type=int, nargs="+", help="Batch size")
     parser.add_argument("--sequence-length", "-s", type=int, nargs="+", help="Sequence length")
     parser.add_argument("--num-tokens-to-generate", "-n", type=int, nargs="+", help="Number of tokens to generate")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to run benchmarks on (cuda, xpu, cpu). If not specified, will auto-detect.",
+    )
 
     parser.add_argument(
         "--level",
@@ -116,6 +122,7 @@ if __name__ == "__main__":
         args.sequence_length,
         args.num_tokens_to_generate,
         not args.no_gpu_monitoring,
+        args.device,
     )
 
     runner = BenchmarkRunner(logger, args.output_dir, args.branch_name, args.commit_id, args.commit_message)

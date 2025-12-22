@@ -14,10 +14,23 @@ import torch
 
 
 # Data class to hold the hardware information
-def get_device_name_and_memory_total() -> tuple[str, float]:
-    """Returns the name and memory total of GPU 0."""
-    device_name = torch.cuda.get_device_properties(0).name
-    device_memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+def get_device_name_and_memory_total(device_type: str = "cuda") -> tuple[str, float]:
+    """Returns the name and memory total of GPU 0.
+
+    Args:
+        device_type: The type of device to query ('cuda', 'xpu', etc.)
+    """
+    if device_type == "xpu":
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            device_name = torch.xpu.get_device_properties(0).name
+            device_memory_total = torch.xpu.get_device_properties(0).total_memory / 1024**3
+        else:
+            raise RuntimeError("XPU is not available")
+    elif device_type == "cuda":
+        device_name = torch.cuda.get_device_properties(0).name
+        device_memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    else:
+        raise RuntimeError(f"Unsupported device type: {device_type}")
     return device_name, device_memory_total
 
 
@@ -27,7 +40,17 @@ class HardwareInfo:
     def __init__(self) -> None:
         # Retrieve GPU stats
         try:
-            self.gpu_name, self.gpu_memory_total_gb = get_device_name_and_memory_total()
+            # Auto-detect device type
+            device_type = None
+            if hasattr(torch, "cuda") and torch.cuda.is_available():
+                device_type = "cuda"
+            elif hasattr(torch, "xpu") and torch.xpu.is_available():
+                device_type = "xpu"
+
+            if device_type:
+                self.gpu_name, self.gpu_memory_total_gb = get_device_name_and_memory_total(device_type)
+            else:
+                self.gpu_name, self.gpu_memory_total_gb = None, None
         except Exception:
             self.gpu_name, self.gpu_memory_total_gb = None, None
         # Retrieve python, torch and CUDA version
@@ -69,17 +92,38 @@ def get_nvidia_gpu_stats() -> tuple[int, float]:
     return int(gpu_stats["utilization.gpu"]), float(gpu_stats["memory.used"]) / 1024**3
 
 
+def get_intel_xpu_stats() -> tuple[int, float]:
+    """Returns the utilization and memory used of an Intel XPU.
+
+    Note: This is a basic implementation. Intel XPU monitoring capabilities may be limited
+    compared to CUDA. Returns dummy values if actual stats cannot be obtained.
+    """
+    try:
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            # Get memory stats if available
+            memory_allocated = torch.xpu.memory_allocated(0) / 1024**3
+            # XPU doesn't have a direct utilization API like CUDA, so we return a placeholder
+            # In practice, you might need to use Intel-specific tools or APIs
+            return 0, memory_allocated
+        else:
+            return 0, 0.0
+    except Exception:
+        return 0, 0.0
+
+
 class GPUStatsCollector:
     """A class to get statistics about the GPU. It serves as a wrapper that holds the GPU total memory and its name,
     which is used to call the right function to get the utilization and memory used."""
 
-    def __init__(self) -> None:
-        self.device_name, self.device_memory_total = get_device_name_and_memory_total()
+    def __init__(self, device_type: str = "cuda") -> None:
+        self.device_name, self.device_memory_total = get_device_name_and_memory_total(device_type)
         # Monkey patch the get_utilization_and_memory_used method based on the GPU type
         if "amd" in self.device_name.lower():
             self.get_utilization_and_memory_used = get_amd_gpu_stats
         elif "nvidia" in self.device_name.lower():
             self.get_utilization_and_memory_used = get_nvidia_gpu_stats
+        elif "intel" in self.device_name.lower() or device_type == "xpu":
+            self.get_utilization_and_memory_used = get_intel_xpu_stats
         else:
             raise RuntimeError(f"Unsupported GPU: {self.device_name}")
 
@@ -122,14 +166,20 @@ class GPURawMetrics:
 class GPUMonitor:
     """Monitor GPU utilization during benchmark execution."""
 
-    def __init__(self, sample_interval_sec: float = 0.1, logger: Logger | None = None):
+    def __init__(self, sample_interval_sec: float = 0.1, logger: Logger | None = None, device_type: str = "cuda"):
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.device_type = device_type
 
-        self.num_available_gpus = torch.cuda.device_count()
+        # Detect available accelerators
+        if device_type == "xpu":
+            self.num_available_gpus = torch.xpu.device_count() if hasattr(torch, "xpu") else 0
+        else:
+            self.num_available_gpus = torch.cuda.device_count()
+
         if self.num_available_gpus == 0:
-            raise RuntimeError("No GPUs detected by torch.cuda.device_count().")
-        self.gpu_stats_getter = GPUStatsCollector()
+            raise RuntimeError(f"No GPUs detected for device type {device_type}.")
+        self.gpu_stats_getter = GPUStatsCollector(device_type)
 
     def start(self):
         """Start monitoring GPU metrics."""

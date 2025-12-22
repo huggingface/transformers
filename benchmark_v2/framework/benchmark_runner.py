@@ -247,7 +247,8 @@ class BenchmarkRunner:
     ) -> tuple[float, list[float], str, GPURawMetrics | None]:
         # Prepare gpu monitoring if needed
         if config.gpu_monitoring and not warmup:
-            gpu_monitor = GPUMonitor(logger=self.logger)
+            device_type = config.device if config.device in ["cuda", "xpu"] else "cuda"
+            gpu_monitor = GPUMonitor(logger=self.logger, device_type=device_type)
             gpu_monitor.start()
         else:
             gpu_monitor = None
