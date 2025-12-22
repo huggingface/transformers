@@ -551,7 +551,7 @@ class ModelUtilsTest(TestCasePlus):
         """
         Test that from_pretrained works with dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
-        Note, this is a deprecated feature and we fallbacl to main dtype in all cases below. This tests checks
+        Note, this is a deprecated feature and we fallback to main dtype in all cases below. This test checks
         if the dtype fallback works correctly.
         """
         # Load without dtype specified
