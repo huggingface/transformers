@@ -3,13 +3,13 @@ import torch.nn.functional as F
 
 def ViTNepaPreTrainingLoss(hidden_states_in, hidden_states_out, shift: bool = True):
     """
-    similarity loss between two hidden states.
+    Similarity loss between two hidden states.
 
     Args:
         hidden_states_in:  [B, T, D]  input hidden states
         hidden_states_out: [B, T, D]  output hidden states (prediction)
-        shift: if True, compare h_out[:, :-1] with h_in[:, 1:]
-               else, compare h_out with h_in (position-wise)
+        shift: if True, compare hidden_states_out[:, :-1] with hidden_states_in[:, 1:]
+               else, compare hidden_states_out with hidden_states_in (position-wise)
 
     Returns:
         scalar loss (negative cosine similarity)
