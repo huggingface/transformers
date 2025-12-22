@@ -4380,7 +4380,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
                     # needed for the sharding
                     param.data.copy_(torch.empty_like(param, device=param.device))
-                    print(param)
             else:
                 value = torch.empty_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)

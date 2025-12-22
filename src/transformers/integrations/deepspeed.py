@@ -308,7 +308,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
     missing_keys = set(meta_model_state_dict.keys())
 
     prefix_model = getattr(model_to_load, "base_model_prefix", None)
-    # take care of the care where in the checkpoint we don't have the prefix
+    # take care of the case where in the checkpoint we don't have the prefix
     state_dict = {
         (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
         for k, v in state_dict.items()
