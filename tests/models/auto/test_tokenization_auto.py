@@ -178,17 +178,18 @@ class AutoTokenizerTest(unittest.TestCase):
             tokenizer_class_from_name(tokenizer_name)
 
     def test_tokenizer_mapping_names_use_single_entries(self):
-        offending_entries = {
-            model_name: tokenizer_entry
+        # this is just to ensure tokenizer mapping names are correct.
+        invalid_entries = [
+            model_name
             for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
             if isinstance(tokenizer_entry, (tuple, list))
-        }
-        self.assertDictEqual(
-            offending_entries,
-            {},
+        ]
+        self.assertListEqual(
+            invalid_entries,
+            [],
             msg=(
                 "TOKENIZER_MAPPING_NAMES should map model types to single tokenizer class names. "
-                f"Found tuple/list values for: {offending_entries}"
+                f"Found invalid mappings for: {invalid_entries}"
             ),
         )
 
