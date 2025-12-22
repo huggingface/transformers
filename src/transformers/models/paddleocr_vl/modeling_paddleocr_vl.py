@@ -1033,6 +1033,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
     def __init__(self, config: PaddleOCRVLConfig):
         super().__init__(config)
+        if hasattr(config, "quantization_config"):
+            config.vision_config.quantization_config = config.quantization_config
+            config.text_config.quantization_config = config.quantization_config
         self.visual = PaddleOCRVisionModel._from_config(config.vision_config)
         self.language_model = PaddleOCRTextModel._from_config(config.text_config)
         self.rope_deltas = None
