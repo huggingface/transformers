@@ -267,6 +267,7 @@ class RTDetrV2Config(PreTrainedConfig):
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
         decoder_method="default",
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -368,6 +369,7 @@ class RTDetrV2Config(PreTrainedConfig):
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
         self.decoder_method = decoder_method
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

@@ -302,7 +302,8 @@ class BridgeTowerConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.vision_config = vision_config
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

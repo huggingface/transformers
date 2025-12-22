@@ -345,11 +345,11 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
-
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
+
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
@@ -584,13 +584,15 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = None,
         **kwargs,
     ):
+        self.sliding_window = sliding_window
+        self.num_code_groups = num_code_groups
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -620,7 +622,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
-        self.num_code_groups = num_code_groups
+
         super().__init__(**kwargs)
 
 

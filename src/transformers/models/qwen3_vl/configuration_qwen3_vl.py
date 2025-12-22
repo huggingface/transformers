@@ -204,8 +204,6 @@ class Qwen3VLConfig(PreTrainedConfig):
             The start token index to encode the image prompt.
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
 
     ```python
     >>> from transformers import Qwen3VLForConditionalGeneration, Qwen3VLConfig
@@ -232,7 +230,6 @@ class Qwen3VLConfig(PreTrainedConfig):
         video_token_id=151656,
         vision_start_token_id=151652,
         vision_end_token_id=151653,
-        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -249,7 +246,7 @@ class Qwen3VLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig"]

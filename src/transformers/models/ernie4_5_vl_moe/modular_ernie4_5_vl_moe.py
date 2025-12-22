@@ -313,10 +313,9 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
-        PreTrainedConfig.__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        PreTrainedConfig.__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
