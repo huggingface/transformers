@@ -59,7 +59,7 @@ class VLMModelTester:
             for model_class in (
                 self.base_model_class,
                 self.conditional_generation_class,
-                self.sequence_classification_class
+                self.sequence_classification_class,
             )
             if model_class is not None
         ]
@@ -336,16 +336,22 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
-            curr_input_dict["input_ids"] = torch.cat([curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=0)
+            curr_input_dict["input_ids"] = torch.cat(
+                [curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=0
+            )
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
             # two images and two image tokens don't raise an error
-            curr_input_dict["pixel_values"] = torch.cat([curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0)
+            curr_input_dict["pixel_values"] = torch.cat(
+                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
+            )
             if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat([curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0)
+                curr_input_dict["image_sizes"] = torch.cat(
+                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
+                )
             _ = model(**curr_input_dict)
 
     @parameterized.expand(
@@ -355,7 +361,6 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
             ([-1, -2],),
         ],
     )
-
     @unittest.skip(reason="VLMs cannot pass input_embeds without input_ids")
     def test_inputs_embeds(self):
         pass
