@@ -28,6 +28,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
@@ -57,6 +58,11 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, JanusVisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass
@@ -973,8 +979,6 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.eval()  # Janus's VQ model is frozen
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
-
-        # Initialize the VQVAE model.
         self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
@@ -1126,7 +1130,7 @@ class JanusModel(JanusPreTrainedModel):
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ):
+    ) -> JanusBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1203,7 +1207,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> JanusCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

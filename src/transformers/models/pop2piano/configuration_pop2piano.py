@@ -125,7 +125,6 @@ class Pop2PianoConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True  # forcing it
 
 
 __all__ = ["Pop2PianoConfig"]

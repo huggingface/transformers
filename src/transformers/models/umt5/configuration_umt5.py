@@ -94,7 +94,6 @@ class UMT5Config(PreTrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=True,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
@@ -138,10 +137,10 @@ class UMT5Config(PreTrainedConfig):
             self.dense_act_fn = "gelu_new"
 
         self.tokenizer_class = tokenizer_class
-        self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = True # force it for T5 family
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

@@ -158,10 +158,10 @@ class MarianConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = share_encoder_decoder_embeddings
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             forced_eos_token_id=forced_eos_token_id,
-            tie_encoder_decoder=share_encoder_decoder_embeddings,
             **kwargs,
         )
 

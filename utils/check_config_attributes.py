@@ -39,6 +39,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Ernie4_5Config": ["tie_word_embeddings"],
     "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
+    "Ernie4_5_VL_MoeTextConfig": ["tie_word_embeddings"],
     "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
     "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
@@ -58,6 +59,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
+    "PaddleOCRTextConfig": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -413,6 +415,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "initializer_range",
         "init_std",
         "initializer_factor",
+        "tie_word_embeddings",
         "bos_index",
         "eos_index",
         "pad_index",

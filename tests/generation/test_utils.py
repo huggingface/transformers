@@ -67,7 +67,6 @@ if is_torch_available():
         AutoModelForImageTextToText,
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
-        AutoModelForVision2Seq,
         BartForConditionalGeneration,
         BartTokenizer,
         DataCollatorWithFlattening,
@@ -2674,6 +2673,32 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_generation_config_defaults(self):
+        "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_ids = tokenizer("Hello", return_tensors="pt").input_ids.to(torch_device)
+
+        # Set the min/max_length to non-default value
+        model.generation_config.min_length = 50
+        model.generation_config.max_length = 50
+
+        # Explicit generate with min/max_length set to global default values
+        generation_config = GenerationConfig(
+            temperature=1.0,
+            max_length=20,
+            min_length=0,
+            do_sample=False,
+            eos_token_id=-1,  # don't stop before max length reached
+        )
+
+        runtime_generation_config, _ = model._prepare_generation_config(generation_config=generation_config)
+        self.assertEqual(runtime_generation_config.max_length, 20)
+        self.assertEqual(runtime_generation_config.min_length, 0)
+
+        out = model.generate(input_ids, generation_config=generation_config)
+        self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
     # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):
@@ -4401,7 +4426,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         """Test that `decoder_input_ids` can be used to condition the generation in vision-to-text models"""
         pixel_values = floats_tensor((2, 3, 30, 30))
         conditioning_input = torch.tensor([[10], [10]])  # this should be the 2nd output token, after the BOS token
-        model = AutoModelForVision2Seq.from_pretrained(
+        model = AutoModelForImageTextToText.from_pretrained(
             "hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2"
         )
         pixel_values = pixel_values.to(torch_device)
@@ -4420,6 +4445,24 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids, output_sequences_input_ids))
         self.assertTrue(np.array_equal(output_sequences_decoder_input_ids[:, 1:2], conditioning_input))
+
+    @pytest.mark.generate
+    def test_load_generation_config_from_text_subconfig(self):
+        """
+        Tests that generation config is be loaded from model's `text_config` when not present
+        in the model repo. We should infer the text config correctly and re-use special tokens
+        for generation. See https://github.com/huggingface/transformers/issues/42794
+        """
+        model = AutoModelForImageTextToText.from_pretrained(
+            "hf-internal-testing/tiny-random-LlavaForConditionalGeneration-no-generation-config",
+            device_map=torch_device,
+        )
+        self.assertTrue(model.generation_config.eos_token_id is not None)
+        self.assertTrue(model.generation_config.bos_token_id is not None)
+        self.assertTrue(model.generation_config.pad_token_id is not None)
+
+        # test that we can generate without inputs, i.e. from BOS
+        _ = model.generate()
 
     @require_read_token
     @slow
@@ -4759,6 +4802,25 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = model.generate(**generation_kwargs, **model_inputs)
         self.assertEqual(output.sequences.shape, (1, 9))
 
+    def test_model_generation_config_can_override_defaults(self):
+        """Sanity check that the model samples, not ignoring the model's generation config"""
+        torch.manual_seed(42)  # make it deterministic
+
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM").eval()
+        model = model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        model_inputs = tokenizer(["Write a poem about the market crashing in summer"], return_tensors="pt")
+        model_inputs = model_inputs.to(model.device)
+
+        # Overwrite default value or sampling
+        model.generation_config.do_sample = True
+        output = model.generate(**model_inputs, max_new_tokens=32)
+
+        EXPECTED_TEXT = 'Write a poem about the market crashing in summersong contradictionPr aucitated realiz Comicsflutterąc inventминцій Glad:` Raymond moreover KulturMillteger мартаTEXT CFщая Русбе Świ Sendlink heuresListener Luigiaceae'  # fmt: skip
+        output = tokenizer.decode(output[0], skip_special_tokens=True)
+        self.assertTrue(output == EXPECTED_TEXT)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
@@ -4873,7 +4935,8 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.assertEqual(self.candidate_generator.matches, self.original_matches)
             self.assertEqual(self.candidate_generator.probs, self.original_probs)
             self.assertEqual(
-                self.assistant_model.generation_config.assistant_confidence_threshold, self.original_threshold
+                self.candidate_generator.assistant_generation_config.assistant_confidence_threshold,
+                self.original_threshold,
             )
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
@@ -4886,7 +4949,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [0])
             self.assertEqual(self.candidate_generator.probs, [0.9])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4899,7 +4962,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4912,7 +4975,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 
@@ -4925,7 +4988,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.2)
         else:
             self.assert_no_sklearn()
 
@@ -4938,7 +5001,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.3)
         else:
             self.assert_no_sklearn()
 
@@ -4951,7 +5014,7 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
             self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
             self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
             self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
-            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+            self.assertEqual(self.candidate_generator.assistant_generation_config.assistant_confidence_threshold, 0.4)
         else:
             self.assert_no_sklearn()
 

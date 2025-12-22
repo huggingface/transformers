@@ -20,6 +20,9 @@
 
 __version__ = "5.0.0.dev0"
 
+import importlib
+import sys
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,6 +36,7 @@ from .utils import (
     is_librosa_available,
     is_mistral_common_available,
     is_mlx_available,
+    is_numba_available,
     is_pretty_midi_available,
 )
 
@@ -174,6 +178,8 @@ _import_structure = {
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils": [],
+    "tokenization_utils_fast": [],
     "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
@@ -261,6 +267,7 @@ _import_structure = {
     ],
     "video_utils": [],
     "utils.kernel_config": ["KernelConfig"],
+    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -434,6 +441,15 @@ else:
         "convert_and_export_with_cache",
     ]
 
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "WeightConverter",
+    ]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
@@ -487,6 +503,13 @@ if TYPE_CHECKING:
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
+    from .core_model_loading import Chunk as Chunk
+    from .core_model_loading import Concatenate as Concatenate
+    from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import MergeModulelist as MergeModulelist
+    from .core_model_loading import PermuteForRope as PermuteForRope
+    from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
     from .data import DataProcessor as DataProcessor
@@ -745,6 +768,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.import_utils import requires_backends
     from .utils.kernel_config import KernelConfig as KernelConfig
 
     # Quantization config
@@ -768,8 +792,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 else:
-    import sys
-
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
@@ -782,6 +804,26 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
+
+    def _create_tokenization_alias(alias: str, target: str) -> None:
+        """
+        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
+        """
+
+        module = types.ModuleType(alias)
+        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+
+        def _get_target():
+            return importlib.import_module(target, __name__)
+
+        module.__getattr__ = lambda name: getattr(_get_target(), name)
+        module.__dir__ = lambda: dir(_get_target())
+
+        sys.modules[alias] = module
+        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
+
+    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
+    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
 
 
 if not is_torch_available():

@@ -110,11 +110,9 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
+        self, generation_config: Optional[GenerationConfig], **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
@@ -261,7 +259,6 @@ class DiaGenerationMixin(GenerationMixin):
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        use_model_defaults: Optional[bool] = None,
         custom_generate: Optional[str] = None,
         **kwargs,
     ):
@@ -274,9 +271,7 @@ class DiaGenerationMixin(GenerationMixin):
             assistant_model,
             streamer,
         )
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
         if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
@@ -426,7 +421,6 @@ class DiaGenerationMixin(GenerationMixin):
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        use_model_defaults: Optional[bool] = None,
         custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
@@ -446,7 +440,6 @@ class DiaGenerationMixin(GenerationMixin):
             streamer=streamer,
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
-            use_model_defaults=use_model_defaults,
             custom_generate=custom_generate,
             **kwargs,
         )

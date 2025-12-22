@@ -26,7 +26,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
@@ -146,16 +146,16 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
             else "cpu"
         )
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight)
-            router_logits = F.softmax(router_logits, dim=1, dtype=torch.float)
-            router_top_value, router_indices = torch.topk(self.moe_statics(router_logits), self.top_k, dim=-1)
-            router_top_value = router_top_value / torch.clamp(
-                router_top_value.sum(dim=-1, keepdim=True), min=self.norm_min
+            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
+            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
+            routing_weights = routing_weights / torch.clamp(
+                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
             )
-            router_scores = router_top_value
-        router_scores = router_scores.to(hidden_states.dtype)
-        return router_logits, router_scores, router_indices
+        routing_weights = routing_weights.to(hidden_states.dtype)
+        return router_logits, selected_experts, routing_weights
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -178,7 +178,7 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         if self.shared_experts is not None:
             shared_output = self.shared_experts(hidden_states)
 
-        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        _, top_k_index, top_k_weights = self.gate(hidden_states)
         final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
 
         if self.shared_experts is not None:

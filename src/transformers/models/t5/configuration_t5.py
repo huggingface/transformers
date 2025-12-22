@@ -102,7 +102,6 @@ class T5Config(PreTrainedConfig):
         add_cross_attention=False,
         **kwargs,
     ):
-        self.tie_word_embeddings = tie_word_embeddings
         self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
@@ -139,8 +138,15 @@ class T5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Super weird feature of T5 because we support T5 and T51.1 from the same
+        # model code. Original T5 always scaled outputs, but the 1.1v does not.
+        # The model code was relying on saved configs where `tie_word_embeddings` is
+        # set to `False` in 1.1v and using it as indicator of whether to scale or not
+        # But in fact we tie weights always and force it to be `True`
+        self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
+        self.tie_word_embeddings = True
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True  # T5 is always tied, has always been like that.
 
 
 __all__ = ["T5Config"]

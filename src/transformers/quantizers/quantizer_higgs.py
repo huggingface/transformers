@@ -69,10 +69,7 @@ class HiggsHfQuantizer(HfQuantizer):
                 )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            logger.info("`dtype` is None. Setting `dtype=torch.float16` for FLUTE compatibility.")
-            dtype = torch.float16
-        elif dtype != torch.float16 and dtype != torch.bfloat16:
+        if dtype != torch.float16 and dtype != torch.bfloat16:
             raise ValueError(
                 f"Invalid `dtype` {dtype}. HIGGS quantization only supports `dtype=torch.float16` or `dtype=torch.bfloat16`."
             )
@@ -116,13 +113,12 @@ class HiggsHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_higgs_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         replace_with_higgs_linear(
@@ -160,7 +156,7 @@ class HiggsHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:

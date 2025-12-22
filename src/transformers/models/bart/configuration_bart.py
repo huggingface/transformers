@@ -164,7 +164,6 @@ class BartConfig(PreTrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["BartConfig"]

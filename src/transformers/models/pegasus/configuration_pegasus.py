@@ -152,9 +152,9 @@ class PegasusConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.forced_eos_token_id = forced_eos_token_id
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 

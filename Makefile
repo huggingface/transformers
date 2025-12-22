@@ -45,7 +45,7 @@ repo-consistency:
 	python utils/check_modular_conversion.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
-	python utils/check_init_weights_data.py
+	python utils/check_modeling_structure.py
 	python utils/check_inits.py
 	python utils/check_pipeline_typing.py
 	python utils/check_config_docstrings.py
@@ -53,7 +53,7 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_docstrings.py
-	python utils/add_dates.py
+	python utils/add_dates.py --check-only
 
 # this target runs checks on all files
 
@@ -93,6 +93,7 @@ fix-copies:
 	python utils/check_pipeline_typing.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
+	python utils/add_dates.py
 
 # Run tests for the library
 
@@ -134,4 +135,3 @@ build-release:
 	rm -rf build
 	python setup.py bdist_wheel
 	python setup.py sdist
-	python utils/check_build.py

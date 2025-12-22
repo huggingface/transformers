@@ -36,7 +36,7 @@ class OmDetTurboConfig(PreTrainedConfig):
     Args:
         text_config (`PreTrainedConfig`, *optional*):
             The configuration of the text backbone.
-        backbone_config (`PreTrainedConfig`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the vision backbone.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use the timm for the vision backbone.

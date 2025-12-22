@@ -422,6 +422,8 @@ class RagModel(RagPreTrainedModel):
         self.ctx_encoder = None
         self.context_encoder_training = False
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
@@ -689,6 +691,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
+
+        self.post_init()
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -1126,6 +1130,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         # instantiate model
         self.rag = RagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever)
 
+        self.post_init()
+
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
@@ -1404,7 +1410,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        use_model_defaults: Optional[bool] = None,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1463,11 +1468,6 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 model's config. If a stopping criteria is passed that is already created with the arguments or a
                 model's config an error is thrown.
-            use_model_defaults (`bool`, *optional*):
-                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
-                generation configuration (`model.generation_config`), as opposed to the global defaults
-                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
-                `True`.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
@@ -1479,9 +1479,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         """
         # Handle `generation_config` and kwargs that might update it
         generation_mode_kwargs = self._extract_generation_mode_kwargs(None, kwargs, False, None, None)
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
         generation_mode = generation_config.get_generation_mode()
         if generation_mode not in [
             GenerationMode.SAMPLE,
