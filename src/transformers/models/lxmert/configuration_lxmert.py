@@ -103,6 +103,8 @@ class LxmertConfig(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "lxmert"

@@ -104,6 +104,12 @@ class AfmoeConfig(PreTrainedConfig):
         mup_enabled (`bool`, *optional*, defaults to `False`):
             Whether to enable muP (Maximal Update Parametrization) input scaling. When enabled, input embeddings
             are scaled by `sqrt(hidden_size)`.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
 
     Example:
     ```python
@@ -160,6 +166,7 @@ class AfmoeConfig(PreTrainedConfig):
         mup_enabled: Optional[bool] = False,
         eos_token_id: Optional[bool] = None,
         pad_token_id: Optional[bool] = None,
+        bos_token_id: Optional[bool] = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -204,6 +211,7 @@ class AfmoeConfig(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)

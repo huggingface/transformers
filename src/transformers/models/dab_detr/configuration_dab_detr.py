@@ -118,6 +118,8 @@ class DabDetrConfig(PreTrainedConfig):
         initializer_bias_prior_prob (`float`, *optional*):
             The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
             If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     Examples:

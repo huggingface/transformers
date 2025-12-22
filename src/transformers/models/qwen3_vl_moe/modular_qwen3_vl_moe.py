@@ -234,8 +234,6 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
             The start token index to encode the image prompt.
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig

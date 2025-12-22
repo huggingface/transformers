@@ -127,6 +127,8 @@ class MimiConfig(PreTrainedConfig):
             Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     Example:
 
     ```python

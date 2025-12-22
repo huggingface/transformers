@@ -191,6 +191,8 @@ class DFineConfig(PreTrainedConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "d_fine"

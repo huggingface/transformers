@@ -68,6 +68,8 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 0):
             Beginning of sequence token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -110,6 +112,7 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         bos_token_id=0,
+        eos_token_id=None,
         use_cache=True,
         is_decoder=False,
         **kwargs,
@@ -117,6 +120,7 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         super().__init__(**kwargs)
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
         self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

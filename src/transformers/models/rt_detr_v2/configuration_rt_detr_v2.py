@@ -166,6 +166,8 @@ class RTDetrV2Config(PreTrainedConfig):
             Scaling factor applied to the attention offsets in the decoder.
         decoder_method (`str`, *optional*, defaults to `"default"`):
             The method to use for the decoder: `"default"` or `"discrete"`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
