@@ -28,7 +28,7 @@ class HumanVConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`HumanVModel`]. It is used to instantiate a
     HumanV model according to the specified arguments, defining the model architecture.
 
-    A pretrained checkpoint is available at: [nebularesearchtrain/nilla-story](https://huggingface.co/nebularesearchtrain/nilla-story)
+    A pretrained checkpoint is available at: [humanvprojectceo/nilla-story](https://huggingface.co/humanvprojectceo/nilla-story)
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
