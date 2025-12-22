@@ -43,6 +43,10 @@ class QuantoQuantize(ConversionOps):
 
         _load_parameter_into_model(model, full_layer_name, value)
         module, _ = get_module_from_name(model, full_layer_name)
+        # Need to set those to a specific value, otherwise they will remain on meta device ...
+        module.input_scale = torch.ones(module.input_scale.shape)
+        module.output_scale = torch.ones(module.output_scale.shape)
+        # quantize
         module.freeze()
         module.weight.requires_grad = False
         module._is_hf_initialized = True

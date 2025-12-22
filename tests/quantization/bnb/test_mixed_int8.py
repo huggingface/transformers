@@ -446,9 +446,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
             hf_quantizer = AutoHfQuantizer.from_config(BitsAndBytesConfig(load_in_8bit=True), pre_quantized=False)
             hf_quantizer.preprocess_model(model=model, config=model.config, device_map=expanded_device_map)
-            quantized_model_size, _ = compute_module_sizes(
-                model, hf_quantizer, only_modules=False, device_map=expanded_device_map
-            )
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
             expected_keys = [name for name, _ in model.named_parameters()] + [
                 name for name, _ in model.named_buffers()
