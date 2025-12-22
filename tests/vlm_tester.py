@@ -177,9 +177,13 @@ class VLMModelTester:
         self.image_token_index = image_token_index
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
-        self.num_image_tokens = num_image_tokens
-        self.seq_length = seq_length + self.num_image_tokens
+        self._base_num_image_tokens = num_image_tokens
+        self._base_seq_length = seq_length
         self.tie_word_embeddings = False
+
+        # Compute derived values using template methods (can be overridden by subclasses)
+        self.num_image_tokens = self.compute_num_image_tokens()
+        self.seq_length = self.compute_seq_length()
 
         for required_attribute in [
             "base_model_class",
@@ -193,13 +197,83 @@ class VLMModelTester:
                     f"You have inherited from VLMModelTester but did not set the {required_attribute} attribute."
                 )
 
+    # ============================================
+    # Template methods - override in subclasses
+    # ============================================
+
+    def compute_num_image_tokens(self):
+        """
+        Compute the number of image tokens per image.
+        Override for models with complex image token calculations.
+
+        Default: returns the num_image_tokens parameter passed to __init__
+        """
+        return self._base_num_image_tokens
+
+    def compute_seq_length(self):
+        """
+        Compute the total sequence length including image tokens.
+        Override for models with different sequence length requirements.
+
+        Default: base_seq_length + num_image_tokens
+        """
+        return self._base_seq_length + self.num_image_tokens
+
+    def create_pixel_values(self):
+        """
+        Create pixel values tensor with the appropriate shape for this model.
+        Override for models that require different pixel value shapes (e.g., 5D for patch-based models).
+
+        Default: 4D tensor (batch_size, num_channels, image_size, image_size)
+        """
+        return floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0
+        )
+
+    def create_attention_mask(self, input_ids):
+        """
+        Create attention mask for the input.
+        Override for models that need different mask types (e.g., padding mask for bidirectional attention).
+
+        Default: causal (lower triangular) mask
+        """
+        return torch.tril(torch.ones_like(input_ids).to(torch_device))
+
+    def place_image_tokens(self, input_ids, config):
+        """
+        Insert image tokens into the input_ids tensor.
+        Override for models with different image token placement strategies.
+
+        Default: places image tokens at the beginning of each sequence
+        """
+        image_token_index = getattr(config, "image_token_index", self.image_token_index)
+        # Clear any accidental image tokens first
+        input_ids = input_ids.clone()
+        input_ids[input_ids == image_token_index] = self.bos_token_id
+        # Place image tokens at the start
+        input_ids[:, : self.num_image_tokens] = image_token_index
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        """
+        Return additional model-specific inputs.
+        Override to add inputs like image_sizes, token_type_ids, etc.
+
+        Default: empty dict (no additional inputs)
+        """
+        return {}
+
+    # ============================================
+    # Core methods that use template methods
+    # ============================================
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
+        pixel_values = self.create_pixel_values()
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+            input_mask = self.create_attention_mask(input_ids)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -223,7 +297,8 @@ class VLMModelTester:
 
     def get_config(self):
         kwargs = {}
-        model_name_to_common_name = {v: k for k, v in self.config_class.attribute_map.items()}
+        attribute_map = getattr(self.config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
         for k in self.config_args + self.forced_config_args:
             if hasattr(self, k) and k != "self":
                 kwargs[k] = getattr(self, k)
@@ -235,7 +310,8 @@ class VLMModelTester:
 
     def get_text_config(self):
         kwargs = {}
-        model_name_to_common_name = {v: k for k, v in self.text_config_class.attribute_map.items()}
+        attribute_map = getattr(self.text_config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
         for k in self.text_config_args:
             if hasattr(self, k) and k != "self":
                 kwargs[k] = getattr(self, k)
@@ -245,7 +321,8 @@ class VLMModelTester:
 
     def get_vision_config(self):
         kwargs = {}
-        model_name_to_common_name = {v: k for k, v in self.vision_config_class.attribute_map.items()}
+        attribute_map = getattr(self.vision_config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
         for k in self.vision_config_args:
             if hasattr(self, k) and k != "self":
                 kwargs[k] = getattr(self, k)
@@ -265,10 +342,22 @@ class VLMModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids, token_type_ids, input_mask, pixel_values = self.prepare_config_and_inputs()
+
+        # Place image tokens in input_ids using template method
+        input_ids = self.place_image_tokens(input_ids, config)
+
+        # Recreate attention mask with final input_ids (after image tokens are placed)
+        # This is important for models that use padding masks based on token values
+        if self.use_input_mask:
+            input_mask = self.create_attention_mask(input_ids)
+
+        # Build base inputs dict
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
-        if "image_sizes" in signature(self.base_model_class.forward).parameters:
-            image_sizes = torch.tensor([[self.image_size, self.image_size]] * self.batch_size)
-            inputs_dict["image_sizes"] = image_sizes
+
+        # Add model-specific additional inputs using template method
+        additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values)
+        inputs_dict.update(additional_inputs)
+
         return config, inputs_dict
 
 
@@ -316,35 +405,42 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
 
     def test_mismatching_num_image_tokens(self):
         """
-        Tests that VLMs through an error with explicit message saying what is wrong
+        Tests that VLMs throw an error with explicit message saying what is wrong
         when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        Also we need to test multi-image cases when one prompt has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            curr_input_dict = copy.deepcopy(input_dict)
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
-            # remove one image but leave the image token in text
+            # Test 1: remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             if "image_sizes" in curr_input_dict:
                 curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            # Test 2: simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            # First, take just the first item from each tensor
             curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
-            curr_input_dict["input_ids"] = torch.cat(
-                [curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=0
-            )
+
+            # Double the batch size for all batch-dimension tensors except pixel_values
+            # This simulates having 2 prompts (each with image tokens) but only 1 image
+            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids"]
+            for key in batch_tensors_to_double:
+                if key in curr_input_dict and curr_input_dict[key] is not None:
+                    curr_input_dict[key] = torch.cat(
+                        [curr_input_dict[key], curr_input_dict[key]], dim=0
+                    )
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
-            # two images and two image tokens don't raise an error
+            # Test 3: two images and two image tokens don't raise an error
             curr_input_dict["pixel_values"] = torch.cat(
                 [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
             )

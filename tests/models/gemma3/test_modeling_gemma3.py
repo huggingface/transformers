@@ -257,47 +257,41 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         sequence_classification_class = Gemma3ForSequenceClassification
         all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
 
-    def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=2, image_token_index=4, **kwargs):
-        # Match the original test's batch_size and seq_length to ensure compatibility
-        # with the bidirectional attention test. The test expects specific dimensions.
-        super().__init__(
-            parent,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_key_value_heads=1,
-            batch_size=3,
-            seq_length=25,
-            num_image_tokens=0,  # Don't add extra to seq_length; match original behavior
-            **kwargs,
-        )
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        # Actual tokens per image after pooling: int(sqrt(mm_tokens_per_image))^2
-        self.tokens_per_side = int(mm_tokens_per_image**0.5)
-        self.actual_tokens_per_image = self.tokens_per_side * self.tokens_per_side
+    # Gemma3-specific configuration
+    mm_tokens_per_image = 2
 
-    def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = super().prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+    def __init__(self, parent, **kwargs):
+        # Gemma3 uses different defaults than the base class
+        kwargs.setdefault("image_size", 20)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
+        super().__init__(parent, **kwargs)
 
-        # Replace any accidental image tokens with a safe value
+    # Template method overrides
+
+    def compute_num_image_tokens(self):
+        """Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2"""
+        tokens_per_side = int(self.mm_tokens_per_image**0.5)
+        return tokens_per_side * tokens_per_side
+
+    def create_attention_mask(self, input_ids):
+        """Gemma3 uses padding mask for bidirectional attention on image tokens"""
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def place_image_tokens(self, input_ids, config):
+        """Place image tokens at the start of each sequence"""
+        input_ids = input_ids.clone()
         input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        return input_ids
 
-        # Insert the correct number of image tokens at the start of each sequence
-        # Each batch item has one image, and each image needs actual_tokens_per_image tokens
-        input_ids[:, : self.actual_tokens_per_image] = config.image_token_index
-
-        # Override the attention mask from parent (which is tril/causal) with a proper padding mask.
-        # Gemma3 uses bidirectional attention for image tokens, which requires a padding mask
-        # (not a causal mask) so that the token_type_ids masking can work correctly.
-        inputs_dict["attention_mask"] = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Set up token_type_ids for bidirectional attention on image tokens
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        """Gemma3 requires token_type_ids for bidirectional attention on image tokens"""
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_index] = 1
-        inputs_dict["token_type_ids"] = token_type_ids
-
-        return config, inputs_dict
+        return {"token_type_ids": token_type_ids}
 
 
 @require_torch
