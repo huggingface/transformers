@@ -269,8 +269,8 @@ class DeformableDetrConfig(PreTrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["DeformableDetrConfig"]

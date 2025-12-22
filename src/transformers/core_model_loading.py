@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from abc import abstractmethod
@@ -25,6 +26,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
@@ -278,6 +280,166 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
+    r"""
+    Special operation that splits a module list over all keys and fuses over the number of original modules.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                 ModuleList 1            ModuleList 2
+                [   Gate    ]            [   Up    ]
+                |           |            |         |
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+              \                  \  /                /
+               \                 \ /                /
+                \               /  \               /
+                 \            /     \             /
+                 [GateUp_Text]      [GateUp_Vision]
+
+    The splits are equal and are defined by the amount of target keys.
+    The final fusions are defined by the amount of original module lists.
+    """
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+
+    def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
+        split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
+        return [tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)]
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        valid_keys = input_dict.keys()
+        split_and_fused = defaultdict(list)
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
+
+            tensors = input_dict.get(key, [])
+            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
+            stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
+            for idx, tensor_group in enumerate(stacked_tensors):
+                split_and_fused[target_patterns[idx]].append(tensor_group)
+
+        for k, v in split_and_fused.items():
+            split_and_fused[k] = torch.cat(v, dim=self.concat_dim)
+
+        return split_and_fused
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ErnieSplitAndDecoupleTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+
+
+class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
+    r"""
+    Special operation that splits a fused module list over all original modules and
+    then decouples them into a mixed module list each over all keys.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                    [GateUp_Text]     [GateUp_Vision]
+                  /              \   /             \
+                 /                \ /               \
+                /                / \                 \
+               /                /   \                 \
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+                |           |            |         |
+                [   Gate    ]            [   Up    ]
+                 ModuleList 1            ModuleList 2
+
+    The splits are equal and are defined by the amount of original module lists.
+    The final decoupled module lists are defined by the amount of keys.
+    """
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        fused_modules = len(target_patterns)
+        valid_keys = input_dict.keys()
+        split_tensors = []
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
+
+            # Assuming that we get single sized lists here to index with 0
+            split_tensors.append(input_dict[key][0].chunk(fused_modules, dim=self.concat_dim))
+
+        decoupled = {}
+        for idx, key in enumerate(target_patterns):
+            tensor_groups = [
+                list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
+            ]
+            tensor_list = list(chain.from_iterable(tensor_groups))
+            targets = [key.replace("*", f"{i}") for i in range(len(tensor_list))]
+            decoupled |= dict(zip(targets, tensor_list))
+
+        return decoupled
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+
+
+class Transpose(ConversionOps):
+    """
+    Transposes the given tensor along dim0 and dim1.
+    """
+
+    def __init__(self, dim0: int = 0, dim1: int = 1):
+        self.dim0 = dim0
+        self.dim1 = dim1
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(input_dict) != len(target_patterns):
+            raise ValueError(
+                f"Transpose conversion can only happen on each key ({len(input_dict)}) "
+                f"and should match exact one target ({len(target_patterns)})."
+            )
+
+        output: dict[str, list[torch.Tensor]] = {}
+        for key, target_pattern in zip(input_dict.keys(), target_patterns):
+            tensor = input_dict.get(key, [])
+            if len(tensor) != 1:
+                raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1)
+        return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Transpose(dim0=self.dim1, dim1=self.dim0)
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: Union[str, list[str]] = field(init=True)
@@ -304,8 +466,9 @@ class WeightTransform:
             pattern = pattern.removeprefix("^")
             # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
             pattern = pattern.removesuffix("$")
-            # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
-            pattern = re.sub(r"\(\?!.+\)", "", pattern)
+            # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+            # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+            pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
             if r"(.+)" in pattern:
                 pattern = pattern.replace(r"(.+)", r"\1")
@@ -340,19 +503,19 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
+
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = source_key.replace(match_object.group(0), replacement)
-
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -439,6 +602,13 @@ class WeightRenaming(WeightTransform):
         return collected_tensors, conversion_errors
 
 
+# List of classes that are known to be able to use m:n
+_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
+    ErnieFuseAndSplitTextVisionExperts,
+    ErnieSplitAndDecoupleTextVisionExperts,
+)
+
+
 @dataclass(slots=True)
 class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
@@ -446,9 +616,11 @@ class WeightConverter(WeightTransform):
     def __post_init__(self):
         WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            raise ValueError(
-                f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
-            )
+            # We allow many-to-many only if we use an internal operation that can handle it
+            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+                raise ValueError(
+                    f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
+                )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
