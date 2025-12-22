@@ -2352,7 +2352,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If the config does not specify any tying, return empty dict
         # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
         # modules do not have any word embeddings!
-        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
+        tie_word_embeddings = getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", False)
         if not tie_word_embeddings:
             return {}
         # If None, return empty dict
@@ -2366,6 +2366,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return tied_mapping.copy()
 
         # We need to expand the regex patterns or the modules into proper parameters
+        print("START")
         expanded_tied_weights = {}
         all_param_names = {k for k, _ in self.named_parameters(remove_duplicate=False)} | {
             k for k, _ in self.named_buffers(remove_duplicate=False)

@@ -198,6 +198,7 @@ class GroundingDinoConfig(PreTrainedConfig):
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -285,6 +286,7 @@ class GroundingDinoConfig(PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

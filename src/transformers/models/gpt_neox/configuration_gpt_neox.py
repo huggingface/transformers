@@ -153,6 +153,7 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.attention_bias = attention_bias
         self.rope_parameters = rope_parameters
+        self.tie_word_embeddings = tie_word_embeddings
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(

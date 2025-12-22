@@ -182,6 +182,7 @@ class DabDetrConfig(PreTrainedConfig):
         normalize_before=False,
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if query_dim != 4:
@@ -255,6 +256,7 @@ class DabDetrConfig(PreTrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

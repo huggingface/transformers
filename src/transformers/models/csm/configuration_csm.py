@@ -133,7 +133,6 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         if kwargs.pop("tie_word_embeddings", False):
             raise ValueError("`tie_word_embeddings=True` is not supported for CsmDepthDecoderConfig")
 
-        super().__init__(**kwargs)
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -160,6 +159,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
 class CsmConfig(PreTrainedConfig):
