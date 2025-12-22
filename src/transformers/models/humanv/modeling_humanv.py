@@ -211,7 +211,8 @@ class HumanVAttention(nn.Module):
 
         k_local = k_local.permute(0, 1, 2, 5, 3, 4).contiguous()
         v_local = v_local.permute(0, 1, 2, 5, 3, 4).contiguous()
-        km_local = km_local.unsqueeze(1)
+
+        km_local = km_local.unsqueeze(1).unsqueeze(3)
 
         g_idx, g_valid = self._build_global_block_indices(n_blocks, global_num_blocks, global_stride, q.device)
         g = g_idx.size(1)
@@ -222,11 +223,23 @@ class HumanVAttention(nn.Module):
             km_g = None
         else:
             idx = g_idx.view(1, 1, n_blocks, g, 1, 1).expand(bsz, n_heads, n_blocks, g, block_size, d)
-            k_g = torch.gather(k_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d), dim=2, index=idx)
-            v_g = torch.gather(v_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d), dim=2, index=idx)
+            k_g = torch.gather(
+                k_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d),
+                dim=2,
+                index=idx,
+            )
+            v_g = torch.gather(
+                v_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d),
+                dim=2,
+                index=idx,
+            )
 
             idxm = g_idx.view(1, 1, n_blocks, g, 1).expand(bsz, n_heads, n_blocks, g, block_size)
-            km_g = torch.gather(km_blocks.unsqueeze(1).unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size), dim=2, index=idxm)
+            km_g = torch.gather(
+                km_blocks.unsqueeze(1).unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size),
+                dim=2,
+                index=idxm,
+            )
             km_g = km_g * g_valid.view(1, 1, n_blocks, g, 1)
 
             g_len = g * block_size
@@ -236,7 +249,7 @@ class HumanVAttention(nn.Module):
         vlf = v_local.to(torch.float32)
 
         s_local = torch.einsum("bhqtd,bhqwsd->bhqtws", qf, klf) * self.scaling
-        s_local = s_local + (1.0 - km_local) * -1e9
+        s_local = s_local + (1.0 - km_local.to(torch.float32)) * -1e9
 
         intra = torch.triu(torch.full((block_size, block_size), -1e9, device=q.device, dtype=torch.float32), diagonal=1)
         s_local[:, :, :, :, -1, :] = s_local[:, :, :, :, -1, :] + intra[None, None, None, :, :]
@@ -246,7 +259,7 @@ class HumanVAttention(nn.Module):
         if g_len > 0:
             kgf = k_g.to(torch.float32)
             s_g = torch.einsum("bhqtd,bhqwsd->bhqtws", qf, kgf) * self.scaling
-            s_g = s_g + (1.0 - km_g.to(torch.float32).unsqueeze(1)) * -1e9
+            s_g = s_g + (1.0 - km_g.to(torch.float32).unsqueeze(3)) * -1e9
             s_g = s_g.reshape(bsz, n_heads, n_blocks, block_size, g_len)
 
             scores = torch.cat([s_local, s_g], dim=-1)
@@ -265,6 +278,7 @@ class HumanVAttention(nn.Module):
         out = out.reshape(bsz, n_heads, total_len, d)
         out = out[:, :, q_pad:, :]
         return out, probs
+
 
     def forward(
         self,
