@@ -329,24 +329,24 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
+            if "image_sizes" in curr_input_dict:
+                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:1]
-            image_sizes = curr_input_dict["image_sizes"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
+            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
+            curr_input_dict["input_ids"] = torch.cat([curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=0)
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+                _ = model(**curr_input_dict)
 
             # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+            curr_input_dict["pixel_values"] = torch.cat([curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0)
+            if "image_sizes" in curr_input_dict:
+                curr_input_dict["image_sizes"] = torch.cat([curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0)
+            _ = model(**curr_input_dict)
 
     @parameterized.expand(
         [
