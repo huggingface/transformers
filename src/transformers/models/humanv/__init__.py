@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
@@ -21,7 +22,5 @@ if TYPE_CHECKING:
     from .configuration_humanv import *
     from .modeling_humanv import *
 else:
-    import sys
-
     _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
