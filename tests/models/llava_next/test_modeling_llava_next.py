@@ -62,6 +62,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     conditional_generation_class = LlavaNextForConditionalGeneration
     text_config_class = LlamaConfig
     vision_config_class = CLIPVisionConfig
+    all_model_classes = (LlavaNextModel, LlavaNextForConditionalGeneration)
 
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
