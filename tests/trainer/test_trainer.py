@@ -608,6 +608,7 @@ if is_torch_available():
             model_init=model_init,
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         )
+        print(trainer.model.config)
         # TODO: loss function defined in RegressionModel doesn't accept num_item_per_batch, to fix later
         trainer.model_accepts_loss_kwargs = False
         return trainer
