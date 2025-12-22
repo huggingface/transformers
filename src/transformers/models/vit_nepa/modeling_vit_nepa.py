@@ -619,10 +619,8 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ViTNepaModel(ViTNepaPreTrainedModel):
-    def __init__(self, config: ViTNepaConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: ViTNepaConfig, use_mask_token: bool = False):
         r"""
-        add_pooling_layer (bool, *optional*, defaults to `True`):
-            Whether to add a pooling layer
         use_mask_token (`bool`, *optional*, defaults to `False`):
             Whether to use a mask token for masked image modeling.
         """
@@ -735,7 +733,6 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         self.add_pooling_layer = config.add_pooling_layer
         self.num_image_tokens = (config.image_size // config.patch_size) ** 2
-        self.pooler = lambda hidden_states: hidden_states.mean(dim=1) if config.add_pooling_layer else None
         self.fc_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.add_pooling_layer else None
         )
@@ -765,7 +762,7 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
         sequence_output = outputs.last_hidden_state
         if self.add_pooling_layer:
             image_tokens = sequence_output[:, -self.num_image_tokens :, :]
-            pooled_output = image_tokens.mean(dim=1)
+            pooled_output = torch.mean(image_tokens, dim=1)
             pooled_output = self.fc_norm(pooled_output)
         else:
             pooled_output = sequence_output[:, -1, :]
