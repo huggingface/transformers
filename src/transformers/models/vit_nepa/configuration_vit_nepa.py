@@ -20,58 +20,57 @@ class ViTNepaConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            hidden_size (`int`, *optional*, defaults to 768):
-                Dimensionality of the encoder layers and the pooler layer.
-            num_hidden_layers (`int`, *optional*, defaults to 12):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 12):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (`int`, *optional*, defaults to 3072):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            use_gated_mlp (`bool`, *optional*, defaults to `False`):
-                Whether to use a gated MLP instead of a standard feed-forward block.
-            hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-                The non-linear activation function in the encoder and pooler. If string, `"gelu"`, `"relu"`, `"selu"` and
-                `"gelu_new"` are supported.
-            hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the attention probabilities.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-                The epsilon used by the layer normalization layers.
-            rope_theta (`float`, *optional*, defaults to 100.0):
-                Base period used for rotary positional embeddings.
-            image_size (`int`, *optional*, defaults to 224):
-                The size (resolution) of each image.
-            patch_size (`int`, *optional*, defaults to 16):
-                The size (resolution) of each patch.
-            num_channels (`int`, *optional*, defaults to 3):
-                The number of input channels.
-            qkv_bias (`bool`, *optional*, defaults to `True`):
-                Whether to add a bias to the queries, keys and values.
-            qk_norm (`bool`, *optional*, defaults to `False`):
-                Whether to apply normalization to the query and key projections before attention.
-            qk_norm_bias (`bool`, *optional*, defaults to `False`):
-                Whether the query/key normalization layers use a bias term.
-            qk_norm_affine (`bool`, *optional*, defaults to `False`):
-                Whether the query/key normalization layers use learnable affine parameters.
-            layerscale_value (`float`, *optional*, defaults to 1e-05):
-                Initial value for LayerScale factors. A non-positive value typically disables LayerScale.
-            drop_path_prob (`float`, *optional*, defaults to 0.0):
-                Stochastic depth (DropPath) rate used in the encoder blocks.
-            add_pooling_layer (`bool`, *optional*, defaults to `False`):
-                Whether to add a pooling layer on top of the final hidden state.
-            is_causal (`bool`, *optional*, defaults to `True`):
-                Whether to use a causal attention mask (for autoregressive-style training).
-            pos_embed_shift (`float`, *optional*):
-                Maximum magnitude of random positional embedding shift used as a training augmentation.
-            pos_embed_jitter (`float`, *optional*):
-                Amount of jitter applied to positional embedding coordinates as a training augmentation.
-            pos_embed_rescale (`float`, *optional*, defaults to 2.0):
-                Rescaling factor applied to positional embedding coordinates (e.g. when interpolating to new resolutions).
-                Additional keyword arguments passed to [`PretrainedConfig`].
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        use_gated_mlp (`bool`, *optional*, defaults to `False`):
+            Whether to use a gated MLP instead of a standard feed-forward block.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the encoder and pooler. If string, `"gelu"`, `"relu"`, `"selu"` and
+            `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        rope_theta (`float`, *optional*, defaults to 100.0):
+            Base period used for rotary positional embeddings.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply normalization to the query and key projections before attention.
+        qk_norm_bias (`bool`, *optional*, defaults to `False`):
+            Whether the query/key normalization layers use a bias term.
+        qk_norm_affine (`bool`, *optional*, defaults to `False`):
+            Whether the query/key normalization layers use learnable affine parameters.
+        layerscale_value (`float`, *optional*, defaults to 1e-05):
+            Initial value for LayerScale factors. A non-positive value typically disables LayerScale.
+        drop_path_prob (`float`, *optional*, defaults to 0.0):
+            Stochastic depth (DropPath) rate used in the encoder blocks.
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+            Whether to add a pooling layer on top of the final hidden state.
+        is_causal (`bool`, *optional*, defaults to `True`):
+            Whether to use a causal attention mask (for autoregressive-style training).
+        pos_embed_shift (`float`, *optional*):
+            Maximum magnitude of random positional embedding shift used as a training augmentation.
+        pos_embed_jitter (`float`, *optional*):
+            Amount of jitter applied to positional embedding coordinates as a training augmentation.
+        pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+            Rescaling factor applied to positional embedding coordinates (e.g. when interpolating to new resolutions).
 
     Example:
 
