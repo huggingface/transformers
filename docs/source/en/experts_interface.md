@@ -78,7 +78,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## torch.compile
 
-All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) work with no issues in eager mode. However, there are some important differences to consider when using `torch.compile` with experts implementations:
+All three backends (`"eager"`, `"batched_mm"`, `"grouped_mm"`) are compatible with `torch.compile` to certain extents. The following table summarizes compatibility:
 
 | Implementation | compilation modes                    | dtypes                           | `fullgraph=True` |
 | -------------- | ------------------------------------ | -------------------------------- | ---------------- |
