@@ -1214,7 +1214,7 @@ class ModelTesterMixin:
             # Now, run all the inits
             model.init_weights()
 
-            # Prepare inputs to correct device
+            # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
             # Inputs may be on cuda -> move to cpu, we don't care about accelerator for this test
             inputs = {k: v.to("cpu") if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
