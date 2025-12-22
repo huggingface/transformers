@@ -61,9 +61,9 @@ class HumanVConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`dict`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. Must include `rope_theta`.
+            Dictionary containing the configuration parameters for the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+            Whether to use a bias in the query, key, value and output projection layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -72,19 +72,18 @@ class HumanVConfig(PreTrainedConfig):
             Attention implementation. Supported: `"eager"`, `"sdpa"`.
         layer_types (`list[str]`, *optional*):
             Attention pattern for each layer. Supported: `"full_attention"`, `"sliding_attention"`.
-
         use_sparse_attention (`bool`, *optional*, defaults to `False`):
-            If `True`, the default `layer_types` will be set to sliding attention for all layers.
+            If `True`, defaults `layer_types` to sliding attention for all layers.
         sparse_attention_impl (`str`, *optional*, defaults to `"local_global_block"`):
             Sparse implementation. Supported: `"local_global_block"`, `"masked"`.
         sparse_attention_window (`int`, *optional*, defaults to 256):
-            Token window size for masked sparse fallback.
+            Token window size for masked sliding attention.
         sparse_block_size (`int`, *optional*, defaults to 64):
-            Block size for block-sparse attention.
+            Block size for local-global block sparse attention.
         sparse_local_num_blocks (`int`, *optional*, defaults to 4):
-            Number of local previous blocks (including current) attended by each query block.
+            Number of local previous blocks attended by each query block (includes current block).
         sparse_global_num_blocks (`int`, *optional*, defaults to 2):
-            Number of global landmark blocks attended by each query block (includes block 0).
+            Number of global landmark blocks attended by each query block (always includes block 0).
         sparse_global_block_stride (`int`, *optional*, defaults to 4):
             Stride (in blocks) to choose landmark blocks from the past.
 
@@ -165,7 +164,6 @@ class HumanVConfig(PreTrainedConfig):
         self.attn_implementation = attn_implementation
         self.rope_parameters = rope_parameters
         self.layer_types = layer_types
-
         self.use_sparse_attention = use_sparse_attention
         self.sparse_attention_impl = sparse_attention_impl
         self.sparse_attention_window = sparse_attention_window
@@ -174,10 +172,7 @@ class HumanVConfig(PreTrainedConfig):
         self.sparse_global_num_blocks = sparse_global_num_blocks
         self.sparse_global_block_stride = sparse_global_block_stride
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = ["HumanVConfig"]

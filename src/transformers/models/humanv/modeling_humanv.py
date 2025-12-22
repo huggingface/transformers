@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2025 The HumanV Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Optional
 
 import torch
@@ -9,20 +24,16 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
 from .configuration_humanv import HumanVConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 class HumanVRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -41,7 +52,7 @@ class HumanVRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x, position_ids):
+    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         inv_freq_expanded = (
             self.inv_freq[None, :, None].to(device=x.device, dtype=torch.float32).expand(position_ids.shape[0], -1, 1)
         )
@@ -51,13 +62,15 @@ class HumanVRotaryEmbedding(nn.Module):
         return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
-def rotate_half(x):
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin):
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     cos = cos.unsqueeze(1)
     sin = sin.unsqueeze(1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -66,14 +79,14 @@ def apply_rotary_pos_emb(q, k, cos, sin):
 
 
 class HumanVMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HumanVConfig):
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -106,8 +119,7 @@ class HumanVAttention(nn.Module):
         pad_left = (multiple - (l % multiple)) % multiple
         if pad_left == 0:
             return x, 0
-        x = torch.nn.functional.pad(x, (0, 0, pad_left, 0))
-        return x, pad_left
+        return torch.nn.functional.pad(x, (0, 0, pad_left, 0)), pad_left
 
     def _make_2d_mask_full(self, attention_mask_2d: Optional[torch.Tensor], k_len: int, device) -> torch.Tensor:
         if attention_mask_2d is None:
@@ -120,22 +132,27 @@ class HumanVAttention(nn.Module):
             m = m[:, -k_len:]
         return m
 
-    def _build_global_block_indices(self, n_blocks: int, num_global: int, stride: int, device) -> torch.Tensor:
+    def _build_global_block_indices(self, n_blocks: int, num_global: int, stride: int, device) -> tuple[torch.Tensor, torch.Tensor]:
         if num_global <= 0:
-            return torch.empty((n_blocks, 0), device=device, dtype=torch.long)
+            idx = torch.empty((n_blocks, 0), device=device, dtype=torch.long)
+            valid = torch.empty((n_blocks, 0), device=device, dtype=torch.float32)
+            return idx, valid
         num_global = int(num_global)
         stride = max(1, int(stride))
         i = torch.arange(n_blocks, device=device, dtype=torch.long)
         if num_global == 1:
-            return torch.zeros((n_blocks, 1), device=device, dtype=torch.long)
+            idx = torch.zeros((n_blocks, 1), device=device, dtype=torch.long)
+            valid = torch.ones((n_blocks, 1), device=device, dtype=torch.float32)
+            return idx, valid
         offsets = torch.arange(num_global - 1, 0, -1, device=device, dtype=torch.long) * stride
-        idx = i[:, None] - offsets[None, :]
-        idx = torch.clamp(idx, min=0)
-        idx = torch.cat([torch.zeros((n_blocks, 1), device=device, dtype=torch.long), idx], dim=1)
+        raw = i[:, None] - offsets[None, :]
+        raw = torch.clamp(raw, min=0)
+        idx = torch.cat([torch.zeros((n_blocks, 1), device=device, dtype=torch.long), raw], dim=1)
+        valid = torch.ones_like(idx, dtype=torch.float32)
         dup = idx[:, 1:] == idx[:, :-1]
-        idx2 = idx.clone()
-        idx2[:, 1:][dup] = -1
-        return idx2
+        valid[:, 1:][dup] = 0.0
+        idx[:, 1:][dup] = 0
+        return idx, valid
 
     def _local_global_block_sparse(
         self,
@@ -196,40 +213,23 @@ class HumanVAttention(nn.Module):
         v_local = v_local.permute(0, 1, 2, 5, 3, 4).contiguous()
         km_local = km_local.unsqueeze(1)
 
-        g_idx = self._build_global_block_indices(n_blocks, global_num_blocks, global_stride, q.device)
-        if g_idx.numel() == 0:
+        g_idx, g_valid = self._build_global_block_indices(n_blocks, global_num_blocks, global_stride, q.device)
+        g = g_idx.size(1)
+        if g == 0:
             g_len = 0
-            g_valid = None
+            k_g = None
+            v_g = None
+            km_g = None
         else:
-            g_valid = (g_idx >= 0).to(dtype=torch.float32)
-            g_idx_safe = g_idx.clamp(min=0)
-            bh = bsz * n_heads
+            idx = g_idx.view(1, 1, n_blocks, g, 1, 1).expand(bsz, n_heads, n_blocks, g, block_size, d)
+            k_g = torch.gather(k_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d), dim=2, index=idx)
+            v_g = torch.gather(v_blocks.unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size, d), dim=2, index=idx)
 
-            kbh = k_blocks.reshape(bh, n_blocks, block_size, d).unsqueeze(1)
-            vbh = v_blocks.reshape(bh, n_blocks, block_size, d).unsqueeze(1)
+            idxm = g_idx.view(1, 1, n_blocks, g, 1).expand(bsz, n_heads, n_blocks, g, block_size)
+            km_g = torch.gather(km_blocks.unsqueeze(1).unsqueeze(3).expand(bsz, n_heads, n_blocks, g, block_size), dim=2, index=idxm)
+            km_g = km_g * g_valid.view(1, 1, n_blocks, g, 1)
 
-            kbh = kbh.expand(bh, n_blocks, n_blocks, block_size, d)
-            vbh = vbh.expand(bh, n_blocks, n_blocks, block_size, d)
-
-            idx_bh = g_idx_safe.unsqueeze(0).expand(bh, -1, -1)
-            idx_full = idx_bh.unsqueeze(-1).unsqueeze(-1).expand(bh, n_blocks, g_idx_safe.size(1), block_size, d)
-
-            k_g = torch.gather(kbh, dim=2, index=idx_full)
-            v_g = torch.gather(vbh, dim=2, index=idx_full)
-
-            k_g = k_g.view(bsz, n_heads, n_blocks, g_idx_safe.size(1), block_size, d)
-            v_g = v_g.view(bsz, n_heads, n_blocks, g_idx_safe.size(1), block_size, d)
-
-            kmg = km_blocks.unsqueeze(1).expand(bsz, n_heads, n_blocks, block_size)
-            kmg = kmg.reshape(bsz * n_heads, n_blocks, block_size).unsqueeze(1).expand(bsz * n_heads, n_blocks, n_blocks, block_size)
-
-            idx_km = idx_bh.unsqueeze(-1).expand(bsz * n_heads, n_blocks, g_idx_safe.size(1), block_size)
-            km_g = torch.gather(kmg, dim=2, index=idx_km)
-            km_g = km_g.view(bsz, n_heads, n_blocks, g_idx_safe.size(1), block_size).unsqueeze(1)
-
-            km_g = km_g * g_valid[None, None, :, :, None]
-
-            g_len = g_idx_safe.size(1) * block_size
+            g_len = g * block_size
 
         qf = q_blocks.to(torch.float32)
         klf = k_local.to(torch.float32)
@@ -246,11 +246,11 @@ class HumanVAttention(nn.Module):
         if g_len > 0:
             kgf = k_g.to(torch.float32)
             s_g = torch.einsum("bhqtd,bhqwsd->bhqtws", qf, kgf) * self.scaling
-            km_g_flat = km_g.reshape(bsz, 1, n_heads, n_blocks, g_idx.size(1), block_size).permute(0, 2, 3, 4, 5, 1).squeeze(-1)
-            km_g_flat = km_g_flat.unsqueeze(1)
-            s_g = s_g + (1.0 - km_g_flat) * -1e9
+            s_g = s_g + (1.0 - km_g.to(torch.float32).unsqueeze(1)) * -1e9
             s_g = s_g.reshape(bsz, n_heads, n_blocks, block_size, g_len)
+
             scores = torch.cat([s_local, s_g], dim=-1)
+
             v_g_flat = v_g.to(torch.float32).reshape(bsz, n_heads, n_blocks, g_len, d)
             v_l_flat = vlf.reshape(bsz, n_heads, n_blocks, local_num_blocks * block_size, d)
             v_all = torch.cat([v_l_flat, v_g_flat], dim=-2)
@@ -412,6 +412,7 @@ class HumanVModel(HumanVPreTrainedModel):
 
         _ = config.layer_types
         _ = config.attn_implementation
+        _ = config.max_position_embeddings
         _ = config.use_sparse_attention
         _ = config.sparse_attention_impl
         _ = config.sparse_attention_window
@@ -426,6 +427,12 @@ class HumanVModel(HumanVPreTrainedModel):
         self.rotary_emb = HumanVRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         batch_size, tgt_len = input_shape
@@ -513,14 +520,26 @@ class HumanVModel(HumanVPreTrainedModel):
 
 
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: HumanVConfig):
         super().__init__(config)
         self.model = HumanVModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def forward(
         self,
