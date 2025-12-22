@@ -37,6 +37,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "rope_scaling",  # used internally in config to generate `rope_parameters`
     ],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Lfm2Config": ["full_attn_idxs"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
         "delay_pattern",

@@ -913,6 +913,10 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
 
     # Replace content
     lines = content.split("\n")
+    prev_line_indentation = find_indent(lines[line_number + start_idx - 2])
+    # Now increase the indentation of every line in new_doc_args by prev_line_indentation
+    new_doc_args = "\n".join([f"{' ' * prev_line_indentation}{line}" for line in new_doc_args.split("\n")])
+
     lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")

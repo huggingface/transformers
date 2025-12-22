@@ -2366,7 +2366,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return tied_mapping.copy()
 
         # We need to expand the regex patterns or the modules into proper parameters
-        print("START")
         expanded_tied_weights = {}
         all_param_names = {k for k, _ in self.named_parameters(remove_duplicate=False)} | {
             k for k, _ in self.named_buffers(remove_duplicate=False)
