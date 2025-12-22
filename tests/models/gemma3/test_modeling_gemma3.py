@@ -26,8 +26,8 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    is_torch_available,
     SiglipVisionConfig,
+    is_torch_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -43,13 +43,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...vlm_tester import VLMModelTest, VLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers.trainer_utils import set_seed
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -269,7 +267,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
             batch_size=3,
             seq_length=25,
             num_image_tokens=0,  # Don't add extra to seq_length; match original behavior
-            **kwargs
+            **kwargs,
         )
         self.mm_tokens_per_image = mm_tokens_per_image
         self.image_token_index = image_token_index
@@ -332,12 +330,6 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        "Gemma3 has no base model prefix which causes issues when loading base model from saved task model checkpoint"
-    )
-    def test_load_with_mismatched_shapes(self):
         pass
 
     def test_bidirectional_image_attention(self):
