@@ -255,6 +255,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         vision_config_class = SiglipVisionConfig
         conditional_generation_class = Gemma3ForConditionalGeneration
         sequence_classification_class = Gemma3ForSequenceClassification
+        all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
 
     def __init__(self, parent, image_size=20, patch_size=5, mm_tokens_per_image=2, image_token_index=4, **kwargs):
         # Match the original test's batch_size and seq_length to ensure compatibility
