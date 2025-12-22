@@ -1099,6 +1099,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
+        if hasattr(config, "quantization_config"):
+            config.vision_config.quantization_config = config.quantization_config
+            config.text_config.quantization_config = config.quantization_config
         super().__init__(config)
         self.visual = PaddleOCRVisionModel._from_config(config.vision_config)
         self.projector = PaddleOCRProjector(config)
