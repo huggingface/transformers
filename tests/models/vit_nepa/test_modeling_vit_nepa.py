@@ -295,9 +295,16 @@ class ViTNepaModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
+        # verify the loss
         expected_loss = torch.tensor(-0.9947).to(torch_device)
         torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)
+
+        # verify the last hidden state
+        expected_shape = torch.Size((1, 257, 768))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor([-0.9382, -0.0110, -0.3818]).to(torch_device)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate
