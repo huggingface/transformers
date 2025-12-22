@@ -211,7 +211,6 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,

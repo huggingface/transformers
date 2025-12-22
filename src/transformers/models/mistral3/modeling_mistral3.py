@@ -252,7 +252,9 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
+        split_sizes = (
+            (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1).tolist()
+        )
         image_features = torch.split(image_features.squeeze(0), split_sizes)
         return image_features
 

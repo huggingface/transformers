@@ -706,6 +706,10 @@ class Emu3VQVAE(PreTrainedModel):
         elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
             init.constant_(module.weight, 1.0)
             init.constant_(module.bias, 0.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag

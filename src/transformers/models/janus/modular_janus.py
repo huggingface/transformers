@@ -24,8 +24,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.models.blip.image_processing_blip import BlipImageProcessor
-
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -58,6 +57,7 @@ from ...utils import (
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..blip.image_processing_blip import BlipImageProcessor
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
@@ -390,6 +390,11 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, JanusVisionEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @dataclass
@@ -942,7 +947,7 @@ class JanusModel(JanusPreTrainedModel):
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ):
+    ) -> JanusBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
@@ -1019,7 +1024,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> JanusCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

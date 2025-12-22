@@ -21,6 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -432,6 +433,12 @@ class VideoLlama3VisionEncoder(SiglipEncoder):
 class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
     config: VideoLlama3Config
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):

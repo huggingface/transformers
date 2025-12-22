@@ -559,6 +559,7 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -1138,6 +1139,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, Kosmos2VisionAttention):
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -1170,6 +1172,11 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             init.zeros_(module.bias)
+        elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)

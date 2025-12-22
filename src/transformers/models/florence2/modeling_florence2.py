@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -628,6 +629,18 @@ class Florence2PreTrainedModel(PreTrainedModel):
 
     _supports_attention_backend = False
     config_class = Florence2Config
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Florence2VisionPositionalEmbeddingCosine1D):
+            pos_idx_to_embed = torch.empty((module.max_seq_len, module.embed_dim))
+            sine, cosine = module.get_sinusoid_embeddings(
+                max_positions=module.max_seq_len,
+                embed_dim=module.embed_dim,
+            )
+            pos_idx_to_embed[:, 0::2] = sine
+            pos_idx_to_embed[:, 1::2] = cosine
+            init.copy_(module.pos_idx_to_embed, pos_idx_to_embed)
 
 
 @auto_docstring(

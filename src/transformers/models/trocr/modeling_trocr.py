@@ -89,7 +89,6 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions, embedding_dim, padding_idx)
-        self.register_buffer("_float_tensor", torch.FloatTensor(1))
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -123,7 +122,6 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
         if self.weights is None or max_pos > self.weights.size(0):
             # recompute/expand embeddings if needed
             self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
-        self.weights = self.weights.to(self._float_tensor)
 
         x = self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
@@ -636,6 +634,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = TrOCRDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
