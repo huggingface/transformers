@@ -198,9 +198,9 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.num_experts = num_experts
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -234,8 +234,6 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
             The start token index to encode the image prompt.
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig

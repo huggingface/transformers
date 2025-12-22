@@ -127,6 +127,8 @@ class MimiConfig(PreTrainedConfig):
             Initial scale of the residual rescaling operation done in the Transformer models.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     Example:
 
     ```python
@@ -184,6 +186,7 @@ class MimiConfig(PreTrainedConfig):
         attention_dropout: Optional[float] = 0.0,
         layer_scale_initial_scale: Optional[float] = 0.01,
         attention_bias: Optional[bool] = False,
+        tie_word_embeddings: Optional[bool] = True,
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
@@ -221,6 +224,7 @@ class MimiConfig(PreTrainedConfig):
         self.head_dim = head_dim or hidden_size // num_attention_heads
         self.layer_scale_initial_scale = layer_scale_initial_scale
         self.attention_bias = attention_bias
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
         # Handle backward compatibility for frame_rate:

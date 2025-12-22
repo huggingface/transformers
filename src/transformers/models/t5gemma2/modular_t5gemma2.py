@@ -172,6 +172,10 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -203,13 +207,7 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PreTrainedConfig.__init__(**kwargs)
 
 
 class T5Gemma2EncoderConfig(Gemma3Config):
@@ -322,6 +320,10 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -353,13 +355,7 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PreTrainedConfig.__init__(**kwargs)
 
 
 class T5Gemma2Config(PreTrainedConfig):
@@ -833,7 +829,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.text_config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
 
         vision_config = config.vision_config

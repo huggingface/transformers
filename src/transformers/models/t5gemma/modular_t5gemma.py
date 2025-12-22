@@ -131,6 +131,11 @@ class T5GemmaModuleConfig(Gemma2Config):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -168,8 +173,12 @@ class T5GemmaModuleConfig(Gemma2Config):
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = 30.0,
         attn_logit_softcapping: Optional[float] = 50.0,
+        is_decoder: Optional[bool] = False,
+        add_cross_attention: Optional[bool] = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
