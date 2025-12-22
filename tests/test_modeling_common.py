@@ -1202,21 +1202,30 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            # apparently this model cannot correctly create its inputs and has to use another function....
+            # Apparently this model cannot correctly create its inputs and has to use another function....
             if "modeling_perceiver.py" in inspect.getfile(model_class):
                 _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
             # Initialize the model fully on meta device, then move everything to cpu and run `init_weights`
             with torch.device("meta"):
                 model = model_class(copy.deepcopy(config)).eval()
-            # move everything randomly to cpu
+            # Move everything randomly to cpu
             model.to_empty(device="cpu")
             # Now, run all the inits
             model.init_weights()
 
+            # Prepare inputs to correct device
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            final_inputs = {}
+            for k, v in inputs.items():
+                if isinstance(v, torch.Tensor):
+                    final_inputs[k] = v.to(device="cpu")
+                else:
+                    final_inputs[k] = v
+
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+                _ = model(**final_inputs)
             except (RuntimeError, NotImplementedError) as e:
                 # Re-raise a more friendly exception (unfortunately, we cannot know which tensor it was...)
                 if "Cannot copy out of meta tensor; no data!" in str(
