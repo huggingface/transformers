@@ -222,8 +222,8 @@ def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[tor
     original_forward = experts_class.forward
 
     @wraps(original_init)
-    def __init__(self, config):
-        original_init(self, config)
+    def __init__(self, config, *args, **kwargs):
+        original_init(self, config, *args, **kwargs)
         self.config = config
 
     @wraps(original_forward)
