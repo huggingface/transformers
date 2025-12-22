@@ -248,12 +248,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         {
             "feature-extraction": KyutaiSpeechToTextModel,
             "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
+            "any-to-any": KyutaiSpeechToTextForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -294,10 +293,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
         pass
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")

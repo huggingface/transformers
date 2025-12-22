@@ -16,13 +16,10 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
-import warnings
 from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
 class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
@@ -44,30 +41,8 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "SeamlessM4TFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        try:
-            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
-        except OSError:
-            warnings.warn(
-                f"Loading a tokenizer inside {cls.__name__} from a config that does not"
-                " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
-                " attribute to either your `config.json` or `tokenizer_config.json` "
-                "file to suppress this warning: ",
-                FutureWarning,
-            )
-
-            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(
         self,

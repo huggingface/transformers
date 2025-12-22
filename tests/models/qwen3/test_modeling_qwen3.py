@@ -165,9 +165,10 @@ class Qwen3IntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("xpu", 3): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
+                ("xpu", 3): "My favourite condiment is 100% beef and comes in a 12 oz. jar. It is sold in",
                 ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
                 ("cuda", 8): "My favourite condiment is 100% beef, 100% beef, 100% beef.",
+                ("npu", None): "My favourite condiment is 100% chicken and beef. I love it because it's so good and I love it",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -214,6 +215,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
                 ("xpu", None): ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"],
                 ("rocm", (9, 5)): ["My favourite condiment is 100% plain, unflavoured, and unadulterated."],
                 ("cuda", None): cuda_expectation,
+                ("npu", None): ["My favourite condiment is 100% plain, unsalted, unsweetened, and unflavored. It is"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
@@ -266,6 +268,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @slow
+    @pytest.mark.flash_attn_test
     def test_600m_generation(self):
         model_id = "Qwen/Qwen3-0.6B-Base"
         tokenizer = AutoTokenizer.from_pretrained(model_id)

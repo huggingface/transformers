@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -195,7 +195,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
     additional_model_inputs = ["bool_masked_pos"]
 
-    test_torchscript = False
     test_resize_embeddings = False
     test_torch_exportable = True
 
@@ -350,7 +349,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             check_hidden_states_output(inputs_dict, config, model_class)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @is_flaky()

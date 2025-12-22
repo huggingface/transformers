@@ -408,11 +408,11 @@ class ReformerModelTester:
     def create_and_check_reformer_model_generate(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
         config.lsh_num_chunks_after = 0
-        config.bos_token_id = 0
-        config.eos_token_id = None
-        config.max_length = 20
 
         model = ReformerModelWithLMHead(config=config)
+        model.generation_config.bos_token_id = 0
+        model.generation_config.eos_token_id = None
+        model.generation_config.max_length = 20
         model.to(torch_device)
         model.eval()
         output = model.generate()
@@ -603,7 +603,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         else ()
     )
 
-    test_torchscript = False
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -744,8 +743,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else {}
     )
-
-    test_torchscript = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(

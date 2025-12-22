@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -364,18 +365,7 @@ class ClapAudioSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -433,6 +423,20 @@ class ClapAudioSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_relative_position_index(self):
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+        return relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
@@ -1265,9 +1269,9 @@ class ClapTextEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -1305,35 +1309,45 @@ class ClapTextPooler(nn.Module):
 class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
     base_model_prefix = "clap"
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = False
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
-            module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.position_embeddings.weight, mean=0.0, std=factor * 0.02)
+            init.normal_(module.token_type_embeddings.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, ClapModel):
-            module.logit_scale_a.data.fill_(math.log(self.config.logit_scale_init_value))
-            module.logit_scale_t.data.fill_(math.log(self.config.logit_scale_init_value))
+            init.constant_(module.logit_scale_a, math.log(self.config.logit_scale_init_value))
+            init.constant_(module.logit_scale_t, math.log(self.config.logit_scale_init_value))
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.weight, mean=0.0, std=factor * 0.02)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.weight, std=in_proj_std)
+            init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, ClapAudioSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            init.zeros_(module.relative_position_bias_table)
+            init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
 class ClapAudioModel(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
@@ -1352,6 +1366,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1370,7 +1385,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> model = ClapAudioModel.from_pretrained("laion/clap-htsat-fused")
         >>> processor = AutoProcessor.from_pretrained("laion/clap-htsat-fused")
 
-        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1406,6 +1421,7 @@ class ClapAudioModel(ClapPreTrainedModel):
 )
 class ClapTextModel(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = ("text",)
 
     def __init__(self, config, add_pooling_layer=True):
         r"""
@@ -1441,6 +1457,7 @@ class ClapTextModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1622,6 +1639,7 @@ class ClapModel(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapOutput]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1644,7 +1662,7 @@ class ClapModel(ClapPreTrainedModel):
 
         >>> input_text = ["Sound of a dog", "Sound of vacuum cleaner"]
 
-        >>> inputs = processor(text=input_text, audios=audio_sample, return_tensors="pt", padding=True)
+        >>> inputs = processor(text=input_text, audio=audio_sample, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
@@ -1710,6 +1728,7 @@ class ClapModel(ClapPreTrainedModel):
 @auto_docstring
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config: ClapTextConfig
+    input_modalities = ("text",)
 
     def __init__(self, config: ClapTextConfig):
         super().__init__(config)
@@ -1734,6 +1753,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapTextModelOutput]:
         r"""
         Examples:
@@ -1776,6 +1796,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config: ClapAudioConfig
     main_input_name = "input_features"
+    input_modalities = "audio"
 
     def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
@@ -1796,6 +1817,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ClapAudioModelOutput]:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1814,7 +1836,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> dataset = load_dataset("hf-internal-testing/ashraq-esc50-1-dog-example")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
+        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""

@@ -41,7 +41,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     require_torchaudio,
     slow,
     torch_device,
@@ -277,10 +276,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         pass
 
     @unittest.skip(reason="this model has multiple inputs embeds and lm heads that should not be tied")
-    def test_tie_model_weights(self):
-        pass
-
-    @unittest.skip(reason="this model has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
 
@@ -295,7 +290,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         self.model_tester.audio_channels = original_audio_channels
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_inference_equivalence
@@ -377,7 +372,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 _ = model_fa(dummy_input, **other_inputs)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.test_flash_attn_2_inference_equivalence_right_padding
@@ -595,9 +590,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     additional_model_inputs = ["decoder_input_ids"]
     # training is not supported yet for MusicGen
     test_resize_embeddings = False
-    # not to test torchscript as the model tester doesn't prepare `input_features` and `padding_mask`
-    # (and `torchscript` hates `None` values).
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -776,10 +768,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
 
-    @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied.")
-    def test_tie_model_weights(self):
-        pass
-
     @unittest.skip(reason="MusicGen has multiple inputs embeds and lm heads that should not be tied")
     def test_tied_weights_keys(self):
         pass
@@ -913,7 +901,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester.audio_channels = original_audio_channels
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_conversion(self):

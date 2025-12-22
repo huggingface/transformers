@@ -21,6 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import LayerNorm
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -50,7 +51,6 @@ from ...utils.generic import check_model_inputs
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
-    make_batched_videos,
     reorder_videos,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -374,14 +374,11 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor`):
-                Input to the layer of shape `(seq_len, embed_dim)`.
-            cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
-            position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-                The cosine and sine position embeddings for vision attention.
+        r"""
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
+        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+            The cosine and sine position embeddings for vision attention.
         """
         residual = hidden_states
 
@@ -437,10 +434,17 @@ class VideoLlama3PreTrainedModel(Qwen2VLPreTrainedModel):
     config: VideoLlama3Config
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
 
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, VideoLlama3VisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
 
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": VideoLlama3VisionEncoderLayer,
         "attentions": VideoLlama3VisionAttention,
@@ -752,13 +756,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
-
-    def visual(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    @property
-    def vision_model(self):
-        return self.model.vision_model
 
     @can_return_tuple
     @auto_docstring
@@ -1137,7 +1134,7 @@ class VideoLlama3Processor(Qwen2VLProcessor):
                 for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
             ]
             video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]
@@ -1448,15 +1445,11 @@ class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
         "pixel_values",
         "image_grid_thw",
         "image_merge_sizes",
-        "pixel_values_videos",
-        "video_grid_thw",
-        "video_merge_sizes",
     ]
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        videos: VideoInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Optional[Union[str, "torch.device"]] = None,
@@ -1464,39 +1457,17 @@ class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
     ) -> BatchFeature:
         # Prepare input images
         batch_feature = BatchFeature()
-        if images is not None:
-            if kwargs["temporal_patch_size"] != 1:
-                raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
-            images = self._prepare_image_like_inputs(
-                images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
-            )
-            batch_feature = self._preprocess(images, **kwargs)
-            batch_feature["image_merge_sizes"] = torch.tensor(
-                [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
-                dtype=batch_feature.image_grid_thw.dtype,
-                device=batch_feature.image_grid_thw.device,
-            )
-        if videos is not None:
-            logger.warning(
-                "`VideoLlama3ImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `VideoLlama3VideoProcessor`. "
-            )
-            # Can't change _prepare_images_structure to work with videos because it also needs to work with images.
-            videos = make_batched_videos(videos)
-            videos = [
-                torch.stack(self._prepare_image_like_inputs(video, do_convert_rgb, input_data_format, device))
-                for video in videos
-            ]
-            video_outputs = self._preprocess(videos, **kwargs)
-            batch_feature.update(
-                {"pixel_values_videos": video_outputs.pixel_values, "video_grid_thw": video_outputs.image_grid_thw}
-            )
-            batch_feature["video_merge_sizes"] = torch.tensor(
-                [kwargs["merge_size"]] * video_outputs.image_grid_thw.size(0),
-                dtype=video_outputs.image_grid_thw.dtype,
-                device=video_outputs.image_grid_thw.device,
-            )
+        if kwargs["temporal_patch_size"] != 1:
+            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        batch_feature = self._preprocess(images, **kwargs)
+        batch_feature["image_merge_sizes"] = torch.tensor(
+            [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
+            dtype=batch_feature.image_grid_thw.dtype,
+            device=batch_feature.image_grid_thw.device,
+        )
         return batch_feature
 
 

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -90,7 +89,7 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Any
+        self, generation_config: Optional[GenerationConfig], **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
@@ -105,9 +104,7 @@ class CsmGenerationMixin(GenerationMixin):
         kwargs = {k: v for k, v in kwargs.items() if not k.startswith("depth_decoder_")}
 
         # initialize the generation config
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
         self.depth_decoder.generation_config.update(**depth_decoder_kwargs)
 
         # ensure the depth decoder generation config is valid
@@ -204,11 +201,11 @@ class CsmGenerationMixin(GenerationMixin):
                     criterion.max_length -= cur_len
         # ============================================
 
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
 
         is_prefill = True
         while self._has_unfinished_sequences(

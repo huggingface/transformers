@@ -22,13 +22,14 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ...utils.generic import check_model_inputs
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
@@ -41,9 +42,6 @@ from ..llava.modeling_llava import (
     LlavaPreTrainedModel,
 )
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 def eager_attention_forward(
@@ -175,11 +173,10 @@ class InternVLVisionPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        embeddings = self.projection(pixel_values)
-        patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 # Based on timm implementation, which can be found here:
@@ -258,7 +255,7 @@ class InternVLVisionEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -275,7 +272,7 @@ class InternVLVisionEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
-        return embeddings, (patch_height, patch_width)
+        return embeddings
 
 
 class InternVLVisionMLP(CLIPMLP):
@@ -355,6 +352,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     config: InternVLVisionConfig
     base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
+    input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
@@ -367,18 +365,19 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, InternVLVisionEmbeddings):
-            module.cls_token.data.zero_()
+            init.zeros_(module.cls_token)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, InternVLVisionLayer):
-            module.lambda_1.data.fill_(self.config.layer_scale_init_value)
-            module.lambda_2.data.fill_(self.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -403,15 +402,13 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None, **kwargs
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]
@@ -425,7 +422,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
-    pass
+    input_modalities = ("image", "text", "video")
 
 
 INTERNVL_INPUTS_DOCSTRING = None

@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -34,7 +33,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `timm/repvit_m1.dist_in1k`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -93,8 +92,6 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         if isinstance(backbone_config, dict):
             backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
             backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif isinstance(backbone_config, AutoConfig):
-            backbone_config = backbone_config
         elif backbone_config is None:
             backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",

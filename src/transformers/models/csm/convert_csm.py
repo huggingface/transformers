@@ -81,7 +81,6 @@ def write_model(
     model_name,
     codec_model_path_or_repo,
     output_dir,
-    safe_serialization=True,
 ):
     print("Converting the model.")
     os.makedirs(output_dir, exist_ok=True)
@@ -92,7 +91,7 @@ def write_model(
     # prepare rope scaling args: the model uses originally
     # 1 - for the depth decoder
     # rope_theta=500000,
-    # rope_scaling={
+    # rope_parameters={
     # 	"factor": 32.0,
     # 	"high_freq_factor": 4.0,
     # 	"low_freq_factor": 1.0,
@@ -101,7 +100,7 @@ def write_model(
     # },
     # 2 - for the backbone
     # rope_theta=500000,
-    # rope_scaling={
+    # rope_parameters={
     # 	"factor": 32.0,
     # 	"high_freq_factor": 4.0,
     # 	"low_freq_factor": 1.0,
@@ -114,7 +113,7 @@ def write_model(
     # Therefore, we convert values to equivalent ones
 
     depth_decoder_config = CsmDepthDecoderConfig(
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
             "high_freq_factor": 0.0078125,
             "low_freq_factor": 0.001953125,
@@ -126,7 +125,7 @@ def write_model(
     config = CsmConfig(
         codec_config=codec_model.config,
         depth_decoder_config=depth_decoder_config,
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
             "high_freq_factor": 0.5,
             "low_freq_factor": 0.125,
@@ -222,7 +221,7 @@ def write_model(
     model.generation_config.depth_decoder_temperature = 0.9
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
@@ -317,9 +316,6 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
-    )
     args = parser.parse_args()
 
     write_model(
@@ -327,7 +323,6 @@ def main():
         args.model_name,
         args.codec_model_path_or_repo,
         output_dir=args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     write_tokenizer(args.output_dir)

@@ -122,11 +122,11 @@ class ImageClassificationPipeline(Pipeline):
     def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+    def __call__(self, inputs: list[str] | list["Image.Image"], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Assign labels to the image(s) passed as inputs.
 

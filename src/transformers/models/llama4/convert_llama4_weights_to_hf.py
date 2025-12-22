@@ -215,7 +215,6 @@ def write_model(
     input_base_path,
     num_shards,
     convert_checkpoints,
-    safe_serialization=True,
     instruct=False,
 ):
     os.makedirs(model_path, exist_ok=True)
@@ -243,14 +242,14 @@ def write_model(
     config_kwargs = {}
     if params["use_scaled_rope"]:
         # some constants from original code
-        rope_scaling = {
+        rope_parameters = {
             "rope_type": "llama3",
-            "factor": params.get("rope_scaling_factor", 8.0),
+            "factor": params.get("rope_parameters_factor", 8.0),
             "low_freq_factor": 1.0,
             "high_freq_factor": params.get("rope_high_freq_factor", 4.0),
             "original_max_position_embeddings": 8192,
         }
-        config_kwargs.update({"rope_scaling": rope_scaling})
+        config_kwargs.update({"rope_parameters": rope_parameters})
 
     if attention_chunk_size is None:
         config_kwargs.update({"cache_implementation": "static"})
@@ -518,7 +517,7 @@ def write_model(
         model.load_state_dict(state_dict, strict=True, assign=True)
         print("Model reloaded successfully.")
         print("Saving the model.")
-        model.save_pretrained(model_path, safe_serialization=safe_serialization)
+        model.save_pretrained(model_path)
         del state_dict, model
 
         # Safety check: reload the converted model
@@ -705,9 +704,6 @@ if __name__ == "__main__":
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--special_tokens",
         default=None,
         type=list[str],
@@ -736,7 +732,6 @@ if __name__ == "__main__":
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         num_shards=args.num_shards,
         instruct=args.instruct,
         convert_checkpoints=args.convert_checkpoints,

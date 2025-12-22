@@ -27,9 +27,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         BloomForCausalLM,
         BloomModel,
-        BloomTokenizerFast,
     )
 
 
@@ -168,9 +168,7 @@ class BloomModelTester(CausalLMModelTester):
 @require_torch
 class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BloomModelTester
-    fx_compatible = True
     test_missing_keys = False
-    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def test_bloom_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -522,7 +520,7 @@ class BloomIntegrationTest(unittest.TestCase):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
+        tokenizer = AutoTokenizer.from_pretrained(path_560m)
 
         input_sentence = "I enjoy walking with my cute dog"
         # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
@@ -542,7 +540,7 @@ class BloomIntegrationTest(unittest.TestCase):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
@@ -562,7 +560,7 @@ class BloomIntegrationTest(unittest.TestCase):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
@@ -592,7 +590,7 @@ class BloomIntegrationTest(unittest.TestCase):
 
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentences = [
             "Hello what is",

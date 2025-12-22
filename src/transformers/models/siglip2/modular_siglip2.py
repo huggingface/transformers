@@ -37,6 +37,7 @@ from transformers.models.siglip.modeling_siglip import (
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...utils import auto_docstring, filter_out_non_signature_kwargs
+from ...utils.generic import check_model_inputs
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -230,6 +231,10 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2PreTrainedModel(SiglipPreTrainedModel):
+    pass
+
+
 class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -242,6 +247,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -280,10 +286,6 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         )
 
 
-class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
-
-
 class Siglip2TextModel(SiglipTextModel):
     pass
 
@@ -314,6 +316,8 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -321,6 +325,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -416,6 +421,7 @@ class Siglip2Model(SiglipModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Siglip2Output:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -519,6 +525,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
