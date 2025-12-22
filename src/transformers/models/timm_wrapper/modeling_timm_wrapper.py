@@ -86,7 +86,8 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     config: TimmWrapperConfig
-    _no_split_modules = []
+    # add WA here as `timm` does not support model parallelism
+    _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
