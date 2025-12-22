@@ -1116,7 +1116,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
-        Gets the non-default generation parameters on the PreTrainedConfig instance
+        Checks if there are generation parameters on the PreTrainedConfig instance. Note that
+        we should not save generation params in PreTrainedConfig, and we will raise error
+        if there are any.
         """
         generation_params = {}
         default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
