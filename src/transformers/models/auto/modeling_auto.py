@@ -713,7 +713,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianForCausalLM"),
         ("mbart", "MBartForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
-        ("mimo_v2_flash","MiMoV2FlashForCausalLM"),
+        ("mimo_v2_flash", "MiMoV2FlashForCausalLM"),
         ("minimax", "MiniMaxForCausalLM"),
         ("ministral", "MinistralForCausalLM"),
         ("ministral3", "Ministral3ForCausalLM"),

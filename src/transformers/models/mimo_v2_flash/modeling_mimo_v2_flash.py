@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -152,7 +152,7 @@ def eager_attention_forward(
 class MiMoV2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-            MiMoV2RMSNorm is equivalent to T5LayerNorm
+        MiMoV2RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -190,11 +190,7 @@ class MiMoV2MoEGate(nn.Module):
         self.config = config
         self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
-        self.routed_scaling_factor = (
-            config.routed_scaling_factor
-            if config.routed_scaling_factor is not None
-            else 1.0
-        )
+        self.routed_scaling_factor = config.routed_scaling_factor if config.routed_scaling_factor is not None else 1.0
         self.scoring_func = config.scoring_func
         self.topk_method = config.topk_method
         self.n_group = config.n_group
@@ -203,64 +199,46 @@ class MiMoV2MoEGate(nn.Module):
         # topk selection algorithm
         self.norm_topk_prob = config.norm_topk_prob
         self.gating_dim = config.hidden_size
-        self.weight = nn.Parameter(
-            torch.empty((self.n_routed_experts, self.gating_dim))
-        )
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
         if self.topk_method == "noaux_tc":
-            self.e_score_correction_bias = nn.Parameter(
-                torch.empty(self.n_routed_experts)
-            )
+            self.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts))
 
     def forward(self, hidden_states):
         bsz, seq_len, h = hidden_states.shape
         ### compute gating score
         hidden_states = hidden_states.view(-1, h)
-        logits = F.linear(
-            hidden_states.type(torch.float32), self.weight.type(torch.float32), None
-        )
+        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32), None)
         if self.scoring_func == "sigmoid":
             scores = logits.sigmoid()
         else:
-            raise NotImplementedError(
-                f"insupportable scoring function for MoE gating: {self.scoring_func}"
-            )
+            raise NotImplementedError(f"insupportable scoring function for MoE gating: {self.scoring_func}")
 
         ### select top-k experts
         if self.topk_method == "noaux_tc":
             assert not self.training
             scores_for_choice = scores.view(bsz * seq_len, -1) + self.e_score_correction_bias.unsqueeze(0)
             group_scores = (
-                scores_for_choice.view(bsz * seq_len, self.n_group, -1).topk(2, dim=-1)[0].sum(dim = -1)
+                scores_for_choice.view(bsz * seq_len, self.n_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
             )  # [n, n_group]
-            group_idx = torch.topk(
-                group_scores, k=self.topk_group, dim=-1, sorted=False
-            )[
-                1
-            ]  # [n, top_k_group]
+            group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
             group_mask = torch.zeros_like(group_scores)  # [n, n_group]
             group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
             score_mask = (
                 group_mask.unsqueeze(-1)
-                .expand(
-                    bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group
-                )
+                .expand(bsz * seq_len, self.n_group, self.n_routed_experts // self.n_group)
                 .reshape(bsz * seq_len, -1)
             )  # [n, e]
             tmp_scores = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))  # [n, e]
-            _, topk_idx = torch.topk(
-                tmp_scores, k=self.top_k, dim=-1, sorted=False
-            )
+            _, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
             topk_weight = scores.gather(1, topk_idx)
         else:
-            raise NotImplementedError(
-                f"insupportable TopK function for MoE gating: {self.topk_method}"
-            )
+            raise NotImplementedError(f"insupportable TopK function for MoE gating: {self.topk_method}")
 
         ### norm gate to sum 1
         if self.top_k > 1 and self.norm_topk_prob:
             denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
             topk_weight = topk_weight / denominator
-        topk_weight = topk_weight * self.routed_scaling_factor # must multiply the scaling factor
+        topk_weight = topk_weight * self.routed_scaling_factor  # must multiply the scaling factor
 
         return topk_idx, topk_weight
 
@@ -274,10 +252,7 @@ class MiMoV2MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = nn.ModuleList(
-            [
-                MiMoV2MLP(config, intermediate_size=config.moe_intermediate_size)
-                for _ in range(config.n_routed_experts)
-            ]
+            [MiMoV2MLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(config.n_routed_experts)]
         )
         self.gate = MiMoV2MoEGate(config)
 
@@ -306,7 +281,6 @@ class MiMoV2MoE(nn.Module):
         # thus the moe module is itelsf an IsolatedParallel module
         # and all expert are "local" meaning we shard but we don't gather
         return final_hidden_states.type(hidden_states.dtype)
-
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         orig_shape = hidden_states.shape
@@ -340,7 +314,7 @@ class MiMoV2Attention(nn.Module):
         self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
         self.attention_bias = config.attention_bias
         self.attention_dropout: float = config.attention_dropout
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         # These dimensions are for the attention layers
         q_hidden_size = self.num_attention_heads * self.head_dim
@@ -432,10 +406,7 @@ class MiMoV2DecoderLayer(nn.Module):
 
         self.mlp = (
             MiMoV2MoE(config)
-            if (
-                    getattr(config, 'n_routed_experts', None) is not None
-                    and config.moe_layer_freq[layer_idx]
-            )
+            if (getattr(config, "n_routed_experts", None) is not None and config.moe_layer_freq[layer_idx])
             else MiMoV2MLP(config)
         )
 
@@ -476,6 +447,7 @@ class MiMoV2DecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         return hidden_states
 
+
 class MiMoV2FlashRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -489,11 +461,13 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
             self.config.rope_theta = config.swa_rope_theta
             self.config.head_dim = config.swa_head_dim
 
-        device = getattr(config, 'device', None)
+        device = getattr(config, "device", None)
 
         # If rope_type is None, use default RoPE
         if self.rope_type is None:
-            head_dim = config.head_dim if hasattr(config, 'head_dim') else config.hidden_size // config.num_attention_heads
+            head_dim = (
+                config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
+            )
             inv_freq = 1.0 / (config.rope_theta ** (torch.arange(0, head_dim, 2, dtype=torch.float32) / head_dim))
             if device is not None:
                 inv_freq = inv_freq.to(device)
@@ -541,6 +515,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
 @auto_docstring
 class MiMoV2Model(PreTrainedModel):
     """The main 'model' block, corresponding to `model.` in the weight map."""
+
     config_class = MiMoV2FlashConfig
 
     def __init__(self, config: MiMoV2FlashConfig):
@@ -555,9 +530,7 @@ class MiMoV2Model(PreTrainedModel):
         self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config, is_swa=False)
         self.swa_rotary_emb = MiMoV2FlashRotaryEmbedding(config=config, is_swa=True)
 
-        self.has_sliding_layers = any(
-            pattern == 1 for pattern in config.hybrid_layer_pattern
-        )
+        self.has_sliding_layers = any(pattern == 1 for pattern in config.hybrid_layer_pattern)
 
         # For Huggingface DynamicCache compatibility
         self.config.layer_types = [
@@ -642,7 +615,7 @@ class MiMoV2Model(PreTrainedModel):
 
 
 @auto_docstring
-class MiMoV2FlashForCausalLM(PreTrainedModel,GenerationMixin):
+class MiMoV2FlashForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -674,7 +647,6 @@ class MiMoV2FlashForCausalLM(PreTrainedModel,GenerationMixin):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -703,6 +675,5 @@ class MiMoV2FlashForCausalLM(PreTrainedModel,GenerationMixin):
             attentions=outputs.attentions,
         )
 
-__all__ = [
-    "MiMoV2FlashForCausalLM"
-]
+
+__all__ = ["MiMoV2FlashForCausalLM"]
