@@ -798,8 +798,7 @@ def set_param_for_module(
     else:
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None:
-                use_dtensor = getattr(distributed_operation, "use_dtensor", False)
-                if use_dtensor:
+                if getattr(distributed_operation, "use_dtensor", False):
                     param_value = DTensor.from_local(
                         param_value,
                         distributed_operation.device_mesh,
@@ -1077,6 +1076,7 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
+                        device_map[""].index,
                         _dtype,
                     )
 
