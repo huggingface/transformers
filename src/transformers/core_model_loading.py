@@ -1076,7 +1076,7 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
-                        device_map[""].index,
+                        device_map[""],
                         _dtype,
                     )
 
