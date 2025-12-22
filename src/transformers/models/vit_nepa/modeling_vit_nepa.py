@@ -692,10 +692,6 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EmbeddedModelingOutput:
-        r"""
-        TODO
-        ```"""
-
         outputs: BaseModelOutputWithEmbedding = self.vit_nepa(
             pixel_values,
             **kwargs,
