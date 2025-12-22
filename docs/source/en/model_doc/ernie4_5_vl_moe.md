@@ -46,7 +46,6 @@ This architecture has the advantage to enhance multimodal understanding without 
 
 Other models from the family can be found at [Ernie 4.5](./ernie4_5) and at [Ernie 4.5 MoE](./ernie4_5_moe.md).
 
-
 ## Usage
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
@@ -172,7 +171,6 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
-
 
 ## Ernie4_5_VL_MoeConfig
 
