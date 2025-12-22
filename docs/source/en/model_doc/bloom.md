@@ -63,7 +63,6 @@ See also:
 [[autodoc]] BloomConfig
     - all
 
-
 ## BloomModel
 
 [[autodoc]] BloomModel

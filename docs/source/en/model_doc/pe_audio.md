@@ -14,6 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-16.*
+
 # PE Audio (Perception Encoder Audio)
 
 ## Overview
@@ -22,9 +23,11 @@ PE Audio (Perception Encoder Audio) is a state-of-the-art multimodal model that 
 The model enables cross-modal retrieval and understanding between audio and text.
 
 **Text input**
+
 - Produces a single embedding representing the full text.
 
 **Audio input**
+
 - **PeAudioFrameLevelModel**
   - Produces a sequence of embeddings, one every 40 ms of audio.
   - Suitable for audio event localization and fine-grained temporal analysis.
@@ -33,6 +36,7 @@ The model enables cross-modal retrieval and understanding between audio and text
   - Suitable for global audio-text retrieval tasks.
 
 **The resulting embeddings can be used for:**
+
 - Audio event localization
 - Cross-modal (audio–text) retrieval and matching
 
@@ -45,6 +49,7 @@ TODO
 ```
 
 ## PeAudioFeatureExtractor
+
 [[autodoc]] PeAudioFeatureExtractor
     - __call__
 
@@ -66,9 +71,9 @@ TODO
 [[autodoc]] PeAudioEncoder
     - forward
 
-## PeAudioFrameLevelModel 
+## PeAudioFrameLevelModel
 
-[[autodoc]] PeAudioFrameLevelModel 
+[[autodoc]] PeAudioFrameLevelModel
     - forward
 
 ## PeAudioModel

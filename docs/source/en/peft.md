@@ -171,7 +171,7 @@ model.load_adapter(file_name_adapter_2, hotswap=True, adapter_name="default")
 # generate outputs with adapter 2
 ```
 
-For compiled models, it is often necessary to call [`~integrations.peft.PeftAdapterMixin.enable_peft_hotswap`] to avoid recompilation. Call this method _before_ loading the first adapter, while `torch.compile` should be called _after_ loading the first adapter.
+For compiled models, it is often necessary to call [`~integrations.peft.PeftAdapterMixin.enable_peft_hotswap`] to avoid recompilation. Call this method *before* loading the first adapter, while `torch.compile` should be called *after* loading the first adapter.
 
 ```python
 model = AutoModel.from_pretrained(...)

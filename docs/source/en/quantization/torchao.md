@@ -661,7 +661,6 @@ quantized_model.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 tokenizer.push_to_hub(f"{USER_ID}/llama3-8b-int4wo-128")
 ```
 
-
 ```py
 # torchao < 0.15 -> unsafe serialization
 filename = "llama3-8b-int4wo-128/pytorch_model.bin"
