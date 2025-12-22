@@ -229,11 +229,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Less common kwargs, only used by some models
         # TODO: move tying in model's own config for old models
-        if "tie_encoder_decoder" in kwargs:
-            tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
-            tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
+        # if "tie_encoder_decoder" in kwargs:
+        #     tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
+        #     tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
 
-        self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
         # Encoder-decoder models attributes
