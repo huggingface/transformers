@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -304,26 +305,22 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=1)
+            init.normal_(module.weight, mean=0.0, std=1)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
-                module.lambda1.data.fill_(self.config.layerscale_value)
+                init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, EomtDinov3ViTEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32), mean=0.0, std=std
-            ).to(module.cls_token.dtype)
-            module.register_tokens.data.zero_()
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.zeros_(module.register_tokens)
 
 
 @auto_docstring(

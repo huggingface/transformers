@@ -303,8 +303,6 @@ class VideoLlama3VisionEncoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        hidden_states (`torch.Tensor`):
-            Input to the layer of shape `(seq_len, embed_dim)`.
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):

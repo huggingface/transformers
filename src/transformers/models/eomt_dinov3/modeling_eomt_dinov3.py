@@ -29,6 +29,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
@@ -36,7 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_eomt_dinov3 import EomtDinov3Config
 
 
@@ -689,27 +690,21 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
     # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # Apply the attention mask before the softmax so that we mimic PyTorch's SDPA semantics.
     if attention_mask is not None:
-        if attention_mask.dtype == torch.bool:
-            attn_weights = attn_weights.masked_fill(~attention_mask, torch.finfo(attn_weights.dtype).min)
-        elif torch.is_floating_point(attention_mask) and torch.any(attention_mask < 0):
-            attn_weights = attn_weights.to(torch.float32) + attention_mask.to(torch.float32)
-        else:
-            attn_weights = attn_weights * attention_mask.to(attn_weights.dtype)
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
 
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -1028,7 +1023,7 @@ class EomtDinov3RopePositionEmbedding(nn.Module):
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
             # the model was trained with random_scale, so it can process images of varying sizes.
             # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
@@ -1135,26 +1130,22 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data.to(torch.float32), mean=0.0, std=std).to(
-                module.weight.dtype
-            )
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=1)
+            init.normal_(module.weight, mean=0.0, std=1)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):
-                module.lambda1.data.fill_(self.config.layerscale_value)
+                init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, EomtDinov3ViTEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32), mean=0.0, std=std
-            ).to(module.cls_token.dtype)
-            module.register_tokens.data.zero_()
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.zeros_(module.register_tokens)
 
 
 @auto_docstring(
