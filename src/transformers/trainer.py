@@ -4096,15 +4096,16 @@ class Trainer:
                     logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                     xm.save(full_state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         elif not isinstance(model, supported_classes):
-            if isinstance(self.accelerator.unwrap_model(model), supported_classes):
-                self.accelerator.unwrap_model(model).save_pretrained(
+            unwrapped_model = unwrap_model(model, recursive=self.is_fsdp_xla_v2_enabled)
+            if isinstance(unwrapped_model, supported_classes):
+                unwrapped_model.save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=xm._maybe_convert_to_cpu(model.state_dict()),
+                    state_dict=xm._maybe_convert_to_cpu(unwrapped_model.state_dict()),
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = xm._maybe_convert_to_cpu(model.state_dict())
+                state_dict = xm._maybe_convert_to_cpu(unwrapped_model.state_dict())
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             model.save_pretrained(
