@@ -4574,7 +4574,11 @@ def get_total_byte_count(
 
         if len(tp_plan) > 0:
             is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= torch.distributed.get_world_size() if is_part_of_plan else 1
+            if is_part_of_plan:
+                world_size = 1
+                if torch.distributed.is_available() and torch.distributed.is_initialized():
+                    world_size = max(torch.distributed.get_world_size(), 1)
+                param_byte_count //= world_size
 
         total_byte_count[device] += param_byte_count
     return total_byte_count
