@@ -1518,6 +1518,13 @@ class ProcessorMixin(PushToHubMixin):
                     sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
                 )
                 args.append(tokenizer)
+            elif "PixtralProcessor" in cls.__name__ and "tokenizer" in sub_processor_type:
+                # This is only necessary for the checkpoing in test_procesing_mistral3.py which has no config.json and
+                # the tokenizer_config.json references LlamaTokenizerFast. TODO: update the config on the hub.
+                from .tokenization_utils_tokenizers import TokenizersBackend
+
+                tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                args.append(tokenizer)
             elif is_primary:
                 # Primary non-tokenizer sub-processor: load via Auto class
                 auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[sub_processor_type]
