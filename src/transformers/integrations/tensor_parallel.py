@@ -671,7 +671,8 @@ class ColwiseParallel(TensorParallelLayer):
         dtype=None,
     ) -> torch.Tensor:
         # If only 1 dim, shard this one (usually it's a `bias`)
-        if param.dim() == 1:
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx)
             shard = [Shard(-1)]
         else:
@@ -790,7 +791,8 @@ class RowwiseParallel(TensorParallelLayer):
         dtype=None,
     ) -> torch.Tensor:
         # If only 1 dim, it should not be sharded (usually it's a `bias`)
-        if param.dim() == 1:
+        dim = param.dim() if isinstance(param, torch.Tensor) else len(param.get_shape())
+        if dim == 1:
             shard = [Replicate()]
             parameter = param[...]
         else:
@@ -1279,10 +1281,9 @@ def shard_and_distribute_module(
 
     if current_shard_plan is not None:
         try:
-            tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
-            tp_layer.empty_param = empty_param
-            tp_layer.device_mesh = device_mesh
-            tp_layer.rank = rank
+            tp_layer = ALL_PARALLEL_STYLES[current_shard_plan](
+                empty_param=empty_param, device_mesh=device_mesh, rank=rank
+            )
             param = tp_layer.partition_tensor(
                 param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
             )
