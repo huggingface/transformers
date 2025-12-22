@@ -1799,7 +1799,7 @@ class GenerationMixin(ContinuousMixin):
         for key, value in self.generation_config.to_dict().items():
             if not hasattr(generation_config, key):
                 setattr(generation_config, key, value)
-        
+
         # Due to some values being boolean and not `None`, we need additional logic to overwrite
         # them explicitly (`defaults_only=False`) on the condition that it's only a previous
         # default value

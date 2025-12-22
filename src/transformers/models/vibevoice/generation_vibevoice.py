@@ -221,9 +221,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 kept_criteria.append(criterion)
         return kept_criteria
 
-    def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs
-    ):
+    def _prepare_generation_config(self, generation_config: Optional[GenerationConfig], **kwargs):
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
 
@@ -389,7 +387,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
             "max_new_tokens": generation_config.max_new_tokens,
         }
-        negative_generation_config, negative_model_kwargs = self._prepare_generation_config(generation_config, **negative_kwargs)
+        negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
+            generation_config, **negative_kwargs
+        )
         _, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
             None, negative_generation_config.bos_token_id, negative_model_kwargs
         )
