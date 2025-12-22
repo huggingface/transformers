@@ -2162,7 +2162,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -4373,12 +4374,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            value = torch.empty_like(param, device="cpu")
-            _load_parameter_into_model(self, key, value)
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
+                    # needed for the sharding
+                    param.data.copy_(torch.empty_like(param, device=param.device))
+            else:
+                value = torch.empty_like(param, device="cpu")
+                _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
-            value = torch.empty_like(buffer, device="cpu")
-            _load_parameter_into_model(self, key, value)
+            if is_deepspeed_zero3_enabled() and not is_quantized:
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters([buffer], modifier_rank=0):
+                    # needed for the sharding
+                    param.data.copy_(torch.empty_like(param, device=param.device))
+            else:
+                value = torch.empty_like(buffer, device="cpu")
+                _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
