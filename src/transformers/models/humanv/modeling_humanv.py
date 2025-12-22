@@ -1,8 +1,9 @@
-from typing import Optional, Tuple, List, Union
-import math
+from typing import Optional
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
