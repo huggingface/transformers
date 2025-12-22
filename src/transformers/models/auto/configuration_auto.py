@@ -944,31 +944,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
 
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
-DEPRECATED_MODELS = [
-    "deta",
-    "efficientformer",
-    "ernie_m",
-    "gptsan_japanese",
-    "graphormer",
-    "jukebox",
-    "mctct",
-    "mega",
-    "mmbt",
-    "nat",
-    "nezha",
-    "open_llama",
-    "qdqbert",
-    "realm",
-    "retribert",
-    "speech_to_text_2",
-    "tapex",
-    "trajectory_transformer",
-    "transfo_xl",
-    "tvlt",
-    "van",
-    "vit_hybrid",
-    "xlm_prophetnet",
-]
+DEPRECATED_MODELS = []
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
