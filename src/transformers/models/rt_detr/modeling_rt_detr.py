@@ -30,12 +30,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr import RTDetrConfig
 
