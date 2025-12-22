@@ -63,6 +63,8 @@ class EmbeddedModelingOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
             Reconstruction loss.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
         when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -76,6 +78,7 @@ class EmbeddedModelingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
@@ -313,7 +316,6 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     scaling: float,
-    output_attentions: bool = False,
     is_causal: bool = False,
     dropout: float = 0.0,
     **kwargs,
@@ -342,8 +344,7 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
-    outputs = (attn_output, attn_weights) if output_attentions else (attn_output, None)
-    return outputs
+    return attn_output, attn_weights
 
 
 class ViTNepaSelfAttention(nn.Module):
@@ -380,7 +381,7 @@ class ViTNepaSelfAttention(nn.Module):
         )
 
     def forward(
-        self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor
+        self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
@@ -410,6 +411,7 @@ class ViTNepaSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -610,6 +612,9 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
+        elif isinstance(module, ViTNepaRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -642,7 +647,6 @@ class ViTNepaModel(ViTNepaPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithEmbedding:
         r"""
@@ -665,7 +669,12 @@ class ViTNepaModel(ViTNepaPreTrainedModel):
         sequence_output = encoder_outputs.last_hidden_state
         sequence_output = self.layernorm(sequence_output)
 
-        return BaseModelOutputWithEmbedding(last_hidden_state=sequence_output, input_embedding=embedding_clean)
+        return BaseModelOutputWithEmbedding(
+            last_hidden_state=sequence_output,
+            input_embedding=embedding_clean,
+            attentions=encoder_outputs.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+        )
 
 
 class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
@@ -681,10 +690,6 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EmbeddedModelingOutput:
         r"""
@@ -693,10 +698,6 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
 
         outputs: BaseModelOutputWithEmbedding = self.vit_nepa(
             pixel_values,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 
@@ -705,7 +706,12 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
 
         loss = self.loss_function(sequence_input, sequence_output)
 
-        return EmbeddedModelingOutput(loss=loss)
+        return EmbeddedModelingOutput(
+            loss=loss,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @auto_docstring(
@@ -747,7 +753,6 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
