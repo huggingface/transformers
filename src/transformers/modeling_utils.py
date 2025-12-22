@@ -3926,6 +3926,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        # with local_torch_dtype(dtype, cls.__name__):
             if hf_quantizer is not None:  # replace module with quantized modules (does not touch weights)
                 hf_quantizer.preprocess_model(
                     model=model,
@@ -4384,7 +4385,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 value = torch.empty_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
-        for key, cbuffer in self.named_non_persistent_buffers():
+        for key, buffer in self.named_non_persistent_buffers():
             if is_deepspeed_zero3_enabled() and not is_quantized:
                 import deepspeed
 
