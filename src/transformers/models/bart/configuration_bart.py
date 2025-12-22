@@ -157,7 +157,6 @@ class BartConfig(PreTrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["BartConfig"]
