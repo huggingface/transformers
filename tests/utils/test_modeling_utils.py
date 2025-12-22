@@ -129,7 +129,12 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _find_disjoint, _find_identical, get_total_byte_count
+    from transformers.modeling_utils import (
+        FLASH_ATTN_KERNEL_FALLBACK,
+        _find_disjoint,
+        _find_identical,
+        get_total_byte_count,
+    )
     from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
