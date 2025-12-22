@@ -4590,8 +4590,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2
-
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if is_accelerator_device(device)
@@ -4620,7 +4618,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
                 index
             ) - torch_accelerator_module.memory_allocated(index)
             byte_count = int(max(0, byte_count - unused_memory))
-        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
+        # We divide by 2 here as we allocate in fp16
+        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
 
 
 class AttentionInterface(GeneralInterface):
