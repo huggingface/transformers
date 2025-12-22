@@ -38,11 +38,10 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",
-    "tie_word_embeddings": False,
+    # "tie_word_embeddings": True, # attribute is hardcoded in many models, hard to test
     "is_decoder": True,
     "cross_attention_hidden_size": 128,
     "add_cross_attention": True,
-    "tie_encoder_decoder": True,
     "chunk_size_feed_forward": 5,
     "architectures": ["BertModel"],
     "finetuning_task": "translation",
@@ -159,6 +158,7 @@ class ConfigTestUtils(unittest.TestCase):
             missing_keys,
             [
                 "_output_attentions",
+                "tie_word_embeddings",  # was omitted in purpose and will be deleted from base config soon
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",

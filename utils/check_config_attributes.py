@@ -415,6 +415,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "initializer_range",
         "init_std",
         "initializer_factor",
+        "tie_word_embeddings",
         "bos_index",
         "eos_index",
         "pad_index",

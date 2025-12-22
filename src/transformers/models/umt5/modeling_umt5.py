@@ -929,12 +929,10 @@ class UMT5Model(UMT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config)
 
@@ -1108,12 +1106,10 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config)
 
@@ -1614,12 +1610,10 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = UMT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UMT5Stack(decoder_config)
 

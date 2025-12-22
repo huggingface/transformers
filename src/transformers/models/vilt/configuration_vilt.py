@@ -115,7 +115,7 @@ class ViltConfig(PreTrainedConfig):
         num_channels=3,
         qkv_bias=True,
         max_image_length=-1,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         num_images=-1,
         **kwargs,
     ):
@@ -142,7 +142,7 @@ class ViltConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
         self.num_images = num_images
-        self.tie_encoder_decoder = True
+        self.tie_word_embeddings = True  # force it
 
 
 __all__ = ["ViltConfig"]

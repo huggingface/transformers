@@ -133,17 +133,16 @@ class MT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["MT5Config"]

@@ -125,9 +125,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
             in `AUTO_MODELS_FOR_CAUSAL_LM`.
-        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
-            and decoder model to have the exact same parameter names.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -217,7 +214,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         is_decoder: bool = False,
         cross_attention_hidden_size: Optional[int] = None,
         add_cross_attention: bool = False,
-        tie_encoder_decoder: bool = False,
         # Fine-tuning task arguments
         architectures: Optional[list[str]] = None,
         finetuning_task: Optional[str] = None,
@@ -281,6 +277,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
+        if "tie_encoder_decoder" in kwargs:
+            tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
+            tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
+
         self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
@@ -289,7 +289,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
         self.cross_attention_hidden_size = cross_attention_hidden_size
         self.add_cross_attention = add_cross_attention
-        self.tie_encoder_decoder = tie_encoder_decoder
 
         # Fine-tuning task attributes
         self.architectures = architectures

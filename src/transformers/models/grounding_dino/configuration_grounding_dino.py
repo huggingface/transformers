@@ -285,9 +285,8 @@ class GroundingDinoConfig(PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["GroundingDinoConfig"]

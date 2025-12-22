@@ -122,7 +122,6 @@ class Pop2PianoConfig(PreTrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True  # forcing it
 
 
 __all__ = ["Pop2PianoConfig"]
