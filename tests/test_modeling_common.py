@@ -1214,18 +1214,14 @@ class ModelTesterMixin:
             # Now, run all the inits
             model.init_weights()
 
-            # Prepare inputs to correct device
+            # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            final_inputs = {}
-            for k, v in inputs.items():
-                if isinstance(v, torch.Tensor):
-                    final_inputs[k] = v.to(device="cpu")
-                else:
-                    final_inputs[k] = v
+            # Inputs may be on cuda -> move to cpu, we don't care about accelerator for this test
+            inputs = {k: v.to("cpu") if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
 
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
-                _ = model(**final_inputs)
+                _ = model(**inputs)
             except (RuntimeError, NotImplementedError) as e:
                 # Re-raise a more friendly exception (unfortunately, we cannot know which tensor it was...)
                 if "Cannot copy out of meta tensor; no data!" in str(
