@@ -178,7 +178,7 @@ class AutoTokenizerTest(unittest.TestCase):
             tokenizer_class_from_name(tokenizer_name)
 
     def test_tokenizer_mapping_names_use_single_entries(self):
-        # this is just to ensure tokenizer mapping names are correct.
+        # this is just to ensure tokenizer mapping names are correct and map to strings!
         invalid_entries = [
             model_name
             for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
