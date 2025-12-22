@@ -1146,6 +1146,15 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         elif isinstance(module, EomtDinov3ViTEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=std)
             init.zeros_(module.register_tokens)
+        elif isinstance(module, EomtDinov3Loss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+        elif isinstance(module, EomtDinov3RopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, EomtDinov3ForUniversalSegmentation):
+            init.ones_(module.attn_mask_probs)
 
 
 @auto_docstring(
@@ -1291,7 +1300,8 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel):
 
                 # Expand attention mask to 4d mask.
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
-                attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
+                dtype_min = torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.to(hidden_states.dtype).masked_fill(~attention_mask, dtype_min)
 
             hidden_states = layer_module(
                 hidden_states,
