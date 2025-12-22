@@ -387,7 +387,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
+> CPU int4 weight-only quantization requires torchao version 0.15.0 or later.
 
 ```py
 import torch
