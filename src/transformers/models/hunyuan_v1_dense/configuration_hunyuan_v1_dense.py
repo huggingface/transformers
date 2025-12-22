@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -83,7 +83,7 @@ class HunYuanDenseV1Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -116,7 +116,7 @@ class HunYuanDenseV1Config(PreTrainedConfig):
         eod_token_id: Optional[int] = 3,
         pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         head_dim: Optional[int] = None,
@@ -141,14 +141,7 @@ class HunYuanDenseV1Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)  # TODO needs model-specific validation?
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -157,36 +150,6 @@ class HunYuanDenseV1Config(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def _rope_parameters_validation(self):
-        """
-        Validate the `rope_parameters` configuration.
-        """
-        if self.rope_parameters is None:
-            return
-
-        if not isinstance(self.rope_parameters, dict) or len(self.rope_parameters) != 2:
-            raise ValueError(
-                "`rope_parameters` must be a dictionary with with two fields, `type` and `factor` or `type` and `alpha`, "
-                f"got {self.rope_parameters}"
-            )
-        rope_parameters_type = self.rope_parameters.get("type", None)
-        rope_parameters_factor = self.rope_parameters.get("factor", None)
-        rope_parameters_alpha = self.rope_parameters.get("alpha", None)
-        if rope_parameters_type is None or rope_parameters_type not in ["linear", "dynamic"]:
-            raise ValueError(
-                f"`rope_parameters`'s type field must be one of ['linear', 'dynamic'], got {rope_parameters_type}"
-            )
-        if rope_parameters_factor is None and rope_parameters_alpha is None:
-            raise ValueError("`rope_parameters`'s factor or alpha field must be have one, got both of none")
-        if rope_parameters_factor is not None:
-            if not isinstance(rope_parameters_factor, float) or rope_parameters_factor <= 1.0:
-                raise ValueError(
-                    f"`rope_parameters`'s factor field must be a float > 1.0, got {rope_parameters_factor}"
-                )
-        if rope_parameters_alpha is not None:
-            if not isinstance(rope_parameters_alpha, float) or rope_parameters_alpha <= 1.0:
-                raise ValueError(f"`rope_parameters`'s alpha field must be a float > 1.0, got {rope_parameters_alpha}")
 
 
 __all__ = ["HunYuanDenseV1Config"]

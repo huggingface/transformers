@@ -24,7 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
@@ -233,7 +233,6 @@ class Lfm2Attention(LlamaAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Lfm2HybridConvCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -371,7 +370,7 @@ class Lfm2ShortConv(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
         return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
 
@@ -473,15 +472,18 @@ class Lfm2Model(LlamaModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        # Skip masking for decoding stage. We check shape here to be compile-friendly
+        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=layer_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

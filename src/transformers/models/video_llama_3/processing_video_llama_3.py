@@ -57,11 +57,6 @@ class VideoLlama3Processor(ProcessorMixin):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
     """
 
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -139,7 +134,7 @@ class VideoLlama3Processor(ProcessorMixin):
                 for grid_thw, merge_size in zip(videos_inputs["video_grid_thw"], videos_inputs["video_merge_sizes"])
             ]
             video_compression_masks = videos_inputs["video_compression_mask"].split(num_video_tokens)
-            if "return_metadata" not in kwargs:
+            if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")
             else:
                 video_metadata = videos_inputs["video_metadata"]

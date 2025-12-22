@@ -23,7 +23,7 @@ from transformers.testing_utils import (
     Expectations,
     get_device_properties,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -400,7 +400,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 @slow
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 class FalconH1ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_falcon_h1_hard(self):
@@ -448,10 +448,36 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             6.
         """
 
+        EXPECTED_TEXT_XPU = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) favored the nobility and clergy while the majority of the population (the Third Estate) bore the brunt of taxation and had limited rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to debates that exposed the weaknesses of the monarchy and the grievances of the common people.
+
+            ### **Key Events**
+            1. **Opening of the Revolution (1789)**:
+               - **Storming of the Bastille**: A symbol of royal tyranny, marking the start of the revolution.
+               - **Declaration of the Rights of Man and of the Citizen**: A foundational document proclaiming liberty, equality, and fraternity.
+
+            2. **Stages of the Revolution**:
+               - **Staffords' Reforms (1789–1791)**: Attempts to address grievances, including the abolition of feudal privileges and the introduction of the Civil Constitution of the Church.
+               - **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre, characterized by mass executions of perceived enemies of the revolution, including King Louis XVI and Queen Marie Antoinette.
+               - **Thermidorian Reaction (1794)**: The fall of Robespierre and the end of the Reign of Terror.
+
+            3. **
+        """
+
         expected_texts = Expectations(
             {
                 (None, None): EXPECTED_TEXT_DEFAULT,
                 ("cuda", 8): EXPECTED_TEXT_A10,
+                ("xpu", None): EXPECTED_TEXT_XPU,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -466,10 +492,9 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = FalconH1ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
-        device = "cuda"
         messages = [{"role": "user", "content": "Tell me about the french revolution."}]
         input_text = tokenizer.apply_chat_template(messages, tokenize=False)
-        inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
+        inputs = tokenizer.encode(input_text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model.generate(inputs, max_new_tokens=512, do_sample=False)

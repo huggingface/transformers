@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -75,10 +75,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
             Beginning of stream token id.
         hidden_activation (``str` or `function``, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The hidden activation used in the recurrent block as well as the MLP layer of the decoder layers.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            The partial rotary factor used in the initialization of the rotary embeddings.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
@@ -119,8 +117,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 1,
         bos_token_id: Optional[int] = 2,
         hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        partial_rotary_factor: Optional[float] = 0.5,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         block_types: Optional[list[str]] = ("recurrent", "recurrent", "attention"),
         attention_dropout: Optional[float] = 0.0,
         num_key_value_heads: Optional[int] = None,
@@ -139,7 +136,6 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.logits_soft_cap = logits_soft_cap
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
@@ -150,14 +146,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale
         self.final_w_init_variance_scale = 2.0 / self.num_hidden_layers
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

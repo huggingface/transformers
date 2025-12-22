@@ -197,7 +197,6 @@ def write_model(
     input_base_path,
     params,
     image_token_id,
-    safe_serialization=True,
     tokenizer=None,
     num_shards=None,
     push_to_hub=False,
@@ -423,17 +422,13 @@ def write_model(
         model.config.dtype = torch.bfloat16
 
         print("Saving in the Transformers format.")
+        model_name = model_path.split(os.path.sep)[-1]
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(
-                model_path,
-                safe_serialization=safe_serialization,
-                private=True,
-                use_temp_dir=True,
-            )
+            model.push_to_hub(model_name, private=True)
         else:
             print("Saving to disk.")
-            model.save_pretrained(model_path, safe_serialization=safe_serialization)
+            model.save_pretrained(model_name)
 
 
 class Llama3Converter(TikTokenConverter):
@@ -543,7 +538,8 @@ def write_tokenizer(
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        processor.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        model_name = tokenizer_path.split(os.path.sep)[-1]
+        processor.push_to_hub(model_name, private=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         processor.save_pretrained(tokenizer_path)
@@ -565,12 +561,6 @@ def main():
         help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--safe_serialization",
-        action="store_true",
-        default=True,
-        help="Whether or not to save using `safetensors`.",
     )
     parser.add_argument(
         "--num_shards",
@@ -604,7 +594,6 @@ def main():
         input_base_path=args.input_dir,
         params=params,
         image_token_id=tokenizer.image_token_id,
-        safe_serialization=args.safe_serialization,
         tokenizer=tokenizer,
         num_shards=args.num_shards,
         push_to_hub=args.push_to_hub,

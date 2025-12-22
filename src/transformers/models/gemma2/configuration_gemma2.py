@@ -22,7 +22,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Gemma2Config(PreTrainedConfig):
@@ -77,7 +77,7 @@ class Gemma2Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -142,7 +142,7 @@ class Gemma2Config(PreTrainedConfig):
         eos_token_id: Optional[int] = 1,
         bos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         query_pre_attn_scalar: Optional[int] = 256,
@@ -153,13 +153,6 @@ class Gemma2Config(PreTrainedConfig):
         use_bidirectional_attention: Optional[bool] = None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -180,9 +173,6 @@ class Gemma2Config(PreTrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
         self.use_bidirectional_attention = use_bidirectional_attention
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
@@ -190,10 +180,15 @@ class Gemma2Config(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["Gemma2Config"]

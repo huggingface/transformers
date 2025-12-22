@@ -18,7 +18,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -77,10 +77,9 @@ class NemotronConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): Percentage of the query and keys which will have rotary embedding.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -122,8 +121,7 @@ class NemotronConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 2,
         eos_token_id: Optional[int] = 3,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.5,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -141,18 +139,11 @@ class NemotronConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.norm_eps = norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         super().__init__(
             pad_token_id=pad_token_id,

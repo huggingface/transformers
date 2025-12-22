@@ -23,7 +23,7 @@ from typing import Any, Optional, Union
 
 import httpx
 import yaml
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 from huggingface_hub.errors import OfflineModeIsEnabled
 from huggingface_hub.utils import HFValidationError
 
@@ -50,7 +50,6 @@ from .utils import (
     MODEL_CARD_NAME,
     cached_file,
     is_datasets_available,
-    is_offline_mode,
     is_tokenizers_available,
     is_torch_available,
     logging,
@@ -752,8 +751,6 @@ def extract_hyperparameters_from_trainer(trainer):
             hyperparameters["optimizer"] = f"Use {optimizer_name} and the args are:\n{optimizer_args}"
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
-    if trainer.args.warmup_ratio != 0.0:
-        hyperparameters["lr_scheduler_warmup_ratio"] = trainer.args.warmup_ratio
     if trainer.args.warmup_steps != 0.0:
         hyperparameters["lr_scheduler_warmup_steps"] = trainer.args.warmup_steps
     if trainer.args.max_steps != -1:

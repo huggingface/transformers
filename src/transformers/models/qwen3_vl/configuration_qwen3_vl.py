@@ -21,7 +21,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Qwen3VLVisionConfig(PreTrainedConfig):
@@ -107,7 +107,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -130,6 +130,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -146,7 +147,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         rms_norm_eps: Optional[float] = 1e-6,
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         **kwargs,
@@ -170,16 +171,13 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 5000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section", "mrope_interleaved"})
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
+            **kwargs,
+        )
 
 
 class Qwen3VLConfig(PreTrainedConfig):

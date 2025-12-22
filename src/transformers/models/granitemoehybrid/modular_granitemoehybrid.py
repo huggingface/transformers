@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
@@ -36,7 +37,9 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
+    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
+    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -55,6 +58,7 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,  # None or rope embeddings
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -63,6 +67,10 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"cache_position": cache_position}
@@ -107,6 +115,10 @@ class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
+class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+    pass
+
+
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
     def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -120,6 +132,9 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
+
+        # Allow non-MoE (dense)
+        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
@@ -176,14 +191,15 @@ class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeHybridMambaLayer):
-            module.dt_bias.data.fill_(1.0)
-            module.A_log.data = torch.log(torch.arange(1, module.num_heads + 1))
-            module.D.data.fill_(1.0)
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
         elif isinstance(module, GraniteMoeHybridRMSNormGated):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
 
 
 class GraniteMoeHybridModel(GraniteMoeSharedModel):
@@ -193,9 +209,10 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             [GraniteMoeHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.embedding_multiplier = config.embedding_multiplier
+        self.rotary_emb = GraniteMoeHybridRotaryEmbedding(config) if config.position_embedding_type == "rope" else None
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -235,7 +252,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
@@ -273,7 +292,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__(config)

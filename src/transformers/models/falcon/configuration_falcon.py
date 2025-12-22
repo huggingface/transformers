@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -78,7 +78,7 @@ class FalconConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with, when `alibi` is `False`. Pretrained
             Falcon models with RoPE support up to 2048 tokens.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         bos_token_id (`int`, *optional*, defaults to 11):
@@ -128,7 +128,7 @@ class FalconConfig(PreTrainedConfig):
         parallel_attn: Optional[bool] = True,
         bias: Optional[bool] = False,
         max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         bos_token_id: Optional[int] = 11,
         eos_token_id: Optional[int] = 11,
         ffn_hidden_size: Optional[int] = None,
@@ -162,14 +162,7 @@ class FalconConfig(PreTrainedConfig):
         else:
             self.ffn_hidden_size = ffn_hidden_size
 
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

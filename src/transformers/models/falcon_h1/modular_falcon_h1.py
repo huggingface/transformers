@@ -39,11 +39,13 @@ from transformers.models.llama.modeling_llama import (
 )
 from transformers.models.mamba2.modeling_mamba2 import (
     MambaRMSNormGated,
+    apply_mask_to_padding_states,
     pad_tensor_by_size,
     reshape_into_chunks,
     segment_sum,
 )
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -283,17 +285,6 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
         if self.norm_before_gate and gate is not None:
             hidden_states = hidden_states * F.silu(gate.to(torch.float32))
         return hidden_states.to(input_dtype)
-
-
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
 
 
 # Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
@@ -930,21 +921,17 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        for name, param in module.named_parameters(recurse=True):
-            if not param.requires_grad:
-                continue
-            if "layernorm" in name.lower() and "weight" in name:
-                # LayerNorm weights usually initialized to 1
-                param.data.fill_(1.0)
-            elif "bias" in name:
-                param.data.zero_()
-            else:
-                try:
-                    param.data.normal_(mean=0.0, std=std)
-                except Exception as e:
-                    print(f"Skipping init for {name} due to error: {e}")
+        super()._init_weights(module)
+        if isinstance(module, FalconH1Mixer):
+            init.ones_(module.dt_bias)
+            init.copy_(module.A_log, torch.log(torch.arange(1, module.num_heads + 1)))
+            init.ones_(module.D)
+        elif isinstance(module, FalconH1Model):
+            mup_vector = compute_mup_vector(module.config)
+            for layer in module.layers:
+                init.copy_(layer.mamba.mup_vector, mup_vector)
 
 
 def compute_mup_vector(config):
@@ -1009,7 +996,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         # Compute the MuP vector once and register it for all layers
         mup_vector = compute_mup_vector(config)
         for layer in self.layers:
-            layer.mamba.register_buffer("mup_vector", mup_vector, persistent=False)
+            layer.mamba.register_buffer("mup_vector", mup_vector.clone(), persistent=False)
 
         # Initialize weights and apply final processing
         self.post_init()

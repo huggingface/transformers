@@ -64,8 +64,8 @@ limitations under the License.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers_as_a_model_definition.png"/>
 </h3>
 
-Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
-vision, audio, video, and multimodal model, for both inference and training.
+Transformers acts as the model-definition framework for state-of-the-art machine learning with text, computer
+vision, audio, video, and multimodal models, for both inference and training.
 
 It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
 pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training
@@ -134,7 +134,7 @@ pipeline("the secret to baking a really good cake is ")
 To chat with a model, the usage pattern is the same. The only difference is you need to construct a chat history (the input to `Pipeline`) between you and the system.
 
 > [!TIP]
-> You can also chat with a model directly from the command line.
+> You can also chat with a model directly from the command line, as long as [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```

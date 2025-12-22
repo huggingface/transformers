@@ -27,6 +27,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -72,6 +73,11 @@ class PLBartPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PLBartForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
 
 class PLBartLearnedPositionalEmbedding(nn.Embedding):
@@ -332,7 +338,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PLBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PLBartConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -346,9 +352,6 @@ class PLBartEncoder(PLBartPreTrainedModel):
         self.embed_tokens = PLBartScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = PLBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -369,6 +372,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
@@ -587,7 +591,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: PLBartConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: PLBartConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -598,9 +602,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
         self.embed_tokens = PLBartScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = PLBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -627,6 +628,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         Args:
@@ -832,7 +834,10 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
 
 @auto_docstring
 class PLBartModel(PLBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -841,10 +846,10 @@ class PLBartModel(PLBartPreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = PLBartScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = PLBartEncoder(config, self.shared)
-        self.decoder = PLBartDecoder(config, self.shared)
+        self.encoder = PLBartEncoder(config)
+        self.decoder = PLBartDecoder(config)
 
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.shared
@@ -853,14 +858,6 @@ class PLBartModel(PLBartPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
-
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
 
     @auto_docstring
     def forward(
@@ -878,6 +875,7 @@ class PLBartModel(PLBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -968,7 +966,9 @@ class PLBartModel(PLBartPreTrainedModel):
 class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: PLBartConfig):
         super().__init__(config)
@@ -976,13 +976,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
-        self.init_weights()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
+        self.post_init()
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
@@ -1017,6 +1011,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1145,8 +1140,6 @@ class PLBartClassificationHead(nn.Module):
     """
 )
 class PLBartForSequenceClassification(PLBartPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
     def __init__(self, config: PLBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = PLBartModel(config)
@@ -1176,6 +1169,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1285,6 +1279,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = PLBartDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -1296,7 +1291,9 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
     """
 )
 class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
@@ -1315,12 +1312,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
@@ -1337,6 +1328,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

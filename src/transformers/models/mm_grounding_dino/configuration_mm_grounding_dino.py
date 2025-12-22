@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -39,7 +38,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this

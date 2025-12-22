@@ -169,6 +169,9 @@ print("Pooled output shape:", pooled_output.shape)
 [[autodoc]] DINOv3ViTModel
     - forward
 
+## DINOv3ViTBackbone    
+[[autodoc]] DINOv3ViTBackbone
+
 ## DINOv3ConvNextModel
 
 [[autodoc]] DINOv3ConvNextModel

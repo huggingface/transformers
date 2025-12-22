@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu, get_activation
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -51,6 +52,7 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
+    return out
 
 
 # Copied from transformers.models.xlm.modeling_xlm.get_masks
@@ -658,9 +660,6 @@ class FlaubertPreTrainedModel(PreTrainedModel):
     config: FlaubertConfig
     base_model_prefix = "transformer"
 
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
     @property
     def dummy_inputs(self):
         inputs_list = torch.tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
@@ -671,25 +670,34 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             langs_list = None
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if self.config is not None and self.config.embed_init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+                init.normal_(module.weight, mean=0, std=self.config.embed_init_std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if isinstance(module, nn.Linear):
             if self.config is not None and self.config.init_std is not None:
-                nn.init.normal_(module.weight, mean=0, std=self.config.init_std)
+                init.normal_(module.weight, mean=0, std=self.config.init_std)
                 if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
+                    init.constant_(module.bias, 0.0)
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, FlaubertModel) and self.config.sinusoidal_embeddings:
-            create_sinusoidal_embeddings(
-                self.config.max_position_embeddings, self.config.emb_dim, out=module.position_embeddings.weight
-            )
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        if isinstance(module, FlaubertModel):
+            if self.config.sinusoidal_embeddings:
+                init.copy_(
+                    module.position_embeddings.weight,
+                    create_sinusoidal_embeddings(
+                        self.config.max_position_embeddings,
+                        self.config.emb_dim,
+                        out=torch.empty_like(module.position_embeddings.weight),
+                    ),
+                )
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
@@ -751,14 +759,14 @@ class FlaubertModel(FlaubertPreTrainedModel):
             self.ffns.append(TransformerFFN(self.dim, self.hidden_dim, self.dim, config=config))
             self.layer_norm2.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.xlm.modeling_xlm.XLMModel.get_input_embeddings
     def get_input_embeddings(self):
@@ -783,6 +791,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -947,7 +956,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     """
 )
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["pred_layer.proj.weight"]
+    _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -993,6 +1002,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1081,6 +1091,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1186,6 +1197,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1277,6 +1289,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1414,6 +1427,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FlaubertForQuestionAnsweringOutput]:
         r"""
         langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1529,6 +1543,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):

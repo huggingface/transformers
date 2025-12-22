@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     require_vision,
     slow,
@@ -501,6 +500,10 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
@@ -785,6 +788,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
             "image-to-text": Blip2ForConditionalGeneration,
             "visual-question-answering": Blip2ForConditionalGeneration,
             "image-text-to-text": Blip2ForConditionalGeneration,
+            "any-to-any": Blip2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -849,6 +853,10 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="BLIP2 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -943,7 +951,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         model = Blip2Model(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
-        self.assertEqual(text_features[0].shape, (1, 10, config.text_config.vocab_size))
+        self.assertEqual(text_features[0].shape, (10, config.text_config.vocab_size))
 
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -958,11 +966,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
             image_features[0].shape,
-            (
-                self.model_tester.vision_model_tester.batch_size,
-                self.model_tester.vision_model_tester.seq_length,
-                config.vision_config.hidden_size,
-            ),
+            (config.vision_config.hidden_size,),
         )
 
     def test_get_qformer_features(self):
@@ -978,7 +982,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         qformer_features = model.get_qformer_features(**inputs_dict)
         self.assertEqual(
             qformer_features[0].shape,
-            (self.model_tester.vision_model_tester.batch_size, 10, config.vision_config.hidden_size),
+            (10, config.vision_config.hidden_size),
         )
 
     @unittest.skip("T5 backbone deepcopies the configs, and fixing it would be more involved")
@@ -1734,7 +1738,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predictions[0].tolist(), expected_ids_and_text[0])
         self.assertEqual(generated_text, expected_ids_and_text[1])
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_itm(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)

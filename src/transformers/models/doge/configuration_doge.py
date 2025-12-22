@@ -23,7 +23,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class DogeConfig(PreTrainedConfig):
@@ -59,7 +59,7 @@ class DogeConfig(PreTrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 8):
@@ -117,11 +117,6 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.input_layernorm.weight": "sequence_parallel",
-        "layers.*.input_residual.weight": "sequence_parallel",
-        "layers.*.post_attention_layernorm.weight": "sequence_parallel",
-        "layers.*.post_attention_residual.weight": "sequence_parallel",
-        "norm.weight": "sequence_parallel",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -148,7 +143,7 @@ class DogeConfig(PreTrainedConfig):
         use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
         max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         num_attention_heads: Optional[int] = 8,
         num_key_value_heads: Optional[int] = None,
         attention_bias: Optional[bool] = False,
@@ -189,14 +184,7 @@ class DogeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # for backward compatibility
         if num_key_value_heads is None:

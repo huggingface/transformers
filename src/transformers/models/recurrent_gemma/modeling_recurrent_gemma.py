@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -30,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import maybe_autocast
 from ...utils.import_utils import is_tracing
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
@@ -78,7 +80,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     # Ignore copy
@@ -101,7 +103,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -120,7 +122,7 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -459,6 +461,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         use_cache: bool = True,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         _, seq_len, _ = input_states.shape
+        batch_size = input_states.shape[0]
 
         y_branch = self.linear_y(input_states)
         y_branch = self.act_fn(y_branch)
@@ -467,6 +470,17 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         x_branch = x_branch.transpose(1, 2)
 
         if use_cache:
+            # Check if cache needs initialization (None or batch size mismatch)
+            if self.conv1d_state is None or self.conv1d_state.shape[0] != batch_size:
+                self.conv1d_state = torch.zeros(
+                    (batch_size, self.hidden_size, self.conv1d_width - 1),
+                    device=input_states.device,
+                    dtype=input_states.dtype,
+                )
+                self.rg_lru.recurrent_states = torch.zeros(
+                    (batch_size, self.lru_width), device=input_states.device, dtype=torch.float32
+                )
+
             if cache_position.shape[0] != 1:  # prefill
                 self.conv1d_state = nn.functional.pad(x_branch, (self.conv1d_width - x_branch.shape[-1] - 1, 0))
                 x_branch = self.conv_1d(x_branch)[..., :seq_len]
@@ -553,52 +567,55 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False  # we can't compare with eager for now
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
         if isinstance(module, nn.Conv1d):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
-            torch.nn.init.zeros_(module.bias)
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.bias)
         elif isinstance(module, RecurrentGemmaSdpaAttention):
-            torch.nn.init.normal_(module.q_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
-            torch.nn.init.normal_(module.k_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
-            torch.nn.init.normal_(module.v_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
+            init.normal_(module.q_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
+            init.normal_(module.k_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
+            init.normal_(module.v_proj.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
 
             std = math.sqrt(self.config.final_w_init_variance_scale / self.config.hidden_size)
-            torch.nn.init.normal_(module.o_proj.weight, mean=0.0, std=std)
+            init.normal_(module.o_proj.weight, mean=0.0, std=std)
         elif isinstance(module, RecurrentGemmaRecurrentBlock):
-            torch.nn.init.zeros_(module.linear_x.bias)
-            torch.nn.init.normal_(module.linear_x.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
+            init.zeros_(module.linear_x.bias)
+            init.normal_(module.linear_x.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
 
-            torch.nn.init.zeros_(module.linear_y.bias)
-            torch.nn.init.normal_(module.linear_y.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
+            init.zeros_(module.linear_y.bias)
+            init.normal_(module.linear_y.weight, mean=0.0, std=math.sqrt(1.0 / self.config.hidden_size))
 
             std = math.sqrt(self.config.final_w_init_variance_scale / self.config.lru_width)
-            torch.nn.init.normal_(module.linear_out.weight, mean=0.0, std=std)
-            torch.nn.init.zeros_(module.linear_out.bias)
+            init.normal_(module.linear_out.weight, mean=0.0, std=std)
+            init.zeros_(module.linear_out.bias)
         elif isinstance(module, RecurrentGemmaRglru):
             std = math.sqrt(
                 self.config.w_init_variance_scale / (self.config.lru_width // self.config.num_attention_heads)
             )
-            torch.nn.init.normal_(module.input_gate_weight, mean=0.0, std=std)
-            torch.nn.init.normal_(module.recurrent_gate_weight, mean=0.0, std=std)
-            torch.nn.init.zeros_(module.input_gate_bias)
-            torch.nn.init.zeros_(module.recurrent_gate_bias)
+            init.normal_(module.input_gate_weight, mean=0.0, std=std)
+            init.normal_(module.recurrent_gate_weight, mean=0.0, std=std)
+            init.zeros_(module.input_gate_bias)
+            init.zeros_(module.recurrent_gate_bias)
 
-            module.recurrent_param.data.uniform_(0.9**2 + 1e-8, 0.999**2 + 1e-8)
-            module.recurrent_param.data.log_().mul_(0.5)
-            module.recurrent_param.data.neg_().exp_().sub_(1.0).log_()
+            recurrent_param = torch.empty_like(module.recurrent_param).uniform_(0.9**2 + 1e-8, 0.999**2 + 1e-8)
+            recurrent_param.log_().mul_(0.5).neg_().exp_().sub_(1.0).log_()
+            init.copy_(module.recurrent_param, recurrent_param)
         elif isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
-                torch.nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif isinstance(module, RecurrentGemmaRMSNorm):
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
+        elif isinstance(module, RecurrentGemmaModel):
+            init.constant_(module.normalizer, module.config.hidden_size**0.5)
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
@@ -640,6 +657,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -728,7 +746,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
 @auto_docstring
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config):
         super().__init__(config)

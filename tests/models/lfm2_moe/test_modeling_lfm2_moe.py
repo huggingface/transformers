@@ -18,7 +18,9 @@ import unittest
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -170,36 +172,30 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
+        # fmt: off
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor(
-            [
-                [
-                    -1.3855,
-                    -0.5123,
-                    -1.3143,
-                    -1.2144,
-                    -1.0791,
-                    -1.2117,
-                    -1.4704,
-                    -0.7648,
-                    -0.6175,
-                    -1.2402,
-                    -1.1459,
-                    -1.0083,
-                    -1.0247,
-                    -0.8830,
-                    -1.5643,
-                    -1.7266,
-                    -1.6254,
-                ]
-            ]
+        EXPECTED_MEANS = Expectations(
+            {
+                ("cuda", None): torch.tensor([[-1.3912, -0.4653, -1.3339, -1.3249, -1.0985, -1.2373, -1.4599, -0.7515, -0.6140, -1.2329, -1.1481, -1.0081, -0.9937, -0.8875, -1.5539, -1.7283, -1.6284]]),
+                ("xpu", None): torch.tensor([[-1.3879, -0.4730, -1.3193, -1.3139, -1.0826, -1.2129, -1.4744, -0.7485, -0.6004, -1.2353, -1.1602, -1.0432, -1.0180, -0.9099, -1.5949, -1.7487, -1.5991]]),
+            }
         )
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        # fmt: on
+        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
+        out_mean = out.mean(-1)
+        torch.testing.assert_close(out_mean, EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        # fmt: off
         # Expected portion of the logits
-        EXPECTED_SLICE = torch.tensor(
-            [-1.2656, 2.4844, 5.5000, -1.3359, -1.3203, -1.3438, 1.9375, 5.8438, -0.6523, -1.2891]
+        EXPECTED_SLICES = Expectations(
+            {
+                ("cuda", None): torch.tensor([-1.2734, 2.4844, 5.5000, -1.3438, -1.3281, -1.3516, 1.9375, 5.8438, -0.6641, -1.2969]),
+                ("xpu", None): torch.tensor([-1.2734,  2.4531, 5.4688, -1.3438, -1.3281, -1.3516, 1.9297, 5.7812, -0.6719, -1.3125]),
+            }
         )
-        torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
+        # fmt: on
+        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
+        out_slice = out[0, 0, :10]
+        torch.testing.assert_close(out_slice, EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_model_1a8b_generation(self):
@@ -217,13 +213,27 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_1a8b_batched_chat_generation(self):
         prompts = ["Who are you?", "Complete the text: Lorem ipsum dolor ", "The Meji Restoration in Japan ended"]
-        EXPECTED_TEXT_COMPLETIONS = [
-            "Who are you??  \nI am an artificial intelligence assistant designed to provide information, answer questions",
-            "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
-            "The Meji Restoration in Japan ended (1868) marked the:  \nA) Establishment of a constitutional",
-        ]
+        # fmt: off
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", None): [
+                    "Who are you? (AI) designed to assist?  \nI am an AI assistant developed to",
+                    "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum.",
+                    "The Meji Restoration in Japan ended**  \n**A.** The shogunate was abolished, and imperial"
+                ],
+                ("xpu", None): [
+                    "Who are you? (AI) designed to assist?  \nI am an AI language model developed",
+                    "Complete the text: Lorem ipsum dolor ipsum dolor ipsum dolor ipsum dolor ipsum dolor",
+                    "The Meji Restoration in Japan ended, which occurred in 1868, marked the:  \nA) Establish"
+                ],
+            }
+        )
+        # fmt: on
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+
         set_seed(1789)
         tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM2-8B-A1B", use_fast=False)
         model = self.get_model()
@@ -233,4 +243,4 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             generated_ids = model.generate(**batched_input_ids, max_new_tokens=15, do_sample=False)
         text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETIONS, text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

@@ -21,7 +21,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -78,7 +78,7 @@ class AriaTextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -99,15 +99,14 @@ class AriaTextConfig(PreTrainedConfig):
 
     model_type = "aria_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `AriaTextModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -134,7 +133,7 @@ class AriaTextConfig(PreTrainedConfig):
         eos_token_id: Optional[int] = 2,
         pretraining_tp: Optional[int] = 1,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -169,14 +168,7 @@ class AriaTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             pad_token_id=pad_token_id,

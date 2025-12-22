@@ -52,7 +52,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     crop_size = None
     do_center_crop = None
 
-    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.5) -> "torch.Tensor":
+    def _pad_images(self, images: "torch.Tensor", constant_value: float = 0.0) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
         """
@@ -69,7 +69,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         disable_grouping: Optional[bool],
-        constant_value: float = 0.5,
+        constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
         """
@@ -175,7 +175,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         if do_pad:
-            processed_images = self.pad(processed_images, constant_value=0.5, disable_grouping=disable_grouping)
+            processed_images = self.pad(processed_images, constant_value=0.0, disable_grouping=disable_grouping)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             processed_images, disable_grouping=disable_grouping
@@ -204,8 +204,6 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

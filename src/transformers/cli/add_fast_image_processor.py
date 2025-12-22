@@ -59,8 +59,6 @@ def add_fast_image_processor(
     image_processor_name = re.findall(r"class (\w*ImageProcessor)", content_base_file)
     if not image_processor_name:
         raise ValueError(f"No ImageProcessor class found in {image_processing_module_file}")
-    elif len(image_processor_name) > 1:
-        raise ValueError(f"Multiple ImageProcessor classes found in {image_processing_module_file}")
 
     image_processor_name = image_processor_name[0]
     fast_image_processor_name = image_processor_name + "Fast"

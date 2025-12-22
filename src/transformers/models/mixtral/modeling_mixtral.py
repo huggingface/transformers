@@ -28,14 +28,16 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -49,61 +51,65 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import OutputRecorder
+from ...utils.generic import OutputRecorder, maybe_autocast
 from .configuration_mixtral import MixtralConfig
 
 
-class MixtralMLP(nn.Module):
+class MixtralExperts(nn.Module):
+    """Collection of expert weights stored as 3D tensors."""
+
     def __init__(self, config: MixtralConfig):
         super().__init__()
-        self.ffn_dim = config.intermediate_size
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
-
+        self.intermediate_dim = config.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states):
-        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)
-        return current_hidden_states
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
-class MixtralExperts(nn.ModuleList):
-    """
-    ModuleList of experts.
-    """
-
-    def __init__(self, config: MixtralConfig):
+class MixtralTopKRouter(nn.Module):
+    def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
-        for _ in range(self.num_experts):
-            self.append(MixtralMLP(config))
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch_size * sequence_length, hidden_dim)
-            selected_experts: (batch_size * sequence_length, top_k)
-            routing_weights: (batch_size * sequence_length, top_k)
-        Returns:
-            (batch_size * sequence_length, hidden_dim)
-        """
-        final_hidden_states = torch.zeros_like(hidden_states)
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit:
-            idx, top_x = torch.where(expert_mask[expert_idx].squeeze(0))
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_states.shape[-1])
-            current_hidden_states = self[expert_idx](current_state) * top_k_weights[top_x, idx, None]
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = torch.nn.functional.softmax(router_logits.float(), dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -111,23 +117,16 @@ class MixtralSparseMoeBlock(nn.Module):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
+        self.gate = MixtralTopKRouter(config)
         self.experts = MixtralExperts(config)
-
-    def route_tokens_to_experts(self, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits.float(), dim=-1)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return top_k_index, top_k_weights.to(router_logits.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        router_logits = self.gate(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights.to(hidden_states.dtype))
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
 
@@ -170,7 +169,7 @@ class MixtralRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -209,7 +208,7 @@ class MixtralRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -225,6 +224,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -290,6 +290,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class MixtralAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -359,7 +360,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = MixtralAttention(config, layer_idx)
 
-        self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        self.mlp = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -387,7 +388,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
@@ -405,10 +406,20 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "router_logits": OutputRecorder(MixtralTopKRouter, index=0),
         "hidden_states": MixtralDecoderLayer,
         "attentions": MixtralAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, MixtralExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, MixtralTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 @auto_docstring
@@ -429,7 +440,7 @@ class MixtralModel(MixtralPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -576,7 +587,7 @@ def load_balancing_loss_func(
 
 @auto_docstring
 class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 

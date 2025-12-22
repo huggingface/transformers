@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -74,7 +74,7 @@ class JetMoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -119,7 +119,7 @@ class JetMoeConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         rms_norm_eps: Optional[int] = 1e-6,
         initializer_range: Optional[float] = 0.01,
         attention_dropout: Optional[float] = 0.0,
@@ -147,14 +147,7 @@ class JetMoeConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.rms_norm_eps = rms_norm_eps
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs

@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -643,8 +643,9 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(batched_generated_texts[0], generated_text_0[0])
         self.assertEqual(batched_generated_texts[1], generated_text_1[0])
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_flash_attn_2_eager_equivalence(self):
         # Create inputs

@@ -41,9 +41,6 @@ class MusicgenMelodyProcessor(ProcessorMixin):
             An instance of [`T5Tokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "MusicgenMelodyFeatureExtractor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

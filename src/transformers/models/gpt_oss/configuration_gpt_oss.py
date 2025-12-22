@@ -17,7 +17,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class GptOssConfig(PreTrainedConfig):
@@ -28,6 +28,7 @@ class GptOssConfig(PreTrainedConfig):
     """
 
     model_type = "gpt_oss"
+    default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -109,14 +110,7 @@ class GptOssConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 150000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

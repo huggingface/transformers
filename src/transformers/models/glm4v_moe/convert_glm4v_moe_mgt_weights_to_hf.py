@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,10 +58,6 @@ def merge_qkv(
     for sd in sd_list:
         if interleaved_qkv:
             shape = sd.shape
-            print(f"zjldbg input {shape} {(multi_query_group_num // original_tp, group_size) + (shape[1:])}")
-            print(
-                f"zjldbg xxx {shape} {(num_attention_heads // multi_query_group_num * attention_dim, attention_dim) + (shape[1:])}"
-            )
             q_, k_, v_ = sd.view((multi_query_group_num // original_tp, group_size) + (shape[1:])).split(
                 [
                     (num_attention_heads // multi_query_group_num * attention_dim),
@@ -116,20 +113,6 @@ def split_glu(sd, cnt, idx):
         ),
         dim=0,
     )
-
-
-def merge_qkv_vit(sd_list, source=None):
-    q, k, v = [], [], []
-    for sd in sd_list:
-        q_, k_, v_ = sd.chunk(dim=0, chunks=3)
-        q.append(q_.clone().contiguous())
-        k.append(k_.clone().contiguous())
-        v.append(v_.clone().contiguous())
-    q = torch.cat(q, dim=0)
-    k = torch.cat(k, dim=0)
-    v = torch.cat(v, dim=0)
-    combined = torch.cat([q, k, v], dim=0)
-    return combined
 
 
 def find_expert_weight(input_dict, layer_num, fc1=True):
@@ -476,7 +459,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     print("Merging tensor parallel weights...")
 
     interleaved_qkv = True
-    multi_query_attention = True
     num_attention_heads = llm_num_heads
     multi_query_group_num = num_kv_heads
     attention_dim = head_dim
@@ -600,16 +582,12 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             f"vision_model.transformer.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
         ]
 
-        # qkv_weight = merge_qkv_vit(
-        #     full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"])
-        # complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = qkv_weight.clone()
         q, k, v = merge_qkv(
             sd_list=full_weights[f"vision_model.transformer.layers.{layer_i}.self_attention.linear_qkv.weight"],
             original_tp=origin_tp,
             num_attention_heads=vit_n_head,
             multi_query_group_num=vit_n_head,
             attention_dim=attention_dim,
-            multi_query_attention=multi_query_attention,
             interleaved_qkv=interleaved_qkv,
         )
         complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = torch.cat((q, k, v), dim=0)
@@ -694,18 +672,21 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     hf_config = {
         "architectures": ["Glm4vMoeForConditionalGeneration"],
         "model_type": "glm4v_moe",
-        "attention_bias": model_config.get("add_qkv_bias", True),
-        "attention_dropout": 0.0,
-        "pad_token_id": model_config.get("pad_token_id", 151329),
-        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
         "image_start_token_id": model_config.get("image_start_token_id", 151339),
         "image_end_token_id": model_config.get("image_end_token_id", 151340),
         "video_start_token_id": model_config.get("video_start_token_id", 151341),
         "video_end_token_id": model_config.get("video_end_token_id", 151342),
-        "image_token_id": model_config.get("image_token_id", 151343),
-        "video_token_id": model_config.get("video_token_id", 151344),
+        "transformers_version": "4.57.0.dev0",
     }
     txt_config = {
+        "model_type": "glm4v_moe_text",
+        "attention_bias": model_config.get("add_qkv_bias", True),
+        "use_qk_norm": model_config.get("use_qk_norm", False),
+        "attention_dropout": 0.0,
+        "pad_token_id": model_config.get("pad_token_id", 151329),
+        "eos_token_id": model_config.get("eos_token_id", [151329, 151336, 151338]),
+        "image_token_id": model_config.get("image_token_id", 151363),
+        "video_token_id": model_config.get("video_token_id", 151364),
         "hidden_act": text_config.get("hidden_act", "silu"),
         "hidden_size": text_config.get("hidden_size", 4096),
         "initializer_range": 0.02,
@@ -715,24 +696,29 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "num_hidden_layers": text_config.get("num_layers", 46),
         "num_key_value_heads": text_config.get("multi_query_group_num", 2),
         "rms_norm_eps": text_config.get("layernorm_epsilon", 1e-05),
-        "rope_theta": text_config.get("rotary_base", 10000.0),
-        "tie_word_embeddings": False,
-        "torch_dtype": text_config.get("torch_dtype", "bfloat16"),
-        "transformers_version": "4.53.0dev",
+        "dtype": text_config.get("torch_dtype", "bfloat16"),
         "use_cache": text_config.get("use_cache", True),
         "vocab_size": text_config.get("vocab_size", 151424),
         "partial_rotary_factor": 0.5,
+        "tie_word_embeddings": False,
         "moe_intermediate_size": text_config.get("moe_intermediate_size", 1408),
         "n_group": text_config.get("n_group", 1),
         "n_routed_experts": text_config.get("n_routed_experts", 128),
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000.0,
+            "mrope_section": [8, 12, 12],
+            "partial_rotary_factor": 0.5,
+        },
     }
     hf_config["text_config"] = txt_config
 
     if "vision_config" in model_config:
         vision_config = {
+            "model_type": "glm4v_moe_vision",
             "hidden_size": model_config["vision_config"].get("hidden_size", 1536),
             "depth": model_config["vision_config"].get("num_layers", 24),
             "num_heads": model_config["vision_config"].get("num_attention_heads", 12),
@@ -749,9 +735,6 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             "temporal_patch_size": model_config["vision_config"].get("t_patch", 2),
         }
         hf_config["vision_config"] = vision_config
-
-    if "rope_scaling" in model_config:
-        hf_config["rope_scaling"] = model_config["rope_scaling"]
 
     config_path = os.path.join(output_path, "config.json")
     with open(config_path, "w") as f:

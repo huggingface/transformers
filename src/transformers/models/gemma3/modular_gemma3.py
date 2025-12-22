@@ -19,22 +19,21 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     RopeParameters,
     dynamic_rope_update,
-    rope_config_validation,
-    standardize_rope_params,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import maybe_autocast
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -126,7 +125,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
@@ -145,6 +144,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     """
 
     model_type = "gemma3_text"
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -171,17 +171,10 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         use_bidirectional_attention: Optional[bool] = False,
         **kwargs,
     ):
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -201,11 +194,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        if rope_scaling is not None:
-            rope_parameters = {"sliding_attention": {"rope_type": "default"}, "full_attention": rope_scaling}
-        self.rope_parameters = rope_parameters
+
         self.use_bidirectional_attention = use_bidirectional_attention
         if use_bidirectional_attention:
             self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
@@ -220,13 +209,38 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1_000_000.0)
-        rope_local_base_freq = getattr(self, "rope_local_base_freq", 10000.0)
-        standardize_rope_params(
-            self, rope_theta={"full_attention": rope_theta, "sliding_attention": rope_local_base_freq}
+        self.rope_parameters = rope_parameters
+        PreTrainedConfig.__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
         )
-        rope_config_validation(self)
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
+        )
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 class Gemma3Config(PreTrainedConfig):
@@ -338,6 +352,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.scalar_embed_scale = embed_scale
         self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
@@ -375,7 +390,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
             self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_original_inv_freq", curr_inv_freq)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
@@ -424,7 +439,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * attention_scaling
@@ -451,7 +466,7 @@ class Gemma3Attention(Gemma2Attention):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -513,23 +528,19 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
@@ -542,20 +553,15 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = ""
-    input_modalities = ["image", "text"]
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
     _no_split_modules = [
         "Gemma3DecoderLayer",
         "SiglipVisionEmbeddings",
@@ -563,13 +569,24 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
         "SiglipMultiheadAttentionPoolingHead",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
-            module.mm_input_projection_weight.data.zero_()
+            init.zeros_(module.mm_input_projection_weight)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         elif "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
+        elif isinstance(module, Gemma3TextScaledWordEmbedding):
+            init.constant_(module.embed_scale, module.scalar_embed_scale)
+        elif isinstance(module, Gemma3RotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, int, int], bool]:
@@ -587,7 +604,7 @@ def _bidirectional_window_overlay(sliding_window: int) -> Callable[[int, int, in
 
 class Gemma3TextModel(Gemma2Model):
     config: Gemma3TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -605,30 +622,16 @@ class Gemma3TextModel(Gemma2Model):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None and not self.training:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
@@ -669,47 +672,27 @@ class Gemma3TextModel(Gemma2Model):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
         hidden_states = self.norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
 class Gemma3ForCausalLM(Gemma2ForCausalLM):
     config: Gemma3TextConfig
-    base_model_prefix = "language_model"
 
     def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
@@ -839,19 +822,10 @@ class Gemma3Model(PaliGemmaModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **lm_kwargs,
+        **lm_kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Gemma3ModelOutputWithPast]:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if input_ids is not None and self.config.image_token_id >= self.vocab_size:
@@ -899,8 +873,6 @@ class Gemma3Model(PaliGemmaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
             **lm_kwargs,
@@ -908,7 +880,7 @@ class Gemma3Model(PaliGemmaModel):
 
         return Gemma3ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
@@ -920,6 +892,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -933,11 +906,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+        **lm_kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, Gemma3CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -983,13 +953,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         "user\nYou are a helpful assistant.\n\n\n\n\n\nWhere is the cat standing?\nmodel\nBased on the image, the cat is standing in a snowy area, likely outdoors. It appears to"
         ```
         """
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1000,9 +963,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **lm_kwargs,
         )
@@ -1033,10 +993,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
             flat_labels = shift_labels.view(-1).to(shift_logits.device)
             loss = loss_fct(flat_logits, flat_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
@@ -1185,7 +1141,7 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
     """
 
     config: Gemma3TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
 
 __all__ = [

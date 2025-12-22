@@ -23,7 +23,7 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class MiniMaxConfig(PreTrainedConfig):
@@ -96,7 +96,7 @@ class MiniMaxConfig(PreTrainedConfig):
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         layer_types (`list`, *optional*):
@@ -132,15 +132,16 @@ class MiniMaxConfig(PreTrainedConfig):
 
     model_type = "minimax"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
-        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -176,7 +177,7 @@ class MiniMaxConfig(PreTrainedConfig):
         output_router_logits: Optional[bool] = False,
         router_aux_loss_coef: Optional[float] = 0.001,
         router_jitter_noise: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         layer_types: Optional[list[str]] = None,
         block_size: Optional[int] = 256,
         full_attn_alpha_factor: Optional[int] = 1,
@@ -221,9 +222,6 @@ class MiniMaxConfig(PreTrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
@@ -231,10 +229,7 @@ class MiniMaxConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

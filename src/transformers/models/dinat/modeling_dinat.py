@@ -559,17 +559,7 @@ class DinatPreTrainedModel(PreTrainedModel):
     config: DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
-    input_modalities = "image"
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    input_modalities = ("image",)
 
 
 @auto_docstring
@@ -606,6 +596,7 @@ class DinatModel(DinatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, DinatModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -678,6 +669,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, DinatImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -750,6 +742,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

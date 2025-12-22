@@ -34,6 +34,7 @@ import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -41,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_olmo import OlmoConfig
 
 
@@ -92,7 +93,7 @@ class OlmoRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -131,7 +132,7 @@ class OlmoRotaryEmbedding(nn.Module):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -212,6 +213,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed.to(q_type), k_embed.to(k_type)
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class OlmoAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -245,7 +247,6 @@ class OlmoAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -373,7 +374,7 @@ class OlmoModel(OlmoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -397,8 +398,8 @@ class OlmoModel(OlmoPreTrainedModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:
@@ -423,6 +424,7 @@ class OlmoModel(OlmoPreTrainedModel):
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 **kwargs,
             )
@@ -436,7 +438,7 @@ class OlmoModel(OlmoPreTrainedModel):
 
 @auto_docstring
 class OlmoForCausalLM(OlmoPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
