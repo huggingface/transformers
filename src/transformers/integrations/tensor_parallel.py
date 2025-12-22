@@ -524,7 +524,6 @@ class GatherParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         self.shard = [Replicate()]
         return param[...].to(device=device, dtype=dtype)
@@ -563,7 +562,6 @@ class IsolatedParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         parameter = param[...].to(device=device, dtype=dtype)
         if self.device_mesh is not None:
@@ -621,7 +619,6 @@ class ReplicateParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         self.shard = [Replicate()]
         return param[...].to(device=device, dtype=dtype)
@@ -672,9 +669,9 @@ class ColwiseParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
-        if param_type == "bias":
+        # If only 1 dim, shard this one (usually it's a `bias`)
+        if param.dim() == 1:
             parameter = get_tensor_shard(param, self.empty_param, self.device_mesh, self.rank, -1, tensor_idx)
             shard = [Shard(-1)]
         else:
@@ -687,7 +684,7 @@ class ColwiseParallel(TensorParallelLayer):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = self.shard_tensor(param, dtype=param_casting_dtype, param_type=param_type)
+        parameter = self.shard_tensor(param, dtype=param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
         if self.use_dtensor:
@@ -717,7 +714,6 @@ class PackedColwiseParallel(ColwiseParallel):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         parameter = get_packed_weights(param, self.empty_param, self.device_mesh, self.rank, -2)
         return parameter.to(device=device, dtype=dtype)
@@ -792,9 +788,9 @@ class RowwiseParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
-        if param_type == "bias":
+        # If only 1 dim, it should not be sharded (usually it's a `bias`)
+        if param.dim() == 1:
             shard = [Replicate()]
             parameter = param[...]
         else:
@@ -882,7 +878,6 @@ class PackedRowwiseParallel(RowwiseParallel):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         parameter = get_packed_weights(param, self.empty_param, self.device_mesh, self.rank, -1)
         return parameter.to(device=device, dtype=dtype)
@@ -988,7 +983,6 @@ class SequenceParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         self.shard = [Replicate()]
         return param[...].to(device=device, dtype=dtype)
@@ -1037,7 +1031,6 @@ class GroupedGemmParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         global_num_experts = self.empty_param.shape[0]
         if global_num_experts % self.device_mesh.size() != 0:
@@ -1141,7 +1134,6 @@ class RouterParallel(TensorParallelLayer):
         tensor_idx=None,
         device=None,
         dtype=None,
-        param_type=None,
     ) -> torch.Tensor:
         self.shard = None
         return param[...].to(device=device, dtype=dtype)
