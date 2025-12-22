@@ -37,11 +37,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "rope_scaling",  # used internally in config to generate `rope_parameters`
     ],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
-    "Ernie4_5Config": ["tie_word_embeddings"],
-    "Ernie4_5_MoeConfig": ["tie_word_embeddings"],
-    "Ernie4_5_VL_MoeTextConfig": ["tie_word_embeddings"],
-    "Lfm2Config": ["full_attn_idxs", "tie_word_embeddings"],
-    "Lfm2MoeConfig": ["tie_word_embeddings"],
     # used internally during generation to provide the custom logit processors with their necessary information
     "DiaConfig": [
         "delay_pattern",
@@ -59,7 +54,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
-    "PaddleOCRTextConfig": ["tie_word_embeddings"],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
@@ -70,7 +64,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
-    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
+    "Gemma2Config": ["cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
     "JetMoeConfig": ["output_router_logits"],
     # Dropout with this value was declared but never used
@@ -168,7 +162,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_kernel_size",
     ],
     "ZambaConfig": [
-        "tie_word_embeddings",
         "attn_layer_offset",
         "attn_layer_period",
     ],
@@ -280,9 +273,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
-    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
-    "T5Gemma2TextConfig": ["tie_word_embeddings"],
-    "T5Gemma2DecoderConfig": ["tie_word_embeddings"],
+    "Gemma3TextConfig": ["cache_implementation"],
     "ShieldGemma2Config": [
         "boi_token_index",
         "eoi_token_index",
@@ -318,8 +309,6 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "SmolLM3Config": ["no_rope_layer_interval"],
     "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],  # this is for use in `timm`
-    "VaultGemmaConfig": ["tie_word_embeddings"],
-    "GemmaConfig": ["tie_word_embeddings"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "LayoutXLMConfig": True,
     "DeepseekV2Config": ["norm_topk_prob"],
@@ -443,7 +432,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pretraining_tp",
         "boi_token_id",
         "eoi_token_id",
-        "tie_word_embeddings",
         "is_decoder",
         "add_cross_attention",
     ]
@@ -457,9 +445,6 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
             # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
             if attribute == "is_encoder_decoder" and default_value is True:
                 case_allowed = True
-            elif attribute == "tie_word_embeddings" and default_value is False:
-                case_allowed = True
-
             # Allow cases without checking the default value in the configuration class
             elif attribute in attributes_to_allow + attributes_used_in_generation:
                 case_allowed = True

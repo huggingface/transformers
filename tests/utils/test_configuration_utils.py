@@ -145,7 +145,6 @@ class ConfigTestUtils(unittest.TestCase):
             missing_keys,
             [
                 "_output_attentions",
-                "tie_word_embeddings",  # was omitted in purpose and will be deleted from base config soon
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",

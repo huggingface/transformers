@@ -162,7 +162,6 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 "following discussion on GitHub: https://github.com/huggingface/transformers/issues/23350"
             )
 
-        # tie encoder, decoder weights if config set accordingly
         self.post_init()
 
     @torch.no_grad()
