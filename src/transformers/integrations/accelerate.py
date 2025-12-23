@@ -353,10 +353,13 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         dispatch_model(model, **device_map_kwargs)
 
 
-def expand_device_map(device_map, param_names):
+def expand_device_map(device_map: dict | None, param_names: list[str]):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    if device_map is None:
+        return dict.fromkeys(param_names, "cpu")
+
     # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
@@ -364,9 +367,14 @@ def expand_device_map(device_map, param_names):
     new_device_map = {}
     for param in param_names:
         device_match = device_map_regex.match(param)
-        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("")
 
     return new_device_map
+
+
+def get_device(device_map: dict | None, param_name: str) -> torch.device | str | int:
+    """Return the device on which `param_name` should be according to the `device_map`"""
+    return expand_device_map(device_map, [param_name])[param_name]
 
 
 def accelerate_disk_offload(
