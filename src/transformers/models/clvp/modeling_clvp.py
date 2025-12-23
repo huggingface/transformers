@@ -838,6 +838,8 @@ class ClvpEncoder(ClvpPreTrainedModel):
         config: ClvpConfig
     """
 
+    config: ClvpEncoderConfig
+
     def __init__(self, config: ClvpConfig):
         super().__init__(config)
 
@@ -990,6 +992,8 @@ class ClvpDecoder(ClvpPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ClvpDecoderLayer`]
     """
+
+    config: ClvpDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1153,6 +1157,8 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
 @auto_docstring
 class ClvpModel(ClvpPreTrainedModel):
+    config: ClvpDecoderConfig
+
     def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
         self.config = config
@@ -1223,6 +1229,8 @@ class ClvpModel(ClvpPreTrainedModel):
     """
 )
 class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
+    config: ClvpDecoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1416,8 +1424,6 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     """
 )
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
-    config: ClvpConfig
-
     def __init__(self, config: ClvpConfig):
         super().__init__(config)
 
