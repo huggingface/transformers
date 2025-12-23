@@ -152,7 +152,7 @@ class Sam2VisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Sam2HieraDetConfig()`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[768, 384, 192, 96]`):

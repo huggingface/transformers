@@ -443,6 +443,8 @@ class PegasusPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, PegasusSinusoidalPositionalEmbedding):
             init.copy_(module.weight, module.create_weight())
+        elif isinstance(module, PegasusForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
 
 class PegasusEncoder(PegasusPreTrainedModel):
@@ -1220,6 +1222,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = PegasusDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
