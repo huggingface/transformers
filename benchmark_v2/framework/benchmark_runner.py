@@ -101,6 +101,10 @@ def flush_memory(flush_compile: bool = True) -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
+    # Clear XPU cache
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
     gc.collect()
 
 
@@ -288,15 +292,29 @@ class BenchmarkRunner:
         # Compute metrics
         e2e_latency = wall_time_1 - wall_time_0
         timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
-        self.logger.info(
-            f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MB"
-        )
+
+        # Get memory usage based on device type
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            memory_allocated = torch.xpu.memory_allocated() / 1024**2
+        elif torch.cuda.is_available():
+            memory_allocated = torch.cuda.memory_allocated() / 1024**2
+        else:
+            memory_allocated = 0.0
+
+        self.logger.info(f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {memory_allocated:.2f} MB")
         return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
+        # Build activities list based on available devices
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            activities.append(torch.profiler.ProfilerActivity.XPU)
+        elif torch.cuda.is_available():
+            activities.append(torch.profiler.ProfilerActivity.CUDA)
+
         profiler = torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+            activities=activities,
             record_shapes=True,
         )
         with profiler as prof:
