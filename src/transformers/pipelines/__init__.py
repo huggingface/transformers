@@ -987,7 +987,7 @@ def pipeline(
                     feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
                 )
                 config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
-                    pretrained_model_name_or_path,
+                    pretrained_model_name_or_path or model_name,
                     **hub_kwargs,
                 )
                 processor_class = config_dict.get("processor_class", None)
