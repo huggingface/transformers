@@ -708,7 +708,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, is_first_iteration=False, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 

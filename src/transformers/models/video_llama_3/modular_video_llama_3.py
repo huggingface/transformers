@@ -849,6 +849,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         video_merge_sizes: Optional[torch.LongTensor] = None,
         video_compression_mask: Optional[torch.BoolTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -868,10 +869,11 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_merge_sizes=video_merge_sizes,
             video_compression_mask=video_compression_mask,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

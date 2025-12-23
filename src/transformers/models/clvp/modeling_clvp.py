@@ -1318,6 +1318,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         conditioning_embeds=None,
         cache_position=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten: has `conditioning_embeds`-related logic
@@ -1329,9 +1330,10 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        if conditioning_embeds is not None and cache_position[0] != 0:
+        if conditioning_embeds is not None and not is_first_iteration:
             model_inputs["position_ids"] = torch.tensor([input_ids_length], dtype=torch.long, device=input_ids.device)
 
         return model_inputs
