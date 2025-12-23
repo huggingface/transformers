@@ -17,7 +17,8 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import get_args
+from types import UnionType
+from typing import Union, get_args, get_origin
 
 import regex as re
 
@@ -1280,38 +1281,46 @@ def _get_model_info(func, parent_class):
     return model_name_lowercase, class_name, config_class
 
 
-def _process_parameter_type(param, param_name, func):
+def _process_parameter_type(param):
     """
     Process and format a parameter's type annotation.
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
-        param_name (`str`): The name of the parameter
-        func (`function`): The function the parameter belongs to
     """
     optional = False
-    if param.annotation != inspect.Parameter.empty:
-        param_type = param.annotation
-        if "typing" in str(param_type):
-            param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-        elif hasattr(param_type, "__module__"):
-            param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
-            if param_type[0] == ".":
-                param_type = param_type[1:]
-        else:
-            if False:
-                print(
-                    f"[ERROR] {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
-                )
-        if "ForwardRef" in param_type:
-            param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-        if "Optional" in param_type:
-            param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-            optional = True
+    if param.annotation == inspect.Parameter.empty:
+        return "", False
+    elif param.annotation is None:
+        return "None", True
+    # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
+    elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
+        subtypes = get_args(param.annotation)
     else:
-        param_type = ""
+        subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
+    out_str = []
+    for subtype in subtypes:
+        if subtype is type(None):
+            optional = True
+            continue
+        if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
+            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
+                "."
+            )
+        else:
+            subtype = str(subtype)  # Just give up
+        if "ForwardRef" in subtype:
+            subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
+        out_str.append(subtype)
 
-    return param_type, optional
+    if param.default is not inspect.Parameter.empty:
+        optional = True
+    if not out_str:
+        return "", optional
+    elif len(out_str) == 1:
+        return out_str[0], optional
+    else:
+        return f"Union[{', '.join(out_str)}]", optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
@@ -1392,7 +1401,7 @@ def _process_regular_parameters(
             continue
 
         # Process parameter type and optional status
-        param_type, optional = _process_parameter_type(param, param_name, func)
+        param_type, optional = _process_parameter_type(param)
 
         # Check for default value
         param_default = ""

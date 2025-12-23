@@ -287,6 +287,7 @@ if TYPE_CHECKING:
     from .phimoe import *
     from .phobert import *
     from .pix2struct import *
+    from .pixio import *
     from .pixtral import *
     from .plbart import *
     from .poolformer import *
