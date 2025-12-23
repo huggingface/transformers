@@ -249,7 +249,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             )
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs
+        self, generation_config: Optional[GenerationConfig], **kwargs
     ):
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
@@ -278,9 +278,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         history_prompt = kwargs.pop("history_prompt", None)
 
         # Call the base class method to load from default generation_config.json
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
         # try creating VibeVoice noise scheduler
         # TODO (ebezzam) ok with this? so user doesn't need to defined noise scheduler each time?
@@ -445,7 +443,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             "attention_mask": torch.ones_like(lm_input_ids, dtype=torch.long),
             "max_new_tokens": generation_config.max_new_tokens,
         }
-        _, lm_model_kwargs = self._prepare_generation_config(generation_config, True, **lm_kwargs)
+        _, lm_model_kwargs = self._prepare_generation_config(generation_config, **lm_kwargs)
         lm_model_kwargs['cache_position'] = torch.arange(lm_input_ids.shape[-1], device=lm_input_ids.device, dtype=torch.long)
         lm_model_kwargs["use_cache"] = self.config.use_cache
 
@@ -456,7 +454,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             "attention_mask": tts_lm_attention_mask,
             "max_new_tokens": generation_config.max_new_tokens,
         }
-        _, tts_lm_model_kwargs = self._prepare_generation_config(generation_config, True, **tts_lm_kwargs)
+        _, tts_lm_model_kwargs = self._prepare_generation_config(generation_config, **tts_lm_kwargs)
         tts_lm_model_kwargs['cache_position'] = torch.arange(tts_lm_input_ids.shape[-1], device=tts_lm_input_ids.device, dtype=torch.long)
         tts_lm_model_kwargs["use_cache"] = self.config.use_cache
         
@@ -465,7 +463,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
             "max_new_tokens": generation_config.max_new_tokens,
         }
-        _, tts_lm_negative_model_kwargs = self._prepare_generation_config(generation_config, True, **tts_lm_negative_kwargs)
+        _, tts_lm_negative_model_kwargs = self._prepare_generation_config(generation_config, **tts_lm_negative_kwargs)
         tts_lm_negative_input_ids = torch.full((batch_size, 1), pad_token_id, dtype=torch.long, device=input_ids.device)
         tts_lm_negative_model_kwargs['cache_position'] = torch.arange(tts_lm_negative_input_ids.shape[-1], device=tts_lm_negative_input_ids.device, dtype=torch.long)
         tts_lm_negative_model_kwargs["use_cache"] = self.config.use_cache
@@ -479,10 +477,11 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
 
         # Calculate generation limits for progress tracking
-        step = tts_lm_input_ids.shape[1]
-        offset = step
-        max_steps = generation_config.max_length - cur_len - offset
+        initial_length = tts_lm_input_ids.shape[-1]
+        max_steps = generation_config.max_new_tokens
+        generation_config.max_length = initial_length + generation_config.max_new_tokens
         completion_steps = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
+        step = 0
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -493,7 +492,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     break
 
             if monitor_progress is not None:
-                current_steps = torch.full((batch_size,), step - offset, dtype=torch.long, device=input_ids.device)
+                current_steps = torch.full((batch_size,), step, dtype=torch.long, device=input_ids.device)
                 current_steps[finished_tags] = completion_steps[finished_tags]
                 progress_tensor = torch.stack((current_steps, torch.full_like(current_steps, max_steps), completion_steps), dim=1)
                 monitor_progress(progress_tensor)
@@ -671,6 +670,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 hidden_states=decoder_hidden_states,
                 past_key_values=tts_lm_model_kwargs.get("past_key_values"),
                 audio=final_audio_outputs,
+                # TODO change
                 reach_max_step_sample=tts_lm_input_ids.shape[1] >= generation_config.max_length,
             )
         else:
