@@ -62,6 +62,7 @@ from .integrations.accelerate import (
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
+    get_device,
     load_offloaded_parameter,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -4111,12 +4112,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
-        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they were not moved when
-        # loading the weights as they were not in the loaded state dict)
+        # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
+        # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
         missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_cpu(missing_and_mismatched, hf_quantizer)
+        model._move_missing_keys_from_meta_to_device(missing_and_mismatched, device_map, device_mesh, hf_quantizer)
 
-        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
+        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
         model._initialize_missing_keys(is_quantized)
 
         # Tie the weights
@@ -4124,29 +4125,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
-
-        unique_devices = set(device_map.values()) if device_map is not None else set()
-        # Post-processing for only 1-value device_map (this includes TP) as we won't use hooks in this case
-        if len(unique_devices) == 1:
-            device = unique_devices.pop()
-            # This is needed for all non-persistent buffers (such as RotaryEmbedding modules), which were not initialized
-            # on the correct device as it is not part of the state_dict
-            for _, buffer in model.named_non_persistent_buffers():
-                buffer.data = buffer.data.to(device)
-
-            # The missing/mismatch weights were not moved to device (and parallelized for TP) as they were not part of the
-            # loaded weights: do it now if we have any
-            missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-            for name in missing_and_mismatched:
-                param = model.get_parameter_or_buffer(name)
-                # For TP, shard the param
-                if device_mesh is not None:
-                    shard_and_distribute_module(
-                        model, param.to(device), param, name, None, False, device_mesh.get_local_rank(), device_mesh
-                    )
-                # Otherwise, just move it to device
-                else:
-                    param.data = param.data.to(device)
 
         log_state_dict_report(
             model=model,
@@ -4345,13 +4323,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
 
-    def _move_missing_keys_from_meta_to_cpu(
-        self, missing_keys: list[str], hf_quantizer: Optional[HfQuantizer]
+    def _move_missing_keys_from_meta_to_device(
+        self,
+        missing_keys: list[str],
+        device_map: dict | None,
+        device_mesh: "torch.distributed.device_mesh.DeviceMesh | None",
+        hf_quantizer: HfQuantizer | None,
     ) -> None:
-        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
-        from meta device to cpu.
+        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
+        back from meta device to their device according to the `device_map` if any, else cpu. Takes care of sharding those
+        missing parameters if `device_mesh` is provided, i.e. we are using TP.
+        All non-persistent buffers are also moved back to the correct device (they are not part of the state_dict, but are
+        not missing either).
         """
         is_quantized = hf_quantizer is not None
+        # This is the only case where we do not initialize the model on meta device, so we don't have to do anything here
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            return
 
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
@@ -4368,26 +4356,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
-                with deepspeed.zero.GatheredParameters([param], modifier_rank=0):
-                    # needed for the sharding
-                    param.data.copy_(torch.empty_like(param, device=param.device))
+            param_device = get_device(device_map, key, valid_torch_device=True)
+            value = torch.empty_like(param, device=param_device)
+            # For TP, we may need to shard the param
+            if device_mesh is not None:
+                shard_and_distribute_module(
+                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                )
+            # Otherwise, just move it to device
             else:
-                value = torch.empty_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
-            if is_deepspeed_zero3_enabled() and not is_quantized:
-                import deepspeed
-
-                with deepspeed.zero.GatheredParameters([buffer], modifier_rank=0):
-                    # needed for the sharding
-                    param.data.copy_(torch.empty_like(param, device=param.device))
-            else:
-                value = torch.empty_like(buffer, device="cpu")
-                _load_parameter_into_model(self, key, value)
+            buffer_device = get_device(device_map, key, valid_torch_device=True)
+            value = torch.empty_like(buffer, device=buffer_device)
+            _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
