@@ -260,7 +260,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = GlmAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
         
         inputs = self.processor.apply_chat_template(
@@ -301,7 +301,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = GlmAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
         
         inputs = self.processor.apply_chat_template(
@@ -356,7 +356,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]
 
         model = GlmAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device, dtype=torch.bfloat16
+            self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
 
         inputs = self.processor.apply_chat_template(
