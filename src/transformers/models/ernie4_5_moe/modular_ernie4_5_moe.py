@@ -121,7 +121,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         )
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = F.linear(hidden_states.float(), self.weight)
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)

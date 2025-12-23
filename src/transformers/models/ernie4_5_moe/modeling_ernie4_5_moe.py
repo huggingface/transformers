@@ -36,7 +36,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_grouped_mm_available
 from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
@@ -373,7 +373,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         )
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = F.linear(hidden_states.float(), self.weight)
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
@@ -477,7 +477,9 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_MoeTopKRouter, index=0),

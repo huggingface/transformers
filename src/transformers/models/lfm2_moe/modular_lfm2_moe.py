@@ -134,7 +134,7 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class Lfm2MoeHybridConvCache
 
     @torch.no_grad()
     def _init_weights(self, module):

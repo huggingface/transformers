@@ -34,7 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, is_grouped_mm_available, logging
 from ...utils.generic import OutputRecorder
 from ..mistral.modeling_mistral import (
     MistralAttention,
@@ -265,7 +265,9 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
 
 
 class MixtralPreTrainedModel(MistralPreTrainedModel):
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _can_record_outputs = {
         "router_logits": OutputRecorder(MixtralTopKRouter, index=0),
         "hidden_states": MixtralDecoderLayer,
