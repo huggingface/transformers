@@ -4111,8 +4111,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
-        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
-        # loading the weights as they are not in the loaded state dict)
+        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they were not moved when
+        # loading the weights as they were not in the loaded state dict)
         missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
         model._move_missing_keys_from_meta_to_cpu(missing_and_mismatched, hf_quantizer)
 
@@ -4134,26 +4134,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for name, buffer in model.named_non_persistent_buffers():
                 buffer.data = buffer.data.to(device)
 
-            # In this case, the missing weights were not moved to device (and parallelized for TP) as they
-            # were not part of the loaded weights: do it now
-            if len(missing_keys) > 0:
-                for name in missing_keys:
-                    param = model.get_parameter_or_buffer(name)
-                    # For TP, shard the param
-                    if device_mesh is not None:
-                        shard_and_distribute_module(
-                            model,
-                            param.to(device),
-                            param,
-                            name,
-                            None,
-                            False,
-                            device_mesh.get_local_rank(),
-                            device_mesh,
-                        )
-                    # Otherwise, just move it to device
-                    else:
-                        param.data = param.data.to(device)
+            # The missing/mismatch weights were not moved to device (and parallelized for TP) as they were not part of the
+            # loaded weights: do it now if we have any
+            missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
+            for name in missing_and_mismatched:
+                param = model.get_parameter_or_buffer(name)
+                # For TP, shard the param
+                if device_mesh is not None:
+                    shard_and_distribute_module(
+                        model, param.to(device), param, name, None, False, device_mesh.get_local_rank(), device_mesh
+                    )
+                # Otherwise, just move it to device
+                else:
+                    param.data = param.data.to(device)
 
         log_state_dict_report(
             model=model,
@@ -4422,8 +4415,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
-        Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
-        be tied anyway.
         """
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
