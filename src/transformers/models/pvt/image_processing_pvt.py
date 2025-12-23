@@ -76,7 +76,7 @@ class PvtImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
