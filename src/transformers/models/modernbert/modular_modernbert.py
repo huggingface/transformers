@@ -36,12 +36,11 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import is_triton_available
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb, rotate_half
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
@@ -439,9 +438,9 @@ def flash_attention_forward(
     - cu_seq_lens_q/k: [batch + 1] cumulative sequence lengths
     - max_length_q/k: maximum sequence length in the batch
     """
-    # Get flash attention functions for the current implementation
+    # Get flash attention function from ALL_ATTENTION_FUNCTIONS
     attn_impl = module.config._attn_implementation
-    (_, flash_varlen_fn, _, _), _ = lazy_import_flash_attention(attn_impl)
+    flash_attention_fn = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
     # Handle dtype conversion - flash attention only supports fp16/bf16
     target_dtype = torch.bfloat16
@@ -452,24 +451,21 @@ def flash_attention_forward(
         key = key.to(target_dtype)
         value = value.to(target_dtype)
 
-    # Prepare window size for local attention
-    window_size = (-1, -1)
-    if sliding_window is not None:
-        window_size = (sliding_window, sliding_window)
-
-    # Call flash attention varlen function
-    attn_output = flash_varlen_fn(
+    # Call flash attention function via ALL_ATTENTION_FUNCTIONS
+    attn_output, _ = flash_attention_fn(
+        module,
         query,
         key,
         value,
-        cu_seqlens_q=cu_seq_lens_q,
-        cu_seqlens_k=cu_seq_lens_k,
-        max_seqlen_q=max_length_q,
-        max_seqlen_k=max_length_k,
-        dropout_p=dropout,
-        softmax_scale=scaling,
-        window_size=window_size,
-        deterministic=module.deterministic_flash_attn,
+        attention_mask=attention_mask,
+        scaling=scaling,
+        dropout=dropout,
+        sliding_window=sliding_window,
+        cu_seq_lens_q=cu_seq_lens_q,
+        cu_seq_lens_k=cu_seq_lens_k,
+        max_length_q=max_length_q,
+        max_length_k=max_length_k,
+        **kwargs,
     )
 
     if isinstance(attn_output, tuple):
@@ -570,11 +566,13 @@ class ModernBertAttention(nn.Module):
         is_unpadded = hidden_states.dim() == 2
         if is_unpadded:
             # For unpadded inputs: query_states is [total_nnz, num_heads, head_dim]
-            # cos/sin is [1, total_nnz, head_dim], need to reshape to [total_nnz, 1, head_dim]
-            cos_unpad = cos.squeeze(0).unsqueeze(1)
-            sin_unpad = sin.squeeze(0).unsqueeze(1)
-            query_states = (query_states * cos_unpad) + (rotate_half(query_states) * sin_unpad)
-            key_states = (key_states * cos_unpad) + (rotate_half(key_states) * sin_unpad)
+            # Reshape to [1, total_nnz, num_heads, head_dim] for apply_rotary_pos_emb
+            query_states = query_states.unsqueeze(0).transpose(1, 2)
+            key_states = key_states.unsqueeze(0).transpose(1, 2)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            # Reshape back to [total_nnz, num_heads, head_dim]
+            query_states = query_states.transpose(1, 2).squeeze(0)
+            key_states = key_states.transpose(1, 2).squeeze(0)
         else:
             # For padded inputs: query_states is [batch, seq, num_heads, head_dim]
             # transpose to [batch, num_heads, seq, head_dim] for standard apply_rotary_pos_emb
