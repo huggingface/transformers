@@ -19,8 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-import warnings
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -30,33 +28,102 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...integrations import use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_glmasr import GlmasrConfig, GlmasrEncoderConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class GlmasrAudioRotaryEmbedding(nn.Module):
+class GlmasrRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+    def __init__(self, config: GlmasrConfig, device=None):
         super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[GlmasrConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -65,61 +132,30 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
+    attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
-
-
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
-
-    # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
     q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
     k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
@@ -134,76 +170,38 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class GlmasrAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        layer_idx: Optional[int] = None,
-        config: Optional[GlmasrConfig] = None,
-    ):
+    def __init__(self, config: GlmasrConfig, layer_idx: int):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
         self.config = config
-
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-        self.is_causal = is_causal
-
-        if layer_idx is None and is_decoder:
-            logger.warning_once(
-                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
         self.layer_idx = layer_idx
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        position_embeddings: Optional[torch.Tensor] = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        bsz, tgt_len, _ = hidden_states.size()
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Scaling is susceptible to floating point arithmetics' inprecisions
-        # which can lead to different results (this is dependent from model
-        # to model, e.g. whisper is one such case). We therefore keep the
-        # original order of scaling to follow the original implementation
-        # and enforce no scaling (1.0) in the attention call below.
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        cos = position_embeddings[..., 0]
-        sin = position_embeddings[..., 1]
-
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attention_interface: Callable = eager_attention_forward
@@ -215,80 +213,64 @@ class GlmasrAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=1.0,
-            output_attentions=output_attentions,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
-class GlmasrEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmasrConfig):
+class GlmasrMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
 
-        self.self_attn = GlmasrAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class GlmasrEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GlmasrConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = GlmasrAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GlmasrMLP(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: bool = False,
-        position_embeddings: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
             position_embeddings=position_embeddings,
-            position_ids=position_ids,
+            **kwargs,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        if hidden_states.dtype == torch.float16:
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -297,188 +279,55 @@ class GlmasrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = None
+    _no_split_modules = ["GlmasrAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_attention_backend = True
-    _can_compile_fullgraph = True
 
 
-@auto_docstring(
-    custom_intro="""
-    The Glmasr encoder, which is a Whisper encoder.
-    """
-)
+# TODO: @eustlb, this is what WhisperEncoder should look like
 class GlmasrEncoder(GlmasrPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`GlmasrEncoderLayer`].
-
-    Args:
-        config: GlmasrEncoderConfig
-    """
-
-    # Ignore copy
-    config: GlmasrEncoderConfig
-    main_input_name = "input_features"
-    input_modalities = "audio"
-    _no_split_modules = ["GlmasrEncoderLayer"]
-    _can_record_outputs = {
-        "attentions": GlmasrAttention,
-        "hidden_states": GlmasrEncoderLayer,
-    }
-
     def __init__(self, config: GlmasrEncoderConfig):
         super().__init__(config)
-        self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
+        self.conv1 = nn.Conv1d(config.num_mel_bins, config.hidden_size, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=2, padding=1)
 
-        embed_dim = config.d_model
-        self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_source_positions
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
-        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
-
-        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
-        self.embed_positions.requires_grad_(False)
-
-        self.layers = nn.ModuleList([GlmasrEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layer_norm = nn.LayerNorm(config.hidden_size)
-        # Ignore copy
-        self.avg_pooler = nn.AvgPool1d(2, stride=2)
-
+        self.layers = nn.ModuleList(
+            [GlmasrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = nn.LayerNorm(config.hidden_size)
+        self.rotary_emb = GlmasrRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.rotary_pos_emb = GlmasrAudioRotaryEmbedding(config.hidden_size // config.encoder_attention_heads // 2)
-        # Initialize weights and apply final processing
         self.post_init()
 
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @check_model_inputs
-    def forward(
-        self,
-        input_features,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        position_ids=None,
-        **kwargs,
-    ):
-        r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
-                the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-
-        expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        if input_features.shape[-1] != expected_seq_length:
-            raise ValueError(
-                f"Whisper expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
-            )
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    @auto_docstring
+    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]):
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        seqlen = inputs_embeds.shape[1]
-        freqs = self.rotary_pos_emb(seqlen)
-        rotary_embs = torch.stack([freqs.cos(), freqs.sin()], dim=-1).to(dtype=inputs_embeds.dtype)
-        position_embeddings = rotary_embs[position_ids]
+        inputs_embeds = inputs_embeds.transpose(1, 2)
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    None,
-                    output_attentions=output_attentions,
-                    position_embeddings=position_embeddings,
-                    position_ids=position_ids,
-                )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        position_embeddings = self.rotary_emb(
+            hidden_states, position_ids=torch.arange(hidden_states.shape[1])[None, :]
         )
 
-    # Ignore copy
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers and the output length of the audio encoder
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-        output_lengths = (input_lengths - 2) // 2 + 1
-        return input_lengths, output_lengths
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class GlmasrMultiModalProjector(nn.Module):
+    """
+    Audio adaptor (small MLP) that projects GlmasrEncoder features
+    to the LLM embedding space so they can replace `<sound>` tokens.
+    """
+
     def __init__(self, config: GlmasrConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(config.audio_config.hidden_size * 4, config.text_config.hidden_size * 2)
+        self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size * 2)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
 
@@ -491,11 +340,13 @@ class GlmasrMultiModalProjector(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The Glmasr model, which consists of Whisper encoder, a multi-modal projector and a LLama language model.
+    The Glmasr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
     """
 )
 class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
-    _keep_in_fp32_modules_strict = ["embed_positions"]
+    _keep_in_fp32_modules_strict = None
+    _tp_plan = None
+    _pp_plan = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -525,7 +376,9 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def get_audio_features(self, input_features: torch.FloatTensor):
+    def get_audio_features(
+        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
+    ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
         Args:
@@ -535,6 +388,8 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
                 and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+                Mask to avoid performing attention on padded feature indices.
 
         Returns:
             `torch.FloatTensor`:
@@ -542,15 +397,20 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         """
         audio_outputs = self.audio_tower(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
-        audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
-        audio_embeds = self.multi_modal_projector(audio_hidden_states)
-        return audio_embeds
-
-    def get_audio_embeds(self, input_features: torch.FloatTensor):
-        warnings.warn(
-            "The method `get_audio_embeds` is deprecated. Please use `get_audio_features` instead.", FutureWarning
+        audio_hidden_states = audio_hidden_states.reshape(
+            input_features.shape[0], -1, self.config.audio_config.intermediate_size
         )
-        return self.get_audio_features(input_features)
+        audio_embeds = self.multi_modal_projector(audio_hidden_states)
+
+        audio_lengths = input_features_mask.sum(-1)
+        for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
+            audio_lengths = (audio_lengths + 2 * padding - (kernel_size - 1) - 1) // stride + 1
+        merge_factor = 4
+        post_lengths = (audio_lengths - merge_factor) // merge_factor + 1
+
+        valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
+        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
+        return audio_embeds
 
     @can_return_tuple
     @auto_docstring
@@ -558,6 +418,7 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
+        input_features_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -569,43 +430,73 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
         Example:
 
         ```python
         >>> from transformers import GlmasrForConditionalGeneration, AutoProcessor
-        >>> import torch
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> repo_id = "mistralai/Glmasr-Mini-3B-2507"
+        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = GlmasrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
-        >>> processor = AutoProcessor.from_pretrained(repo_id)
-        >>> model = GlmasrForConditionalGeneration.from_pretrained(repo_id, dtype=torch.bfloat16, device_map=device)
+        >>> conversations = [
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {"type": "text", "text": "Transcribe the input speech."},
+        >>>                 {
+        >>>                     "type": "audio",
+        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+        >>>                 },
+        >>>             ],
+        >>>         }
+        >>>     ],
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {
+        >>>                     "type": "text",
+        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+        >>>                 },
+        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
+        >>>             ],
+        >>>         }
+        >>>     ],
+        >>> ]
 
-        >>> conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
-                    },
-                    {"type": "text", "text": "What can you tell me about this audio?"},
-                ],
-            }
-        ]
+        >>> inputs = processor.apply_chat_template(
+        >>>     conversations,
+        >>>     tokenize=True,
+        >>>     add_generation_prompt=True,
+        >>>     return_dict=True,
+        >>> ).to(model.device)
 
-        >>> inputs = processor.apply_chat_template(conversation)
-        >>> inputs = inputs.to(device, dtype=torch.bfloat16)
+        >>> outputs = model.generate(**inputs, max_new_tokens=500)
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=30)
-        >>> processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
-        ["This audio is a humorous conversation between two friends, likely in English, where one of them is trying to figure out what the other's tattoo says."]
+        >>> decoded_outputs = processor.batch_decode(
+        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        >>> )
+        >>> print(decoded_outputs)
+        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask)
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
@@ -613,11 +504,11 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
             )
 
-        outputs: BaseModelOutputWithPast = self.language_model(
+        outputs: CausalLMOutputWithPast = self.language_model(
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
             cache_position=cache_position,
@@ -630,15 +521,19 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
 
         input_features = kwargs.pop("input_features", None)
+        input_features_mask = kwargs.pop("input_features_mask", None)
         cache_position = kwargs.get("cache_position")
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if cache_position is not None and cache_position[0] == 0:
             # input_features should only be passed when we are not in cached decoding stage
-            model_inputs["input_features"] = input_features
+            if input_features is not None:
+                model_inputs["input_features"] = input_features
+            if input_features_mask is not None:
+                model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
 
 
-__all__ = ["GlmasrPreTrainedModel", "GlmasrEncoder", "GlmasrForConditionalGeneration"]
+__all__ = ["GlmasrEncoder", "GlmasrForConditionalGeneration"]
