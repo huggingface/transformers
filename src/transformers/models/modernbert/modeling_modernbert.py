@@ -218,68 +218,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def flash_attention_forward(
-    module: "ModernBertAttention",
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    sliding_window: Optional[int] = None,
-    cu_seq_lens_q: Optional[torch.Tensor] = None,
-    cu_seq_lens_k: Optional[torch.Tensor] = None,
-    max_length_q: Optional[int] = None,
-    max_length_k: Optional[int] = None,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """
-    Flash attention forward for ModernBert with unpadded inputs.
-
-    For unpadded inputs:
-    - query/key/value: [total_nnz, num_heads, head_dim]
-    - cu_seq_lens_q/k: [batch + 1] cumulative sequence lengths
-    - max_length_q/k: maximum sequence length in the batch
-    """
-    # Get flash attention function from ALL_ATTENTION_FUNCTIONS
-    attn_impl = module.config._attn_implementation
-    flash_attention_fn = ALL_ATTENTION_FUNCTIONS[attn_impl]
-
-    # Handle dtype conversion - flash attention only supports fp16/bf16
-    target_dtype = torch.bfloat16
-    convert_dtype = query.dtype not in (torch.float16, torch.bfloat16)
-    if convert_dtype:
-        orig_dtype = query.dtype
-        query = query.to(target_dtype)
-        key = key.to(target_dtype)
-        value = value.to(target_dtype)
-
-    # Call flash attention function via ALL_ATTENTION_FUNCTIONS
-    attn_output, _ = flash_attention_fn(
-        module,
-        query,
-        key,
-        value,
-        attention_mask=attention_mask,
-        scaling=scaling,
-        dropout=dropout,
-        sliding_window=sliding_window,
-        cu_seq_lens_q=cu_seq_lens_q,
-        cu_seq_lens_k=cu_seq_lens_k,
-        max_length_q=max_length_q,
-        max_length_k=max_length_k,
-        **kwargs,
-    )
-
-    if isinstance(attn_output, tuple):
-        attn_output = attn_output[0]
-
-    if convert_dtype:
-        attn_output = attn_output.to(orig_dtype)
-
-    return attn_output, None
-
-
 def eager_attention_forward(
     module: "ModernBertAttention",
     query: torch.Tensor,
@@ -363,27 +301,27 @@ class ModernBertAttention(nn.Module):
         query_states, key_states, value_states = qkv.unbind(dim=-3)
 
         # Apply rotary position embeddings
+        # cos/sin shape: [1, seq_len, head_dim] or [1, total_nnz, head_dim]
         cos, sin = position_embeddings
 
-        # Check if input is unpadded (2D) or padded (3D)
+        # Check if input is unpadded (2D hidden_states) or padded (3D hidden_states)
         is_unpadded = hidden_states.dim() == 2
         if is_unpadded:
-            # For unpadded inputs: query_states is [total_nnz, num_heads, head_dim]
-            # Reshape to [1, total_nnz, num_heads, head_dim] for apply_rotary_pos_emb
-            query_states = query_states.unsqueeze(0).transpose(1, 2)
-            key_states = key_states.unsqueeze(0).transpose(1, 2)
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-            # Reshape back to [total_nnz, num_heads, head_dim]
-            query_states = query_states.transpose(1, 2).squeeze(0)
-            key_states = key_states.transpose(1, 2).squeeze(0)
+            # For unpadded inputs:
+            # query_states/key_states: [total_nnz, num_heads, head_dim]
+            # Convert to [1, num_heads, total_nnz, head_dim] for attention interface
+            query_states = query_states.transpose(0, 1).unsqueeze(0)
+            key_states = key_states.transpose(0, 1).unsqueeze(0)
+            value_states = value_states.transpose(0, 1).unsqueeze(0)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
         else:
-            # For padded inputs: query_states is [batch, seq, num_heads, head_dim]
-            # transpose to [batch, num_heads, seq, head_dim] for standard apply_rotary_pos_emb
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states.transpose(1, 2), key_states.transpose(1, 2), cos, sin
-            )
-            # Also transpose value_states for consistency
+            # For padded inputs:
+            # query_states/key_states: [batch, seq, num_heads, head_dim]
+            # transpose to [batch, num_heads, seq, head_dim] for standard attention
+            query_states = query_states.transpose(1, 2)
+            key_states = key_states.transpose(1, 2)
             value_states = value_states.transpose(1, 2)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
         # Select the appropriate attention mask
         if self.sliding_window is not None:
@@ -392,9 +330,12 @@ class ModernBertAttention(nn.Module):
             effective_attention_mask = attention_mask
 
         # Select attention implementation
-        if "flash" in self.config._attn_implementation and cu_seqlens is not None and max_seqlen is not None:
-            # Use custom flash attention for unpadded inputs
-            attention_interface: Callable = flash_attention_forward
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_unpadded:
+            # Unpadded inputs: only flash attention supports varlen, pass cu_seqlens
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
@@ -408,13 +349,11 @@ class ModernBertAttention(nn.Module):
                 max_length_q=max_seqlen,
                 max_length_k=max_seqlen,
                 sliding_window=self.sliding_window,
+                is_causal=self.is_causal,
                 **kwargs,
             )
         else:
-            # Use standard attention interface for eager/sdpa
-            attention_interface = eager_attention_forward
-            if self.config._attn_implementation != "eager":
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            # Standard padded attention
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
