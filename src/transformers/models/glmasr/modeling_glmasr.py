@@ -309,7 +309,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(
-            hidden_states, position_ids=torch.arange(hidden_states.shape[1])[None, :]
+            hidden_states, position_ids=torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :]
         )
 
         for encoder_layer in self.layers:
