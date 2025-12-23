@@ -525,7 +525,7 @@ class HumanVModel(HumanVPreTrainedModel):
 
 
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: HumanVConfig):
         super().__init__(config)
@@ -534,13 +534,13 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
+    def get_input_embeddings(self):
         return self.model.embed_tokens
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.model.embed_tokens = value
 
-    def get_output_embeddings(self) -> nn.Module:
+    def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings: nn.Module) -> None:
