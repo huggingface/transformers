@@ -120,6 +120,13 @@ class BenchmarkConfig:
             )
             self.continuous_batching = False
 
+        # Continuous batching does not support XPU yet # FIXME: add XPU support to transformers continuous_batching
+        if self.device == "xpu" and self.continuous_batching:
+            logger.error(
+                "Disabling continuous batching because of invalid configuration: XPU is not supported yet."
+            )
+            self.continuous_batching = False
+
         # Continuous batching supports compile mode "default" or "max-autotune-no-cudagraphs"
         if (
             self.continuous_batching
