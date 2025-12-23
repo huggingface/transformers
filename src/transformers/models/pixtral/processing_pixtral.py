@@ -87,6 +87,29 @@ class PixtralProcessor(ProcessorMixin):
             Special token used to denote the end of an image input.
     """
 
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        """
+        Override for BC. Pixtral requires a modified pre_tokenizer with ByteLevel prepended to handle
+        the specific tokenization format expected by pretrained Pixtral models.
+        """
+        from tokenizers import decoders, pre_tokenizers
+
+        from ...models.llama import LlamaTokenizer
+
+        tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        # Add ByteLevel pre_tokenizer before the existing one
+        tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
+        )
+
+        tokenizer._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
+
+        return tokenizer
+
     def __init__(
         self,
         image_processor=None,
