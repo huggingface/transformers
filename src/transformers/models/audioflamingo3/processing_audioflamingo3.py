@@ -85,6 +85,11 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
+        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
+        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+        return audio_tokens_lengths
+
     def __call__(
         self,
         text: Union[TextInput, list[TextInput]],
@@ -167,8 +172,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
-            audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+            audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
 
             # expand audio tokens in text
             for i, audio_length in enumerate(audio_tokens_lengths):
