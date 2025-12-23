@@ -4131,7 +4131,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device = unique_devices.pop()
             # This is needed for all non-persistent buffers (such as RotaryEmbedding modules), which were not initialized
             # on the correct device as it is not part of the state_dict
-            for name, buffer in model.named_non_persistent_buffers():
+            for _, buffer in model.named_non_persistent_buffers():
                 buffer.data = buffer.data.to(device)
 
             # The missing/mismatch weights were not moved to device (and parallelized for TP) as they were not part of the
