@@ -19,8 +19,8 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    GlmasrConfig,
-    GlmasrForConditionalGeneration,
+    GlmAsrConfig,
+    GlmAsrForConditionalGeneration,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
 
 
-class GlmasrModelTester:
+class GlmAsrModelTester:
     def __init__(
         self,
         parent,
@@ -94,7 +94,7 @@ class GlmasrModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return GlmasrConfig(
+        return GlmAsrConfig(
             text_config=self.text_config,
             audio_config=self.audio_config,
             ignore_index=self.ignore_index,
@@ -131,16 +131,16 @@ class GlmasrModelTester:
 
 
 @require_torch
-class GlmasrForConditionalGenerationModelTest(
+class GlmAsrForConditionalGenerationModelTest(
     ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
 ):
     """
-    Model tester for `GlmasrForConditionalGeneration`.
+    Model tester for `GlmAsrForConditionalGeneration`.
     """
 
-    all_model_classes = (GlmasrForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (GlmAsrForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": GlmasrForConditionalGeneration, "any-to-any": GlmasrForConditionalGeneration}
+        {"text-to-speech": GlmAsrForConditionalGeneration, "any-to-any": GlmAsrForConditionalGeneration}
         if is_torch_available()
         else {}
     )
@@ -148,8 +148,8 @@ class GlmasrForConditionalGenerationModelTest(
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = GlmasrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GlmasrConfig, has_text_modality=False)
+        self.model_tester = GlmAsrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GlmAsrConfig, has_text_modality=False)
 
     @unittest.skip(
         reason="This test does not apply to glmasr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
@@ -236,7 +236,7 @@ class GlmasrForConditionalGenerationModelTest(
 
 
 @require_torch
-class GlmasrForConditionalGenerationIntegrationTest(unittest.TestCase):
+class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint_name = "eustlb/GLM-ASR-Nano-2512"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
@@ -259,7 +259,7 @@ class GlmasrForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        model = GlmasrForConditionalGeneration.from_pretrained(
+        model = GlmAsrForConditionalGeneration.from_pretrained(
             self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
         
@@ -291,7 +291,7 @@ class GlmasrForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        model = GlmasrForConditionalGeneration.from_pretrained(
+        model = GlmAsrForConditionalGeneration.from_pretrained(
             self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
         
@@ -349,7 +349,7 @@ class GlmasrForConditionalGenerationIntegrationTest(unittest.TestCase):
             ],
         ]
 
-        model = GlmasrForConditionalGeneration.from_pretrained(
+        model = GlmAsrForConditionalGeneration.from_pretrained(
             self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
 

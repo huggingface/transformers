@@ -27,7 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import check_model_inputs
 from ..llama.modeling_llama import LlamaAttention, rotate_half, eager_attention_forward
-from .configuration_glmasr import GlmasrConfig, GlmasrEncoderConfig
+from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 from ..glm.modeling_glm import GlmRotaryEmbedding 
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -40,7 +40,7 @@ from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 logger = logging.get_logger(__name__)
 
 
-class GlmasrProcessor(AudioFlamingo3Processor):
+class GlmAsrProcessor(AudioFlamingo3Processor):
     def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
         merge_factor = 4
         for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
@@ -50,7 +50,7 @@ class GlmasrProcessor(AudioFlamingo3Processor):
         return num_tokens
         
 
-class GlmasrRotaryEmbedding(GlmRotaryEmbedding): ...
+class GlmAsrRotaryEmbedding(GlmRotaryEmbedding): ...
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -71,8 +71,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class GlmasrAttention(LlamaAttention):
-    def __init__(self, config: GlmasrConfig, layer_idx: int):
+class GlmAsrAttention(LlamaAttention):
+    def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = False
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
@@ -116,7 +116,7 @@ class GlmasrAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class GlmasrMLP(nn.Module):
+class GlmAsrMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -130,14 +130,14 @@ class GlmasrMLP(nn.Module):
         return hidden_states
 
 
-class GlmasrEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmasrConfig, layer_idx: int):
+class GlmAsrEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = GlmasrAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GlmAsrAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = GlmasrMLP(config)
+        self.mlp = GlmAsrMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
@@ -165,21 +165,21 @@ class GlmasrEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class GlmasrPreTrainedModel(AudioFlamingo3PreTrainedModel): ...
+class GlmAsrPreTrainedModel(AudioFlamingo3PreTrainedModel): ...
 
 
 # TODO: @eustlb, this is what WhisperEncoder should look like
-class GlmasrEncoder(GlmasrPreTrainedModel):
-    def __init__(self, config: GlmasrEncoderConfig):
+class GlmAsrEncoder(GlmAsrPreTrainedModel):
+    def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)
         self.conv1 = nn.Conv1d(config.num_mel_bins, config.hidden_size, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=2, padding=1)
 
         self.layers = nn.ModuleList(
-            [GlmasrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [GlmAsrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size)
-        self.rotary_emb = GlmasrRotaryEmbedding(config=config)
+        self.rotary_emb = GlmAsrRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -200,14 +200,14 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class GlmasrMultiModalProjector(AudioFlamingo3MultiModalProjector):
-    def __init__(self, config: GlmasrConfig):
+class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
+    def __init__(self, config: GlmAsrConfig):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size * 2)
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
 
 
-class GlmasrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def get_audio_features(
         self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
     ) -> torch.FloatTensor:
@@ -227,4 +227,4 @@ class GlmasrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         return audio_embeds
 
 
-__all__ = ["GlmasrEncoder", "GlmasrForConditionalGeneration", "GlmasrProcessor"]
+__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor"]

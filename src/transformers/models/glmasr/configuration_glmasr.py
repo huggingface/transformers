@@ -17,9 +17,9 @@ from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class GlmasrEncoderConfig(PreTrainedConfig):
+class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmasrEncoder`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmAsrEncoder`]. It is used to instantiate a
     glmasr audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the glmasr
     architecture.
@@ -46,7 +46,7 @@ class GlmasrEncoderConfig(PreTrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features used per input features. Should correspond to the value used in the
-            `GlmasrProcessor` class.
+            `GlmAsrProcessor` class.
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -55,13 +55,13 @@ class GlmasrEncoderConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import GlmasrEncoderConfig, GlmasrEncoder
+    >>> from transformers import GlmAsrEncoderConfig, GlmAsrEncoder
 
-    >>> # Initializing a GlmasrEncoderConfig
-    >>> configuration = GlmasrEncoderConfig()
+    >>> # Initializing a GlmAsrEncoderConfig
+    >>> configuration = GlmAsrEncoderConfig()
 
-    >>> # Initializing a GlmasrEncoder (with random weights)
-    >>> model = GlmasrEncoder(configuration)
+    >>> # Initializing a GlmAsrEncoder (with random weights)
+    >>> model = GlmAsrEncoder(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -101,9 +101,9 @@ class GlmasrEncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class GlmasrConfig(PreTrainedConfig):
+class GlmAsrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmasrForConditionalGeneration`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`GlmAsrForConditionalGeneration`]. It is used to instantiate an
     glmasr model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the glmasr-Mini-3B.
 
@@ -123,13 +123,13 @@ class GlmasrConfig(PreTrainedConfig):
             The activation function (function or string) in the multi-modal projector.
 
     ```python
-    >>> from transformers import GlmasrForConditionalGeneration, GlmasrConfig
+    >>> from transformers import GlmAsrForConditionalGeneration, GlmAsrConfig
 
     >>> # Initializing a glmasr configuration
-    >>> configuration = GlmasrConfig(audio_token_id=24, projector_hidden_act="gelu")
+    >>> configuration = GlmAsrConfig(audio_token_id=24, projector_hidden_act="gelu")
 
     >>> # Initializing a 3B model with random weights
-    >>> model = GlmasrForConditionalGeneration(configuration)
+    >>> model = GlmAsrForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -187,4 +187,4 @@ class GlmasrConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["GlmasrEncoderConfig", "GlmasrConfig"]
+__all__ = ["GlmAsrEncoderConfig", "GlmAsrConfig"]

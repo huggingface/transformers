@@ -37,13 +37,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_glmasr import GlmasrConfig, GlmasrEncoderConfig
+from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
 
-class GlmasrRotaryEmbedding(nn.Module):
+class GlmAsrRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: GlmasrConfig, device=None):
+    def __init__(self, config: GlmAsrConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -61,7 +61,7 @@ class GlmasrRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[GlmasrConfig] = None,
+        config: Optional[GlmAsrConfig] = None,
         device: Optional["torch.device"] = None,
         seq_len: Optional[int] = None,
     ) -> tuple["torch.Tensor", float]:
@@ -171,10 +171,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class GlmasrAttention(nn.Module):
+class GlmAsrAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: GlmasrConfig, layer_idx: int):
+    def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -224,7 +224,7 @@ class GlmasrAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GlmasrMLP(nn.Module):
+class GlmAsrMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -238,14 +238,14 @@ class GlmasrMLP(nn.Module):
         return hidden_states
 
 
-class GlmasrEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmasrConfig, layer_idx: int):
+class GlmAsrEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = GlmasrAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GlmAsrAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = GlmasrMLP(config)
+        self.mlp = GlmAsrMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
@@ -274,29 +274,29 @@ class GlmasrEncoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class GlmasrPreTrainedModel(PreTrainedModel):
-    config: GlmasrConfig
+class GlmAsrPreTrainedModel(PreTrainedModel):
+    config: GlmAsrConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GlmasrAttention"]
+    _no_split_modules = ["GlmAsrAttention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
 
 
 # TODO: @eustlb, this is what WhisperEncoder should look like
-class GlmasrEncoder(GlmasrPreTrainedModel):
-    def __init__(self, config: GlmasrEncoderConfig):
+class GlmAsrEncoder(GlmAsrPreTrainedModel):
+    def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)
         self.conv1 = nn.Conv1d(config.num_mel_bins, config.hidden_size, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=2, padding=1)
 
         self.layers = nn.ModuleList(
-            [GlmasrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [GlmAsrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size)
-        self.rotary_emb = GlmasrRotaryEmbedding(config=config)
+        self.rotary_emb = GlmAsrRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -319,13 +319,13 @@ class GlmasrEncoder(GlmasrPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class GlmasrMultiModalProjector(nn.Module):
+class GlmAsrMultiModalProjector(nn.Module):
     """
-    Audio adaptor (small MLP) that projects GlmasrEncoder features
+    Audio adaptor (small MLP) that projects GlmAsrEncoder features
     to the LLM embedding space so they can replace `<sound>` tokens.
     """
 
-    def __init__(self, config: GlmasrConfig):
+    def __init__(self, config: GlmAsrConfig):
         super().__init__()
         self.linear_1 = nn.Linear(config.audio_config.intermediate_size, config.text_config.hidden_size * 2)
         self.act = ACT2FN[config.projector_hidden_act]
@@ -340,10 +340,10 @@ class GlmasrMultiModalProjector(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The Glmasr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
     """
 )
-class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
+class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = None
     _tp_plan = None
     _pp_plan = None
@@ -353,7 +353,7 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.multi_modal_projector = GlmasrMultiModalProjector(config)
+        self.multi_modal_projector = GlmAsrMultiModalProjector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -443,11 +443,11 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import GlmasrForConditionalGeneration, AutoProcessor
+        >>> from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
         >>> model_id = "nvidia/audio-flamingo-3-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = GlmasrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        >>> model = GlmAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
         >>> conversations = [
         >>>     [
@@ -536,4 +536,4 @@ class GlmasrForConditionalGeneration(GlmasrPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["GlmasrEncoder", "GlmasrForConditionalGeneration"]
+__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration"]

@@ -35,7 +35,7 @@ from ...utils import is_torch_available, logging
 logger = logging.get_logger(__name__)
 
 
-class GlmasrProcessorKwargs(ProcessingKwargs, total=False):
+class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -57,13 +57,13 @@ MAX_AUDIO_LEN = 10 * 60  # 10 minutes
 DEFAULT_TRANSCRIPTION_PROMPT = "Transcribe the input speech."
 
 
-class GlmasrProcessor(ProcessorMixin):
+class GlmAsrProcessor(ProcessorMixin):
     r"""
-    Constructs an Glmasr processor which wraps an Glmasr feature extractor and an Glmasr
+    Constructs an GlmAsr processor which wraps an GlmAsr feature extractor and an GlmAsr
     tokenizer into a single processor.
 
-    [`GlmasrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~GlmasrProcessor.__call__`] for more information.
+    [`GlmAsrProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
+    [`Qwen2TokenizerFast`]. See the [`~GlmAsrProcessor.__call__`] for more information.
 
     Args:
         feature_extractor ([`WhisperFeatureExtractor`]):
@@ -101,7 +101,7 @@ class GlmasrProcessor(ProcessorMixin):
         text: Union[TextInput, list[TextInput]],
         audio: Optional[AudioInput] = None,
         output_labels: Optional[bool] = False,
-        **kwargs: Unpack[GlmasrProcessorKwargs],
+        **kwargs: Unpack[GlmAsrProcessorKwargs],
     ) -> BatchFeature:
         r"""
         Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
@@ -126,7 +126,7 @@ class GlmasrProcessor(ProcessorMixin):
 
         # Merge defaults with user kwargs
         call_kwargs = self._merge_kwargs(
-            GlmasrProcessorKwargs,
+            GlmAsrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -207,7 +207,7 @@ class GlmasrProcessor(ProcessorMixin):
         self,
         audio: Union[str, list[str], AudioInput],
         prompt: Optional[Union[str, list[str]]] = None,
-        **kwargs: Unpack[GlmasrProcessorKwargs],
+        **kwargs: Unpack[GlmAsrProcessorKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
@@ -220,11 +220,11 @@ class GlmasrProcessor(ProcessorMixin):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~GlmasrProcessor.apply_chat_template`] (for example
+                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmasrForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
 
         """
 
@@ -321,4 +321,4 @@ class GlmasrProcessor(ProcessorMixin):
         return stripped
 
 
-__all__ = ["GlmasrProcessor"]
+__all__ = ["GlmAsrProcessor"]

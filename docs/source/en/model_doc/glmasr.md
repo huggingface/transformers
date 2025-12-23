@@ -19,7 +19,7 @@ limitations under the License.
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-15.*
 
 
-# Glmasr
+# GlmAsr
 
 ## Overview
 
@@ -48,29 +48,29 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 ```python
 ```
 
-## GlmasrEncoderConfig
+## GlmAsrEncoderConfig
 
-[[autodoc]] GlmasrEncoderConfig
+[[autodoc]] GlmAsrEncoderConfig
 
-## GlmasrConfig
+## GlmAsrConfig
 
-[[autodoc]] GlmasrConfig
+[[autodoc]] GlmAsrConfig
 
-## GlmasrPreTrainedModel
+## GlmAsrPreTrainedModel
 
-[[autodoc]] GlmasrPreTrainedModel
+[[autodoc]] GlmAsrPreTrainedModel
     - forward
 
-## GlmasrProcessor
+## GlmAsrProcessor
 
-[[autodoc]] GlmasrProcessor
+[[autodoc]] GlmAsrProcessor
 
-## GlmasrEncoder
+## GlmAsrEncoder
 
-[[autodoc]] GlmasrEncoder
+[[autodoc]] GlmAsrEncoder
     - forward
 
-## GlmasrForConditionalGeneration
+## GlmAsrForConditionalGeneration
 
-[[autodoc]] GlmasrForConditionalGeneration
+[[autodoc]] GlmAsrForConditionalGeneration
     - forward
