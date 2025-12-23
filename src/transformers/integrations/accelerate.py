@@ -367,14 +367,18 @@ def expand_device_map(device_map: dict | None, param_names: list[str]):
     new_device_map = {}
     for param in param_names:
         device_match = device_map_regex.match(param)
-        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("")
+        new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
 
     return new_device_map
 
 
-def get_device(device_map: dict | None, param_name: str) -> torch.device | str | int:
-    """Return the device on which `param_name` should be according to the `device_map`"""
-    return expand_device_map(device_map, [param_name])[param_name]
+def get_device(device_map: dict | None, param_name: str, valid_torch_device: bool = False) -> torch.device | str | int:
+    """Return the device on which `param_name` should be according to the `device_map`. If `valid_torch_device` is `True`,
+    then if the device is `"disk"`, `"cpu"` will be returned instead."""
+    device = expand_device_map(device_map, [param_name])[param_name]
+    if valid_torch_device and device == "disk":
+        return "cpu"
+    return device
 
 
 def accelerate_disk_offload(

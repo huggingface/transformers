@@ -4356,7 +4356,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            param_device = get_device(device_map, key)
+            param_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
             if device_mesh is not None:
@@ -4368,7 +4368,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 _load_parameter_into_model(self, key, value)
         # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
-            buffer_device = get_device(device_map, key)
+            buffer_device = get_device(device_map, key, valid_torch_device=True)
             value = torch.empty_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
