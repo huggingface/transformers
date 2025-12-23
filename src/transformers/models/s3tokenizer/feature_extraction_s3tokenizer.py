@@ -20,10 +20,14 @@ import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import PaddingStrategy, TensorType, is_librosa_available, logging
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_librosa_available():
+    import librosa
 
 
 class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
@@ -48,7 +52,7 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
             Number of audio samples between adjacent STFT columns (10ms at 16kHz).
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
@@ -69,51 +73,65 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
         self.n_mels = n_mels
         self.n_fft = n_fft
         self.hop_length = hop_length
+        self._mel_filters = None
+        self._window = None
+
+    def _get_mel_filters(self):
+        if self._mel_filters is None:
+            if not is_librosa_available():
+                raise ImportError(
+                    "librosa is required to compute mel filters in S3TokenizerFeatureExtractor. "
+                    "Please install it with `pip install librosa`."
+                )
+            self._mel_filters = librosa.filters.mel(sr=self.sampling_rate, n_fft=self.n_fft, n_mels=self.n_mels)
+        return self._mel_filters
+
+    def _get_window(self):
+        if self._window is None:
+            self._window = np.hanning(self.n_fft)
+        return self._window
+
+    def _extract_mel_features(self, audio: np.ndarray) -> np.ndarray:
+        """Compute the log-Mel spectrogram of audio using numpy/librosa."""
+        # STFT
+        # We use librosa for stft if available for consistency with original torch implementation
+        if not is_librosa_available():
+            raise ImportError("librosa is required for S3TokenizerFeatureExtractor.")
+
+        stft = librosa.stft(
+            audio,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            window=self._get_window(),
+            center=True,
+        )
+
+        # Power spectrogram
+        magnitudes = np.abs(stft[..., :-1]) ** 2
+
+        # Mel spectrogram
+        mel_spec = self._get_mel_filters() @ magnitudes
+
+        # Log mel spectrogram
+        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
+        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = (log_spec + 4.0) / 4.0
+
+        # Transpose to [time, n_mels] for Transformers padding convention
+        return log_spec.T
 
     def __call__(
         self,
         raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
-        truncation: Optional[bool] = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
-
-        Args:
-            raw_audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
-                The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            truncation (`bool`, *optional*, defaults to `False`):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_audio` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_values** -- Audio waveform ready for the model.
-            - **attention_mask** -- Mask to avoid performing attention on padding token indices.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -133,18 +151,18 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
         )
 
         if is_batched:
-            raw_audio = [np.asarray(audio, dtype=np.float32) for audio in raw_audio]
-        elif not is_batched and not isinstance(raw_audio, np.ndarray):
-            raw_audio = np.asarray(raw_audio, dtype=np.float32)
-        elif isinstance(raw_audio, np.ndarray) and raw_audio.dtype is np.dtype(np.float64):
-            raw_audio = raw_audio.astype(np.float32)
+            raw_audio = [np.asarray(audio, dtype=np.float32).squeeze() for audio in raw_audio]
+        else:
+            raw_audio = [np.asarray(raw_audio, dtype=np.float32).squeeze()]
 
-        # always return batch
-        if not is_batched:
-            raw_audio = [raw_audio]
+        # Ensure all are 1D
+        raw_audio = [audio if audio.ndim == 1 else audio.flatten() for audio in raw_audio]
+
+        # Extract features
+        input_features = [self._extract_mel_features(audio) for audio in raw_audio]
 
         # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": raw_audio})
+        encoded_inputs = BatchFeature({"input_features": input_features})
 
         padded_inputs = self.pad(
             encoded_inputs,

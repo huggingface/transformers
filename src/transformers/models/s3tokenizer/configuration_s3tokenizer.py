@@ -33,22 +33,29 @@ class S3TokenizerConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
-        n_mels (`int`, *optional*, defaults to 128):
-            Number of mel-frequency bins for the mel-spectrogram.
-        n_fft (`int`, *optional*, defaults to 400):
-            Size of the FFT window for computing the mel-spectrogram.
-        vocab_size (`int`, *optional*, defaults to 6561):
-            Vocabulary size of the S3 tokenizer (3^8 for FSQ quantization).
-        n_audio_state (`int`, *optional*, defaults to 1280):
-            Hidden state dimension of the audio encoder.
-        n_audio_head (`int`, *optional*, defaults to 20):
-            Number of attention heads in the audio encoder.
-        n_audio_layer (`int`, *optional*, defaults to 6):
-            Number of transformer layers in the audio encoder.
-        use_sdpa (`bool`, *optional*, defaults to `False`):
-            Whether to use Scaled Dot Product Attention (SDPA) for faster inference.
+            sampling_rate (`int`, *optional*, defaults to 16000):
+                The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
+            n_mels (`int`, *optional*, defaults to 128):
+                Number of mel-frequency bins for the mel-spectrogram.
+            n_fft (`int`, *optional*, defaults to 400):
+                Size of the FFT window for computing the mel-spectrogram.
+            vocab_size (`int`, *optional*, defaults to 6561):
+                Vocabulary size of the S3 tokenizer (3^8 for FSQ quantization).
+            n_audio_state (`int`, *optional*, defaults to 1280):
+                Hidden state dimension of the audio encoder.
+            n_audio_head (`int`, *optional*, defaults to 20):
+                Number of attention heads in the audio encoder.
+            n_audio_layer (`int`, *optional*, defaults to 6):
+                Number of transformer layers in the audio encoder.
+            use_sdpa (`bool`, *optional*, defaults to `False`):
+                Whether to use Scaled Dot Product Attention (SDPA) for faster inference.
+            num_attention_heads (`<fill_type>`, *optional*): <fill_docstring>
+            num_key_value_heads (`<fill_type>`, *optional*): <fill_docstring>
+            attention_bias (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+            attention_dropout (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+            max_position_embeddings (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+            rope_theta (`<fill_type>`, *optional*, defaults to 10000.0): <fill_docstring>
+            rope_scaling (`<fill_type>`, *optional*): <fill_docstring>
 
     Example:
 
@@ -77,6 +84,13 @@ class S3TokenizerConfig(PreTrainedConfig):
         n_audio_head=20,
         n_audio_layer=6,
         use_sdpa=False,
+        num_attention_heads=None,
+        num_key_value_heads=None,
+        attention_bias=False,
+        attention_dropout=0.0,
+        max_position_embeddings=2048,
+        rope_theta=10000.0,
+        rope_scaling=None,
         **kwargs,
     ):
         self.sampling_rate = sampling_rate
@@ -89,8 +103,16 @@ class S3TokenizerConfig(PreTrainedConfig):
         self.use_sdpa = use_sdpa
         # Add hidden_size as an alias for n_audio_state for compatibility with common tests
         self.hidden_size = n_audio_state
+        self.num_attention_heads = num_attention_heads if num_attention_heads is not None else n_audio_head
+        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else self.num_attention_heads
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.max_position_embeddings = max_position_embeddings
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
 
         super().__init__(**kwargs)
+        self.convert_rope_params_to_dict()
 
 
 __all__ = ["S3TokenizerConfig"]

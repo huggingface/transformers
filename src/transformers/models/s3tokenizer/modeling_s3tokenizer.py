@@ -22,13 +22,12 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ..llama.modeling_llama import LlamaAttention
 from .configuration_s3tokenizer import S3TokenizerConfig
 
 
@@ -48,24 +47,7 @@ EOS = SPEECH_VOCAB_SIZE + 1
 
 
 def make_non_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
-    """Make mask tensor containing indices of non-padded part.
-
-    The sequences in a batch may have different lengths. To enable
-    batch computing, padding is need to make all sequence in same
-    size. To avoid the padding part pass value to context dependent
-    block such as attention or convolution , this padding part is
-    masked.
-
-    1 for non-padded part and 0 for padded part.
-
-    Parameters
-    ----------
-        lengths (torch.Tensor): Batch of lengths (B,).
-
-    Returns:
-    -------
-        torch.Tensor: Mask tensor containing indices of padded part (B, max_T).
-    """
+    """Make mask tensor containing indices of non-padded part."""
     batch_size = lengths.size(0)
     max_len = max_len if max_len > 0 else lengths.max().item()
     seq_range = torch.arange(0, max_len, dtype=torch.int64, device=lengths.device)
@@ -76,38 +58,16 @@ def make_non_pad_mask(lengths: torch.Tensor, max_len: int = 0) -> torch.Tensor:
 
 
 def mask_to_bias(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    """Convert bool-tensor to float-tensor for flash attention.
-
-    Parameters
-    ----------
-        mask (torch.Tensor): Boolean mask tensor (B, ?).
-
-    Returns:
-    -------
-        torch.Tensor: Mask tensor with large negative values for masked positions (B, ?).
-    """
+    """Convert bool-tensor to float-tensor for flash attention."""
     assert mask.dtype == torch.bool
     assert dtype in [torch.float32, torch.bfloat16, torch.float16]
     mask = mask.to(dtype)
-
-    # attention mask bias
-    # NOTE(Mddct): torch.finfo jit issues
-    #     chunk_masks = (1.0 - chunk_masks) * torch.finfo(dtype).min
     mask = (1.0 - mask) * -1.0e10
     return mask
 
 
 def padding(data: list[torch.Tensor]):
-    """Padding the data into batch data
-
-    Parameters
-    ----------
-        data: List[Tensor], shape of Tensor (128, T)
-
-    Returns:
-    -------
-        feats [B, 128, T_max], feats lengths [B]
-    """
+    """Padding the data into batch data"""
     sample = data
     assert isinstance(sample, list)
     feats_lengths = torch.tensor([s.size(1) for s in sample], dtype=torch.int32)
@@ -118,111 +78,16 @@ def padding(data: list[torch.Tensor]):
 
 
 def merge_tokenized_segments(tokenized_segments, overlap, token_rate):
-    """
-    Merges tokenized outputs by keeping the middle and dropping half of the overlapped tokens.
-
-    Args:
-    - tokenized_segments (List[List[int]]): List of tokenized sequences.
-    - overlap (int): Overlapping duration in seconds (default: 4s).
-    - token_rate (int): Number of tokens per second.
-
-    Returns:
-    - List[int]: A single merged token sequence.
-    """
+    """Merges tokenized outputs by keeping the middle and dropping half of the overlapped tokens."""
     merged_tokens = []
-    overlap_tokens = (overlap // 2) * token_rate  # Tokens corresponding to half of the overlap duration
+    overlap_tokens = (overlap // 2) * token_rate
 
     for i, tokens in enumerate(tokenized_segments):
         l = 0 if i == 0 else overlap_tokens
         r = -overlap_tokens if i != len(tokenized_segments) - 1 else len(tokens)
-        # Keep only the middle part (drop overlap / 2 from both sides)
         merged_tokens.extend(tokens[l:r])
 
     return merged_tokens
-
-
-class LayerNorm(torch.nn.LayerNorm):
-    """Layer normalization that preserves dtype."""
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return super().forward(x.float()).type(x.dtype)
-
-
-class Linear(torch.nn.Linear):
-    """Linear layer that preserves dtype."""
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.linear(
-            x,
-            self.weight.to(x.dtype),
-            None if self.bias is None else self.bias.to(x.dtype),
-        )
-
-
-class Conv1d(torch.nn.Conv1d):
-    """Conv1d layer that preserves dtype."""
-
-    def _conv_forward(self, x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor]) -> torch.Tensor:
-        return super()._conv_forward(x, weight.to(x.dtype), None if bias is None else bias.to(x.dtype))
-
-
-class MultiHeadAttention(torch.nn.Module):
-    """Multi-head attention module."""
-
-    def __init__(self, n_state: int, n_head: int, use_sdpa: bool = False):
-        super().__init__()
-        self.n_head = n_head
-        self.query = Linear(n_state, n_state)
-        self.key = Linear(n_state, n_state, bias=False)
-        self.value = Linear(n_state, n_state)
-        self.out = Linear(n_state, n_state)
-        self.use_sdpa = use_sdpa
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-    ):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
-        wv, qk = self.qkv_attention(q, k, v, mask)
-        return self.out(wv), qk
-
-    def qkv_attention(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-    ):
-        _, _, D = q.shape
-        scale = (D // self.n_head) ** -0.25
-        q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3) * scale
-        k = k.view(*k.shape[:2], self.n_head, -1)
-        v = v.view(*v.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
-
-        if not self.use_sdpa:
-            k = k.permute(0, 2, 3, 1) * scale
-            qk = q @ k
-            if mask is not None:
-                qk = qk + mask
-            qk = qk.float()
-            w = torch.nn.functional.softmax(qk, dim=-1).to(q.dtype)
-            return (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2), qk.detach()
-        else:
-            k = k.permute(0, 2, 1, 3) * scale
-            assert mask is not None
-            output = torch.nn.functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=mask,
-                dropout_p=0.0,
-                scale=1.0,
-            )
-            output = output.transpose(1, 2).contiguous().view(q.size(0), -1, D)
-            return output, None
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0, scaling=None):
@@ -258,6 +123,103 @@ def apply_rotary_emb(
     return xq * cos + xq_r * sin, xk * cos + xk_r * sin
 
 
+class FSMNMultiHeadAttention(LlamaAttention):
+    """FSMN (Feed-forward Sequential Memory Network) Multi-Head Attention."""
+
+    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+        self.n_head = config.num_attention_heads
+
+        self.fsmn_block = torch.nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size,
+            stride=1,
+            padding=0,
+            groups=config.hidden_size,
+            bias=False,
+        )
+        self.left_padding = (kernel_size - 1) // 2
+        self.right_padding = kernel_size - 1 - self.left_padding
+        self.pad_fn = torch.nn.ConstantPad1d((self.left_padding, self.right_padding), 0.0)
+
+        # Re-initialize to match Chatterbox biases and use standard nn.Linear
+        self.query = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.key = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.value = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.out = torch.nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+
+        # Remove the old names created by LlamaAttention from _modules
+        del self._modules["q_proj"]
+        del self._modules["k_proj"]
+        del self._modules["v_proj"]
+        del self._modules["o_proj"]
+
+    def forward_fsmn(self, inputs: torch.Tensor, mask: Optional[torch.Tensor] = None):
+        b, t, _ = inputs.size()
+        if mask is not None and mask.size(2) > 0:
+            inputs = inputs * mask
+        x = inputs.transpose(1, 2)
+        x = self.pad_fn(x)
+        x = self.fsmn_block(x)
+        x = x.transpose(1, 2)
+        x += inputs
+        if mask is not None:
+            x = x * mask
+        return x
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        mask_pad: Optional[torch.Tensor] = None,
+        freqs_cis: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
+
+        # Calculate fsm_memory BEFORE permuting v
+        fsm_memory = self.forward_fsmn(v, mask_pad)
+
+        # Exact baseline logic from here
+        _, _, D = q.shape
+        scale = (D // self.n_head) ** -0.25
+        q = q.view(*q.shape[:2], self.n_head, -1)
+        k = k.view(*k.shape[:2], self.n_head, -1)
+        v = v.view(*v.shape[:2], self.n_head, -1)
+
+        if freqs_cis is not None:
+            q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
+
+        q = q.permute(0, 2, 1, 3) * scale
+        v = v.permute(0, 2, 1, 3)
+
+        if not getattr(self.config, "use_sdpa", False):
+            k = k.permute(0, 2, 3, 1) * scale
+            qk = q @ k
+            if mask is not None:
+                qk = qk + mask
+            qk = qk.float()
+            w = torch.nn.functional.softmax(qk, dim=-1).to(q.dtype)
+            wv = (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2)
+            return self.out(wv) + fsm_memory, qk.detach()
+        else:
+            k = k.permute(0, 2, 1, 3) * scale
+            output = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=mask,
+                dropout_p=0.0,
+                scale=1.0,
+            )
+            output = output.transpose(1, 2).contiguous().view(q.size(0), -1, D)
+            return self.out(output) + fsm_memory, None
+
+
 class FSQCodebook(torch.nn.Module):
     """Finite Scalar Quantization codebook."""
 
@@ -269,7 +231,6 @@ class FSQCodebook(torch.nn.Module):
 
     @torch.inference_mode()
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        # Flatten all dimensions except last: equivalent to rearrange(x, "... d -> (...) d")
         x = x.view(-1, x.shape[-1])
         return x
 
@@ -311,116 +272,24 @@ class FSQVectorQuantization(torch.nn.Module):
     @torch.inference_mode()
     def decode(self, embed_ind: torch.Tensor) -> torch.Tensor:
         quantize = self._codebook.decode(embed_ind)
-        # Transpose dimensions: equivalent to rearrange(quantize, "b n d -> b d n")
         quantize = quantize.transpose(1, 2)
         return quantize
-
-
-class FSMNMultiHeadAttention(MultiHeadAttention):
-    """FSMN (Feed-forward Sequential Memory Network) Multi-Head Attention."""
-
-    def __init__(self, n_state: int, n_head: int, kernel_size: int = 31, use_sdpa: bool = False):
-        super().__init__(n_state, n_head)
-
-        self.fsmn_block = torch.nn.Conv1d(
-            n_state,
-            n_state,
-            kernel_size,
-            stride=1,
-            padding=0,
-            groups=n_state,
-            bias=False,
-        )
-        self.left_padding = (kernel_size - 1) // 2
-        self.right_padding = kernel_size - 1 - self.left_padding
-        self.pad_fn = torch.nn.ConstantPad1d((self.left_padding, self.right_padding), 0.0)
-        self.use_sdpa = use_sdpa
-
-    def forward_fsmn(self, inputs: torch.Tensor, mask: Optional[torch.Tensor] = None):
-        b, t, _, _ = inputs.size()
-        inputs = inputs.view(b, t, -1)
-        if mask is not None and mask.size(2) > 0:
-            inputs = inputs * mask
-        x = inputs.transpose(1, 2)
-        x = self.pad_fn(x)
-        x = self.fsmn_block(x)
-        x = x.transpose(1, 2)
-        x += inputs
-        return x * mask
-
-    def qkv_attention(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        mask_pad: Optional[torch.Tensor] = None,
-        freqs_cis: Optional[torch.Tensor] = None,
-    ):
-        _, _, D = q.shape
-        scale = (D // self.n_head) ** -0.25
-        q = q.view(*q.shape[:2], self.n_head, -1)
-        k = k.view(*k.shape[:2], self.n_head, -1)
-        v = v.view(*v.shape[:2], self.n_head, -1)
-
-        if freqs_cis is not None:
-            q, k = apply_rotary_emb(q, k, freqs_cis=freqs_cis)
-
-        fsm_memory = self.forward_fsmn(v, mask_pad)
-
-        q = q.permute(0, 2, 1, 3) * scale
-        v = v.permute(0, 2, 1, 3)
-
-        if not self.use_sdpa:
-            k = k.permute(0, 2, 3, 1) * scale
-            qk = q @ k
-            if mask is not None:
-                qk = qk + mask
-            qk = qk.float()
-            w = torch.nn.functional.softmax(qk, dim=-1).to(q.dtype)
-            return (
-                (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2),
-                qk.detach(),
-                fsm_memory,
-            )
-        else:
-            k = k.permute(0, 2, 1, 3) * scale
-            assert mask is not None
-            output = torch.nn.functional.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                attn_mask=mask,
-                dropout_p=0.0,
-                scale=1.0,
-            )
-            output = output.transpose(1, 2).contiguous().view(q.size(0), -1, D)
-            return output, None, fsm_memory
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        mask_pad: Optional[torch.Tensor] = None,
-        freqs_cis: Optional[torch.Tensor] = None,
-    ):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
-        wv, qk, fsm_memory = self.qkv_attention(q, k, v, mask, mask_pad, freqs_cis)
-        return self.out(wv) + fsm_memory, qk
 
 
 class ResidualAttentionBlock(torch.nn.Module):
     """Residual attention block with FSMN."""
 
-    def __init__(self, n_state: int, n_head: int, kernel_size: int = 31, use_sdpa: bool = False):
+    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
         super().__init__()
-        self.attn = FSMNMultiHeadAttention(n_state, n_head, kernel_size, use_sdpa=use_sdpa)
-        self.attn_ln = LayerNorm(n_state, eps=1e-6)
-        n_mlp = n_state * 4
-        self.mlp = torch.nn.Sequential(Linear(n_state, n_mlp), torch.nn.GELU(), Linear(n_mlp, n_state))
-        self.mlp_ln = LayerNorm(n_state)
+        self.attn = FSMNMultiHeadAttention(config, layer_idx, kernel_size)
+        self.attn_ln = torch.nn.LayerNorm(config.hidden_size, eps=1e-6)
+        n_mlp = config.hidden_size * 4
+
+        # Using numeric keys to match state_dict
+        self.mlp = torch.nn.ModuleList(
+            [torch.nn.Linear(config.hidden_size, n_mlp), torch.nn.GELU(), torch.nn.Linear(n_mlp, config.hidden_size)]
+        )
+        self.mlp_ln = torch.nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -429,30 +298,39 @@ class ResidualAttentionBlock(torch.nn.Module):
         mask_pad: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
     ):
-        x = x + self.attn(self.attn_ln(x), mask=mask, mask_pad=mask_pad, freqs_cis=freqs_cis)[0]
-        x = x + self.mlp(self.mlp_ln(x))
+        # LN Stability: cast to float32 for computation
+        attn_input = self.attn_ln(x.float()).to(x.dtype)
+        attn_out, _ = self.attn(
+            attn_input,
+            mask=mask,
+            mask_pad=mask_pad,
+            freqs_cis=freqs_cis,
+        )
+        x = x + attn_out
+
+        # LN Stability: cast to float32 for computation
+        mlp_input = self.mlp_ln(x.float()).to(x.dtype)
+        mlp_out = mlp_input
+        for layer in self.mlp:
+            mlp_out = layer(mlp_out)
+
+        x = x + mlp_out
         return x
 
 
 class AudioEncoderV2(torch.nn.Module):
     """Audio encoder for S3TokenizerV2."""
 
-    def __init__(
-        self,
-        n_mels: int,
-        n_state: int,
-        n_head: int,
-        n_layer: int,
-        stride: int,
-        use_sdpa: bool,
-    ):
+    def __init__(self, config: S3TokenizerConfig):
         super().__init__()
-        self.stride = stride
-        self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, stride=stride, padding=1)
-        self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
+        self.stride = 2  # Hardcoded for V2
+        self.conv1 = torch.nn.Conv1d(config.n_mels, config.hidden_size, kernel_size=3, stride=self.stride, padding=1)
+        self.conv2 = torch.nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, stride=2, padding=1)
+
         self.register_buffer("freqs_cis", precompute_freqs_cis(64, 1024 * 2), persistent=False)
+
         self.blocks = torch.nn.ModuleList(
-            [ResidualAttentionBlock(n_state, n_head, use_sdpa=use_sdpa) for _ in range(n_layer)]
+            [ResidualAttentionBlock(config, layer_idx=i) for i in range(config.n_audio_layer)]
         )
 
     def forward(self, x: torch.Tensor, x_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -464,12 +342,13 @@ class AudioEncoderV2(torch.nn.Module):
         x_len = (x_len + 2 - 1 * (3 - 1) - 1) // 2 + 1
         mask = make_non_pad_mask(x_len).unsqueeze(1)
         x = x.permute(0, 2, 1)
-        freqs_cis = self.freqs_cis.to(x.device)
+
         mask_pad = mask.transpose(1, 2)
-        mask = mask_to_bias(mask, x.dtype)
+        mask_bias = mask_to_bias(mask, x.dtype)
+        freqs_cis = self.freqs_cis.to(x.device)
 
         for block in self.blocks:
-            x = block(x, mask.unsqueeze(1), mask_pad, freqs_cis[: x.size(1)])
+            x = block(x, mask=mask_bias.unsqueeze(1), mask_pad=mask_pad, freqs_cis=freqs_cis[: x.size(1)])
 
         return x, x_len
 
@@ -477,20 +356,10 @@ class AudioEncoderV2(torch.nn.Module):
 class S3TokenizerV2Core(torch.nn.Module):
     """Core S3 tokenizer v2 implementation."""
 
-    def __init__(
-        self,
-        name: str,
-        n_mels: int,
-        n_audio_state: int,
-        n_audio_head: int,
-        n_audio_layer: int,
-        n_codebook_size: int,
-        use_sdpa: bool,
-    ):
+    def __init__(self, config: S3TokenizerConfig):
         super().__init__()
-        self.name = name
-        self.encoder = AudioEncoderV2(n_mels, n_audio_state, n_audio_head, n_audio_layer, 2, use_sdpa)
-        self.quantizer = FSQVectorQuantization(n_audio_state, n_codebook_size)
+        self.encoder = AudioEncoderV2(config)
+        self.quantizer = FSQVectorQuantization(config.hidden_size, config.vocab_size)
 
     def forward(self, mel: torch.Tensor, mel_len: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.quantize(mel, mel_len)
@@ -637,7 +506,7 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
 
     config_class = S3TokenizerConfig
     base_model_prefix = "s3tokenizer"
-    main_input_name = "input_values"
+    main_input_name = "input_features"
 
 
 class S3TokenizerModel(S3TokenizerPreTrainedModel):
@@ -652,111 +521,25 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
             name (`str`, *optional*, defaults to `"speech_tokenizer_v2_25hz"`): <fill_docstring>
     """
 
-    ignore_state_dict_missing = ("_mel_filters",)
     all_tied_weights_keys = {}
 
     def __init__(self, config: S3TokenizerConfig, name: str = "speech_tokenizer_v2_25hz"):
         super().__init__(config)
         self.config = config
 
-        # Init core S3TokenizerV2 model
-        # code adapted from xingchensong/S3Tokenizer
-        self.s3_model = S3TokenizerV2Core(
-            name=name,
-            n_mels=config.n_mels,
-            n_audio_state=config.n_audio_state,
-            n_audio_head=config.n_audio_head,
-            n_audio_layer=config.n_audio_layer,
-            n_codebook_size=config.vocab_size,
-            use_sdpa=config.use_sdpa,
-        )
-
-        self.n_fft = config.n_fft
-        try:
-            import librosa
-
-            _mel_filters = librosa.filters.mel(sr=config.sampling_rate, n_fft=self.n_fft, n_mels=config.n_mels)
-            self.register_buffer("_mel_filters", torch.FloatTensor(_mel_filters))
-        except ImportError:
-            logger.warning(
-                "librosa is not installed. Mel filters will not be initialized. "
-                "Install librosa with: pip install librosa"
-            )
-            self.register_buffer("_mel_filters", torch.zeros(config.n_mels, self.n_fft // 2 + 1))
-        # self.window = torch.hann_window(self.n_fft)
-        self.register_buffer("window", torch.hann_window(self.n_fft))
-
-    def pad(self, wavs: list[Union[torch.Tensor, np.ndarray]], sr: int) -> list[torch.Tensor]:
-        """Pad waveforms to be multiple of 40ms (S3 runs at 25 token/sec)."""
-        processed_wavs = []
-        for wav in wavs:
-            if isinstance(wav, np.ndarray):
-                wav = torch.from_numpy(wav)
-            if wav.dim() == 1:
-                wav = wav.unsqueeze(0)
-
-            n_tokens = (wav.shape[1] / sr) * S3_TOKEN_RATE
-            n_tokens = np.ceil(n_tokens)
-            intended_wav_len = int(n_tokens * (sr / S3_TOKEN_RATE))
-            wav = torch.nn.functional.pad(wav, (0, intended_wav_len - wav.shape[-1]), mode="constant", value=0)
-            processed_wavs.append(wav)
-        return processed_wavs
-
-    def _prepare_audio(self, wavs: list[Union[torch.Tensor, np.ndarray]]) -> list[torch.Tensor]:
-        """Prepare a list of audios for s3tokenizer processing."""
-        processed_wavs = []
-        for wav in wavs:
-            if isinstance(wav, np.ndarray):
-                wav = torch.from_numpy(wav)
-            if wav.dim() == 1:
-                wav = wav.unsqueeze(0)
-            processed_wavs.append(wav)
-        return processed_wavs
-
-    def log_mel_spectrogram(self, audio: torch.Tensor, padding: int = 0) -> torch.Tensor:
-        """Compute the log-Mel spectrogram of audio."""
-        if not torch.is_tensor(audio):
-            audio = torch.from_numpy(audio)
-
-        audio = audio.to(self.device)
-        if padding > 0:
-            audio = F.pad(audio, (0, padding))
-
-        if audio.dim() == 1:
-            audio = audio.unsqueeze(0)
-            squeeze_output = True
-        else:
-            squeeze_output = False
-
-        stft = torch.stft(
-            audio,
-            self.n_fft,
-            S3_HOP,
-            window=self.window.to(self.device),
-            return_complex=True,
-        )
-        magnitudes = stft[..., :-1].abs() ** 2
-        mel_spec = self._mel_filters.to(self.device) @ magnitudes
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
-
-        if squeeze_output:
-            log_spec = log_spec.squeeze(0)
-
-        return log_spec
+        self.s3_model = S3TokenizerV2Core(config)
 
     def forward(
         self,
-        input_values: torch.Tensor,
+        input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         max_len: Optional[int] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, S3TokenizerOutput]:
         """
         Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-                Float values of input raw speech waveform at 16kHz sampling rate.
+            input_features (`torch.FloatTensor` of shape `(batch_size, n_mels, sequence_length)`):
+                Float values of log-mel spectrogram features.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing operations on padding token indices.
             max_len (`int`, *optional*):
@@ -769,32 +552,21 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if isinstance(input_values, list):
-            wavs = input_values
-        elif input_values.dim() == 1:
-            # Single waveform
-            wavs = [input_values]
+        if max_len is not None:
+            input_features = input_features[..., : max_len * 4]
+
+        # Get mel lengths from attention_mask or input_features shape
+        if attention_mask is not None:
+            mel_lens = attention_mask.sum(dim=-1).int()
         else:
-            # Batch Mode
-            wavs = [input_values[i] for i in range(input_values.shape[0])]
+            mel_lens = torch.full(
+                (input_features.size(0),), input_features.size(1), device=input_features.device, dtype=torch.int32
+            )
 
-        processed_wavs = self._prepare_audio(wavs)
-        mels, mel_lens = [], []
+        # Transpose from [batch, time, n_mels] to [batch, n_mels, time] for conv layers
+        input_features = input_features.transpose(1, 2)
 
-        for wav in processed_wavs:
-            wav = wav.to(self.device)
-            mel = self.log_mel_spectrogram(wav.squeeze(0))
-            if mel.dim() == 2:
-                mel = mel.unsqueeze(0)
-            if max_len is not None:
-                mel = mel[..., : max_len * 4]
-            mels.append(mel.squeeze(0))
-
-        mels, mel_lens = padding(mels)
-        mels = mels.to(self.device)
-        mel_lens = mel_lens.to(self.device)
-
-        speech_tokens, speech_token_lens = self.s3_model.quantize(mels, mel_lens)
+        speech_tokens, speech_token_lens = self.s3_model.quantize(input_features, mel_lens)
         speech_tokens = speech_tokens.long().detach()
         speech_token_lens = speech_token_lens.long().detach()
 

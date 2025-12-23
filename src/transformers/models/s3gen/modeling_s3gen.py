@@ -16,7 +16,6 @@
 
 import logging
 import math
-from collections import OrderedDict
 from typing import Optional
 
 import numpy as np
@@ -26,15 +25,16 @@ import torch.nn.functional as F
 import torchaudio.compliance.kaldi as Kaldi
 from librosa.filters import mel as librosa_mel_fn
 from scipy.signal import get_window
-from torch import pow, sin
 from torch.distributions.uniform import Uniform
-from torch.nn import Conv1d, ConvTranspose1d, Parameter
+from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn.utils import remove_weight_norm
 from torch.nn.utils.parametrizations import weight_norm
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, auto_docstring
+from ..dac.modeling_dac import Snake1d
 from ..s3tokenizer.configuration_s3tokenizer import S3TokenizerConfig
+from ..s3tokenizer.feature_extraction_s3tokenizer import S3TokenizerFeatureExtractor
 from ..s3tokenizer.modeling_s3tokenizer import S3TokenizerModel
 from .configuration_s3gen import HiFTNetConfig, S3GenConfig
 
@@ -132,17 +132,22 @@ class BasicResBlock(nn.Module):
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
 
-        self.shortcut = nn.Sequential()
+        self.shortcut = nn.ModuleList()
         if stride != 1 or in_planes != self.expansion * planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=(stride, 1), bias=False),
-                nn.BatchNorm2d(self.expansion * planes),
+            self.shortcut.append(
+                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=(stride, 1), bias=False)
             )
+            self.shortcut.append(nn.BatchNorm2d(self.expansion * planes))
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
+
+        shortcut_out = x
+        for layer in self.shortcut:
+            shortcut_out = layer(shortcut_out)
+        out += shortcut_out
+
         out = F.relu(out)
         return out
 
@@ -169,13 +174,15 @@ class FCM(nn.Module):
         for stride in strides:
             layers.append(block(self.in_planes, planes, stride))
             self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
+        return nn.ModuleList(layers)
 
     def forward(self, x):
         x = x.unsqueeze(1)
         out = F.relu(self.bn1(self.conv1(x)))
-        out = self.layer1(out)
-        out = self.layer2(out)
+        for layer in self.layer1:
+            out = layer(out)
+        for layer in self.layer2:
+            out = layer(out)
         out = F.relu(self.bn2(self.conv2(out)))
         shape = out.shape
         out = out.reshape(shape[0], shape[1] * shape[2], shape[3])
@@ -184,18 +191,12 @@ class FCM(nn.Module):
 
 def get_nonlinear(config_str, channels):
     """Create non-linear activation module."""
-    nonlinear = nn.Sequential()
-    for name in config_str.split("-"):
-        if name == "relu":
-            nonlinear.add_module("relu", nn.ReLU(inplace=True))
-        elif name == "prelu":
-            nonlinear.add_module("prelu", nn.PReLU(channels))
-        elif name == "batchnorm":
-            nonlinear.add_module("batchnorm", nn.BatchNorm1d(channels))
-        elif name == "batchnorm_":
-            nonlinear.add_module("batchnorm", nn.BatchNorm1d(channels, affine=False))
-        else:
-            raise ValueError(f"Unexpected module ({name}).")
+    nonlinear = nn.ModuleDict()
+    if "batchnorm" in config_str:
+        affine = "batchnorm_" not in config_str
+        nonlinear["batchnorm"] = nn.BatchNorm1d(channels, affine=affine)
+    if "relu" in config_str:
+        nonlinear["relu"] = nn.ReLU(inplace=True)
     return nonlinear
 
 
@@ -239,7 +240,8 @@ class TDNNLayer(nn.Module):
 
     def forward(self, x):
         x = self.linear(x)
-        x = self.nonlinear(x)
+        for layer in self.nonlinear.values():
+            x = layer(x)
         return x
 
 
@@ -303,11 +305,15 @@ class CAMDenseTDNNLayer(nn.Module):
         )
 
     def bn_function(self, x):
-        return self.linear1(self.nonlinear1(x))
+        for layer in self.nonlinear1.values():
+            x = layer(x)
+        return self.linear1(x)
 
     def forward(self, x):
         x = self.bn_function(x)
-        x = self.cam_layer(self.nonlinear2(x))
+        for layer in self.nonlinear2.values():
+            x = layer(x)
+        x = self.cam_layer(x)
         return x
 
 
@@ -357,7 +363,8 @@ class TransitLayer(nn.Module):
         self.linear = nn.Conv1d(in_channels, out_channels, 1, bias=bias)
 
     def forward(self, x):
-        x = self.nonlinear(x)
+        for layer in self.nonlinear.values():
+            x = layer(x)
         x = self.linear(x)
         return x
 
@@ -375,7 +382,8 @@ class DenseLayer(nn.Module):
             x = self.linear(x.unsqueeze(dim=-1)).squeeze(dim=-1)
         else:
             x = self.linear(x)
-        x = self.nonlinear(x)
+        for layer in self.nonlinear.values():
+            x = layer(x)
         return x
 
 
@@ -389,60 +397,26 @@ def get_padding(kernel_size: int, dilation: int = 1) -> int:
     return int((kernel_size * dilation - dilation) / 2)
 
 
-class Snake(nn.Module):
+class Snake(Snake1d):
     """
     Implementation of a sine-based periodic activation function.
-
-    Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
-
-    Parameters:
-        - alpha: trainable parameter
-
-    References:
-        - This activation function is from this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
-        https://arxiv.org/abs/2006.08195
+    Inherits from Snake1d for modularity.
     """
 
     def __init__(
         self, in_features: int, alpha: float = 1.0, alpha_trainable: bool = True, alpha_logscale: bool = False
     ):
-        """
-        Initialization.
-
-        Args:
-            in_features: shape of the input
-            alpha: trainable parameter (default 1.0)
-                   alpha is initialized to 1 by default, higher values = higher-frequency.
-                   alpha will be trained along with the rest of your model.
-            alpha_trainable: whether alpha is trainable
-            alpha_logscale: whether to use log scale for alpha
-        """
-        super().__init__()
-        self.in_features = in_features
-
-        # initialize alpha
-        self.alpha_logscale = alpha_logscale
-        if self.alpha_logscale:  # log scale alphas initialized to zeros
-            self.alpha = Parameter(torch.zeros(in_features) * alpha)
-        else:  # linear scale alphas initialized to ones
-            self.alpha = Parameter(torch.ones(in_features) * alpha)
-
+        super().__init__(in_features)
+        # Re-initialize to match Chatterbox original shapes (C,) instead of (1, C, 1)
+        # to ensure checkpoint compatibility.
+        self.alpha = nn.Parameter(torch.ones(in_features) * alpha)
         self.alpha.requires_grad = alpha_trainable
-        self.no_div_by_zero = 0.000000001
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the function.
-        Applies the function to the input elementwise.
-        Snake ∶= x + 1/a * sin^2 (xa)
-        """
-        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
-        if self.alpha_logscale:
-            alpha = torch.exp(alpha)
-        x = x + (1.0 / (alpha + self.no_div_by_zero)) * pow(sin(x * alpha), 2)
-        return x
+        # We override forward to handle the (C,) -> (1, C, 1) unsqueeze
+        # while keeping the core logic identical to Snake1d.
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)
+        return x + (alpha + 1e-9).reciprocal() * torch.sin(alpha * x).pow(2)
 
 
 class ResBlock(nn.Module):
@@ -460,27 +434,23 @@ class ResBlock(nn.Module):
 
         for dilation in dilations:
             self.convs1.append(
-                weight_norm(
-                    Conv1d(
-                        channels,
-                        channels,
-                        kernel_size,
-                        1,
-                        dilation=dilation,
-                        padding=get_padding(kernel_size, dilation),
-                    )
+                Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    1,
+                    dilation=dilation,
+                    padding=get_padding(kernel_size, dilation),
                 )
             )
             self.convs2.append(
-                weight_norm(
-                    Conv1d(
-                        channels,
-                        channels,
-                        kernel_size,
-                        1,
-                        dilation=1,
-                        padding=get_padding(kernel_size, 1),
-                    )
+                Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    1,
+                    dilation=1,
+                    padding=get_padding(kernel_size, 1),
                 )
             )
         # Note: Weights will be initialized by _init_weights in post_init()
@@ -495,6 +465,11 @@ class ResBlock(nn.Module):
             xt = self.convs2[idx](xt)
             x = xt + x
         return x
+
+    def apply_weight_norm(self):
+        for idx in range(len(self.convs1)):
+            weight_norm(self.convs1[idx])
+            weight_norm(self.convs2[idx])
 
     def remove_weight_norm(self):
         for idx in range(len(self.convs1)):
@@ -649,17 +624,20 @@ class ConvRNNF0Predictor(nn.Module):
         super().__init__()
 
         self.num_class = num_class
-        self.condnet = nn.Sequential(
-            weight_norm(nn.Conv1d(in_channels, cond_channels, kernel_size=3, padding=1)),
-            nn.ELU(),
-            weight_norm(nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1)),
-            nn.ELU(),
-            weight_norm(nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1)),
-            nn.ELU(),
-            weight_norm(nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1)),
-            nn.ELU(),
-            weight_norm(nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1)),
-            nn.ELU(),
+        # Using numeric keys to match state_dict
+        self.condnet = nn.ModuleList(
+            [
+                nn.Conv1d(in_channels, cond_channels, kernel_size=3, padding=1),
+                nn.ELU(),
+                nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1),
+                nn.ELU(),
+                nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1),
+                nn.ELU(),
+                nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1),
+                nn.ELU(),
+                nn.Conv1d(cond_channels, cond_channels, kernel_size=3, padding=1),
+                nn.ELU(),
+            ]
         )
         self.classifier = nn.Linear(in_features=cond_channels, out_features=self.num_class)
 
@@ -671,9 +649,23 @@ class ConvRNNF0Predictor(nn.Module):
         Returns:
             f0: [B, T] predicted F0
         """
-        x = self.condnet(x)
+        for layer in self.condnet:
+            x = layer(x)
         x = x.transpose(1, 2)
         return torch.abs(self.classifier(x).squeeze(-1))
+
+    def apply_weight_norm(self):
+        for module in self.condnet:
+            if isinstance(module, nn.Conv1d):
+                weight_norm(module)
+
+    def remove_weight_norm(self):
+        for module in self.condnet:
+            if isinstance(module, nn.Conv1d):
+                try:
+                    remove_weight_norm(module)
+                except ValueError:
+                    pass
 
 
 class HiFTGenerator(nn.Module):
@@ -722,20 +714,18 @@ class HiFTGenerator(nn.Module):
         )
 
         # Pre-convolution
-        self.conv_pre = weight_norm(Conv1d(config.in_channels, config.base_channels, 7, 1, padding=3))
+        self.conv_pre = Conv1d(config.in_channels, config.base_channels, 7, 1, padding=3)
 
         # Upsampling layers
         self.ups = nn.ModuleList()
         for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
             self.ups.append(
-                weight_norm(
-                    ConvTranspose1d(
-                        config.base_channels // (2**i),
-                        config.base_channels // (2 ** (i + 1)),
-                        k,
-                        u,
-                        padding=(k - u) // 2,
-                    )
+                ConvTranspose1d(
+                    config.base_channels // (2**i),
+                    config.base_channels // (2 ** (i + 1)),
+                    k,
+                    u,
+                    padding=(k - u) // 2,
                 )
             )
 
@@ -777,13 +767,29 @@ class HiFTGenerator(nn.Module):
                 self.resblocks.append(ResBlock(ch, k, d))
 
         # Post-convolution
-        self.conv_post = weight_norm(Conv1d(ch, self.istft_params["n_fft"] + 2, 7, 1, padding=3))
+        self.conv_post = Conv1d(ch, self.istft_params["n_fft"] + 2, 7, 1, padding=3)
         # Note: Weights will be initialized by _init_weights in post_init()
 
         # Reflection padding and STFT window
         self.reflection_pad = nn.ReflectionPad1d((1, 0))
         stft_window = torch.from_numpy(get_window("hann", self.istft_params["n_fft"], fftbins=True).astype(np.float32))
         self.register_buffer("stft_window", stft_window)
+
+    def apply_weight_norm(self):
+        """Apply weight normalization to all relevant layers."""
+        logger.info("Applying weight norm...")
+        for l in self.ups:
+            weight_norm(l)
+        for l in self.resblocks:
+            l.apply_weight_norm()
+        weight_norm(self.conv_pre)
+        weight_norm(self.conv_post)
+        for l in self.source_downs:
+            weight_norm(l)
+        for l in self.source_resblocks:
+            l.apply_weight_norm()
+        # Apply weight norm to F0 predictor
+        self.f0_predictor.apply_weight_norm()
 
     def remove_weight_norm(self):
         """Remove weight normalization from all layers."""
@@ -799,12 +805,7 @@ class HiFTGenerator(nn.Module):
         for l in self.source_resblocks:
             l.remove_weight_norm()
         # Remove weight norm from F0 predictor
-        for module in self.f0_predictor.condnet:
-            if hasattr(module, "weight"):
-                try:
-                    remove_weight_norm(module)
-                except ValueError:
-                    pass
+        self.f0_predictor.remove_weight_norm()
 
     def _stft(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute STFT."""
@@ -1428,16 +1429,11 @@ class CAMPPlus(nn.Module):
         channels = self.head.out_channels
         self.output_level = output_level
 
-        self.xvector = nn.Sequential(
-            OrderedDict(
-                [
-                    (
-                        "tdnn",
-                        TDNNLayer(channels, init_channels, 5, stride=2, dilation=1, padding=-1, config_str=config_str),
-                    ),
-                ]
-            )
+        self.xvector = nn.ModuleDict()
+        self.xvector["tdnn"] = TDNNLayer(
+            channels, init_channels, 5, stride=2, dilation=1, padding=-1, config_str=config_str
         )
+
         channels = init_channels
         for i, (num_layers, kernel_size, dilation) in enumerate(zip((12, 24, 16), (3, 3, 3), (1, 2, 2))):
             block = CAMDenseTDNNBlock(
@@ -1450,19 +1446,16 @@ class CAMPPlus(nn.Module):
                 config_str=config_str,
                 memory_efficient=memory_efficient,
             )
-            self.xvector.add_module(f"block{i + 1}", block)
+            self.xvector[f"block{i + 1}"] = block
             channels = channels + num_layers * growth_rate
-            self.xvector.add_module(
-                f"transit{i + 1}",
-                TransitLayer(channels, channels // 2, bias=False, config_str=config_str),
-            )
+            self.xvector[f"transit{i + 1}"] = TransitLayer(channels, channels // 2, bias=False, config_str=config_str)
             channels //= 2
 
-        self.xvector.add_module("out_nonlinear", get_nonlinear(config_str, channels))
+        self.xvector["out_nonlinear"] = get_nonlinear(config_str, channels)
 
         if self.output_level == "segment":
-            self.xvector.add_module("stats", StatsPool())
-            self.xvector.add_module("dense", DenseLayer(channels * 2, embedding_size, config_str="batchnorm_"))
+            self.xvector["stats"] = StatsPool()
+            self.xvector["dense"] = DenseLayer(channels * 2, embedding_size, config_str="batchnorm_")
         else:
             assert self.output_level == "frame", "`output_level` should be set to 'segment' or 'frame'."
 
@@ -1475,7 +1468,28 @@ class CAMPPlus(nn.Module):
     def forward(self, x):
         x = x.permute(0, 2, 1)  # (B,T,F) => (B,F,T)
         x = self.head(x)
-        x = self.xvector(x)
+
+        # Manual forward through ModuleDict in correct order
+        for key in [
+            "tdnn",
+            "block1",
+            "transit1",
+            "block2",
+            "transit2",
+            "block3",
+            "transit3",
+            "out_nonlinear",
+            "stats",
+            "dense",
+        ]:
+            if key in self.xvector:
+                module = self.xvector[key]
+                if isinstance(module, nn.ModuleDict):
+                    for sublayer in module.values():
+                        x = sublayer(x)
+                else:
+                    x = module(x)
+
         if self.output_level == "frame":
             x = x.transpose(1, 2)
         return x
@@ -1712,17 +1726,20 @@ class LinearNoSubsampling(nn.Module):
 
     def __init__(self, idim: int, odim: int, dropout_rate: float, pos_enc_class: nn.Module):
         super().__init__()
-        self.out = nn.Sequential(
-            nn.Linear(idim, odim),
-            nn.LayerNorm(odim, eps=1e-5),
-            nn.Dropout(dropout_rate),
+        self.out = nn.ModuleList(
+            [
+                nn.Linear(idim, odim),
+                nn.LayerNorm(odim, eps=1e-5),
+                nn.Dropout(dropout_rate),
+            ]
         )
         self.pos_enc = pos_enc_class
         self.right_context = 0
         self.subsampling_rate = 1
 
     def forward(self, x: torch.Tensor, x_mask: torch.Tensor, offset: int = 0):
-        x = self.out(x)
+        for layer in self.out:
+            x = layer(x)
         x, pos_emb = self.pos_enc(x, offset)
         return x, pos_emb, x_mask
 
@@ -2079,17 +2096,21 @@ class CausalBlock1D(nn.Module):
 
     def __init__(self, dim: int, dim_out: int):
         super().__init__()
-        self.block = nn.Sequential(
-            CausalConv1d(dim, dim_out, 3),
-            Transpose(1, 2),
-            nn.LayerNorm(dim_out),
-            Transpose(1, 2),
-            nn.Mish(),
+        self.block = nn.ModuleList(
+            [
+                CausalConv1d(dim, dim_out, 3),
+                Transpose(1, 2),
+                nn.LayerNorm(dim_out),
+                Transpose(1, 2),
+                nn.Mish(),
+            ]
         )
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor):
-        output = self.block(x * mask)
-        return output * mask
+        x = x * mask
+        for layer in self.block:
+            x = layer(x)
+        return x * mask
 
 
 class CausalResnetBlock1D(nn.Module):
@@ -2097,14 +2118,19 @@ class CausalResnetBlock1D(nn.Module):
 
     def __init__(self, dim: int, dim_out: int, time_emb_dim: int, groups: int = 8):
         super().__init__()
-        self.mlp = nn.Sequential(nn.Mish(), nn.Linear(time_emb_dim, dim_out))
+        self.mlp = nn.ModuleList([nn.Mish(), nn.Linear(time_emb_dim, dim_out)])
         self.block1 = CausalBlock1D(dim, dim_out)
         self.block2 = CausalBlock1D(dim_out, dim_out)
         self.res_conv = CausalConv1d(dim, dim_out, 1)
 
     def forward(self, x, mask, time_emb):
         h = self.block1(x, mask)
-        h += self.mlp(time_emb).unsqueeze(-1)
+
+        mlp_out = time_emb
+        for layer in self.mlp:
+            mlp_out = layer(mlp_out)
+        h += mlp_out.unsqueeze(-1)
+
         h = self.block2(h, mask)
         output = h + self.res_conv(x * mask)
         return output
@@ -2460,6 +2486,7 @@ class S3GenModel(S3GenPreTrainedModel):
         # S3 Tokenizer for reference audio (initialized locally, weights loaded from checkpoint)
         tokenizer_config = S3TokenizerConfig()
         self.tokenizer = S3TokenizerModel(tokenizer_config, name="speech_tokenizer_v2_25hz")
+        self.tokenizer_feature_extractor = S3TokenizerFeatureExtractor()
 
         # Speaker encoder
         self.speaker_encoder = CAMPPlus(
@@ -2585,8 +2612,13 @@ class S3GenModel(S3GenPreTrainedModel):
         # Speaker embedding
         ref_x_vector = self.speaker_encoder.inference(ref_wav_16)
 
-        # Tokenize reference (use return_dict=False to get tuple)
-        ref_speech_tokens, ref_speech_token_lens = self.tokenizer(ref_wav_16, return_dict=False)
+        # Tokenize reference (use feature extractor first)
+        features = self.tokenizer_feature_extractor(
+            ref_wav_16.cpu().numpy(), sampling_rate=16000, return_tensors="pt"
+        ).to(device)
+        ref_speech_tokens, ref_speech_token_lens = self.tokenizer(
+            input_features=features.input_features, attention_mask=features.attention_mask, return_dict=False
+        )
 
         # Ensure mel_len = 2 * token_len
         if ref_mels_24.shape[1] != 2 * ref_speech_tokens.shape[1]:

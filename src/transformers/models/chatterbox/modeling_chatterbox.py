@@ -33,6 +33,7 @@ from ...generation.utils import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
+from ...models.s3tokenizer.feature_extraction_s3tokenizer import S3TokenizerFeatureExtractor
 from ...models.s3tokenizer.modeling_s3tokenizer import drop_invalid_tokens
 from ...utils import auto_docstring
 from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
@@ -1187,10 +1188,20 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
         # Speech prompt tokens for T3
         cond_prompt_speech_tokens = None
         if self.config.t3_config.speech_cond_prompt_len > 0:
-            ref_tensor_16k = torch.from_numpy(ref_16k).unsqueeze(0).to(self.device)
+            # Use feature extractor for prompt tokens
+            if not hasattr(self, "s3_feature_extractor"):
+                self.s3_feature_extractor = S3TokenizerFeatureExtractor()
+
+            features = self.s3_feature_extractor(ref_16k, sampling_rate=self.s3_sr, return_tensors="pt").to(
+                self.device
+            )
+
             with torch.no_grad():
                 prompt_tokens, _ = self.s3gen.tokenizer(
-                    ref_tensor_16k, return_dict=False, max_len=self.config.t3_config.speech_cond_prompt_len
+                    input_features=features.input_features,
+                    attention_mask=features.attention_mask,
+                    return_dict=False,
+                    max_len=self.config.t3_config.speech_cond_prompt_len,
                 )
             cond_prompt_speech_tokens = prompt_tokens.to(self.device)
 
