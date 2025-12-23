@@ -1123,6 +1123,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         generation_params = {}
         default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
         for key in GenerationConfig._get_default_generation_params().keys():
+            if key == "use_cache":
+                continue  # common key for most models
             if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
                 generation_params[key] = getattr(self, key)
 
