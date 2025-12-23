@@ -131,8 +131,8 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def __init__(self, config):
         super().__init__(config)
         self.model = VibeVoiceRealTimeModel(config)
-        self.register_buffer("latent_scaling_factor", torch.tensor(1.0))
-        self.register_buffer("latent_bias_factor", torch.tensor(0.0))
+        self.latent_scaling_factor = nn.Parameter(torch.tensor(1.0))
+        self.latent_bias_factor = nn.Parameter(torch.tensor(0.0))
         self.tts_eos_classifier = VibeVoiceRealTimeBinaryClassifier(config.text_config.hidden_size)
         self.post_init()
 

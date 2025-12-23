@@ -269,9 +269,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
         """
         noise_scheduler = kwargs.pop("noise_scheduler", None)
-        if "max_new_tokens" in kwargs and kwargs["max_new_tokens"] is None:
-            # pop to default to generation_config max_length behavior instead of internal default of 20
-            kwargs.pop("max_new_tokens")
         cfg_scale = kwargs.pop("cfg_scale", None)
         n_diffusion_steps = kwargs.pop("n_diffusion_steps", None)
         monitor_progress = kwargs.pop("monitor_progress", None)
@@ -344,7 +341,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 value_states=v.to(device),
                 layer_idx=layer_idx,
             )
-        # TODO (ebezzam) don't use model output here?
+        # TODO (ebezzam) ok to use model output here?
         return BaseModelOutputWithPast(
             last_hidden_state=entry["last_hidden_state"].to(device),
             past_key_values=cache,
@@ -352,7 +349,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
     def _sample(
         self,
-        input_ids: torch.LongTensor,    # TODO used in different way... for first language model but should rather be the encoded text?
+        input_ids: torch.LongTensor,
         logits_processor: LogitsProcessorList,
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
@@ -479,9 +476,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         # Calculate generation limits for progress tracking
         initial_length = tts_lm_input_ids.shape[-1]
         max_steps = generation_config.max_new_tokens
-        generation_config.max_length = initial_length + generation_config.max_new_tokens
+        generation_config.max_length = generation_config.max_new_tokens + initial_length
         completion_steps = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
         step = 0
+
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -513,7 +511,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 lm_input_ids = torch.cat([lm_input_ids, cur_input_tts_text_ids], dim=-1)
                 tts_lm_input_ids = torch.cat([tts_lm_input_ids, cur_input_tts_text_ids], dim=-1)
 
-                if tts_lm_input_ids.shape[1] > generation_config.max_length:
+                if tts_lm_input_ids.shape[1] >= generation_config.max_length:
                     finished_tags[:] = True
                     completion_steps[:] = step + 1
                     break
@@ -595,7 +593,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     # Append speech token to TTS LM sequence
                     tts_lm_input_ids = torch.cat([tts_lm_input_ids, torch.ones_like(tts_lm_input_ids[:, -1:])], dim=-1)
                     
-                    if tts_lm_input_ids.shape[1] > generation_config.max_length:
+                    if tts_lm_input_ids.shape[1] >= generation_config.max_length:
                         break
                     
                     step += 1
