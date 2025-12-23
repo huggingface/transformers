@@ -265,26 +265,17 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, `p[i, 1]`
             contains the maximum generation steps for batch item `i` (which may vary based on input length), and
             `p[i, 2]` contains the actual completion step for finished samples. No return value is expected.
-        - `history_prompt`: A prefilled history prompt containing past key values for language and TTS LMs.
+        - `history_prompt`: A prefilled history prompt containing past key values for the language and TTS decoders.
 
         """
-        noise_scheduler = kwargs.pop("noise_scheduler", None)
-        cfg_scale = kwargs.pop("cfg_scale", None)
-        n_diffusion_steps = kwargs.pop("n_diffusion_steps", None)
-        monitor_progress = kwargs.pop("monitor_progress", None)
-        history_prompt = kwargs.pop("history_prompt", None)
-
         # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
-        # try creating VibeVoice noise scheduler
-        # TODO (ebezzam) ok with this? so user doesn't need to defined noise scheduler each time?
+        # try creating VibeVoice noise scheduler if not provided
+        noise_scheduler = model_kwargs.pop("noise_scheduler", kwargs.pop("noise_scheduler", None))
+        # TODO (ebezzam) ok with this? so user doesn't need to define noise scheduler each time?
         # Alternatively, require user to create noise scheduler outside
-        if (
-            noise_scheduler is None
-            and hasattr(generation_config, "noise_scheduler_class")
-            and generation_config.noise_scheduler_class
-        ):
+        if noise_scheduler is None:
             try:
                 scheduler_class = getattr(
                     importlib.import_module("diffusers"), generation_config.noise_scheduler_class
@@ -296,34 +287,24 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     "the specified noise scheduler class is not available. "
                     f"Please install with `pip install diffusers` and verify that {generation_config.noise_scheduler_class} exists."
                 )
-        if noise_scheduler is not None:
-            if not (
-                hasattr(noise_scheduler, "set_timesteps")
-                and hasattr(noise_scheduler, "step")
-                and hasattr(noise_scheduler, "timesteps")
-            ):
-                raise ValueError(
-                    "The provided noise scheduler is not compatible with VibeVoice generation. "
-                    "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
-                )
-            generation_config.noise_scheduler = noise_scheduler
-        if not hasattr(generation_config, "noise_scheduler"):
+        generation_config.noise_scheduler = noise_scheduler
+        if not (
+            hasattr(generation_config.noise_scheduler, "set_timesteps")
+            and hasattr(generation_config.noise_scheduler, "step")
+            and hasattr(generation_config.noise_scheduler, "timesteps")
+        ):
             raise ValueError(
-                "A noise scheduler must be provided for VibeVoice generation, either through the `noise_scheduler` "
-                "argument or by defining `noise_scheduler_class` and `noise_scheduler_config` in the generation config."
+                "The provided noise scheduler is not compatible with VibeVoice generation. "
+                "It must implement `set_timesteps` and `step` methods, and have a `timesteps` attribute."
             )
-        if cfg_scale is not None:
-            generation_config.cfg_scale = cfg_scale
-        if not hasattr(generation_config, "cfg_scale"):
-            raise ValueError("cfg_scale must be provided for VibeVoice generation.")
-        if n_diffusion_steps is not None:
-            generation_config.n_diffusion_steps = n_diffusion_steps
-        if not hasattr(generation_config, "n_diffusion_steps"):
-            raise ValueError("n_diffusion_steps must be provided for VibeVoice generation.")
-        generation_config.monitor_progress = monitor_progress
-        if history_prompt is not None:
-            generation_config.history_prompt = history_prompt
-
+        if "monitor_progress" in model_kwargs:
+            generation_config.monitor_progress = model_kwargs.pop("monitor_progress")
+        if "cfg_scale" in model_kwargs:
+            generation_config.cfg_scale = model_kwargs.pop("cfg_scale")
+        if "n_diffusion_steps" in model_kwargs:
+            generation_config.n_diffusion_steps = model_kwargs.pop("n_diffusion_steps")
+        if "history_prompt" in model_kwargs:
+            generation_config.history_prompt = model_kwargs.pop("history_prompt")
         return generation_config, model_kwargs
     
     def _rebuild_history_prompt(self, entry, device):
@@ -526,9 +507,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
                 # Forward pass through TTS LM with text
                 tts_lm_model_inputs = self.prepare_inputs_for_generation(
-                    input_ids=tts_lm_input_ids, inputs_embeds=lm_outputs.last_hidden_state, **tts_lm_model_kwargs
+                    input_ids=tts_lm_input_ids, **tts_lm_model_kwargs
                 )
-                tts_lm_additional_inputs = {"tts_text_masks": torch.ones_like(tts_lm_input_ids[:, -1:])}
+                tts_lm_model_inputs["inputs_embeds"] = lm_outputs.last_hidden_state
+                tts_lm_additional_inputs = {"tts_text_masks": torch.ones_like(tts_lm_input_ids[:, -1:], dtype=torch.long)}
                 tts_lm_outputs = self(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
                 tts_lm_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_outputs, tts_lm_model_kwargs)
 
@@ -600,10 +582,9 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     total_generated_speech_tokens += 1
 
                     # Forward pass through TTS LM with speech
-                    tts_lm_model_inputs = self.prepare_inputs_for_generation(
-                        tts_lm_input_ids, inputs_embeds=acoustic_embed, **tts_lm_model_kwargs
-                    )
-                    tts_lm_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_input_ids[:, -1:])}
+                    tts_lm_model_inputs = self.prepare_inputs_for_generation(tts_lm_input_ids, **tts_lm_model_kwargs)
+                    tts_lm_model_inputs["inputs_embeds"] = acoustic_embed
+                    tts_lm_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_input_ids[:, -1:], dtype=torch.long)}
                     tts_lm_outputs = self(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
                     
                     # Update model kwargs: on last speech token + more text coming, pre-allocate for next window
@@ -617,9 +598,10 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     # Update negative TTS LM
                     tts_lm_negative_input_ids = torch.cat([tts_lm_negative_input_ids, torch.ones_like(tts_lm_input_ids[:, -1:])], dim=-1)
                     tts_lm_negative_model_inputs = self.prepare_inputs_for_generation(
-                        tts_lm_negative_input_ids, inputs_embeds=acoustic_embed, **tts_lm_negative_model_kwargs
+                        tts_lm_negative_input_ids, **tts_lm_negative_model_kwargs
                     )
-                    tts_lm_negative_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_negative_input_ids[:, -1:])}
+                    tts_lm_negative_model_inputs["inputs_embeds"] = acoustic_embed
+                    tts_lm_negative_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_negative_input_ids[:, -1:], dtype=torch.long)}
                     tts_lm_negative_outputs = self(**tts_lm_negative_model_inputs, **tts_lm_negative_additional_inputs, return_dict=True)
                     tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
 

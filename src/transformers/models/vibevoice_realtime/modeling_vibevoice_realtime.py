@@ -803,10 +803,10 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
             # TODO can input embeds be computed by self.language model if only input_ids is provided?
             raise ValueError("Input embeds should be computed by with `self.forward_lm`")
 
-        inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
+        inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks)
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
-    # TODO eventually remove / merge into forward?
+    # TODO eventually remove / merge into forward? But needs it's own model_kwargs
     @can_return_tuple
     def forward_lm(
         self,
@@ -853,7 +853,7 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def diffusion_head(self):
         return self.model.diffusion_head
 
-    # TODO eventually remove / merge into forward?
+    # TODO eventually remove / merge into forward? But needs it's own model_kwargs
     def forward_lm(self, *args, **kwargs):
         return self.model.forward_lm(*args, **kwargs)
 

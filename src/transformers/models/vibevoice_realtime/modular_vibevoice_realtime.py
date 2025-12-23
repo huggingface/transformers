@@ -94,7 +94,7 @@ class VibeVoiceRealTimeModel(VibeVoiceModel):
     def get_audio_features(self, input_features, input_features_mask, latent_scaling_factor, latent_bias_factor):
         raise NotImplementedError("get_audio_features method is not implemented for VibeVoiceRealTimeModel.")
 
-    # TODO eventually remove / merge into forward?
+    # TODO eventually remove / merge into forward? But needs it's own model_kwargs
     @can_return_tuple
     def forward_lm(
         self,
@@ -117,7 +117,7 @@ class VibeVoiceRealTimeModel(VibeVoiceModel):
             # TODO can input embeds be computed by self.language model if only input_ids is provided?
             raise ValueError("Input embeds should be computed by with `self.forward_lm`")
 
-        inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks.long())
+        inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks)
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
 
@@ -156,7 +156,7 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
     def diffusion_head(self):
         return self.model.diffusion_head
     
-    # TODO eventually remove / merge into forward?
+    # TODO eventually remove / merge into forward? But needs it's own model_kwargs
     def forward_lm(self, *args, **kwargs):
         return self.model.forward_lm(*args, **kwargs)
 
