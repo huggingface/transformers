@@ -149,7 +149,8 @@ class PeAudioVideoEncoderTester:
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_seq_length])
-        valid_audio_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
+        # Generate valid_lengths in range [1, self.audio_seq_length] to ensure at least one valid frame
+        valid_audio_lengths = ids_tensor([self.batch_size], self.audio_seq_length - 1) + 1
         padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_audio_lengths[:, None]
         padding_mask = padding_mask.int()
 
@@ -162,7 +163,8 @@ class PeAudioVideoEncoderTester:
                 self.config_kwargs["video_config"]["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        valid_video_lengths = ids_tensor([self.batch_size], self.num_frames)
+        # Generate valid_lengths in range [1, self.num_frames] to ensure at least one valid frame
+        valid_video_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
         padding_mask_videos = (
             torch.arange(self.num_frames, device=torch_device)[None, :] < valid_video_lengths[:, None]
         )
@@ -256,6 +258,10 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("#TODO @eustlb this should be fixed tho")
     def test_save_load(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip(reason="@eustlb this is not really expected")
