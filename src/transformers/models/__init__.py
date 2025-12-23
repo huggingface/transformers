@@ -102,6 +102,7 @@ if TYPE_CHECKING:
     from .dialogpt import *
     from .diffllama import *
     from .dinat import *
+    from .dino_detr import *
     from .dinov2 import *
     from .dinov2_with_registers import *
     from .dinov3_convnext import *
