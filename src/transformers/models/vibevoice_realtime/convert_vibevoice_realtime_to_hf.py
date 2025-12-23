@@ -255,6 +255,9 @@ def convert_checkpoint(
     # https://huggingface.co/microsoft/VibeVoice-Realtime-0.5B/blob/main/config.json#L51
     vibevoice_model.generation_config.max_new_tokens = 8192
     vibevoice_model.generation_config.max_length = 8192
+    # https://github.com/microsoft/VibeVoice/blob/6c7369bb311f42e33b5c51715ca047c9e0757bc6/vibevoice/modular/modeling_vibevoice_streaming_inference.py#L29
+    vibevoice_model.generation_config.text_window_size = 5
+    vibevoice_model.generation_config.speech_window_size = 6
 
     vibevoice_model.save_pretrained(output_dir)
     # -- push to hub
@@ -288,7 +291,7 @@ python src/transformers/models/vibevoice_realtime/convert_vibevoice_realtime_to_
     --processor_config /raid/eric/vibevoice_0.5b/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-0.5B
 
-# -- converted voice embeddings should be added to the hub (not done automatically)
+# -- converted voice embeddings should be added to the hub (not done automatically this script)
 by running this script: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-convert_realtime_presets-py
 """
 if __name__ == "__main__":

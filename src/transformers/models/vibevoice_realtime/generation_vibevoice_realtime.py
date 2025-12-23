@@ -265,7 +265,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, `p[i, 1]`
             contains the maximum generation steps for batch item `i` (which may vary based on input length), and
             `p[i, 2]` contains the actual completion step for finished samples. No return value is expected.
-        - `history_prompt`: A prefilled history prompt containing past key values for the language and TTS decoders.
+        - `voice_preset`: A dictionary of past key values for the language and TTS decoders for a specific voice.
 
         """
         # Call the base class method to load from default generation_config.json
@@ -303,8 +303,12 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             generation_config.cfg_scale = model_kwargs.pop("cfg_scale")
         if "n_diffusion_steps" in model_kwargs:
             generation_config.n_diffusion_steps = model_kwargs.pop("n_diffusion_steps")
-        if "history_prompt" in model_kwargs:
-            generation_config.history_prompt = model_kwargs.pop("history_prompt")
+        if "voice_preset" in model_kwargs:
+            generation_config.voice_preset = model_kwargs.pop("voice_preset")
+        if "text_window_size" in model_kwargs:
+            generation_config.tts_text_window_size = model_kwargs.pop("text_window_size")
+        if "speech_window_size" in model_kwargs:
+            generation_config.tts_speech_window_size = model_kwargs.pop("speech_window_size")
         return generation_config, model_kwargs
     
     def _rebuild_history_prompt(self, entry, device):
@@ -374,48 +378,35 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # *************** VibeVoice specific ***************
-        # Extract prefilled outputs from history_prompt
-        history_prompt = getattr(generation_config, "history_prompt", None)
-        if history_prompt is None:
-            raise ValueError("history_prompt must be provided in generation_config for VibeVoiceRealTime")
-        lm_outputs = self._rebuild_history_prompt(history_prompt[0]["lm"], device=input_ids.device)
-        tts_lm_outputs = self._rebuild_history_prompt(history_prompt[0]["tts_lm"], device=input_ids.device)
-        tts_lm_negative_outputs = self._rebuild_history_prompt(history_prompt[0]["neg_tts_lm"], device=input_ids.device)
-
-        # keep track of which sequences are already finished
-        batch_size, cur_len = lm_outputs.last_hidden_state.shape[:2]  # NOTE changes from input_ids.shape to match original
-        this_peer_finished = False
-        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
-
-        # extract VibeVoice-specific generation parameters
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
         n_diffusion_steps = generation_config.n_diffusion_steps
+        text_window_size = generation_config.text_window_size
+        speech_window_size = generation_config.speech_window_size
         diffusion_head_device = next(self.diffusion_head.parameters()).device
         if do_sample:
             logger.warning(
                 "VibeVoiceRealTime generation does not support sampling-based token selection. An internal diffusion process naturally samples latent representations, and a seed can be set for a deterministic output."
             )
 
+        # previous outputs for a specific voice preset
+        voice_preset = generation_config.voice_preset
+        lm_outputs = self._rebuild_history_prompt(voice_preset[0]["lm"], device=input_ids.device)
+        tts_lm_outputs = self._rebuild_history_prompt(voice_preset[0]["tts_lm"], device=input_ids.device)
+        tts_lm_negative_outputs = self._rebuild_history_prompt(voice_preset[0]["neg_tts_lm"], device=input_ids.device)
+
         # State tracking
+        batch_size, cur_len = lm_outputs.last_hidden_state.shape[:2]
+        this_peer_finished = False
+        unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
         acoustic_cache = None
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
-        tts_text_window_index = 0
-        
-        # Constants for windowed processing, TODO add to generation config?
-        TTS_TEXT_WINDOW_SIZE = getattr(self.config, "tts_text_window_size", 5)
-        TTS_SPEECH_WINDOW_SIZE = getattr(self.config, "tts_speech_window_size", 6)
-        
-        # Output audio
+        text_window_index = 0
         audio_chunks = [[] for _ in range(batch_size)]
-        
-        # Track token counts
-        total_generated_speech_tokens = 0
-        total_prefilled_text_tokens = 0
 
-        # Prepare small LM model inputs instead of TTS to use input_ids correctly
+        # Prepare initial LM model inputs
         lm_input_ids = torch.full((batch_size, lm_outputs.last_hidden_state.shape[1]), pad_token_id, dtype=torch.long, device=input_ids.device)
         lm_kwargs = {
             "attention_mask": torch.ones_like(lm_input_ids, dtype=torch.long),
@@ -425,7 +416,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         lm_model_kwargs['cache_position'] = torch.arange(lm_input_ids.shape[-1], device=lm_input_ids.device, dtype=torch.long)
         lm_model_kwargs["use_cache"] = self.config.use_cache
 
-        # Prepare TTS LM inputs and that of negative for CFG, TODO rely base class when input_ids handled properly
+        # Prepare TTS LM inputs and negative inputs for CFG
         tts_lm_input_ids = torch.full((batch_size, tts_lm_outputs.last_hidden_state.shape[1]), pad_token_id, dtype=torch.long, device=input_ids.device)
         tts_lm_attention_mask = torch.ones_like(tts_lm_input_ids, dtype=torch.long)
         tts_lm_kwargs = {
@@ -435,8 +426,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         _, tts_lm_model_kwargs = self._prepare_generation_config(generation_config, **tts_lm_kwargs)
         tts_lm_model_kwargs['cache_position'] = torch.arange(tts_lm_input_ids.shape[-1], device=tts_lm_input_ids.device, dtype=torch.long)
         tts_lm_model_kwargs["use_cache"] = self.config.use_cache
-        
-        # Prepare TTS LM negative inputs for CFG
         tts_lm_negative_kwargs = {
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
             "max_new_tokens": generation_config.max_new_tokens,
@@ -445,11 +434,9 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         tts_lm_negative_input_ids = torch.full((batch_size, 1), pad_token_id, dtype=torch.long, device=input_ids.device)
         tts_lm_negative_model_kwargs['cache_position'] = torch.arange(tts_lm_negative_input_ids.shape[-1], device=tts_lm_negative_input_ids.device, dtype=torch.long)
         tts_lm_negative_model_kwargs["use_cache"] = self.config.use_cache
-        
-        # Update kwargs from prefilled outputs
-        first_text_window_size = TTS_TEXT_WINDOW_SIZE if input_ids.shape[1] >= TTS_TEXT_WINDOW_SIZE else input_ids.shape[1]
 
         # Initialize kwargs from prefilled outputs
+        first_text_window_size = text_window_size if input_ids.shape[1] >= text_window_size else input_ids.shape[1]
         lm_model_kwargs = self._update_model_kwargs_for_generation(lm_outputs, lm_model_kwargs, num_new_tokens=first_text_window_size)
         tts_lm_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_outputs, tts_lm_model_kwargs, num_new_tokens=first_text_window_size)
         tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
@@ -480,12 +467,12 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 break
 
             # Get current text window
-            cur_input_tts_text_ids = input_ids[:, tts_text_window_index*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE]
-            next_text_window_size = input_ids[:, (tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+2)*TTS_TEXT_WINDOW_SIZE].shape[1]
-            tts_text_window_index += 1
+            cur_input_tts_text_ids = input_ids[:, text_window_index*text_window_size:(text_window_index+1)*text_window_size]
+            next_text_window_size = input_ids[:, (text_window_index+1)*text_window_size:(text_window_index+2)*text_window_size].shape[1]
+            text_window_index += 1
 
             # TODO use for batching (not done by original)
-            cur_input_attention_mask = model_kwargs["attention_mask"][:, tts_text_window_index*TTS_TEXT_WINDOW_SIZE:(tts_text_window_index+1)*TTS_TEXT_WINDOW_SIZE]
+            cur_input_attention_mask = model_kwargs["attention_mask"][:, text_window_index*text_window_size:(text_window_index+1)*text_window_size]
 
             # Process text window if available
             if cur_input_tts_text_ids.shape[1] > 0:
@@ -498,7 +485,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     break
                 
                 step += cur_input_tts_text_ids.shape[1]
-                total_prefilled_text_tokens += cur_input_tts_text_ids.shape[1]
 
                 # Forward pass through LM
                 lm_model_inputs = self.prepare_inputs_for_generation(lm_input_ids, **lm_model_kwargs)
@@ -518,15 +504,12 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             diffusion_indices = torch.arange(batch_size, device=input_ids.device)[~finished_tags]
             
             if diffusion_indices.numel() > 0:
-                for cur_speech_index in range(TTS_SPEECH_WINDOW_SIZE):
-                    # Diffusion process with classifier-free guidance
+                for cur_speech_index in range(speech_window_size):
                     positive_condition = tts_lm_outputs.last_hidden_state[diffusion_indices, -1, :]
                     negative_condition = tts_lm_negative_outputs.last_hidden_state[diffusion_indices, -1, :]
-
                     noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                     condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
                     speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
-
                     # NOTE (ebezzam) exact match at this point
 
                     for timestep in noise_scheduler.timesteps:
@@ -539,7 +522,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                         eps = torch.cat([half_eps, half_eps], dim=0)
                         speech = noise_scheduler.step(eps, timestep, speech).prev_sample
-
                     # NOTE (ebezzam) slight deviation for bfloat16 at this point but seems numerical
 
                     speech_latent = speech[: len(speech) // 2].unsqueeze(1)
@@ -568,27 +550,20 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                         audio_chunks[idx].append(audio_chunk[i])
                     if streamer is not None:
                         streamer.put(audio_chunk, diffusion_indices)
-
-                    # Get acoustic embedding for next step
-                    acoustic_embed = self.acoustic_connector(speech_latent)
                     
                     # Append speech token to TTS LM sequence
                     tts_lm_input_ids = torch.cat([tts_lm_input_ids, torch.ones_like(tts_lm_input_ids[:, -1:])], dim=-1)
-                    
                     if tts_lm_input_ids.shape[1] >= generation_config.max_length:
                         break
-                    
                     step += 1
-                    total_generated_speech_tokens += 1
 
                     # Forward pass through TTS LM with speech
+                    acoustic_embed = self.acoustic_connector(speech_latent)
                     tts_lm_model_inputs = self.prepare_inputs_for_generation(tts_lm_input_ids, **tts_lm_model_kwargs)
                     tts_lm_model_inputs["inputs_embeds"] = acoustic_embed
                     tts_lm_additional_inputs = {"tts_text_masks": torch.zeros_like(tts_lm_input_ids[:, -1:], dtype=torch.long)}
                     tts_lm_outputs = self(**tts_lm_model_inputs, **tts_lm_additional_inputs, return_dict=True)
-                    
-                    # Update model kwargs: on last speech token + more text coming, pre-allocate for next window
-                    if cur_speech_index == TTS_SPEECH_WINDOW_SIZE - 1 and next_text_window_size > 0:
+                    if cur_speech_index == speech_window_size - 1 and next_text_window_size > 0:
                         tts_lm_model_kwargs = self._update_model_kwargs_for_generation(
                             tts_lm_outputs, tts_lm_model_kwargs, num_new_tokens=next_text_window_size
                         )
@@ -605,9 +580,8 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     tts_lm_negative_outputs = self(**tts_lm_negative_model_inputs, **tts_lm_negative_additional_inputs, return_dict=True)
                     tts_lm_negative_model_kwargs = self._update_model_kwargs_for_generation(tts_lm_negative_outputs, tts_lm_negative_model_kwargs)
 
-                    # Check TTS EOS
-                    # TODO (ebezzam) shouldn't call tts_eos_classifier here?
-                    tts_eos_logits = torch.sigmoid(self.tts_eos_classifier(tts_lm_outputs.last_hidden_state[diffusion_indices, -1, :]))
+                    # Check EOS classifier
+                    tts_eos_logits = torch.sigmoid(tts_lm_outputs.logits)[diffusion_indices]
                     eos_mask = tts_eos_logits[:, 0] > 0.5
                     if eos_mask.any():
                         eos_indices = diffusion_indices[eos_mask]
@@ -616,7 +590,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                         if streamer is not None:
                             streamer.end(eos_indices)
 
-            # Check max length
             if tts_lm_input_ids.shape[1] >= generation_config.max_length:
                 unfinished_indices = ~finished_tags
                 if unfinished_indices.any():
@@ -633,7 +606,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             streamer.end()
 
         # *************** VibeVoice specific ***************
-        # Prepare final audio outputs
         final_audio_outputs = []
         for sample_chunks in audio_chunks:
             if sample_chunks:
@@ -650,10 +622,8 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                 hidden_states=decoder_hidden_states,
                 past_key_values=tts_lm_model_kwargs.get("past_key_values"),
                 audio=final_audio_outputs,
-                # TODO change
-                reach_max_step_sample=tts_lm_input_ids.shape[1] >= generation_config.max_length,
+                reach_max_step_sample=completion_steps >= generation_config.max_length,
             )
         else:
-            # NOTE (ebezzam): new tokens in tts_lm_input_ids does not reflect generated audio as tokenizer is continuous
             return final_audio_outputs
         # ============================================

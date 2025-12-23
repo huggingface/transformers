@@ -140,26 +140,21 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
         text_preprocessed = [t.strip() + "\n" for t in text]
         encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
-
-        if voice_preset is not None:
-            # TODO how to handle batching? Bark doesn't make batch
-            if isinstance(voice_preset, (str, dict)):
-                voice_preset = [voice_preset]
-            elif not isinstance(voice_preset, (list, tuple)):
-                raise ValueError("voice_preset input must be a string, dict, or list of strings/dicts")
-
-            # load and validate each voice preset
-            for i, _preset in enumerate(voice_preset):
-                if isinstance(_preset, str) and _preset.endswith(".pt"):
-                    voice_preset[i] = torch.load(_preset, weights_only=False)
-                elif not isinstance(_preset, dict):
-                    raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {_preset}")
-                self._validate_voice_preset_dict(voice_preset[i])
-
-            # NOTE (ebezzam) like in Bark: https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
-            # TODO should we batch? not done in Bark
-            encoded_text["history_prompt"] = voice_preset
-
+        
+        # Prepare voice preset(s)
+        # TODO (ebezzam) should we batch? not done in Bark https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
+        # namely a batch would use the same voice
+        if isinstance(voice_preset, (str, dict)):
+            voice_preset = [voice_preset]
+        elif not isinstance(voice_preset, (list, tuple)):
+            raise ValueError("voice_preset input must be a string, dict, or list of strings/dicts")
+        for i, _preset in enumerate(voice_preset):
+            if isinstance(_preset, str) and _preset.endswith(".pt"):
+                voice_preset[i] = torch.load(_preset, weights_only=False)
+            elif not isinstance(_preset, dict):
+                raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {_preset}")
+            self._validate_voice_preset_dict(voice_preset[i])
+        encoded_text["voice_preset"] = voice_preset
         return encoded_text
 
     @property
