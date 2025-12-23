@@ -93,22 +93,33 @@ def get_nvidia_gpu_stats() -> tuple[int, float]:
 
 
 def get_intel_xpu_stats() -> tuple[int, float]:
-    """Returns the utilization and memory used of an Intel XPU.
+    """Returns the utilization and memory used of an Intel XPU"""
+    # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
+    xpu_smi_output = subprocess.check_output(["sudo", "xpu-smi", "dump", "-m", "5,18", "-n", "1"])
+    lines = xpu_smi_output.decode("utf-8").strip().split("\n")
 
-    Note: This is a basic implementation. Intel XPU monitoring capabilities may be limited
-    compared to CUDA. Returns dummy values if actual stats cannot be obtained.
-    """
-    try:
-        if hasattr(torch, "xpu") and torch.xpu.is_available():
-            # Get memory stats if available
-            memory_allocated = torch.xpu.memory_allocated(0) / 1024**3
-            # XPU doesn't have a direct utilization API like CUDA, so we return a placeholder
-            # In practice, you might need to use Intel-specific tools or APIs
-            return 0, memory_allocated
-        else:
-            return 0, 0.0
-    except Exception:
+    # Parse all data lines (skip header) and collect stats from all cards
+    xpu_stats = []
+    for line in lines[1:]:
+        data_line = line.split(",")
+        if len(data_line) < 4:
+            continue
+        device_id = data_line[1].strip()
+        utilization_str = data_line[2].strip()
+        memory_used_str = data_line[3].strip()
+        if utilization_str != "N/A" and memory_used_str != "N/A":
+            utilization = int(float(utilization_str))
+            memory_used_mib = float(memory_used_str)
+            xpu_stats.append((device_id, utilization, memory_used_mib))
+
+    if not xpu_stats:
         return 0, 0.0
+
+    # Sort by utilization (descending) and pick the highest
+    xpu_stats.sort(key=lambda x: x[1], reverse=True)
+    device_id, utilization, memory_used_mib = xpu_stats[0]
+    memory_used_gb = memory_used_mib / 1024
+    return utilization, memory_used_gb
 
 
 class GPUStatsCollector:
