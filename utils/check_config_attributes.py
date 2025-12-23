@@ -323,6 +323,17 @@ SPECIAL_CASES_TO_ALLOW = {
     "CsmConfig": ["tie_codebooks_embeddings"],
     "LayoutXLMConfig": True,
     "DeepseekV2Config": ["norm_topk_prob"],
+    "LwDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
 }
 
 
