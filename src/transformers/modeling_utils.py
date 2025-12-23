@@ -4125,9 +4125,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
 
-        unique_devices = set(device_map.values()) if device_map is not None else None
+        unique_devices = set(device_map.values()) if device_map is not None else set()
         # Post-processing for only 1-value device_map (this includes TP) as we won't use hooks in this case
-        if unique_devices is not None and len(unique_devices) == 1:
+        if len(unique_devices) == 1:
             device = unique_devices.pop()
             # This is needed for all non-persistent buffers (such as RotaryEmbedding modules), which were not initialized
             # on the correct device as it is not part of the state_dict
