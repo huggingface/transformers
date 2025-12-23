@@ -519,6 +519,8 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
 
         self.head = nn.Linear(embed_dim, config.projection_size)
 
+        self.post_init()
+
     @can_return_tuple
     @auto_docstring
     def forward(
