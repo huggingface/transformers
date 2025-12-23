@@ -95,7 +95,7 @@ def get_nvidia_gpu_stats() -> tuple[int, float]:
 def get_intel_xpu_stats() -> tuple[int, float]:
     """Returns the utilization and memory used of an Intel XPU"""
     # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
-    xpu_smi_output = subprocess.check_output(["sudo", "xpu-smi", "dump", "-m", "5,18", "-n", "1"])
+    xpu_smi_output = subprocess.check_output(["xpu-smi", "dump", "-m", "5,18", "-n", "1"])
     lines = xpu_smi_output.decode("utf-8").strip().split("\n")
 
     # Parse all data lines (skip header) and collect stats from all cards
