@@ -96,7 +96,7 @@ class PvtImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
+
     def resize(
         self,
         image: np.ndarray,
