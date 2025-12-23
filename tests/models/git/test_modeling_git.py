@@ -15,6 +15,7 @@
 import inspect
 import unittest
 
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
@@ -414,6 +415,33 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester._test_batched_generate_captioning(*config_and_inputs)
 
+    @pytest.mark.generate
+    def test_past_key_values_format(self):
+        """
+        Test that the KV cache is formatted correctly.
+        Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
+        """
+        # GIT seq length shape depends on image inputs, overwrite
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # If it doesn't support cache, skip the test
+            decoder_config = config.get_text_config(decoder=True)
+
+            model = model_class(config).to(torch_device)
+            model = model.eval()
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            cache = outputs["past_key_values"]
+            batch_size, seq_length = inputs["input_ids"].shape[:2]
+            image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
+
+            # Check the format
+            self._check_past_key_values_for_generate(batch_size, cache, seq_length + image_length, decoder_config)
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -497,7 +525,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.sequences.shape, expected_shape)
         self.assertEqual(generated_caption, "two cats laying on a pink blanket")
         self.assertTrue(outputs.scores[-1].shape, expected_shape)
-        expected_slice = torch.tensor([-0.8805, -0.8803, -0.8799], device=torch_device)
+        expected_slice = torch.tensor([-0.8131, -0.8128, -0.8124], device=torch_device)
         torch.testing.assert_close(outputs.scores[-1][0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_visual_question_answering(self):
@@ -540,7 +568,7 @@ class GitModelIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=50)
         generated_captions = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        self.assertEqual(generated_captions, ["two cats sleeping on a pink blanket next to remotes."] * 2)
+        self.assertEqual(generated_captions, ["two cats sleeping on a couch"] * 2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

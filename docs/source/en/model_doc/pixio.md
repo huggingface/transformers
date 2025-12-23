@@ -52,7 +52,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
 
 - The example below shows how to split the output tensor into:
   - a set of global embeddings for the whole image, commonly referred to as `CLS` token,
-    useful for classification and retrieval. 
+    useful for classification and retrieval.
     You can either average them (recommended) or concatenate them along the channel dimension.
   - a set of local embeddings, one for each `16x16` patch of the input image,
     useful for dense tasks, such as depth estimation and semantic segmentation.
