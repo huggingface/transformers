@@ -121,7 +121,17 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
         return_tensors = text_kwargs.get("return_tensors", None)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
+        if isinstance(text, str):
+            text = [text]
+        elif not isinstance(text, (list, tuple)):
+            raise ValueError("text input must be a string or list of strings")
+        # TODO mimic their preprocessing but maybe not necessary?
+        # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
+        text_preprocessed = [t.strip() + "\n" for t in text]
+        encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
         
+        # Prepare voice preset(s)
         if voice_preset is None:
             # TODO (ebezzam) best way to default?
             default_preset = "en-Frank_man"
@@ -130,18 +140,6 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
             default_preset = f"voice_presets/{default_preset}_converted.pt"
             voice_preset = hf_hub_download(repo_id="bezzam/VibeVoice-0.5B", filename=default_preset)
 
-        # make batch
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, (list, tuple)):
-            raise ValueError("text input must be a string or list of strings")
-        
-        # TODO mimic their preprocessing but maybe not necessary?
-        # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
-        text_preprocessed = [t.strip() + "\n" for t in text]
-        encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
-        
-        # Prepare voice preset(s)
         # TODO (ebezzam) should we batch? not done in Bark https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
         # namely a batch would use the same voice
         if isinstance(voice_preset, (str, dict)):
