@@ -3963,7 +3963,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_mapping=weight_conversions,
         )
 
-        model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
+        model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
@@ -3979,8 +3979,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # for device_map="auto" : dispatch model with hooks on all devices if necessary
-        if device_map is not None and device_mesh is None:
+        # If the device_map has more than 1 device: dispatch model with hooks on all devices
+        if device_map is not None and len(set(device_map.values())) > 1:
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
         if hf_quantizer is not None:
@@ -4056,7 +4056,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
-        tp_plan = getattr(model, "_tp_plan", None)
         error_msgs = []
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
@@ -4091,17 +4090,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, conversion_errors = (
                 convert_and_load_state_dict_in_model(
-                    model,
-                    merged_state_dict,
-                    weight_mapping,
-                    tp_plan,
-                    hf_quantizer,
-                    dtype,
-                    device_map,
-                    model.dtype_plan,
-                    device_mesh,
-                    disk_offload_index,
-                    disk_offload_folder,
+                    model=model,
+                    state_dict=merged_state_dict,
+                    weight_mapping=weight_mapping,
+                    tp_plan=model._tp_plan,
+                    hf_quantizer=hf_quantizer,
+                    dtype=dtype,
+                    device_map=device_map,
+                    dtype_plan=model.dtype_plan,
+                    device_mesh=device_mesh,
+                    disk_offload_index=disk_offload_index,
+                    disk_offload_folder=disk_offload_folder,
                 )
             )
 
@@ -4112,10 +4111,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
-        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
-        # loading the weights as they are not in the loaded state dict)
-        miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, hf_quantizer)
+        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they were not moved when
+        # loading the weights as they were not in the loaded state dict)
+        missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
+        model._move_missing_keys_from_meta_to_cpu(missing_and_mismatched, hf_quantizer)
 
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
         model._initialize_missing_keys(is_quantized)
@@ -4126,33 +4125,28 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
 
-        # Post-processing for tensor parallelism
-        if device_mesh is not None:
-            # When using TP, the device map is a single device for all parameters
-            tp_device = list(device_map.values())[0]
-            # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
-            # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
+        unique_devices = set(device_map.values()) if device_map is not None else set()
+        # Post-processing for only 1-value device_map (this includes TP) as we won't use hooks in this case
+        if len(unique_devices) == 1:
+            device = unique_devices.pop()
+            # This is needed for all non-persistent buffers (such as RotaryEmbedding modules), which were not initialized
+            # on the correct device as it is not part of the state_dict
+            for _, buffer in model.named_non_persistent_buffers():
+                buffer.data = buffer.data.to(device)
 
-            # In this case, the top-most task module weights were not moved to device and parallelized as they
-            # were not part of the loaded weights: do it now
-            if missing_keys:
-                state_dict = model.state_dict()
-                for name in missing_keys:
-                    param = state_dict[name]
-                    # Shard the param
+            # The missing/mismatch weights were not moved to device (and parallelized for TP) as they were not part of the
+            # loaded weights: do it now if we have any
+            missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
+            for name in missing_and_mismatched:
+                param = model.get_parameter_or_buffer(name)
+                # For TP, shard the param
+                if device_mesh is not None:
                     shard_and_distribute_module(
-                        model,
-                        param.to(tp_device),
-                        param,
-                        name,
-                        None,
-                        False,
-                        device_mesh.get_local_rank(),
-                        device_mesh,
+                        model, param.to(device), param, name, None, False, device_mesh.get_local_rank(), device_mesh
                     )
+                # Otherwise, just move it to device
+                else:
+                    param.data = param.data.to(device)
 
         log_state_dict_report(
             model=model,
@@ -4421,8 +4415,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
-        Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
-        be tied anyway.
         """
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
