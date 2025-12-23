@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on TBD.*
+*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -44,7 +44,6 @@ This architecture has the advantage to enhance multimodal understanding without 
 </div>
 
 Other models from the family can be found at [Ernie 4.5](./ernie4_5) and at [Ernie 4.5 MoE](./ernie4_5_moe.md).
-
 
 ## Usage
 
@@ -171,7 +170,6 @@ output_text = processor.batch_decode(
 )
 print(output_text)
 ```
-
 
 ## Ernie4_5_VL_MoeConfig
 

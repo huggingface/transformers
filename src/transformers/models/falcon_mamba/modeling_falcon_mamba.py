@@ -814,6 +814,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[FalconMambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
