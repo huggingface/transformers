@@ -3979,7 +3979,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # If the device_map has more than 1 device: dispatch model with hooks on all devices if necessary
+        # If the device_map has more than 1 device: dispatch model with hooks on all devices
         if device_map is not None and len(set(device_map.values())) > 1:
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
