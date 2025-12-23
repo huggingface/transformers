@@ -5,8 +5,7 @@ import numpy as np
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
-
-from transformers import VideoPrismConfig, VideoPrismTokenizer
+from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismVisionConfig, VideoPrismTextConfig
 from transformers.models.videoprism.modeling_videoprism import VideoPrismModel, VideoPrismClipModel
 
 
@@ -378,16 +377,7 @@ def convert(
 
     if convert:
         state_dict = download_weights(checkpoint_info)
-        # for k, v in state_dict.items():
-        #     shape = v.shape
-        #     new_shape = ()
-        #     for i in range(len(shape)):
-        #         new_shape += (shape[i]-1,)
-        #     print(f"Key: {k}, Value shape: {shape}, values: {v[new_shape]} ")
-        # print(state_dict["params/text_encoder/token_emb/emb_var"][:5,:5])
 
-        # first = state_dict["params/patch_projection/linear/bias"]
-        # transform_state(state_dict, checkpoint_info)
 
     if upload:
         api = HfApi()
@@ -400,53 +390,12 @@ def convert(
         print("uploaded")
 
     if load_model:
-        config = VideoPrismConfig(**checkpoint_info["config"])
-        model = VideoPrismModel(config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(config)
-
-        # try:
+        vision_config = VideoPrismVisionConfig(**checkpoint_info["config"])
+        clip_config = VideoPrismConfig(**checkpoint_info["config"])
+        model = VideoPrismModel(vision_config) if checkpoint_info["model_type"] == "backbone" else VideoPrismClipModel(clip_config)
         state_dict = load_file(path)
-        # except:
-        #     hf_hub_download(repo_id="MHRDYN7/videoprism-base", filename=path, local_dir="./")
-        #     state_dict = load_file(path)
-            # raise ValueError("File not found, please download first")
-
-        # for lvt
-
-        # key_list = list(state_dict.keys())
-        # for k in key_list:
-        #     # shape = v.shape
-        #     # print(f"Key: {k}, Value shape: {shape}")
-        #     if k.startswith("backbone") or k.startswith("auxiliary_encoder") or k.startswith("contrastive_vision_pooler"):
-        #         state_dict[f"video_model.{k}"] = state_dict.pop(k)
-
-        #     if k.startswith("text_encoder"):
-        #         k_new = k.replace("text_encoder", "text_model")
-        #         state_dict[f"{k_new}"] = state_dict.pop(k)
-        
-        # state_dict["video_model.backbone.spatial_embeddings.position_embeddings"] = state_dict.pop("video_model.backbone.spatial_embeddings.spatial_pos_emb")
-        # state_dict["video_model.backbone.temporal_embeddings.position_embeddings"] = state_dict.pop("video_model.backbone.temporal_embeddings.temporal_pos_emb")
-        
-        
-        # For video encoder
-        # state_dict["spatial_embeddings.position_embeddings"] = state_dict.pop("spatial_embeddings.spatial_pos_emb")
-        # state_dict["temporal_embeddings.position_embeddings"] = state_dict.pop("temporal_embeddings.temporal_pos_emb")    
-          
-        # for scale buffer
-
-        # self.dim = int(config.intermediate_size / config.num_attention_heads)
-        # self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
-        # r_softplus_0 = 1.442695041
-        # _scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
-
-        # dim = int(checkpoint_info["config"]["intermediate_size"] / checkpoint_info["config"]["num_attention_heads"])
-        # r_softplus_0 = 1.442695041
-
-        # scale = torch.tensor(r_softplus_0 / (dim**0.5))
-        # softplus = nn.functional.softplus(state_dict["video_model.contrastive_vision_pooler.per_dim_scale.per_dim_scale"])
-        # scale = scale * softplus
-        # state_dict["video_model.contrastive_vision_pooler.per_dim_scale.scale"] = scale
-        
         model.load_state_dict(state_dict)
+        model.config._attn_implementation = "eager"
         print("all good")
 
     if load_video:
@@ -499,7 +448,7 @@ def convert(
                 print("Inference successful, output matches expected tensor.")
                 path = f"videoprism_{checkpoint_info['model_size']}_{checkpoint_info['id']}.safetensors"
                 print(path)
-                save_file(state_dict, path, metadata={"format": "safetensors"})
+                # save_file(state_dict, path, metadata={"format": "safetensors"})
                 print("done")
 
             elif checkpoint_info["model_type"] == "lvt":
@@ -585,13 +534,9 @@ def convert(
                     )
                     print("Inference successful, output matches expected tensor.")
                     print(path)
-                    save_file(state_dict, path, metadata={"format": "safetensors"})
+                    # save_file(state_dict, path, metadata={"format": "safetensors"})
                     print("done")
 
-                # print(outputs[0].shape)
-                # print(outputs[0][:, :9])
-                # print(outputs[1].shape)
-                # print(outputs[1][:, :3])
 
 
 if __name__ == "__main__":

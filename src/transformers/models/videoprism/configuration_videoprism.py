@@ -6,14 +6,18 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 from ...configuration_utils import PreTrainedConfig
+from ...utils import logging
 
 
-class VideoPrismConfig(PreTrainedConfig):
+logger = logging.get_logger(__name__)
+
+
+class VideoPrismVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to instantiate a VideoPrism
+    This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a VideoPrismVision
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the VideoPrism
-    [google/videoprism-b-16x2-kinetics400](https://huggingface.co/google/videoprism-b-16x2-kinetics400) architecture.
+    defaults will yield a similar configuration to that of the VideoPrismVision
+    [google/video_prism_vision-b-16x2-kinetics400](https://huggingface.co/google/video_prism_vision-b-16x2-kinetics400) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -52,50 +56,46 @@ class VideoPrismConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VideoPrismConfig, VideoPrismModel
+    >>> from transformers import VideoPrismVisionConfig, VideoPrismVisionModel
 
-    >>> # Initializing a VideoPrism google/videoprism-b-16x2-kinetics400 style configuration
-    >>> configuration = VideoPrismConfig()
+    >>> # Initializing a VideoPrismVision google/video_prism_vision-b-16x2-kinetics400 style configuration
+    >>> configuration = VideoPrismVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the google/videoprism-b-16x2-kinetics400 style configuration
-    >>> model = VideoPrismModel(configuration)
+    >>> # Initializing a model (with random weights) from the google/video_prism_vision-b-16x2-kinetics400 style configuration
+    >>> model = VideoPrismVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "videoprism"
+    model_type = "videoprism_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
         image_size=288,
-        num_frames=16,  # ? embeds are made using 16 frames for base and 8 frames for large model size
+        num_frames=16,
         tubelet_size=[1, 18, 18],
         num_channels=3,
-        hidden_size=768,  # ? 1024 for large
-        num_spatial_layers=12,  # ? 24
-        num_temporal_layers=4,  # ? 4
-        num_attention_heads=12,  # ? 16
-        intermediate_size=3072,  # ? 4096
+        hidden_size=768,
+        num_spatial_layers=12,
+        num_temporal_layers=4,
+        num_attention_heads=12,
+        intermediate_size=3072,
         hidden_act="gelu_python",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-06,
         qkv_bias=True,
-        _attn_implementation="eager",
         atten_logit_cap=50.0,
         num_auxiliary_layers=2,
-        enable_causal_atten=True,  #! only for text encoder
-        num_unimodal_layers=12,
-        vocabulary_size=32000,
         apply_l2_norm=True,
-        num_hidden_layers=12,  #! this is just a placeholder value, num_hidden_layers will be later set from num spatial/temporal etc layers
         num_labels=1000,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -109,18 +109,111 @@ class VideoPrismConfig(PreTrainedConfig):
         self.tubelet_size = tubelet_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-
-        super().__init__(**kwargs)
         self.num_spatial_layers = num_spatial_layers
         self.num_temporal_layers = num_temporal_layers
-        self._attn_implementation = _attn_implementation
         self.atten_logit_cap = atten_logit_cap
         self.num_auxiliary_layers = num_auxiliary_layers
-        self.enable_causal_atten = enable_causal_atten
-        self.num_unimodal_layers = num_unimodal_layers
-        self.vocabulary_size = vocabulary_size
         self.apply_l2_norm = apply_l2_norm
         self.num_labels = num_labels
 
 
-__all__ = ["VideoPrismConfig"]
+class VideoPrismTextConfig(PreTrainedConfig):
+    model_type = "videoprism_text_model"
+    base_config_key = "text_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_attention_heads=12,
+        num_unimodal_layers=12,
+        vocabulary_size=32000,
+        apply_l2_norm=True,
+        hidden_act="relu",
+        attention_probs_dropout_prob=0.0,
+        qkv_bias=True,
+        hidden_dropout_prob=0.0,
+        layer_norm_eps=1e-06,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_attention_heads
+        self.num_unimodal_layers = num_unimodal_layers
+        self.vocabulary_size = vocabulary_size
+        self.apply_l2_norm = apply_l2_norm
+        self.hidden_act = hidden_act
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.qkv_bias = qkv_bias
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
+
+
+class VideoPrismConfig(PreTrainedConfig):
+    r"""
+    [`VideoPrismConfig`] is the configuration class to store the configuration of a [`VideoPrismModel`]. It is used to
+    instantiate a VideoPrism model according to the specified arguments, defining the text model and vision model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the VideoPrism
+    [google/videoprism-base-patch16-224](https://huggingface.co/google/videoprism-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`VideoPrismTextConfig`].
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`VideoPrismVisionConfig`].
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import VideoPrismConfig, VideoPrismModel
+
+    >>> # Initializing a VideoPrismConfig with google/videoprism-base-patch16-224 style configuration
+    >>> configuration = VideoPrismConfig()
+
+    >>> # Initializing a VideoPrismModel (with random weights) from the google/videoprism-base-patch16-224 style configuration
+    >>> model = VideoPrismModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a VideoPrismConfig from a VideoPrismTextConfig and a VideoPrismVisionConfig
+    >>> from transformers import VideoPrismTextConfig, VideoPrismVisionConfig
+
+    >>> # Initializing a VideoPrismText and VideoPrismVision configuration
+    >>> config_text = VideoPrismTextConfig()
+    >>> config_vision = VideoPrismVisionConfig()
+
+    >>> config = VideoPrismConfig(text_config=config_text, vision_config=config_vision)
+    ```"""
+
+    model_type = "videoprism"
+    sub_configs = {"text_config": VideoPrismTextConfig, "vision_config": VideoPrismVisionConfig}
+
+    def __init__(self, **kwargs):
+        if text_config is None:
+            text_config = VideoPrismTextConfig()
+            logger.info("`text_config` is `None`. Initializing the `VideoPrismTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = VideoPrismTextConfig(**text_config)
+
+        if vision_config is None:
+            vision_config = VideoPrismVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `VideoPrismVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = VideoPrismVisionConfig(**vision_config)
+
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        super().__init__(**kwargs)
+
+
+__all__ = ["VideoPrismVisionConfig", "VideoPrismTextConfig", "VideoPrismConfig"]
