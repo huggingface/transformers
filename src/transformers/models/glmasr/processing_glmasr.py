@@ -53,10 +53,6 @@ class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-MAX_AUDIO_LEN = 10 * 60  # 10 minutes
-DEFAULT_TRANSCRIPTION_PROMPT = "Transcribe the input speech."
-
-
 class GlmAsrProcessor(ProcessorMixin):
     r"""
     Constructs an GlmAsr processor which wraps an GlmAsr feature extractor and an GlmAsr
@@ -82,10 +78,14 @@ class GlmAsrProcessor(ProcessorMixin):
         feature_extractor,
         tokenizer,
         chat_template=None,
-        audio_token="<sound>",
+        audio_token="<|pad|>",
+        default_transcription_prompt="Please transcribe this audio into text",
+        max_audio_len=600,  # TODO : ???
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.default_transcription_prompt = default_transcription_prompt
+        self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
@@ -150,7 +150,7 @@ class GlmAsrProcessor(ProcessorMixin):
 
             # Determine number of chunks per sample, and flatten
             window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(MAX_AUDIO_LEN // audio_kwargs["chunk_length"])
+            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
@@ -160,7 +160,7 @@ class GlmAsrProcessor(ProcessorMixin):
                 n_win = max(1, (n_samples + window_size - 1) // window_size)
                 if n_win > max_windows:
                     logger.warning(
-                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {MAX_AUDIO_LEN}s; truncating to first {MAX_AUDIO_LEN}s."
+                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
                     )
                     n_win = max_windows
                 per_sample_windows.append(n_win)
@@ -220,11 +220,11 @@ class GlmAsrProcessor(ProcessorMixin):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
+                Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to [`AudioFlamingo3ForConditionalGeneration.generate`].
 
         """
 
@@ -242,7 +242,7 @@ class GlmAsrProcessor(ProcessorMixin):
             raise ValueError("`audio` must contain at least one sample.")
 
         if prompt is None:
-            prompts = [DEFAULT_TRANSCRIPTION_PROMPT] * batch_size
+            prompts = [self.default_transcription_prompt] * batch_size
         elif isinstance(prompt, str):
             prompts = [prompt] * batch_size
         elif isinstance(prompt, (list, tuple)):
@@ -253,7 +253,7 @@ class GlmAsrProcessor(ProcessorMixin):
             prompts = []
             for item in prompt:
                 if item is None:
-                    prompts.append(DEFAULT_TRANSCRIPTION_PROMPT)
+                    prompts.append(self.default_transcription_prompt)
                 elif isinstance(item, str):
                     prompts.append(item)
                 else:
@@ -266,10 +266,10 @@ class GlmAsrProcessor(ProcessorMixin):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt_text},
                         {"type": "audio", "path": audio_item}
                         if isinstance(audio_item, str)
                         else {"type": "audio", "audio": audio_item},
+                        {"type": "text", "text": prompt_text},
                     ],
                 }
             ]
