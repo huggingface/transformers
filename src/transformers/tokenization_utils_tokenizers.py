@@ -901,8 +901,21 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
-        return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces 
+            if clean_up_tokenization_spaces is not None 
+            else self.clean_up_tokenization_spaces
+        )
+    
+        if clean_up_tokenization_spaces:
+            import re
+            text = re.sub(r'\s+([?.!,"])', r'\1', text)
+    
+        return text
+    
     def _save_pretrained(
         self,
         save_directory: str | os.PathLike,
