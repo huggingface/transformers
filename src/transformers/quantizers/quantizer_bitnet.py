@@ -68,13 +68,12 @@ class BitNetHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bitnet_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_bitnet_linear(
@@ -86,10 +85,6 @@ class BitNetHfQuantizer(HfQuantizer):
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        target_dtype = torch.int8
-        return target_dtype
 
     def is_serializable(self):
         return True

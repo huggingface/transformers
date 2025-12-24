@@ -48,7 +48,6 @@ The model also introduces a **Thinking Mode** switch, allowing users to balance 
 
 [[autodoc]] Glm4vMoeConfig
 
-
 ## Glm4vMoeVisionConfig
 
 [[autodoc]] Glm4vMoeVisionConfig
