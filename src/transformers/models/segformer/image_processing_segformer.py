@@ -138,7 +138,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -151,8 +151,8 @@ class SegformerImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
