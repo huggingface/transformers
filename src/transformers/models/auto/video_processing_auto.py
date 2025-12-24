@@ -61,6 +61,7 @@ else:
             ("internvl", "InternVLVideoProcessor"),
             ("llava_next_video", "LlavaNextVideoVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
+            ("modernvbert", "ModernVBertVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
             ("pe_video", "PeVideoVideoProcessor"),
             ("perception_lm", "PerceptionLMVideoProcessor"),
