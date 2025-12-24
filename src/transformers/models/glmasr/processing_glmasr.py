@@ -87,6 +87,7 @@ class GlmAsrProcessor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token="<|pad|>",
+        
         default_transcription_prompt="Please transcribe this audio into text",
         max_audio_len=655,
     ):
