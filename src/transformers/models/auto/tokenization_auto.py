@@ -154,6 +154,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4v", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4v_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glmasr", "TokenizersBackend" if is_tokenizers_available() else None),
         ("got_ocr2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("gpt-sw3", "GPTSw3Tokenizer" if is_sentencepiece_available() else None),
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),

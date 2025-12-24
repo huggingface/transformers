@@ -901,6 +901,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
+        if isinstance(token_ids, dict):
+            token_ids = token_ids["input_ids"]
         return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
     def _save_pretrained(
