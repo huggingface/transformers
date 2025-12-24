@@ -227,20 +227,6 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Eager attention forward for ModernBert with standard attention interface.
-
-    Args:
-        module: The attention module
-        query: Query tensor of shape (batch, num_heads, seq_len, head_dim)
-        key: Key tensor of shape (batch, num_heads, seq_len, head_dim)
-        value: Value tensor of shape (batch, num_heads, seq_len, head_dim)
-        attention_mask: Optional attention mask
-        scaling: Attention scaling factor
-        dropout: Dropout probability
-
-    Returns:
-        Tuple of (attn_output, attn_weights)
-    """
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
@@ -302,18 +288,6 @@ class ModernBertAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> tuple[torch.Tensor, ...]:
-        """Forward pass for ModernBert attention.
-
-        Args:
-            hidden_states: Input tensor of shape (batch, seq_len, hidden_size)
-            attention_mask: Attention mask for padded inputs (4D mask)
-            sliding_window_mask: Sliding window attention mask for local attention layers
-            position_embeddings: Tuple of (cos, sin) for rotary position embeddings
-            output_attentions: Whether to return attention weights
-
-        Returns:
-            Tuple of (hidden_states,) or (hidden_states, attn_weights) if output_attentions=True
-        """
         input_shape = hidden_states.shape[:-1]
         original_dtype = hidden_states.dtype
 
@@ -326,14 +300,11 @@ class ModernBertAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # Apply rotary position embeddings
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
-        # Select attention mask based on layer type (local vs global attention)
         effective_attention_mask = sliding_window_mask if self.sliding_window is not None else attention_mask
 
-        # Select attention implementation
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -360,7 +331,6 @@ class ModernBertAttention(nn.Module):
             **kwargs,
         )
 
-        # Cast back to the original dtype (e.g., when flash attention converts to bfloat16)
         attn_output = attn_output.to(original_dtype)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         hidden_states = self.out_drop(self.Wo(attn_output))
@@ -618,7 +588,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
-        # Prepare 4D attention masks for non-flash attention implementations
         if "flash" not in self.config._attn_implementation:
             attention_mask, sliding_window_mask = self._update_attention_mask(
                 attention_mask, output_attentions=output_attentions
