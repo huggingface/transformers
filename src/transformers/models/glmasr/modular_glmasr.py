@@ -70,8 +70,9 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                 Special token used to represent audio inputs in the chat template.
             default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
                 Default prompt to use for transcription tasks when applying transcription requests.
-            max_audio_len (`int`, *optional*, defaults to 600):
+            max_audio_len (`int`, *optional*, defaults to 655):
                 Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+                655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
     """
 
     def __init__(
@@ -81,7 +82,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         chat_template=None,
         audio_token="<|pad|>",
         default_transcription_prompt="Please transcribe this audio into text",
-        max_audio_len=600,  # TODO : ???
+        max_audio_len=655,
     ):
         super().__init__(
             feature_extractor,
