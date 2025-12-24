@@ -293,7 +293,7 @@ def _get_device_map(
         # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
         # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
         # if we were in-between, as otherwise we blow-up cpu memory
-        if max_memory is None:
+        if max_memory is None and "cpu" in inferred_max_memory:
             inferred_max_memory["cpu"] *= 0.90
 
         if hf_quantizer is not None:
