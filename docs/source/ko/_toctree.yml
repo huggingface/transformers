@@ -427,6 +427,10 @@
     - local: in_translation
       title: (번역중) DeepSpeed
     - local: in_translation
+      title: (번역중) Feature Extractor
+    - local: main_classes/image_processor
+      title: 이미지 프로세서
+    title: (번역중) 메인 클래스
       title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 피쳐 추출기
@@ -1235,6 +1239,9 @@
     title: 내부 헬퍼(Internal helpers)
   - sections:
     - local: in_translation
+      title: (번역중) Utilities for Time Series
+    title: (번역중) Internal Helpers
+  title: (번역중) API
       title: (번역중)Environment Variables
     title: Reference
   title: API
