@@ -17,8 +17,6 @@ from collections.abc import Callable
 from typing import Optional, Union
 
 import numpy as np
-import torch
-from torch import nn
 
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput, make_list_of_audio
@@ -39,6 +37,11 @@ from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, 
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)

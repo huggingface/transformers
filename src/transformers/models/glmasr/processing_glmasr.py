@@ -23,13 +23,16 @@ import re
 from typing import Optional, Union
 
 import numpy as np
-import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -88,7 +91,7 @@ class GlmAsrProcessor(ProcessorMixin):
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         merge_factor = 4
         for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
             audio_lengths = (audio_lengths + 2 * padding - (kernel_size - 1) - 1) // stride + 1
