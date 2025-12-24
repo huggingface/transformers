@@ -16,7 +16,6 @@
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import torch
@@ -148,7 +147,7 @@ def convert_chatterbox_model_to_hf(checkpoint_path, pytorch_dump_folder_path, ve
     if missing_keys:
         print(f"Warning: Missing keys in new state dict: {len(missing_keys)}")
         if verbose:
-            for k in sorted(list(missing_keys))[:20]:
+            for k in sorted(missing_keys)[:20]:
                 print(f"  Missing: {k}")
 
     # Load state dict

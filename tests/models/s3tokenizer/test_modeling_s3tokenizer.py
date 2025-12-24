@@ -43,9 +43,9 @@ class S3TokenizerModelTester:
         self.use_labels = use_labels
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        input_features = floats_tensor([self.batch_size, self.seq_length, config.n_mels], scale=1.0)
+        inputs_dict = {"input_features": input_features}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -65,11 +65,11 @@ class S3TokenizerModelTester:
             use_sdpa=False,
         )
 
-    def create_and_check_model(self, config, input_values):
+    def create_and_check_model(self, config, input_features):
         model = S3TokenizerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values)
+        result = model(input_features)
         self.parent.assertIsNotNone(result.speech_tokens)
         self.parent.assertIsNotNone(result.speech_token_lens)
 
@@ -97,7 +97,7 @@ class S3TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(config, inputs_dict["input_values"])
+        self.model_tester.create_and_check_model(config, inputs_dict["input_features"])
 
     @unittest.skip(reason="S3Tokenizer does not output hidden states in the traditional sense")
     def test_hidden_states_output(self):

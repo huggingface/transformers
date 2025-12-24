@@ -238,7 +238,7 @@ class FSQCodebook(torch.nn.Module):
 
     @torch.inference_mode()
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.view(-1, x.shape[-1])
+        x = x.reshape(-1, x.shape[-1])
         return x
 
     @torch.inference_mode()
@@ -549,7 +549,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
     ) -> Union[tuple, S3TokenizerOutput]:
         """
         Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, n_mels, sequence_length)`):
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, n_mels)`):
                 Float values of log-mel spectrogram features.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing operations on padding token indices.
