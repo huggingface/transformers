@@ -36,6 +36,7 @@ class Scheduler(ABC):
         self.retain_cache_on_finish = retain_cache_on_finish
         self._cancellation_lock = threading.Lock()
         self._requests_to_cancel: set[str] = set()
+        self._requests_to_fork: list[RequestState] = []
 
     @traced
     def add_waiting_request(self, state: RequestState):
@@ -151,8 +152,13 @@ class Scheduler(ABC):
         else:
             request_tokens = state.tokens_to_process
 
+        # If the request has one or more children we make sure not to prefill it entrirely
+        if state.num_children > 0 and token_budget >= len(request_tokens) - 1:
+            token_budget = len(request_tokens) - 1
+            self._requests_to_fork.append(state)
+
+        # Case: we can process the entire prompt/remainder
         if len(request_tokens) < token_budget:
-            # Can process the entire prompt/remainder
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING
@@ -161,8 +167,9 @@ class Scheduler(ABC):
                 state.status = RequestStatus.PREFILLING
                 state.tokens_to_process = state.remaining_prefill_tokens
                 state.remaining_prefill_tokens = []
+
+        # Otherwise: we need to split the request
         else:
-            # Need to split the request
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING_SPLIT

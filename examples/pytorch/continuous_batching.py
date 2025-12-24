@@ -177,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
+    parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
@@ -190,6 +191,7 @@ if __name__ == "__main__":
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -209,6 +211,10 @@ if __name__ == "__main__":
             )
         else:
             args.attn = "kernels-community/flash-attn3"
+
+    # Set seed
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
@@ -272,17 +278,27 @@ if __name__ == "__main__":
         inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
         batched_inputs.append(inputs)
 
+    # If num_return_sequences > 1, automatically enable do_sample with a warning
+    do_sample = args.do_sample
+    if args.num_return_sequences != 1 and not args.do_sample:
+        logger.warning(
+            f"num_return_sequences={args.num_return_sequences} > 1, automatically enabling do_sample=True. "
+            "Set --do-sample explicitly to suppress this warning."
+        )
+        do_sample = True
+
     # Prepare generation config
     generation_cfg = GenerationConfig(
         max_new_tokens=args.max_new_tokens,
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=args.do_sample,
+        do_sample=do_sample,
         temperature=0.8,
         top_p=0.9,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
+        num_return_sequences=args.num_return_sequences,
     )
 
     # Add a compile config if requested

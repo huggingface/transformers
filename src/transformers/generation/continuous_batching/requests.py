@@ -101,6 +101,8 @@ class RequestState:
 
     Attributes:
         request_id (str): The ID of the generation request.
+        initial_tokens (list[int]): The initial prompt tokens.
+        num_children (int): The number of children requests
         full_prompt_ids (list[int] | None): The tokens IDs of the full prompt.
         prompt_ids (list[int] | None): The tokens IDs currently being processed.
         remaining_prompt_ids (list[int]): The tokens IDs remaining to be processed (for split requests).
@@ -121,6 +123,7 @@ class RequestState:
     initial_tokens: list[int]  # Initial prompt tokens
     # Optional fields
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
+    num_children: int = 0  # Number of children requests
     # Internal fields
     tokens_to_process: list[int] | None = None  # Tokens IDs currently being processed
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # For split requests, prefill left to process
@@ -181,7 +184,7 @@ class RequestState:
         Returns:
             bool: True if the request is now complete, False otherwise
         """
-        # Only update if we're in decoding state
+        # Only update if we're in decoding state # TODO: seems useless (always true) -- remove this
         if self.status != RequestStatus.DECODING:
             return False
 
@@ -226,4 +229,26 @@ class RequestState:
             logprobs=[],
             error=self.error,
             timestamps=self.timestamps,
+        )
+
+    def fork(self, new_request_id: str) -> "RequestState":
+        """Fork the request into a new request with the same state expect for request_id, created_time and lifespan."""
+        return RequestState(
+            request_id=new_request_id,
+            initial_tokens=self.initial_tokens[:],
+            record_timestamps=self.record_timestamps,
+            num_children=self.num_children,
+            tokens_to_process=self.tokens_to_process[:],
+            remaining_prefill_tokens=self.remaining_prefill_tokens[:],
+            generated_tokens=self.generated_tokens[:],
+            allocated_blocks=self.allocated_blocks,
+            position_offset=self.position_offset,
+            _status=self.status,
+            max_new_tokens=self.max_new_tokens,
+            eos_token_id=self.eos_token_id,
+            streaming=self.streaming,
+            created_time=time.perf_counter(),
+            error=self.error,
+            lifespan=(time.perf_counter(), -1),
+            _timestamps=self._timestamps,
         )
