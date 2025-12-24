@@ -17,6 +17,8 @@
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import (
     AutoProcessor,
     GlmAsrConfig,
@@ -140,7 +142,7 @@ class GlmAsrForConditionalGenerationModelTest(
 
     all_model_classes = (GlmAsrForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": GlmAsrForConditionalGeneration, "any-to-any": GlmAsrForConditionalGeneration}
+        {"audio-text-to-text": GlmAsrForConditionalGeneration}
         if is_torch_available()
         else {}
     )
@@ -152,53 +154,30 @@ class GlmAsrForConditionalGenerationModelTest(
         self.config_tester = ConfigTester(self, config_class=GlmAsrConfig, has_text_modality=False)
 
     @unittest.skip(
-        reason="This test does not apply to glmasr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+        reason="This test does not apply to GlmAsr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
+    @unittest.skip(reason="Compile not yet supported for GlmAsr models")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+    @unittest.skip(reason="Compile not yet supported for GlmAsr models")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+    @unittest.skip(reason="GlmAsr tests avoid right-padding equivalence; fusion is in-place.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
-
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_flash_attention_3_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip(
-        reason="glmasr need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
-    )
-    def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
-        pass
-
-    @unittest.skip(reason="glmasr has no separate base model without a head.")
+    @unittest.skip(reason="GlmAsr has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
-        # overwrite because glmasr is audio+text model (not vision+text)
+        # GlmAsr is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -211,25 +190,25 @@ class GlmAsrForConditionalGenerationModelTest(
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                # SDPA (default)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
                 text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                vision_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
+                audio_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
 
-                # `None` as it is the requested one which will be assigned to each sub-config
-                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
                 self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.audio_tower.config._attn_implementation == vision_attn)
+                self.assertTrue(model.audio_tower.config._attn_implementation == audio_attn)
 
+                # Eager
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
 
-                for name, submodule in model_eager.named_modules():
+                for _, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
