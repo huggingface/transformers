@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-10-01 and added to Hugging Face Transformers on 2025-12-24.*
 
 # ColModernVBert
 
@@ -26,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ColModernVBert is a model for efficient visual document retrieval. It leverages [ModernVBert](modernvbert) to construct multi-vector embeddings directly from document images, following the ColPali approach.
 
-The model was introduced in [ModernVBERT: Towards Smaller Visual Document Retrievers](https://arxiv.org/abs/2510.01149).
+The model was introduced in [ModernVBERT: Towards Smaller Visual Document Retrievers](https://huggingface.co/papers/2510.01149).
 
 <hfoptions id="usage">
 <hfoption id="Python">

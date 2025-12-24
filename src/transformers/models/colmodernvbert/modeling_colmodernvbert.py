@@ -117,6 +117,9 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> ColModernVBertForRetrievalOutput:
+        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
 
@@ -124,9 +127,10 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             **kwargs,
         )
-        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         proj_dtype = self.embedding_proj_layer.weight.dtype
@@ -143,7 +147,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             embeddings=embeddings,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_image_hidden_states,
+            image_hidden_states=vlm_output.image_hidden_states,
         )
 
     def get_input_embeddings(self):

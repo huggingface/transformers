@@ -2349,7 +2349,8 @@ class Trainer:
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
-            dist.fsdp.register_fsdp_forward_method(self.model, "generate")
+            if hasattr(self.model, "generate"):
+                dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -4021,7 +4022,16 @@ class Trainer:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
-                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                )
+                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
+                if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
+                    # When using PEFT with DeepSpeed ZeRO Stage 3,
+                    # we do not need to load the frozen parameters
+                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
+                else:
+                    state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
             except ValueError:
@@ -4827,6 +4837,7 @@ class Trainer:
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
@@ -4921,6 +4932,8 @@ class Trainer:
             The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
             progress of the commit if `blocking=True`.
         """
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
+
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:

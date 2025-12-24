@@ -158,6 +158,7 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = ["full_attention", "sliding_attention"]
 
         # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
         # named location of the RoPE layer class.

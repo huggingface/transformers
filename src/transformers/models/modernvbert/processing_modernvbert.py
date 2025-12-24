@@ -7,9 +7,6 @@
 from ..idefics3 import Idefics3Processor
 
 
-DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}<end_of_utterance>\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
-
-
 class ModernVBertProcessor(Idefics3Processor):
     r"""
     Constructs a ModernVBert processor which wraps a LLama tokenizer and ModernVBert image processor into a single processor.
@@ -29,11 +26,6 @@ class ModernVBertProcessor(Idefics3Processor):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
-        if chat_template is None:
-            chat_template = DEFAULT_CHAT_TEMPLATE
-        return super().apply_chat_template(conversation, chat_template, **kwargs)
 
 
 __all__ = ["ModernVBertProcessor"]

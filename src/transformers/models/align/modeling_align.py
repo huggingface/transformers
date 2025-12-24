@@ -781,9 +781,9 @@ class AlignTextEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -844,6 +844,13 @@ class AlignPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
+        elif isinstance(module, AlignTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring(
@@ -976,6 +983,7 @@ class AlignVisionModel(AlignPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
+    _input_embed_layer = "convolution"
     _no_split_modules = ["AlignVisionBlock"]
 
     def __init__(self, config: AlignVisionConfig):
@@ -994,9 +1002,6 @@ class AlignVisionModel(AlignPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.convolution
 
     @can_return_tuple
     @auto_docstring

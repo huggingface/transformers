@@ -418,6 +418,25 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
         if isinstance(module, Qwen3VLMoeTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Qwen3VLMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
+
+class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
 
 
 class Qwen3VLMoeVisionMLP(nn.Module):
@@ -451,20 +470,6 @@ class Qwen3VLMoeVisionPatchEmbed(nn.Module):
         )
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
-
-
-class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
 
 
 class Qwen3VLMoeVisionPatchMerger(nn.Module):
@@ -534,8 +539,8 @@ class Qwen3VLMoeVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
-            # Flash Attention 2: Use cu_seqlens for variable length attention
+        if "flash" in self.config._attn_implementation:
+            # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
                 self,
@@ -645,6 +650,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         )
 
         self.gradient_checkpointing = False
+
+        self.post_init()
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
@@ -815,7 +822,7 @@ class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
@@ -1635,6 +1642,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1651,6 +1659,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -1682,7 +1691,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             text_positions = model_inputs["position_ids"][None, ...]
             model_inputs["position_ids"] = torch.cat([text_positions, vision_positions], dim=0)
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 

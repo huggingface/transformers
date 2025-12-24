@@ -19,6 +19,7 @@ from typing import Any
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
+from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig  # noqa: F401
 
 
 logger = logging.get_logger(__name__)
@@ -54,7 +55,7 @@ class ColQwen2Config(PreTrainedConfig):
     """
 
     model_type = "colqwen2"
-    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    sub_configs: dict[str, Any] = {"vlm_config": Qwen2VLConfig}
 
     def __init__(
         self,
@@ -64,7 +65,7 @@ class ColQwen2Config(PreTrainedConfig):
         **kwargs,
     ):
         if vlm_config is None:
-            vlm_config = CONFIG_MAPPING["qwen2_vl"]()
+            vlm_config = self.sub_configs["vlm_config"]()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )

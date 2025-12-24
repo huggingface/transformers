@@ -56,7 +56,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        super(ColModernVBertProcessor, self).__init__(
+        super().__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
             image_seq_len=image_seq_len,

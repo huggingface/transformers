@@ -7,7 +7,6 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -20,7 +19,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging, TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..idefics3 import Idefics3ImageProcessor, Idefics3ImageProcessorFast, Idefics3Processor
 from ..modernbert import ModernBertConfig, ModernBertModel
 from ..modernbert.modeling_modernbert import ModernBertPredictionHead
@@ -36,9 +35,6 @@ class ModernVBertImageProcessor(Idefics3ImageProcessor):
 
 class ModernVBertImageProcessorFast(Idefics3ImageProcessorFast):
     pass
-
-
-DEFAULT_CHAT_TEMPLATE = "{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}<end_of_utterance>\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
 
 
 class ModernVBertProcessor(Idefics3Processor):
@@ -60,11 +56,6 @@ class ModernVBertProcessor(Idefics3Processor):
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
-
-    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
-        if chat_template is None:
-            chat_template = DEFAULT_CHAT_TEMPLATE
-        return super().apply_chat_template(conversation, chat_template, **kwargs)
 
 
 class ModernVBertConfig(PretrainedConfig):
@@ -125,12 +116,16 @@ class ModernVBertConfig(PretrainedConfig):
         classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout: Optional[float] = 0.0,
         classifier_bias: Optional[bool] = False,
-        vocab_size: Optional[int] = None,
         **kwargs,
     ):
         if classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
+            )
+
+        if "vocab_size" in kwargs:
+            logger.warning(
+                "The vocab_size parameter is deprecated, please set vocab_size in the `text_config` instead."
             )
 
         if text_config is None:
@@ -151,10 +146,6 @@ class ModernVBertConfig(PretrainedConfig):
         self.classifier_pooling = classifier_pooling
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
-
-        if vocab_size is not None:
-            self.text_config.vocab_size = vocab_size
-        self.vocab_size = self.text_config.vocab_size
 
         super().__init__(image_token_id=image_token_id, **kwargs)
 
@@ -229,10 +220,10 @@ class ModernVBertConnector(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.pixel_shuffle_factor = config.pixel_shuffle_factor
-        self.modality_projection =  nn.Linear(
-            config.vision_config.hidden_size * (config.pixel_shuffle_factor**2), 
-            config.text_config.hidden_size, 
-            bias=False
+        self.modality_projection = nn.Linear(
+            config.vision_config.hidden_size * (config.pixel_shuffle_factor**2),
+            config.text_config.hidden_size,
+            bias=False,
         )
 
     def pixel_shuffle(self, x, pixel_shuffle_factor):
@@ -248,7 +239,9 @@ class ModernVBertConnector(nn.Module):
             embed_dim * (pixel_shuffle_factor**2),
         )
         x = x.permute(0, 2, 1, 3)
-        return x.reshape(batch_size, int(seq_length / (pixel_shuffle_factor**2)), embed_dim * (pixel_shuffle_factor**2))
+        return x.reshape(
+            batch_size, int(seq_length / (pixel_shuffle_factor**2)), embed_dim * (pixel_shuffle_factor**2)
+        )
 
     def forward(self, image_hidden_states):
         image_hidden_states = self.pixel_shuffle(image_hidden_states, self.pixel_shuffle_factor)
@@ -379,6 +372,9 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
         image_hidden_states = image_hidden_states.last_hidden_state
 
+        # Modality projection & resampling
+        image_hidden_states = self.connector(image_hidden_states)
+
         return image_hidden_states
 
     def inputs_merger(self, input_ids, inputs_embeds, image_hidden_states):
@@ -462,8 +458,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             image_hidden_states = self.get_image_features(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
             )
-            # Modality projection & resampling
-            image_hidden_states = self.connector(image_hidden_states)
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
@@ -488,20 +482,9 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         )
 
 
-# copied from transformers.models.moderbert.modeling_modernbert
-# class ModernVBertPredictionHead(nn.Module):
-#     def __init__(self, config: ModernBertConfig):
-#         super().__init__()
-#         self.config = config
-#         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.classifier_bias)
-#         self.act = ACT2FN[config.classifier_activation]
-#         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-
-#     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-#         return self.norm(self.act(self.dense(hidden_states)))
-
 class ModernVBertPredictionHead(ModernBertPredictionHead):
-    pass    
+    pass
+
 
 @auto_docstring
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):

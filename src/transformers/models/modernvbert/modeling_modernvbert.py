@@ -253,6 +253,9 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
         image_hidden_states = image_hidden_states.last_hidden_state
 
+        # Modality projection & resampling
+        image_hidden_states = self.connector(image_hidden_states)
+
         return image_hidden_states
 
     def inputs_merger(self, input_ids, inputs_embeds, image_hidden_states):
@@ -336,8 +339,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             image_hidden_states = self.get_image_features(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
             )
-            # Modality projection & resampling
-            image_hidden_states = self.connector(image_hidden_states)
 
         # Merge image and text embeddings
         if image_hidden_states is not None:

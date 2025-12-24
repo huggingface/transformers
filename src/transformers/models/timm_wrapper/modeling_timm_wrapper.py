@@ -29,6 +29,8 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 if is_timm_available():
     import timm
 
+    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
+
 
 @dataclass
 @auto_docstring(
@@ -84,15 +86,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     config: TimmWrapperConfig
-    _no_split_modules = []
+    # add WA here as `timm` does not support model parallelism
+    _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision", "timm"])
-        super().__init__(*args, **kwargs)
 
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
@@ -113,10 +112,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
-        if isinstance(module, (nn.Linear)):
+        if isinstance(module, nn.Linear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        # Also, reinit all non-persistemt buffers if any!
+        _maybe_reinit_non_persistent_buffer(module)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -136,6 +137,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def get_input_embeddings(self):
+        # TIMM backbones operate directly on images and do not expose token embeddings.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -143,19 +151,13 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
         self.features_only = extra_init_kwargs.get("features_only", False)
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
-
-    def get_input_embeddings(self):
-        # Vision backbones from timm do not expose token embeddings, so there is nothing to return.
-        return None
-
-    def set_input_embeddings(self, value):
-        raise NotImplementedError("TimmWrapperModel does not own token embeddings and cannot set them.")
 
     @auto_docstring
     def forward(
@@ -265,6 +267,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
 
         if config.num_labels == 0:

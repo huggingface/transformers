@@ -10,7 +10,6 @@ from ..colqwen2 import ColQwen2Config
 from ..modernvbert import ModernVBertConfig
 
 
-# class ColModernVBertConfig(PreTrainedConfig):
 class ColModernVBertConfig(ColQwen2Config):
     r"""
     Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
@@ -42,34 +41,6 @@ class ColModernVBertConfig(ColQwen2Config):
 
     model_type = "colmodernvbert"
     sub_configs: dict[str, Any] = {"vlm_config": ModernVBertConfig}
-
-    # def __init__(
-    #     self,
-    #     vlm_config=None,
-    #     embedding_dim: int = 128,
-    #     initializer_range: float = 0.02,
-    #     **kwargs,
-    # ):
-    #     if vlm_config is None:
-    #         vlm_config = self.sub_configs["vlm_config"]()
-    #         logger.info(
-    #             "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
-    #         )
-    #     elif isinstance(vlm_config, dict):
-    #         vlm_config = self.sub_configs["vlm_config"](**vlm_config)
-    #     elif not isinstance(vlm_config, PreTrainedConfig):
-    #         raise TypeError(
-    #             f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
-    #         )
-
-    #     self.vlm_config = vlm_config
-    #     self.embedding_dim = embedding_dim
-    #     self.initializer_range = initializer_range
-
-    #     super().__init__(**kwargs)
-
-    # def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
-    #     return self.vlm_config.get_text_config(*args, **kwargs)
 
 
 __all__ = ["ColModernVBertConfig"]

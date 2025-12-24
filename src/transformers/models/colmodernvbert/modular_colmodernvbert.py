@@ -4,16 +4,15 @@ from typing import Any, Optional, Union
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack, ProcessorMixin
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
-from ..modernvbert import ModernVBertConfig, ModernVBertModel, ModernVBertProcessor
 from ..colqwen2 import ColQwen2Config
-from ..colpali import ColPaliProcessor
+from ..modernvbert import ModernVBertConfig, ModernVBertModel, ModernVBertProcessor
+
 
 if is_torch_available():
     import torch
@@ -21,7 +20,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# class ColModernVBertConfig(PreTrainedConfig):
 class ColModernVBertConfig(ColQwen2Config):
     r"""
     Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
@@ -53,34 +51,6 @@ class ColModernVBertConfig(ColQwen2Config):
 
     model_type = "colmodernvbert"
     sub_configs: dict[str, Any] = {"vlm_config": ModernVBertConfig}
-
-    def __init__(
-        self,
-        vlm_config=None,
-        embedding_dim: int = 128,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        if vlm_config is None:
-            vlm_config = self.sub_configs["vlm_config"]()
-            logger.info(
-                "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
-            )
-        elif isinstance(vlm_config, dict):
-            vlm_config = self.sub_configs["vlm_config"](**vlm_config)
-        elif not isinstance(vlm_config, PreTrainedConfig):
-            raise TypeError(
-                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
-            )
-
-        self.vlm_config = vlm_config
-        self.embedding_dim = embedding_dim
-        self.initializer_range = initializer_range
-
-        super().__init__(**kwargs)
-
-    def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
-        return self.vlm_config.get_text_config(*args, **kwargs)
 
 
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
@@ -121,7 +91,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        super(ColModernVBertProcessor, self).__init__(
+        super().__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
             image_seq_len=image_seq_len,
@@ -440,7 +410,6 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
-
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
@@ -461,6 +430,9 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> ColModernVBertForRetrievalOutput:
+        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
 
@@ -468,9 +440,10 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             **kwargs,
         )
-        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         proj_dtype = self.embedding_proj_layer.weight.dtype
@@ -487,7 +460,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             embeddings=embeddings,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_image_hidden_states,
+            image_hidden_states=vlm_output.image_hidden_states,
         )
 
     def get_input_embeddings(self):

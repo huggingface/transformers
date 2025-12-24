@@ -7,8 +7,12 @@
 from typing import Any, Literal, Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 from ..modernbert import ModernBertConfig
 from ..siglip import SiglipVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class ModernVBertConfig(PretrainedConfig):
@@ -69,12 +73,16 @@ class ModernVBertConfig(PretrainedConfig):
         classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout: Optional[float] = 0.0,
         classifier_bias: Optional[bool] = False,
-        vocab_size: Optional[int] = None,
         **kwargs,
     ):
         if classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
+            )
+
+        if "vocab_size" in kwargs:
+            logger.warning(
+                "The vocab_size parameter is deprecated, please set vocab_size in the `text_config` instead."
             )
 
         if text_config is None:
@@ -95,10 +103,6 @@ class ModernVBertConfig(PretrainedConfig):
         self.classifier_pooling = classifier_pooling
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
-
-        if vocab_size is not None:
-            self.text_config.vocab_size = vocab_size
-        self.vocab_size = self.text_config.vocab_size
 
         super().__init__(image_token_id=image_token_id, **kwargs)
 

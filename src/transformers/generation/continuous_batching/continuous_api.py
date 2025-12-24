@@ -259,7 +259,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
         self.max_seqlen_q = 0
         self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
-        self.output_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
+        self.output_ids = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -311,7 +311,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: b_size + 1].zero_()
         self.max_seqlen_q = 0
         self.logits_indices[:q_len].fill_(-1)
-        self.output_ids[:, :q_len].fill_(-1)
+        self.output_ids[:q_len].fill_(-1)
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -447,7 +447,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         # Reset the static tensors used for storage
-        self.reset_static_tensors()  # TODO: this might be unnecessary
+        self.reset_static_tensors()  # FIXME: why does this make the generation faster?
 
         # Prepare accumulators
         self.actual_query_length = 0
@@ -557,13 +557,10 @@ class ContinuousBatchProcessor:
             self.actual_index_sizes[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
-    def _sync(self) -> list[int]:
-        if self.output_ids is not None:
-            try:
-                return self.output_ids.tolist()[0]
-            except Exception:
-                return [0, 1]
-        return [0, 0]
+    def _get_new_tokens(self, num_new_tokens: int) -> list[int]:
+        indices = self.logits_indices[:num_new_tokens]
+        new_tokens = self.output_ids[indices]
+        return new_tokens.tolist()
 
     @traced
     def _maybe_send_output(self, state: RequestState) -> None:
@@ -574,25 +571,25 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        out_tokens = self._sync()
+        new_tokens = self._get_new_tokens(len(self.requests_in_batch))
         for i, state in enumerate(self.requests_in_batch):
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
                 self.metrics.record_ttft_metric(state.created_time, state.request_id)
                 state.status = RequestStatus.DECODING
-                token = out_tokens[self.logits_indices[i]]
+                token = new_tokens[i]
                 state.tokens_to_process = [token]
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
-                self.cache.mark_blocks_as_complete(state)
+                self.cache.mark_shareable_blocks_as_complete(state)
                 if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
-                self.cache.mark_blocks_as_complete(state)
+                self.cache.mark_shareable_blocks_as_complete(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             else:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
@@ -727,12 +724,11 @@ class ContinuousBatchProcessor:
             probs = nn.functional.softmax(probs, dim=-1)
             # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
-            # Add batch dimension back to match argmax output
-            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
-        tokens = next_tokens.size(1)  # Get seq_len dimension
-        self.output_ids[:, :tokens].copy_(next_tokens)
+            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
+            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
+        tokens = next_tokens.size(0)  # Get seq_len dimension
+        self.output_ids[:tokens].copy_(next_tokens)
 
 
 # Manager Class (User Interface)
@@ -752,7 +748,7 @@ class ContinuousBatchingManager:
         max_queue_size: int = 0,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -762,7 +758,7 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             num_q_padding_intervals: (optional) Number of intervals used to pad the query dimension
             num_kv_padding_intervals: (optional) Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
         """
         # Reloade paged version if necessary
         if "paged|" not in model.config._attn_implementation:
@@ -784,7 +780,8 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
         self.manual_eviction = manual_eviction
         self.batch_processor: ContinuousBatchProcessor | None = None
-        self._allow_prefix_sharing = allow_prefix_sharing
+        self._allow_block_sharing = allow_block_sharing
+        self._use_prefix_sharing = allow_block_sharing  # approximation until the cache is created
 
         self.use_cuda_graph = self._decide_use_cuda_graphs(
             use_cuda_graph=getattr(generation_config, "use_cuda_graph", None),
@@ -950,6 +947,10 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
     ) -> None:
+        # If there is prefix sharing, we sort the inputs to maximize cache hits
+        if self._use_prefix_sharing:
+            inputs = sorted(inputs, reverse=True)
+        # Add requests in order
         for input_ids in inputs:
             self.add_request(
                 input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
@@ -1020,8 +1021,9 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
-                allow_prefix_sharing=self._allow_prefix_sharing,
+                allow_block_sharing=self._allow_block_sharing,
             )
+            self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 
             scheduler = None
@@ -1080,10 +1082,6 @@ class ContinuousBatchingManager:
             )
 
         self._generation_step()
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()  # FIXME: why is this needed?
-        # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
 
     @traced
@@ -1125,7 +1123,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
         block: bool = True,
         timeout: float | None = None,
     ) -> Generator[ContinuousBatchingManager]:
@@ -1135,7 +1133,7 @@ class ContinuousMixin:
             max_queue_size,
             num_q_cuda_graphs,
             num_kv_cuda_graphs,
-            allow_prefix_sharing,
+            allow_block_sharing,
         )
         manager.start()
         try:
@@ -1154,7 +1152,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -1164,7 +1162,7 @@ class ContinuousMixin:
             max_queue_size: Maximum size of the input request queue
             num_q_padding_intervals: Number of intervals used to pad the query dimension
             num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -1188,7 +1186,7 @@ class ContinuousMixin:
             max_queue_size=max_queue_size,
             num_q_padding_intervals=num_q_padding_intervals,
             num_kv_padding_intervals=num_kv_padding_intervals,
-            allow_prefix_sharing=allow_prefix_sharing,
+            allow_block_sharing=allow_block_sharing,
         )
 
     # TODO: support streaming
@@ -1200,7 +1198,7 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
         record_timestamps: bool = False,
         progress_bar: bool = True,
         **kwargs,
@@ -1212,7 +1210,7 @@ class ContinuousMixin:
             generation_config: Optional generation configuration
             num_q_padding_intervals: Number of intervals used to pad the query dimension
             num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
             **kwargs: Additional generation parameters
@@ -1234,7 +1232,7 @@ class ContinuousMixin:
                 generation_config=generation_config,
                 num_q_cuda_graphs=num_q_padding_intervals,
                 num_kv_cuda_graphs=num_kv_padding_intervals,
-                allow_prefix_sharing=allow_prefix_sharing,
+                allow_block_sharing=allow_block_sharing,
                 block=True,
                 timeout=5,
             ) as manager,
@@ -1247,7 +1245,9 @@ class ContinuousMixin:
             ) as pbar,
         ):
             try:
-                manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
+                manager.add_requests(
+                    inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
+                )
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)

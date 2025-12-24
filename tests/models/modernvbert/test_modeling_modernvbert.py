@@ -69,7 +69,7 @@ class ModernVBertModelTester:
         batch_size=2,
         num_images=2,
         text_config={
-            "vocab_size": 98,
+            "vocab_size": 99,
             "pad_token_id": 0,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -99,7 +99,6 @@ class ModernVBertModelTester:
             "initializer_range": 0.02,
         },
         image_token_id: int = 98,
-        vocab_size: int = 99,
         pixel_shuffle_factor=2,
         num_labels=3,
         num_choices=4,
@@ -119,7 +118,7 @@ class ModernVBertModelTester:
             * self.num_images
         )
 
-        self.vocab_size = vocab_size
+        self.vocab_size = text_config["vocab_size"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
@@ -300,7 +299,10 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ModernVBertModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ModernVBertConfig, has_text_modality=True, has_vision_modality=True
+            self,
+            config_class=ModernVBertConfig,
+            has_text_modality=False,  # Avoid the check for vocab_size, which is now in text_config
+            common_properties=None,  # Common properties are now in text_config
         )
 
     def test_config(self):

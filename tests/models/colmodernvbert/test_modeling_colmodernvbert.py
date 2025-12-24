@@ -51,8 +51,6 @@ class ColModernVBertForRetrievalModelTester:
         batch_size=2,
         num_images=2,
         ignore_index=-100,
-        image_token_index=0,
-        seq_length=25,
         text_config={
             "vocab_size": 99,
             "pad_token_id": 0,
@@ -108,6 +106,7 @@ class ColModernVBertForRetrievalModelTester:
 
         self.embedding_dim = embedding_dim
         self.vlm_config = {
+            "model_type": "modernvbert",
             "text_config": self.text_config,
             "vision_config": self.vision_config,
             "image_token_id": self.image_token_id,
@@ -157,7 +156,7 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = ColModernVBertForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColModernVBertConfig, has_text_modality=False)
 
-    @slow
+    # @slow
     @require_vision
     def test_colmodernvbert_forward_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -260,8 +259,8 @@ class ColModernVBertModelIntegrationTest(unittest.TestCase):
 
         # Further validation: fine-grained check, with a hardcoded score from the original implementation
         expected_scores = torch.tensor(
-            [[0.9350, 0.0650], [0.0015, 0.9985]],
+            [[0.95181, 0.048189], [0.00057251, 0.99943]],
             dtype=scores.dtype,
         )
 
-        assert torch.allclose(scores, expected_scores, atol=1), f"Expected scores {expected_scores}, got {scores}"
+        assert torch.allclose(scores, expected_scores, atol=1e-2), f"Expected scores {expected_scores}, got {scores}"
