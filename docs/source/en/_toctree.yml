@@ -1053,6 +1053,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
