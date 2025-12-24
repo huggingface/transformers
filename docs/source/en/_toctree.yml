@@ -74,6 +74,8 @@
       title: Overview
     - local: attention_interface
       title: Attention backends
+    - local: experts_interface
+      title: Experts backends
     - local: continuous_batching
       title: Continuous batching
     - local: kernel_doc/overview

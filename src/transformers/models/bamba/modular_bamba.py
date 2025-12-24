@@ -43,7 +43,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
 )
 
 from ... import initialization as init
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import lazy_load_kernel
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel

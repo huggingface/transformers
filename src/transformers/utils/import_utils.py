@@ -553,6 +553,11 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
