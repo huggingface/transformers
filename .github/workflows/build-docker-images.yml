@@ -38,7 +38,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
@@ -74,7 +74,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
@@ -113,7 +113,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
@@ -149,7 +149,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-doc-builder
           push: true
@@ -183,7 +183,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
@@ -250,7 +250,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-pytorch-deepspeed-amd-gpu
           build-args: |
@@ -286,7 +286,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./docker/transformers-quantization-latest-gpu
           build-args: |
