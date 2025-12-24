@@ -119,7 +119,7 @@ class GlmImagePreTrainedModel(Glm4PreTrainedModel):
 class GlmImageModel(Glm4Model):
     def __init__(self, config: GlmImageConfig):
         super().__init__(config)
-        self.vision_embed_tokens = nn.Embedding(config.vision_vocab_size, config.hidden_size, self.padding_idx)
+        self.vision_embed_tokens = nn.Embedding(config.vision_vocab_size, config.hidden_size)
         # Initialize weights and apply final processing
         self.post_init()
 

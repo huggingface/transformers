@@ -320,7 +320,7 @@ class GlmImageRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -408,7 +408,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         self.norm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmImageRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.vision_embed_tokens = nn.Embedding(config.vision_vocab_size, config.hidden_size, self.padding_idx)
+        self.vision_embed_tokens = nn.Embedding(config.vision_vocab_size, config.hidden_size)
 
         # Initialize weights and apply final processing
         self.post_init()
