@@ -40,6 +40,7 @@ Key capabilities include:
   Achieves the **lowest average error rate (4.10)** among comparable open-source models, showing significant advantages
   in Chinese benchmarks (Wenet Meeting, Aishell-1, etc..).
 
+This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb) and [Yuxuan Zhang](https://huggingface.co/ZHANGYUXUAN-zR).
 you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) for more details and our 
 [github repo](https://github.com/zai-org/GLM-ASR).
 
