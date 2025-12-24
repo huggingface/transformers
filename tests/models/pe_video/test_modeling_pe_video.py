@@ -370,6 +370,12 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     def test_can_init_all_missing_weights(self):
         pass
 
+    @unittest.skip(
+        reason="TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
 
 @require_torch
 class PeVideoIntegrationTest(unittest.TestCase):
