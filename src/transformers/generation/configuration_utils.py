@@ -346,11 +346,11 @@ class GenerationConfig(PushToHubMixin):
         self.stop_strings = kwargs.pop("stop_strings", None)
 
         # Parameters that control the generation strategy used
-        self.do_sample = kwargs.pop("do_sample", False)
+        self.do_sample = kwargs.pop("do_sample", None)
         self.num_beams = kwargs.pop("num_beams", None)
 
         # Parameters that control the cache
-        self.use_cache = kwargs.pop("use_cache", True)
+        self.use_cache = kwargs.pop("use_cache", None)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
 
@@ -368,15 +368,15 @@ class GenerationConfig(PushToHubMixin):
         self.length_penalty = kwargs.pop("length_penalty", None)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", None)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.renormalize_logits = kwargs.pop("renormalize_logits", False)
+        self.renormalize_logits = kwargs.pop("renormalize_logits", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
-        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.remove_invalid_values = kwargs.pop("remove_invalid_values", None)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
-        self.token_healing = kwargs.pop("token_healing", False)
+        self.token_healing = kwargs.pop("token_healing", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
 
         self.watermarking_config = kwargs.pop("watermarking_config", None)
@@ -384,12 +384,12 @@ class GenerationConfig(PushToHubMixin):
             self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
 
         # Parameters that define the output variables of `generate`
-        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.output_attentions = kwargs.pop("output_attentions", False)
-        self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_scores = kwargs.pop("output_scores", False)
-        self.output_logits = kwargs.pop("output_logits", False)
-        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
+        self.num_return_sequences = kwargs.pop("num_return_sequences", None)
+        self.output_attentions = kwargs.pop("output_attentions", None)
+        self.output_hidden_states = kwargs.pop("output_hidden_states", None)
+        self.output_scores = kwargs.pop("output_scores", None)
+        self.output_logits = kwargs.pop("output_logits", None)
+        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", None)
 
         # Special tokens that can be used at generation time
         self.pad_token_id = kwargs.pop("pad_token_id", None)
@@ -401,7 +401,7 @@ class GenerationConfig(PushToHubMixin):
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         # Assistant generation
-        self.is_assistant = kwargs.pop("is_assistant", False)
+        self.is_assistant = kwargs.pop("is_assistant", None)
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", None)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", None)
         self.assistant_confidence_threshold = kwargs.pop("assistant_confidence_threshold", None)
@@ -413,7 +413,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
-        self.disable_compile = kwargs.pop("disable_compile", False)
+        self.disable_compile = kwargs.pop("disable_compile", None)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
@@ -483,7 +483,7 @@ class GenerationConfig(PushToHubMixin):
         if self.constraints is not None or self.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
         elif self.num_beams is None or self.num_beams == 1:
-            if not self.do_sample:
+            if self.do_sample is not True:
                 if (
                     self.top_k is not None
                     and self.top_k > 1
@@ -498,7 +498,7 @@ class GenerationConfig(PushToHubMixin):
         else:
             if self.num_beam_groups is not None and self.num_beam_groups > 1:
                 generation_mode = GenerationMode.GROUP_BEAM_SEARCH
-            elif self.do_sample:
+            elif self.do_sample is True:
                 generation_mode = GenerationMode.BEAM_SAMPLE
             else:
                 generation_mode = GenerationMode.BEAM_SEARCH
@@ -537,6 +537,7 @@ class GenerationConfig(PushToHubMixin):
             "max_length": 20,
             "min_length": 0,
             "do_sample": False,
+            "use_cache": True,
             "early_stopping": False,
             "num_beams": 1,
             "temperature": 1.0,
@@ -616,7 +617,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. Validation of attribute combinations
         # 2.1. detect sampling-only parameterization when not in sampling mode
-        if not self.do_sample:
+        if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
                 "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
                 "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
@@ -662,21 +663,25 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2.4. check `num_return_sequences`
-        if self.num_return_sequences > 1:
+        if self.num_return_sequences is not None and self.num_return_sequences > 1:
             if self.num_beams is None or self.num_beams == 1:
                 if not self.do_sample:
                     raise ValueError(
                         "Greedy methods (do_sample != True) without beam search do not support "
                         f"`num_return_sequences` different than 1 (got {self.num_return_sequences})."
                     )
-            elif self.num_beams is not None and self.num_return_sequences > self.num_beams:
+            elif (
+                self.num_beams is not None
+                and self.num_return_sequences is not None
+                and self.num_return_sequences > self.num_beams
+            ):
                 raise ValueError(
                     f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
                     f"({self.num_beams})."
                 )
 
         # 2.5. check cache-related arguments
-        if not self.use_cache:
+        if self.use_cache is not True:
             # In this case, all cache-related arguments should be unset. However, since `use_cache=False` is often used
             # passed to `generate` directly to hot-fix cache issues, let's raise a warning instead of an error
             # (otherwise a user might need to overwrite several parameters).
@@ -691,9 +696,9 @@ class GenerationConfig(PushToHubMixin):
                     )
 
         # 2.6. other incorrect combinations
-        if not self.return_dict_in_generate:
+        if self.return_dict_in_generate is not True:
             for extra_output_flag in self.extra_output_flags:
-                if getattr(self, extra_output_flag):
+                if getattr(self, extra_output_flag) is True:
                     minor_issues[extra_output_flag] = (
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
