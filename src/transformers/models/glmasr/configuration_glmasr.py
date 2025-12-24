@@ -75,7 +75,7 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
         intermediate_size=5120,
         num_hidden_layers=32,
         num_attention_heads=20,
-        num_key_value_heads=20,
+        num_key_value_heads=None,
         hidden_act="gelu",
         max_position_embeddings=1500,
         initializer_range=0.02,
@@ -88,6 +88,8 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
