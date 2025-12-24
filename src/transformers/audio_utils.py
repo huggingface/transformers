@@ -166,7 +166,6 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
-    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     requires_backends(load_audio_as, ["librosa"])
 
     if return_format not in ["base64", "dict", "buffer"]:
