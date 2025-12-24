@@ -21,6 +21,7 @@ import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, ModernBertConfig, PreTrainedModel, is_torch_available
+from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
@@ -375,7 +376,9 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config=config)
-            self.assertTrue(model.config._attn_implementation == "flash_attention_2")
+            # If flash_attn is not available, fallback to kernels loading mechanism
+            expected_implementations = ["flash_attention_2", FLASH_ATTN_KERNEL_FALLBACK.get("flash_attention_2")]
+            self.assertIn(model.config._attn_implementation, expected_implementations)
 
     # This is overloaded because the model handles padding / unpadding on its own, thus ModernBertForMultipleChoice has
     # a different hidden states shape when using FA2.
