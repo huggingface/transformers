@@ -126,10 +126,17 @@ def apply_rotary_emb(
 class FSMNMultiHeadAttention(LlamaAttention):
     """FSMN (Feed-forward Sequential Memory Network) Multi-Head Attention."""
 
-    def __init__(self, config: S3TokenizerConfig, layer_idx: Optional[int] = None, kernel_size: int = 31):
+    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
         super().__init__(config, layer_idx)
         self.is_causal = False
         self.n_head = config.num_attention_heads
+        self.attention_bias = config.attention_bias
+        self.attention_dropout = config.attention_dropout
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_scaling = config.rope_scaling
+        self.n_audio_head = config.n_audio_head
+        self.n_audio_state = config.n_audio_state
+        self.num_key_value_heads = config.num_key_value_heads
 
         self.fsmn_block = torch.nn.Conv1d(
             config.hidden_size,
@@ -279,7 +286,7 @@ class FSQVectorQuantization(torch.nn.Module):
 class ResidualAttentionBlock(torch.nn.Module):
     """Residual attention block with FSMN."""
 
-    def __init__(self, config: S3TokenizerConfig, layer_idx: Optional[int] = None, kernel_size: int = 31):
+    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
         super().__init__()
         self.attn = FSMNMultiHeadAttention(config, layer_idx, kernel_size)
         self.attn_ln = torch.nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -528,6 +535,10 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         self.config = config
 
         self.s3_model = S3TokenizerV2Core(config)
+
+        # Register buffers for STFT to match checkpoint keys
+        self.register_buffer("window", torch.zeros(config.n_fft))
+        self.register_buffer("_mel_filters", torch.zeros(config.n_mels, config.n_fft // 2 + 1))
 
     def forward(
         self,

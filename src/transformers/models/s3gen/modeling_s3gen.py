@@ -775,6 +775,9 @@ class HiFTGenerator(nn.Module):
         stft_window = torch.from_numpy(get_window("hann", self.istft_params["n_fft"], fftbins=True).astype(np.float32))
         self.register_buffer("stft_window", stft_window)
 
+        # Apply weight normalization to match checkpoint
+        self.apply_weight_norm()
+
     def apply_weight_norm(self):
         """Apply weight normalization to all relevant layers."""
         logger.info("Applying weight norm...")
@@ -784,8 +787,6 @@ class HiFTGenerator(nn.Module):
             l.apply_weight_norm()
         weight_norm(self.conv_pre)
         weight_norm(self.conv_post)
-        for l in self.source_downs:
-            weight_norm(l)
         for l in self.source_resblocks:
             l.apply_weight_norm()
         # Apply weight norm to F0 predictor
@@ -800,8 +801,6 @@ class HiFTGenerator(nn.Module):
             l.remove_weight_norm()
         remove_weight_norm(self.conv_pre)
         remove_weight_norm(self.conv_post)
-        for l in self.source_downs:
-            remove_weight_norm(l)
         for l in self.source_resblocks:
             l.remove_weight_norm()
         # Remove weight norm from F0 predictor
