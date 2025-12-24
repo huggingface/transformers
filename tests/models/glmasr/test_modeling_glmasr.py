@@ -24,7 +24,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -263,7 +262,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = GlmAsrForConditionalGeneration.from_pretrained(
             self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
-        
+
         inputs = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
         ).to(model.device, dtype=model.dtype)
@@ -278,7 +277,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
         decoded_outputs = self.processor.batch_decode(
-            outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
+            outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
         )
 
         EXPECTED_OUTPUT = [
@@ -304,7 +303,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = GlmAsrForConditionalGeneration.from_pretrained(
             self.checkpoint_name, device_map=torch_device, dtype="auto"
         )
-        
+
         inputs = self.processor.apply_chat_template(
             conversation, tokenize=True, add_generation_prompt=True, return_dict=True
         ).to(model.device, dtype=model.dtype)
@@ -319,7 +318,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
         decoded_outputs = self.processor.batch_decode(
-            outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
+            outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
         )
 
         EXPECTED_OUTPUT = [
@@ -377,14 +376,11 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
         decoded_outputs = self.processor.batch_decode(
-            outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True
+            outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
         )
 
         EXPECTED_OUTPUT = [
             "Yesterday it was thirty five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
-            "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the"
+            "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the",
         ]
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
-
-
-

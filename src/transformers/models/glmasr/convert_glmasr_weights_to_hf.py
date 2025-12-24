@@ -1,16 +1,18 @@
 import argparse
 import re
-import torch
 
+import torch
 from safetensors.torch import load_file
+
 from transformers import (
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
     GlmAsrProcessor,
+    TokenizersBackend,
     WhisperFeatureExtractor,
-    TokenizersBackend
 )
 from transformers.utils.hub import cached_file
+
 
 chat_template = """{%- macro to_text(content) -%}
 {%- if content is string -%}
@@ -62,6 +64,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
+
 def permute_rope(tensor, config):
     # IMPORTANT: the original checkpoint applies partial rope (half dimension) in the interleaved manner
     # since we use a different rope implementation, we want to permute the order like:
@@ -76,7 +79,7 @@ def permute_rope(tensor, config):
     n_heads = config.audio_config.num_attention_heads
     head_dim = config.audio_config.head_dim
     rope_dim = dim1 // 2
-    
+
     rope_indices = torch.arange(rope_dim)
     rope_indices = rope_indices.view(n_heads, rope_dim // n_heads // 2, 2)
     rope_indices = rope_indices.transpose(1, 2)
@@ -85,14 +88,14 @@ def permute_rope(tensor, config):
     non_rope_start = head_dim // 2
     non_rope_indices = torch.arange(non_rope_start, head_dim, dtype=torch.long)
     non_rope_indices = non_rope_indices.expand(n_heads, -1)
-    
+
     head_offsets = torch.arange(n_heads, dtype=torch.long)[:, None] * (head_dim // 2)
     non_rope_indices = non_rope_indices + head_offsets.expand(n_heads, head_dim // 2)
-    
+
     combined_indices = torch.cat([rope_indices, non_rope_indices], dim=1)
     global_head_offsets = torch.arange(n_heads, dtype=torch.long)[:, None] * (head_dim // 2)
     combined_indices = combined_indices + global_head_offsets.expand(n_heads, head_dim)
-    
+
     permutation_indices = combined_indices.reshape(-1)
     tensor = tensor[permutation_indices]
 
@@ -131,7 +134,7 @@ def main():
         default=None,
         help="Repository ID to push the model and processor to Hub (if not provided, won't push)",
     )
-    
+
     args = parser.parse_args()
 
     path = cached_file(args.input_path_or_repo, "model.safetensors", revision=args.revision)
@@ -146,13 +149,13 @@ def main():
 
         # those are not used
         if new_key in [
-            "audio_encoder.audio_bos_eos_token.weight", # already present in the emb
+            "audio_encoder.audio_bos_eos_token.weight",  # already present in the emb
             "audio_tower.embed_positions.weight",
             "multi_modal_projector.bias",
             "multi_modal_projector.weight",
         ]:
             continue
-        
+
         if "audio_tower" in new_key and ("q_proj" in new_key or "k_proj" in new_key):
             v = permute_rope(v, config)
 

@@ -536,4 +536,4 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration"]
+__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrPreTrainedModel"]

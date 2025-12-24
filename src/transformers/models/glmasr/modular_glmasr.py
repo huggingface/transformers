@@ -16,29 +16,28 @@
 from collections.abc import Callable
 from typing import Optional, Union
 
+import numpy as np
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...audio_utils import AudioInput, make_list_of_audio
+from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
 from ...utils.generic import check_model_inputs
-from ..llama.modeling_llama import LlamaAttention, rotate_half, eager_attention_forward
-from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
-from ..glm.modeling_glm import GlmRotaryEmbedding 
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3MultiModalProjector,
-    AudioFlamingo3PreTrainedModel
+    AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
-from ...utils import is_torch_available
-
-from ...audio_utils import AudioInput, make_list_of_audio
-from ...feature_extraction_utils import BatchFeature
+from ..glm.modeling_glm import GlmRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
+from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,9 +54,16 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         chat_template=None,
         audio_token="<|pad|>",
         default_transcription_prompt="Please transcribe this audio into text",
-        max_audio_len=600, # TODO : ???
+        max_audio_len=600,  # TODO : ???
     ):
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template, audio_token=audio_token, default_transcription_prompt=default_transcription_prompt, max_audio_len=max_audio_len)
+        super().__init__(
+            feature_extractor,
+            tokenizer,
+            chat_template=chat_template,
+            audio_token=audio_token,
+            default_transcription_prompt=default_transcription_prompt,
+            max_audio_len=max_audio_len,
+        )
 
     def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
         merge_factor = 4
@@ -290,7 +296,9 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
         inputs_embeds = inputs_embeds.transpose(1, 2)
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids=torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :])
+        position_embeddings = self.rotary_emb(
+            hidden_states, position_ids=torch.arange(hidden_states.shape[1], device=hidden_states.device)[None, :]
+        )
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
@@ -312,7 +320,9 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     ) -> torch.FloatTensor:
         audio_outputs = self.audio_tower(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
-        audio_hidden_states = audio_hidden_states.reshape(input_features.shape[0], -1, self.config.audio_config.intermediate_size)
+        audio_hidden_states = audio_hidden_states.reshape(
+            input_features.shape[0], -1, self.config.audio_config.intermediate_size
+        )
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
 
         audio_lengths = input_features_mask.sum(-1)
@@ -326,4 +336,4 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         return audio_embeds
 
 
-__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor"]
+__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor", "GlmAsrPreTrainedModel"]

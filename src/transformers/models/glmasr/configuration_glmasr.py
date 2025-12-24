@@ -151,10 +151,7 @@ class GlmAsrConfig(PreTrainedConfig):
         "rms_norm_eps": 1e-05,
         "use_cache": True,
         "eos_token_id": [59246, 59253, 59255],
-        "rope_parameters": {
-            "rope_theta": 10000.0,
-            "rope_type": "default"
-        },
+        "rope_parameters": {"rope_theta": 10000.0, "rope_type": "default"},
     }
 
     def __init__(
