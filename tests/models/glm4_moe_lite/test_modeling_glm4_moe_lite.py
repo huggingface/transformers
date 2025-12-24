@@ -1,4 +1,5 @@
-# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
+# coding=utf-8
+# Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
+"""Testing suite for the PyTorch GLM-4-MoE-Lite model."""
 
 import unittest
 
@@ -33,12 +34,12 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, Glm4MoeLiteForCausalLM, Glm4MoeLiteModel
 
 
-class Glm4MoeModelTester(CausalLMModelTester):
+class Glm4MoeLiteModelTester(CausalLMModelTester):
     if is_torch_available():
-        base_model_class = Glm4MoeModel
+        base_model_class = Glm4MoeLiteModel
 
     def __init__(
         self,
@@ -57,8 +58,8 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 
 @require_torch
-class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Glm4MoeModelTester
+class Glm4MoeLiteModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Glm4MoeLiteModelTester
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
     _torch_compile_train_cls = None
     model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
@@ -67,7 +68,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @require_read_token
 @slow
-class Glm4MoeIntegrationTest(unittest.TestCase):
+class Glm4MoeLiteIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
@@ -90,7 +91,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
-        model = Glm4MoeForCausalLM.from_pretrained("zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16)
+        model = Glm4MoeLiteForCausalLM.from_pretrained(
+            "zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16
+        )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
