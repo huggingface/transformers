@@ -19,9 +19,10 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
 """
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub import get_session
 
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install -U git+https://github.com/nielsrogge/LAVIS.git@blip2_float32
@@ -46,9 +47,13 @@ from transformers import (
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
+session = get_session()
+
+
 def load_demo_image():
     url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     return image
 
@@ -299,7 +304,11 @@ def convert_blip2_checkpoint(
                 logits = hf_model(pixel_values, input_ids).logits
             else:
                 original_logits = original_model(
-                    {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
+                    {
+                        "image": original_pixel_values,
+                        "text_input": ["\n"],
+                        "text_output": ["\n"],
+                    }
                 ).logits
                 labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
                 logits = hf_model(pixel_values, input_ids, labels=labels).logits

@@ -20,11 +20,11 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -38,6 +38,8 @@ try:
     from detectron2.projects.deeplab import add_deeplab_config
 except ImportError:
     pass
+from huggingface_hub import get_session
+
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (
@@ -51,6 +53,7 @@ from transformers.models.oneformer.processing_oneformer import OneFormerProcesso
 from transformers.utils import logging
 
 
+session = get_session()
 StateDict = dict[str, Tensor]
 
 logging.set_verbosity_info()
@@ -93,9 +96,9 @@ class TrackedStateDict:
 # Image to verify the result
 def prepare_img():
     url = "https://praeclarumjj3.github.io/files/coco.jpeg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass

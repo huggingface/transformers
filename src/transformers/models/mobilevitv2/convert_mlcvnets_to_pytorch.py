@@ -17,12 +17,12 @@
 import argparse
 import collections
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 import yaml
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -33,6 +33,8 @@ from transformers import (
 )
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -227,8 +229,9 @@ def remove_unused_keys(state_dict):
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # url = "https://cdn.britannica.com/86/141086-050-9D7C75EE/Gulfstream-G450-business-jet-passengers.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

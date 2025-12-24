@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pathlib
 import subprocess
 from typing import Any
 
-import httpx
 import numpy as np
+from huggingface_hub import get_session
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -24,6 +25,8 @@ from .base import Pipeline, build_pipeline_init_args
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 
+
+session = get_session()
 logger = logging.get_logger(__name__)
 
 
@@ -168,10 +171,9 @@ class AudioClassificationPipeline(Pipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = httpx.get(inputs, follow_redirects=True).content
+                inputs = session.get(inputs, follow_redirects=True).content
             else:
-                with open(inputs, "rb") as f:
-                    inputs = f.read()
+                inputs = pathlib.Path(inputs).read_bytes()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)

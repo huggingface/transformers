@@ -20,16 +20,18 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 import argparse
 import os
 import re
+from io import BytesIO
 from typing import Optional
 
-import requests
 import torch
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import HfApi, get_session, hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
 from transformers import DINOv3ViTConfig, DINOv3ViTImageProcessorFast, DINOv3ViTModel
 
+
+session = get_session()
 
 HUB_MODELS = {
     "vits16_lvd1689m": "facebook/dinov3-vits16-pretrain-lvd1689m",
@@ -182,7 +184,8 @@ def get_dinov3_config(model_name: str) -> DINOv3ViTConfig:
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 
 

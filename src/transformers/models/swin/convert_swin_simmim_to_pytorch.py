@@ -17,12 +17,16 @@
 URL: https://github.com/microsoft/Swin-Transformer/blob/main/MODELHUB.md#simmim-pretrained-swin-v1-models"""
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import SwinConfig, SwinForMaskedImageModeling, ViTImageProcessor
+
+
+session = get_session()
 
 
 def get_swin_config(model_name):
@@ -133,7 +137,9 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image_processor = ViTImageProcessor(size={"height": 192, "width": 192})
-    image = Image.open(requests.get(url, stream=True).raw)
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+
     inputs = image_processor(images=image, return_tensors="pt")
 
     with torch.no_grad():

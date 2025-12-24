@@ -22,11 +22,11 @@ Also supports converting the SlimSAM checkpoints from https://github.com/czg1225
 
 import argparse
 import re
+from io import BytesIO
 
 import numpy as np
-import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -36,6 +36,9 @@ from transformers import (
     SamProcessor,
     SamVisionConfig,
 )
+
+
+session = get_session()
 
 
 def get_config(model_name):
@@ -151,7 +154,8 @@ def convert_sam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pus
     hf_model = hf_model.to(device)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    with session.stream("GET", img_url) as response:
+        raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[500, 375]]]
     input_labels = [[1]]

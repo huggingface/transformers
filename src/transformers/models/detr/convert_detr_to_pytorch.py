@@ -16,16 +16,18 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrImageProcessor, ResNetConfig
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -108,31 +110,31 @@ def create_rename_keys(config):
             for i in range(3):
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i+1}.weight",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i + 1}.weight",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.weight",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.weight",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.bias",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.bias",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_mean",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.running_mean",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_var",
+                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i + 1}.running_var",
                         f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
@@ -147,20 +149,32 @@ def create_rename_keys(config):
             )
         )
         rename_keys.append(
-            (f"transformer.encoder.layers.{i}.self_attn.out_proj.bias", f"encoder.layers.{i}.self_attn.out_proj.bias")
+            (
+                f"transformer.encoder.layers.{i}.self_attn.out_proj.bias",
+                f"encoder.layers.{i}.self_attn.out_proj.bias",
+            )
         )
         rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"encoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"encoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"encoder.layers.{i}.fc2.weight"))
         rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"encoder.layers.{i}.fc2.bias"))
         rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm1.weight", f"encoder.layers.{i}.self_attn_layer_norm.weight")
+            (
+                f"transformer.encoder.layers.{i}.norm1.weight",
+                f"encoder.layers.{i}.self_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm1.bias", f"encoder.layers.{i}.self_attn_layer_norm.bias")
+            (
+                f"transformer.encoder.layers.{i}.norm1.bias",
+                f"encoder.layers.{i}.self_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight")
+            (
+                f"transformer.encoder.layers.{i}.norm2.weight",
+                f"encoder.layers.{i}.final_layer_norm.weight",
+            )
         )
         rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
         # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
@@ -171,7 +185,10 @@ def create_rename_keys(config):
             )
         )
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.self_attn.out_proj.bias", f"decoder.layers.{i}.self_attn.out_proj.bias")
+            (
+                f"transformer.decoder.layers.{i}.self_attn.out_proj.bias",
+                f"decoder.layers.{i}.self_attn.out_proj.bias",
+            )
         )
         rename_keys.append(
             (
@@ -190,19 +207,34 @@ def create_rename_keys(config):
         rename_keys.append((f"transformer.decoder.layers.{i}.linear2.weight", f"decoder.layers.{i}.fc2.weight"))
         rename_keys.append((f"transformer.decoder.layers.{i}.linear2.bias", f"decoder.layers.{i}.fc2.bias"))
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm1.weight", f"decoder.layers.{i}.self_attn_layer_norm.weight")
+            (
+                f"transformer.decoder.layers.{i}.norm1.weight",
+                f"decoder.layers.{i}.self_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm1.bias", f"decoder.layers.{i}.self_attn_layer_norm.bias")
+            (
+                f"transformer.decoder.layers.{i}.norm1.bias",
+                f"decoder.layers.{i}.self_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.encoder_attn_layer_norm.weight")
+            (
+                f"transformer.decoder.layers.{i}.norm2.weight",
+                f"decoder.layers.{i}.encoder_attn_layer_norm.weight",
+            )
         )
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.encoder_attn_layer_norm.bias")
+            (
+                f"transformer.decoder.layers.{i}.norm2.bias",
+                f"decoder.layers.{i}.encoder_attn_layer_norm.bias",
+            )
         )
         rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight")
+            (
+                f"transformer.decoder.layers.{i}.norm3.weight",
+                f"decoder.layers.{i}.final_layer_norm.weight",
+            )
         )
         rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
 
@@ -279,9 +311,10 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()

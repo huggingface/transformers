@@ -16,9 +16,10 @@
 """Convert CLIPSeg checkpoints from the original repository. URL: https://github.com/timojl/clipseg."""
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -30,6 +31,9 @@ from transformers import (
     CLIPTokenizer,
     ViTImageProcessor,
 )
+
+
+session = get_session()
 
 
 def get_clipseg_config(model_name):
@@ -160,7 +164,8 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 

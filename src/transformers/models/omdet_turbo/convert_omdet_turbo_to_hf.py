@@ -17,9 +17,10 @@
 URL: https://github.com/om-ai-lab/OmDet"""
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -30,6 +31,8 @@ from transformers import (
     OmDetTurboProcessor,
 )
 
+
+session = get_session()
 
 IMAGE_MEAN = [123.675, 116.28, 103.53]
 IMAGE_STD = [58.395, 57.12, 57.375]
@@ -65,7 +68,7 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
 def create_rename_keys_vision(state_dict, config):
     rename_keys = []
     # fmt: off
-    ########################################## VISION BACKBONE - START
+    # VISION BACKBONE - START
     for layer_name in state_dict:
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
@@ -74,7 +77,7 @@ def create_rename_keys_vision(state_dict, config):
                 if "downsample" in layer_name:
                     # get layer number
                     layer_num = int(layer_name.split(".")[2])
-                    layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num+1}.downsample")
+                    layer_name_replace = layer_name_replace.replace(f"{layer_num}.downsample", f"{layer_num + 1}.downsample")
             else:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone")
                 layer_name_replace = layer_name_replace.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
@@ -91,15 +94,15 @@ def create_rename_keys_vision(state_dict, config):
             layer_num = int(layer_name.split("norm")[1].split(".")[0])
             if config.use_timm_backbone:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone")
-                layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num-1}")
+                layer_name_replace = layer_name_replace.replace(f"norm{layer_num}", f"layer_norms.{layer_num - 1}")
             else:
-                layer_name_replace = layer_name.replace(f"backbone.norm{layer_num}", f"vision_backbone.vision_backbone.hidden_states_norms.stage{layer_num+1}")
+                layer_name_replace = layer_name.replace(f"backbone.norm{layer_num}", f"vision_backbone.vision_backbone.hidden_states_norms.stage{layer_num + 1}")
         else:
             continue
         rename_keys.append((layer_name, layer_name_replace))
-    ########################################## VISION BACKBONE - END
+    # VISION BACKBONE - END
 
-    ########################################## ENCODER - START
+    # ENCODER - START
     for layer_name in state_dict:
         if "neck" in layer_name:
             layer_name_replace = layer_name.replace("neck", "encoder")
@@ -114,9 +117,9 @@ def create_rename_keys_vision(state_dict, config):
                 layer_name_replace = layer_name_replace.replace("norm1", "self_attn_layer_norm")
                 layer_name_replace = layer_name_replace.replace("norm2", "final_layer_norm")
             rename_keys.append((layer_name, layer_name_replace))
-    ########################################## ENCODER - END
+    # ENCODER - END
 
-    ########################################## DECODER - START
+    # DECODER - START
     for layer_name in state_dict:
         if layer_name.startswith("decoder"):
             layer_name_replace = layer_name.replace("decoder.decoder.layers", "decoder.layers")
@@ -128,7 +131,7 @@ def create_rename_keys_vision(state_dict, config):
             layer_name_replace = layer_name_replace.replace("dec_bbox_head", "decoder_bbox_head")
             layer_name_replace = layer_name_replace.replace("enc_score_head", "encoder_class_head")
             rename_keys.append((layer_name, layer_name_replace))
-    ########################################## DECODER - END
+    # DECODER - END
     # fmt: on
     return rename_keys
 
@@ -237,7 +240,8 @@ def read_in_q_k_v_decoder(state_dict, config):
 def run_test(model, processor):
     # We will verify our results on an image of cute cats
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     classes = ["cat", "remote"]
     task = "Detect {}.".format(", ".join(classes))

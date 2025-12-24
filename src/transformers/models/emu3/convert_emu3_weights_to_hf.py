@@ -15,10 +15,11 @@ import argparse
 import json
 import os
 import re
+from io import BytesIO
 from typing import Optional
 
-import requests
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -35,6 +36,7 @@ from transformers import (
 from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
 
 
+session = get_session()
 """
 Sample usage:
 
@@ -133,17 +135,15 @@ def convert_tiktoken(tokenizer, output_dir):
     reserved_token_id = vocab["<|extra_0|>"]
     vocab["<image>"] = reserved_token_id
     del vocab["<|extra_0|>"]
-    added_tokens.append(
-        {
-            "id": reserved_token_id,
-            "content": "<image>",
-            "single_word": False,
-            "lstrip": False,
-            "rstrip": False,
-            "normalized": False,
-            "special": True,
-        }
-    )
+    added_tokens.append({
+        "id": reserved_token_id,
+        "content": "<image>",
+        "single_word": False,
+        "lstrip": False,
+        "rstrip": False,
+        "normalized": False,
+        "special": True,
+    })
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -332,11 +332,10 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         ]
         prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
-        image = Image.open(
-            requests.get(
-                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-            ).raw
-        )
+        url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+
+        with session.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
         length = inputs.input_ids.shape[1]
 

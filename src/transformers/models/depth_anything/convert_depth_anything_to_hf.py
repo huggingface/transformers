@@ -16,16 +16,18 @@
 https://github.com/LiheYoung/Depth-Anything"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
 from transformers.utils import logging
 
+
+session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -118,7 +120,7 @@ def create_rename_keys(config):
             rename_keys.append((f"depth_head.resize_layers.{i}.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
-    mapping = {1:3, 2:2, 3:1, 4:0}
+    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -135,7 +137,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"depth_head.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"depth_head.scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.conv1.weight"))
@@ -176,8 +178,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 name_to_checkpoint = {
@@ -254,7 +257,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     )
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
@@ -307,15 +311,27 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             )
         elif model_name == "depth-anything-v2-metric-outdoor-small":
             expected_slice = torch.tensor(
-                [[9.5804, 8.0339, 7.7386], [7.9890, 7.2464, 7.7149], [7.7021, 7.2330, 7.3304]]
+                [
+                    [9.5804, 8.0339, 7.7386],
+                    [7.9890, 7.2464, 7.7149],
+                    [7.7021, 7.2330, 7.3304],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-base":
             expected_slice = torch.tensor(
-                [[10.2916, 9.0933, 8.8622], [9.1964, 9.3393, 9.0644], [8.9618, 9.4201, 9.2262]]
+                [
+                    [10.2916, 9.0933, 8.8622],
+                    [9.1964, 9.3393, 9.0644],
+                    [8.9618, 9.4201, 9.2262],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-large":
             expected_slice = torch.tensor(
-                [[14.0137, 13.3627, 13.1080], [13.2522, 13.3943, 13.3705], [13.0581, 13.4505, 13.3925]]
+                [
+                    [14.0137, 13.3627, 13.1080],
+                    [13.2522, 13.3943, 13.3705],
+                    [13.0581, 13.4505, 13.3925],
+                ]
             )
         else:
             raise ValueError("Not supported")

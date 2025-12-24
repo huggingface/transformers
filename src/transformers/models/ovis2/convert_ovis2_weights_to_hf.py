@@ -16,9 +16,10 @@
 import argparse
 import os
 import re
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -35,6 +36,7 @@ from transformers.models.ovis2.processing_ovis2 import Ovis2Processor
 from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 
 
+session = get_session()
 # Constants
 CONTEXT_LENGTH = 32768  # multimodal_max_length
 
@@ -382,7 +384,8 @@ def main():
         },
     ]
     url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     messages = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     print(messages)
 

@@ -16,12 +16,12 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from datasets import load_dataset
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -35,6 +35,7 @@ from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
+session = get_session()
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -49,10 +50,16 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
         rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
         rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight")
+            (
+                f"{prefix}blocks.{i}.attn.proj.weight",
+                f"beit.encoder.layer.{i}.attention.output.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"{prefix}blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias")
+            (
+                f"{prefix}blocks.{i}.attn.proj.bias",
+                f"beit.encoder.layer.{i}.attention.output.dense.bias",
+            )
         )
         rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
         rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))
@@ -162,8 +169,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with session.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

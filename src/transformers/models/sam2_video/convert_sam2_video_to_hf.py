@@ -20,11 +20,11 @@ URL: https://github.com/facebookresearch/segment-anything-2.
 
 import argparse
 import re
+from io import BytesIO
 
 import numpy as np
-import requests
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_session, hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -38,6 +38,9 @@ from transformers import (
     Sam2VideoVideoProcessor,
     Sam2VisionConfig,
 )
+
+
+session = get_session()
 
 
 def get_config(model_name):
@@ -244,7 +247,8 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     print("Unexpected keys:", unexpected_keys)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    with session.stream("GET", img_url) as response:
+        raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[[1000, 600]]]]
     input_labels = [[[1]]]
