@@ -142,51 +142,35 @@ class HumanVAttention(nn.Module):
         out = torch.matmul(probs, vf)
         return out.to(dtype=q.dtype)
 
-    def _local_global_block_sparse(
+    def _local_global_block_sparse_prefill_chunk(
         self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        key_padding_mask_2d: Optional[torch.Tensor],
+        q_blk: torch.Tensor,
+        k_blk: torch.Tensor,
+        v_blk: torch.Tensor,
+        km_blk: torch.Tensor,
         block_size: int,
         local_num_blocks: int,
         global_num_blocks: int,
         global_stride: int,
         dropout_p: float,
+        chunk_start: int,
+        chunk_end: int,
     ) -> torch.Tensor:
-        b, h, t, d = q.shape
-        device = q.device
+        b, h, n_blocks, _, d = q_blk.shape
+        device = q_blk.device
 
-        if key_padding_mask_2d is None:
-            key_padding_mask_2d = torch.ones((b, t), device=device, dtype=torch.bool)
-        else:
-            if key_padding_mask_2d.dtype != torch.bool:
-                key_padding_mask_2d = key_padding_mask_2d.to(dtype=torch.bool)
-            key_padding_mask_2d = key_padding_mask_2d.to(device=device)
-
-        n_blocks = (t + block_size - 1) // block_size
-        t_pad = n_blocks * block_size
-        pad = t_pad - t
-
-        if pad > 0:
-            q = nn.functional.pad(q, (0, 0, 0, pad))
-            k = nn.functional.pad(k, (0, 0, 0, pad))
-            v = nn.functional.pad(v, (0, 0, 0, pad))
-            key_padding_mask_2d = nn.functional.pad(key_padding_mask_2d, (0, pad), value=False)
-
-        q_blk = q.view(b, h, n_blocks, block_size, d)
-        k_blk = k.view(b, h, n_blocks, block_size, d)
-        v_blk = v.view(b, h, n_blocks, block_size, d)
-        km_blk = key_padding_mask_2d.view(b, n_blocks, block_size)
-
-        max_local_by_window = max(1, int(getattr(self.config, "sparse_attention_window", block_size) // block_size))
+        max_local_by_window = max(
+            1, int(getattr(self.config, "sparse_attention_window", block_size) // block_size)
+        )
         local_num_blocks = int(min(local_num_blocks, max_local_by_window))
 
-        block_ids = torch.arange(n_blocks, device=device)
+        block_ids = torch.arange(chunk_start, chunk_end, device=device)
         offsets = torch.arange(local_num_blocks - 1, -1, -1, device=device)
         idx_local = block_ids[:, None] - offsets[None, :]
         valid_local = idx_local >= 0
         idx_local = idx_local.clamp_min(0)
+
+        q_sub = q_blk[:, :, chunk_start:chunk_end, :, :]
 
         k_local = torch.stack([k_blk[:, :, idx_local[:, i], :, :] for i in range(local_num_blocks)], dim=3)
         v_local = torch.stack([v_blk[:, :, idx_local[:, i], :, :] for i in range(local_num_blocks)], dim=3)
@@ -225,14 +209,14 @@ class HumanVAttention(nn.Module):
             global_num_blocks = 0
 
         if self.attn_compute_fp32:
-            qf = _as_fp32(q_blk)
+            qf = _as_fp32(q_sub)
             k_local_f = _as_fp32(k_local)
             v_local_f = _as_fp32(v_local)
             if k_gsum is not None:
                 k_gsum_f = _as_fp32(k_gsum)
                 v_gsum_f = _as_fp32(v_gsum)
         else:
-            qf = q_blk
+            qf = q_sub
             k_local_f = k_local
             v_local_f = v_local
             if k_gsum is not None:
@@ -246,7 +230,7 @@ class HumanVAttention(nn.Module):
         intra = torch.triu(torch.full((block_size, block_size), -1e9, device=device, dtype=s_local.dtype), diagonal=1)
         s_local[:, :, :, :, -1, :] = s_local[:, :, :, :, -1, :] + intra[None, None, None, :, :]
 
-        s_local = s_local.reshape(b, h, n_blocks, block_size, local_num_blocks * block_size)
+        s_local = s_local.reshape(b, h, chunk_end - chunk_start, block_size, local_num_blocks * block_size)
 
         if global_num_blocks > 0:
             s_global = torch.einsum("bhnqd,bhngd->bhnqg", qf, k_gsum_f) * self.scaling
@@ -260,7 +244,7 @@ class HumanVAttention(nn.Module):
             probs = nn.functional.dropout(probs, p=dropout_p, training=self.training)
 
         p_local = probs[..., : local_num_blocks * block_size].reshape(
-            b, h, n_blocks, block_size, local_num_blocks, block_size
+            b, h, chunk_end - chunk_start, block_size, local_num_blocks, block_size
         )
         out_local = torch.einsum("bhnqlk,bhnlkd->bhnqd", p_local, v_local_f)
 
@@ -271,8 +255,211 @@ class HumanVAttention(nn.Module):
         else:
             out = out_local
 
-        out = out.to(dtype=q.dtype).reshape(b, h, t_pad, d)
+        return out.to(dtype=q_blk.dtype)
+
+    def _local_global_block_sparse(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        key_padding_mask_2d: Optional[torch.Tensor],
+        block_size: int,
+        local_num_blocks: int,
+        global_num_blocks: int,
+        global_stride: int,
+        dropout_p: float,
+    ) -> torch.Tensor:
+        b, h, t, d = q.shape
+        device = q.device
+
+        if key_padding_mask_2d is None:
+            key_padding_mask_2d = torch.ones((b, t), device=device, dtype=torch.bool)
+        else:
+            if key_padding_mask_2d.dtype != torch.bool:
+                key_padding_mask_2d = key_padding_mask_2d > 0
+            key_padding_mask_2d = key_padding_mask_2d.to(device=device)
+
+        n_blocks = (t + block_size - 1) // block_size
+        t_pad = n_blocks * block_size
+        pad = t_pad - t
+
+        if pad > 0:
+            q = nn.functional.pad(q, (0, 0, 0, pad))
+            k = nn.functional.pad(k, (0, 0, 0, pad))
+            v = nn.functional.pad(v, (0, 0, 0, pad))
+            key_padding_mask_2d = nn.functional.pad(key_padding_mask_2d, (0, pad), value=False)
+
+        q_blk = q.view(b, h, n_blocks, block_size, d)
+        k_blk = k.view(b, h, n_blocks, block_size, d)
+        v_blk = v.view(b, h, n_blocks, block_size, d)
+        km_blk = key_padding_mask_2d.view(b, n_blocks, block_size)
+
+        chunk_blocks = int(getattr(self.config, "sparse_prefill_chunk_blocks", 0))
+        if chunk_blocks <= 0:
+            out_blk = self._local_global_block_sparse_prefill_chunk(
+                q_blk=q_blk,
+                k_blk=k_blk,
+                v_blk=v_blk,
+                km_blk=km_blk,
+                block_size=block_size,
+                local_num_blocks=local_num_blocks,
+                global_num_blocks=global_num_blocks,
+                global_stride=global_stride,
+                dropout_p=dropout_p,
+                chunk_start=0,
+                chunk_end=n_blocks,
+            )
+        else:
+            out_list = []
+            for s in range(0, n_blocks, chunk_blocks):
+                e = min(n_blocks, s + chunk_blocks)
+                out_list.append(
+                    self._local_global_block_sparse_prefill_chunk(
+                        q_blk=q_blk,
+                        k_blk=k_blk,
+                        v_blk=v_blk,
+                        km_blk=km_blk,
+                        block_size=block_size,
+                        local_num_blocks=local_num_blocks,
+                        global_num_blocks=global_num_blocks,
+                        global_stride=global_stride,
+                        dropout_p=dropout_p,
+                        chunk_start=s,
+                        chunk_end=e,
+                    )
+                )
+            out_blk = torch.cat(out_list, dim=2)
+
+        out = out_blk.reshape(b, h, t_pad, d)
         return out[:, :, :t, :]
+
+    def _local_global_block_sparse_decode(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        attention_mask_2d: Optional[torch.Tensor],
+        block_size: int,
+        local_window: int,
+        global_num_blocks: int,
+        global_stride: int,
+        dropout_p: float,
+    ) -> torch.Tensor:
+        b, h, _, d = q.shape
+        t = k.shape[-2]
+        device = q.device
+
+        if attention_mask_2d is not None:
+            if attention_mask_2d.dtype != torch.bool:
+                attention_mask_2d = attention_mask_2d > 0
+            attention_mask_2d = attention_mask_2d.to(device=device)
+
+        w = min(int(local_window), t)
+        start = t - w
+
+        k_local = k[:, :, start:t, :]
+        v_local = v[:, :, start:t, :]
+
+        km_local = attention_mask_2d[:, start:t] if attention_mask_2d is not None else None
+
+        if self.attn_compute_fp32:
+            qf = q.to(torch.float32)
+            klf = k_local.to(torch.float32)
+            vlf = v_local.to(torch.float32)
+        else:
+            qf = q
+            klf = k_local
+            vlf = v_local
+
+        s_local = torch.matmul(qf, klf.transpose(-2, -1)) * self.scaling
+        if km_local is not None:
+            s_local = s_local + (~km_local)[:, None, None, :].to(dtype=s_local.dtype) * (-1e9)
+
+        if global_num_blocks > 0 and global_stride > 0 and t > block_size:
+            cur_block = (t - 1) // block_size
+            cand = []
+            for i in range(int(global_num_blocks)):
+                idx = int(cur_block - 1 - i * int(global_stride))
+                if idx >= 0:
+                    cand.append(idx)
+
+            if len(cand) > 0:
+                idxs = torch.tensor(cand, device=device, dtype=torch.long)
+                g = idxs.numel()
+
+                starts = idxs * block_size
+                ends = (idxs + 1) * block_size
+                max_end = int(min(int(ends.max().item()), t))
+
+                k_slice = k[:, :, :max_end, :]
+                v_slice = v[:, :, :max_end, :]
+
+                gathered_k = []
+                gathered_v = []
+                gathered_m = []
+
+                for j in range(g):
+                    s = int(starts[j].item())
+                    e = int(min(ends[j].item(), t))
+                    kk = k_slice[:, :, s:e, :]
+                    vv = v_slice[:, :, s:e, :]
+
+                    if e - s < block_size:
+                        pad = block_size - (e - s)
+                        kk = nn.functional.pad(kk, (0, 0, 0, pad))
+                        vv = nn.functional.pad(vv, (0, 0, 0, pad))
+                        if attention_mask_2d is not None:
+                            mm = attention_mask_2d[:, s:e]
+                            mm = nn.functional.pad(mm, (0, pad), value=False)
+                        else:
+                            mm = torch.ones((b, block_size), device=device, dtype=torch.bool)
+                            mm[:, -pad:] = False
+                    else:
+                        mm = attention_mask_2d[:, s:e] if attention_mask_2d is not None else torch.ones(
+                            (b, block_size), device=device, dtype=torch.bool
+                        )
+
+                    gathered_k.append(kk)
+                    gathered_v.append(vv)
+                    gathered_m.append(mm)
+
+                k_g = torch.stack(gathered_k, dim=2)
+                v_g = torch.stack(gathered_v, dim=2)
+                m_g = torch.stack(gathered_m, dim=1)
+
+                denom = m_g.to(torch.float32).sum(dim=-1).clamp_min(1.0)
+                k_gsum = (k_g * m_g[:, None, :, :, None].to(k_g.dtype)).sum(dim=-2) / denom[:, None, :, None]
+                v_gsum = (v_g * m_g[:, None, :, :, None].to(v_g.dtype)).sum(dim=-2) / denom[:, None, :, None]
+                m_gsum = m_g.any(dim=-1)
+
+                if self.attn_compute_fp32:
+                    k_gsum_f = k_gsum.to(torch.float32)
+                    v_gsum_f = v_gsum.to(torch.float32)
+                else:
+                    k_gsum_f = k_gsum
+                    v_gsum_f = v_gsum
+
+                s_global = torch.matmul(qf, k_gsum_f.transpose(-2, -1)) * self.scaling
+                s_global = s_global + (~m_gsum)[:, None, None, :].to(dtype=s_global.dtype) * (-1e9)
+
+                scores = torch.cat([s_local, s_global], dim=-1)
+                probs = torch.softmax(scores, dim=-1)
+                if dropout_p > 0:
+                    probs = nn.functional.dropout(probs, p=dropout_p, training=self.training)
+
+                p_local = probs[..., :w]
+                p_global = probs[..., w:]
+
+                out_local = torch.matmul(p_local, vlf)
+                out_global = torch.matmul(p_global, v_gsum_f)
+                out = out_local + out_global
+                return out.to(dtype=q.dtype)
+
+        probs = torch.softmax(s_local, dim=-1)
+        if dropout_p > 0:
+            probs = nn.functional.dropout(probs, p=dropout_p, training=self.training)
+        out = torch.matmul(probs, vlf)
+        return out.to(dtype=q.dtype)
 
     def forward(
         self,
@@ -301,18 +488,31 @@ class HumanVAttention(nn.Module):
         use_sparse = bool(getattr(self.config, "use_sparse_attention", False)) and self.layer_type == "sliding_attention"
         sparse_impl = str(getattr(self.config, "sparse_attention_impl", "local_global_block"))
 
-        if use_sparse and sparse_impl == "local_global_block" and (past_key_values is None or q_len > 1):
-            out = self._local_global_block_sparse(
-                q=q,
-                k=k,
-                v=v,
-                key_padding_mask_2d=attention_mask_2d,
-                block_size=int(getattr(self.config, "sparse_block_size", 64)),
-                local_num_blocks=int(getattr(self.config, "sparse_local_num_blocks", 4)),
-                global_num_blocks=int(getattr(self.config, "sparse_global_num_blocks", 2)),
-                global_stride=int(getattr(self.config, "sparse_global_block_stride", 4)),
-                dropout_p=self.dropout_p,
-            )
+        if use_sparse and sparse_impl == "local_global_block":
+            if past_key_values is not None and q_len == 1:
+                out = self._local_global_block_sparse_decode(
+                    q=q,
+                    k=k,
+                    v=v,
+                    attention_mask_2d=attention_mask_2d,
+                    block_size=int(getattr(self.config, "sparse_block_size", 64)),
+                    local_window=int(getattr(self.config, "sparse_attention_window", 256)),
+                    global_num_blocks=int(getattr(self.config, "sparse_global_num_blocks", 2)),
+                    global_stride=int(getattr(self.config, "sparse_global_block_stride", 4)),
+                    dropout_p=self.dropout_p,
+                )
+            else:
+                out = self._local_global_block_sparse(
+                    q=q,
+                    k=k,
+                    v=v,
+                    key_padding_mask_2d=attention_mask_2d,
+                    block_size=int(getattr(self.config, "sparse_block_size", 64)),
+                    local_num_blocks=int(getattr(self.config, "sparse_local_num_blocks", 4)),
+                    global_num_blocks=int(getattr(self.config, "sparse_global_num_blocks", 2)),
+                    global_stride=int(getattr(self.config, "sparse_global_block_stride", 4)),
+                    dropout_p=self.dropout_p,
+                )
         else:
             window = None
             if self.layer_type == "sliding_attention":
