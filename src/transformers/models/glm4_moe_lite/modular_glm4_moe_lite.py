@@ -27,9 +27,10 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeTopkRouter,
 )
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
+from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 
 
-class Glm4MoeLiteConfig(Glm4MoeConfig):
+class Glm4MoeLiteConfig(DeepseekV3Config):
     pass
 
 
