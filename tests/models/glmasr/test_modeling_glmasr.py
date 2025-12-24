@@ -48,7 +48,7 @@ class GlmAsrModelTester:
         ignore_index=-100,
         audio_token_id=0,
         seq_length=35,
-        feat_seq_length=60,
+        feat_seq_length=64,
         text_config={
             "model_type": "llama",
             "intermediate_size": 64,
@@ -66,12 +66,12 @@ class GlmAsrModelTester:
         is_training=True,
         audio_config={
             "model_type": "glmasr_encoder",
-            "hidden_size": 16,
-            "num_attention_heads": 4,
-            "intermediate_size": 64,
-            "num_hidden_layers": 4,
-            "num_mel_bins": 80,
-            "max_source_positions": 30,
+            "hidden_size": 128,
+            "num_attention_heads": 2,
+            "intermediate_size": 512,
+            "num_hidden_layers": 2,
+            "num_mel_bins": 128,
+            "max_source_positions": 32,
             "initializer_range": 0.02,
         },
     ):
@@ -109,12 +109,13 @@ class GlmAsrModelTester:
             ]
         )
         config = self.get_config()
-        return config, input_features_values
+        input_features_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
+        return config, input_features_values, input_features_mask
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_features_values = config_and_inputs
-        num_audio_tokens_per_batch_idx = 30
+        config, input_features_values, input_features_mask = config_and_inputs
+        num_audio_tokens_per_batch_idx = 8
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
@@ -125,6 +126,7 @@ class GlmAsrModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "input_features": input_features_values,
+            "input_features_mask": input_features_mask,
         }
         return config, inputs_dict
 
