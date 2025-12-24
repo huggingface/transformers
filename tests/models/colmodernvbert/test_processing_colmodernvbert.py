@@ -41,7 +41,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor = ColModernVBertProcessor.from_pretrained("./debug/mvb_models/colmvb__hf")
+        processor = ColModernVBertProcessor.from_pretrained("ModernVBERT/colmodernvbert")
         processor.save_pretrained(cls.tmpdirname)
 
     @classmethod
