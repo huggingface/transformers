@@ -141,11 +141,7 @@ class GlmAsrForConditionalGenerationModelTest(
     """
 
     all_model_classes = (GlmAsrForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"audio-text-to-text": GlmAsrForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"audio-text-to-text": GlmAsrForConditionalGeneration} if is_torch_available() else {}
 
     _is_composite = True
 
