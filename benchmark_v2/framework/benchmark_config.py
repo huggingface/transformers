@@ -66,6 +66,7 @@ class BenchmarkConfig:
         kernelize: bool = False,
         name: str | None = None,
         skip_validity_check: bool = False,
+        device: str | None = None,
     ) -> None:
         # Benchmark parameters
         self.warmup_iterations = warmup_iterations
@@ -87,7 +88,7 @@ class BenchmarkConfig:
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
-        self.device = "cuda"
+        self.device = device if device is not None else "cuda"
 
         self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()
@@ -172,6 +173,7 @@ class BenchmarkConfig:
             "attn_implementation": self.attn_implementation,
             "compile_kwargs": self.compile_config.to_dict() if self.compile_config is not None else None,
             "kernelize": self.kernelize,
+            "device": self.device,
         }
 
     @classmethod
@@ -189,6 +191,7 @@ class BenchmarkConfig:
             kernelize=data.get("kernelize", False),
             name=data.get("name"),
             skip_validity_check=skip_validity_check,
+            device=data.get("device"),
         )
 
 
@@ -200,6 +203,7 @@ def adapt_configs(
     sequence_length: int | list[int] = 128,
     num_tokens_to_generate: int | list[int] = 128,
     gpu_monitoring: bool | list[bool] = True,
+    device: str | None = None,
 ) -> list[BenchmarkConfig]:
     parameters = (
         x if isinstance(x, list) else [x]
@@ -224,6 +228,8 @@ def adapt_configs(
             config["sequence_length"] = seqlen
             config["num_tokens_to_generate"] = ntok
             config["gpu_monitoring"] = monitor
+            if device is not None:
+                config["device"] = device
             # Remove the old name so it gets re-inferred with the updated values
             config.pop("name", None)
             adapted_configs.append(BenchmarkConfig.from_dict(config))
