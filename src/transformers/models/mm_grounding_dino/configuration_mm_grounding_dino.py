@@ -38,7 +38,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -280,7 +280,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["MMGroundingDinoConfig"]

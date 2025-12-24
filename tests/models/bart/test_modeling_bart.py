@@ -962,7 +962,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " state."
             "</s>"
         )
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             max_length=1024,
             padding="max_length",
@@ -987,7 +987,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
-        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
+        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": None}
         config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
@@ -1188,7 +1188,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " up to four years in prison.  Her next court appearance is scheduled for May 18."
         )
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             padding="max_length",

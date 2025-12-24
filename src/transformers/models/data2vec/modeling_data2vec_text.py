@@ -26,6 +26,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -493,6 +494,12 @@ class Data2VecTextPreTrainedModel(PreTrainedModel):
         "attentions": Data2VecTextSelfAttention,
         "cross_attentions": Data2VecTextCrossAttention,
     }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Data2VecTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class Data2VecTextEncoder(nn.Module):

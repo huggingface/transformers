@@ -19,12 +19,9 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_auto_round_available, is_torch_available, logging
+from ..utils import is_auto_round_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -36,7 +33,6 @@ class AutoRoundQuantizer(HfQuantizer):
 
     # AutoRound requires data calibration - we support only inference
     requires_calibration = True
-    required_packages = ["auto_round"]
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -47,12 +43,6 @@ class AutoRoundQuantizer(HfQuantizer):
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
             )
-
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.bfloat16
-            logger.info("Loading the model in `torch.bfloat16`. To overwrite it, set `dtype` manually.")
-        return dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if model.__class__.main_input_name != "input_ids":
@@ -76,6 +66,6 @@ class AutoRoundQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         ## for gptq/awq models, the quantization config will be changed
         return True

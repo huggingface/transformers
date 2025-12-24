@@ -18,11 +18,11 @@ import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-from huggingface_hub import model_info
+from huggingface_hub import is_offline_mode, model_info
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..feature_extraction_utils import FeatureExtractionMixin, PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
@@ -38,7 +38,6 @@ from ..utils import (
     extract_commit_hash,
     find_adapter_config_file,
     is_kenlm_available,
-    is_offline_mode,
     is_peft_available,
     is_pyctcdecode_available,
     is_torch_available,
@@ -278,7 +277,7 @@ SUPPORTED_TASKS = {
     "image-to-text": {
         "impl": ImageToTextPipeline,
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
-        "default": {"model": ("ydshieh/vit-gpt2-coco-en", "5bebf1e")},
+        "default": {"model": ("ydshieh/vit-gpt2-coco-en", "e460201")},
         "type": "multimodal",
     },
     "image-text-to-text": {
@@ -701,12 +700,14 @@ def pipeline(
 
     code_revision = kwargs.pop("code_revision", None)
     commit_hash = kwargs.pop("_commit_hash", None)
+    local_files_only = kwargs.get("local_files_only", False)
 
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": commit_hash,
+        "local_files_only": local_files_only,
     }
 
     if task is None and model is None:
@@ -987,12 +988,13 @@ def pipeline(
                 feature_extractor = AutoFeatureExtractor.from_pretrained(
                     feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
                 )
+                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                    pretrained_model_name_or_path or model_name,
+                    **hub_kwargs,
+                )
+                processor_class = config_dict.get("processor_class", None)
 
-                if (
-                    feature_extractor._processor_class
-                    and feature_extractor._processor_class.endswith("WithLM")
-                    and isinstance(model_name, str)
-                ):
+                if processor_class is not None and processor_class.endswith("WithLM") and isinstance(model_name, str):
                     try:
                         import kenlm  # to trigger `ImportError` if not installed
                         from pyctcdecode import BeamSearchDecoderCTC

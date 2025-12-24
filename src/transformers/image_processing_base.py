@@ -18,7 +18,7 @@ import os
 from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -28,7 +28,6 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     copy_func,
-    is_offline_mode,
     logging,
     safe_load_json_file,
 )
@@ -72,8 +71,8 @@ class ImageProcessingMixin(PushToHubMixin):
         # This key was saved while we still used `XXXFeatureExtractor` for image processing. Now we use
         # `XXXImageProcessor`, this attribute and its value are misleading.
         kwargs.pop("feature_extractor_type", None)
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", should not be saved with image processing config anymore
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -81,10 +80,6 @@ class ImageProcessingMixin(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
 
     @classmethod
     def from_pretrained(
@@ -428,12 +423,6 @@ class ImageProcessingMixin(PushToHubMixin):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

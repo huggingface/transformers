@@ -99,6 +99,8 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmAsrProcessor",
+    "AudioFlamingo3Processor",
     "ApertusConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",
@@ -289,6 +291,9 @@ OBJECTS_TO_IGNORE = {
     "JukeboxTokenizer",
     "LEDConfig",
     "LEDTokenizerFast",
+    "LasrEncoderConfig",
+    "LasrFeatureExtractor",
+    "LasrTokenizer",
     "LayoutLMForQuestionAnswering",
     "LayoutLMTokenizerFast",
     "LayoutLMv2Config",
@@ -367,6 +372,7 @@ OBJECTS_TO_IGNORE = {
     "OpenLlamaConfig",
     "PLBartConfig",
     "ParakeetCTCConfig",
+    "LasrCTCConfig",
     "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",

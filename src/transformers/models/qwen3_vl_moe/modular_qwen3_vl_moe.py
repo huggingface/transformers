@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import TransformersKwargs, can_return_tuple, logging
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoePreTrainedModel,
@@ -41,6 +41,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLTextAttention,
     Qwen3VLTextModel,
     Qwen3VLVisionModel,
+    Qwen3VLVisionRotaryEmbedding,
 )
 
 
@@ -368,6 +369,13 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
         if isinstance(module, Qwen3VLMoeTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Qwen3VLMoeVisionRotaryEmbedding):
+            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
+
+
+class Qwen3VLMoeVisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
+    pass
 
 
 class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
@@ -387,6 +395,7 @@ class Qwen3VLMoeModel(Qwen3VLModel):
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -496,6 +505,8 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
 

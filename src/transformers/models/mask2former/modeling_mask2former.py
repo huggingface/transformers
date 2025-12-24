@@ -2149,6 +2149,10 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             init.ones_(module.weight)
@@ -2159,6 +2163,11 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
+
+        elif isinstance(module, Mask2FormerLoss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
 
         if hasattr(module, "reference_points"):
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
@@ -2184,6 +2193,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Mask2FormerModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2305,6 +2315,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Mask2FormerForUniversalSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):

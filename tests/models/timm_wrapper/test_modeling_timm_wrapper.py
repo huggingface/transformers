@@ -149,10 +149,6 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="TimmWrapper initialization is managed on the timm side")
-    def test_can_init_all_missing_weights(self):
-        pass
-
     def test_gradient_checkpointing(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = TimmWrapperModel._from_config(config)

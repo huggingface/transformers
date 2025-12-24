@@ -417,6 +417,10 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         # Ensure even dimension for proper axial splitting
         if dim % 4 != 0:
             raise ValueError("Dimension must be divisible by 4 for axial RoPE")
+        self.end_x, self.end_y = end_x, end_y
+        self.dim = dim
+        self.rope_theta = config.rope_theta
+        self.scale = scale
         freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
 
         flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
@@ -557,7 +561,7 @@ class Sam3ViTPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).flatten(2).transpose(1, 2)
         return embeddings
 
 
@@ -776,6 +780,19 @@ class Sam3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam3ViTEmbeddings):
             init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Sam3ViTRotaryEmbedding):
+            end_x, end_y = module.end_x, module.end_y
+            dim = module.dim
+            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+            x_positions = (flattened_indices % end_x) * module.scale
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 @auto_docstring
@@ -953,6 +970,7 @@ class Sam3FPNLayer(nn.Module):
         self.proj2 = nn.Conv2d(in_channels=fpn_dim, out_channels=fpn_dim, kernel_size=3, padding=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.to(self.proj1.weight.dtype)
         for layer in self.scale_layers:
             hidden_states = layer(hidden_states)
 
@@ -1337,6 +1355,8 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
 
         self.layers = nn.ModuleList([Sam3DetrEncoderLayer(config) for _ in range(config.num_layers)])
 
+        self.post_init()
+
     def _prepare_multilevel_features(
         self,
         vision_features: list[torch.Tensor],
@@ -1615,6 +1635,8 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         self.box_rpb_embed_y = Sam3DecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
 
         self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.hidden_size // 2, normalize=False)
+
+        self.post_init()
 
     @compile_compatible_method_lru_cache(maxsize=1)
     def _get_coords(
@@ -1985,6 +2007,8 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         self.prompt_cross_attn = Sam3Attention(config)
         self.prompt_cross_attn_norm = nn.LayerNorm(hidden_size)
         self.prompt_cross_attn_dropout = nn.Dropout(config.dropout)
+
+        self.post_init()
 
     @check_model_inputs
     def forward(

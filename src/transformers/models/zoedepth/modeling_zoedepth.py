@@ -21,6 +21,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
@@ -1211,6 +1212,12 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LogBinomialSoftmax):
+            init.copy_(module.k_idx, torch.arange(0, module.k).view(1, -1, 1, 1))
+            init.copy_(module.k_minus_1, torch.tensor([module.k - 1]).view(1, -1, 1, 1))
+
 
 @auto_docstring(
     custom_intro="""
@@ -1251,6 +1258,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

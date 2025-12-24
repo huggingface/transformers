@@ -1851,6 +1851,14 @@ class ReformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 init.normal_(weight, std=self.config.axial_norm_std)
+        elif isinstance(module, LSHSelfAttention):
+            init.constant_(module.self_mask_value_float16, -1e3)
+            init.constant_(module.self_mask_value_float32, -1e5)
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
+        elif isinstance(module, LocalSelfAttention):
+            init.constant_(module.mask_value_float16, -1e4)
+            init.constant_(module.mask_value_float32, -1e9)
 
 
 @dataclass
@@ -1946,6 +1954,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ReformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2238,7 +2247,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):
         # Overitten -- different expected inputs/outputs
 
@@ -2297,6 +2306,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2428,6 +2438,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2577,6 +2588,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

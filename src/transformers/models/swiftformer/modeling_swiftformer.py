@@ -400,6 +400,10 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             init.constant_(module.bias, 0)
             init.constant_(module.weight, 1.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
             init.ones_(module.layer_scale)
         elif isinstance(module, SwiftFormerEncoderBlock):
@@ -428,6 +432,7 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -478,6 +483,7 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

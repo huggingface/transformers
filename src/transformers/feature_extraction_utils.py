@@ -22,7 +22,7 @@ from collections import UserDict
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
 
 import numpy as np
-from huggingface_hub import create_repo
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -30,9 +30,9 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
+    _is_tensor_or_array_like,
     copy_func,
     is_numpy_array,
-    is_offline_mode,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -68,11 +68,18 @@ class BatchFeature(UserDict):
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+            List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
     """
 
-    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(
+        self,
+        data: Optional[dict[str, Any]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
+        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -111,6 +118,14 @@ class BatchFeature(UserDict):
             import torch
 
             def as_tensor(value):
+                if torch.is_tensor(value):
+                    return value
+
+                # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
+                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    return torch.stack(value)
+
+                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
                 if isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
@@ -139,7 +154,11 @@ class BatchFeature(UserDict):
             is_tensor = is_numpy_array
         return is_tensor, as_tensor
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(
+        self,
+        tensor_type: Optional[Union[str, TensorType]] = None,
+        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+    ):
         """
         Convert the inner content to tensors.
 
@@ -147,6 +166,13 @@ class BatchFeature(UserDict):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
+            skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+                List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+
+        Note:
+            Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
+            automatically skipped and won't be converted to tensors. Ragged arrays (lists of arrays with
+            different lengths) are still attempted, though they may raise errors during conversion.
         """
         if tensor_type is None:
             return self
@@ -155,18 +181,30 @@ class BatchFeature(UserDict):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
+            # Skip keys explicitly marked for no conversion
+            if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
+            # Skip values that are not array-like
+            if not _is_tensor_or_array_like(value):
+                continue
+
             try:
                 if not is_tensor(value):
                     tensor = as_tensor(value)
-
                     self[key] = tensor
-            except:  # noqa E722
+            except Exception as e:
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        f"Unable to create tensor for '{key}' with overflowing values of different lengths. "
+                        f"Original error: {str(e)}"
+                    ) from e
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
+                    f"Unable to convert output '{key}' (type: {type(value).__name__}) to tensor: {str(e)}\n"
+                    f"You can try:\n"
+                    f"  1. Use padding=True to ensure all outputs have the same shape\n"
+                    f"  2. Set return_tensors=None to return Python objects instead of tensors"
+                ) from e
 
         return self
 
@@ -205,12 +243,15 @@ class BatchFeature(UserDict):
 
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         def maybe_to(v):
-            # check if v is a floating point
+            # check if v is a floating point tensor
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
                 return v.to(device=device, non_blocking=non_blocking)
+            # recursively handle lists and tuples
+            elif isinstance(v, (list, tuple)):
+                return type(v)(maybe_to(item) for item in v)
             else:
                 return v
 
@@ -228,8 +269,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", it should not be saved in feature extractor config
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -237,10 +278,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
 
     @classmethod
     def from_pretrained(
@@ -584,12 +621,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

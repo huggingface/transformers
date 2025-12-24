@@ -677,6 +677,9 @@ class FlavaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
+        elif isinstance(module, FlavaTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
                 init.zeros_(module.cls_token)
@@ -725,6 +728,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -804,6 +808,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
@@ -896,6 +901,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, image_num_patches + text_seq_len, hidden_size)`):
@@ -1103,7 +1109,8 @@ class FlavaModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, FlavaOutput]:
+        **kwargs,
+    ) -> Union[tuple, FlavaModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1380,7 +1387,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         z_logits = self.blocks(pixel_values)
         return nn.Softmax(dim=1)(z_logits)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> torch.Tensor:
         f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1575,6 +1582,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):

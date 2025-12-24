@@ -993,6 +993,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Example:
@@ -1113,6 +1114,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetDecoderModelOutput]:
         r"""
         Example:
@@ -1416,6 +1418,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1845,6 +1848,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
@@ -1853,7 +1857,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+        if past_key_values is not None and not is_first_iteration:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         model_inputs = {
