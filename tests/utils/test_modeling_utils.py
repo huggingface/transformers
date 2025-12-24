@@ -133,6 +133,7 @@ if is_torch_available():
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
+        get_total_byte_count,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -397,6 +398,23 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    @require_torch
+    def test_get_total_byte_count_does_not_require_process_group(self):
+        model = BaseModel(PreTrainedConfig())
+        model._tp_plan = {"linear.weight": "rowwise"}
+        accelerator_device_map = {"linear.weight": torch.device("cpu")}
+
+        with (
+            patch("transformers.modeling_utils.torch.distributed.is_available", return_value=True),
+            patch("transformers.modeling_utils.torch.distributed.is_initialized", return_value=False),
+            patch("transformers.modeling_utils.torch.distributed.get_world_size") as mock_world_size,
+        ):
+            total_byte_count = get_total_byte_count(model, accelerator_device_map, None)
+
+        mock_world_size.assert_not_called()
+        self.assertIn(torch.device("cpu"), total_byte_count)
+        self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
