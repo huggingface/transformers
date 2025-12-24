@@ -20,8 +20,9 @@ from pathlib import Path
 
 import httpx
 
-from transformers import AutoImageProcessor, ViTImageProcessor, ViTImageProcessorFast
+from transformers import AutoImageProcessor, TensorType, ViTImageProcessor, ViTImageProcessorFast
 from transformers.image_processing_utils import get_size_dict
+from transformers.image_processing_utils_fast import validate_fast_preprocess_arguments
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
 
@@ -218,7 +219,14 @@ class ImageProcessingUtilsTester(unittest.TestCase):
         # Test an int representing the shortest edge and max_size which represents the longest edge
         outputs = get_size_dict(224, max_size=256, default_to_square=False)
         self.assertEqual(outputs, {"shortest_edge": 224, "longest_edge": 256})
-
         # Test int with default_to_square=True and max_size fails
         with self.assertRaises(ValueError):
             get_size_dict(224, max_size=256, default_to_square=True)
+
+    def test_validate_fast_preprocess_arguments(self):
+        # Test valid return_tensors
+        validate_fast_preprocess_arguments(return_tensors=TensorType.PYTORCH)
+        validate_fast_preprocess_arguments(return_tensors=TensorType.MLX)
+        validate_fast_preprocess_arguments(return_tensors=TensorType.NUMPY)
+
+

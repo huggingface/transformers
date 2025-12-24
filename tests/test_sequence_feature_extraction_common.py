@@ -76,6 +76,24 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
             == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_size)
         )
 
+    def test_batch_feature_mlx(self):
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_common(equal_length=True)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        input_name = feat_extract.model_input_names[0]
+
+        processed_features = BatchFeature({input_name: speech_inputs}, tensor_type="mlx")
+
+        batch_features_input = processed_features[input_name]
+       
+        if len(batch_features_input.shape) < 3:
+            batch_features_input = batch_features_input[:, :, None]
+
+        self.assertTrue(
+            batch_features_input.shape,
+            (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_size),
+        )
+
+
     def _check_padding(self, numpify=False):
         def _inputs_have_equal_length(input):
             length = len(input[0])
