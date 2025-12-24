@@ -1,12 +1,9 @@
-# coding=utf-8
-# Copyright 2025 The HumanV Team.
-# Licensed under the Apache License, Version 2.0
+from __future__ import annotations
 
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -16,14 +13,14 @@ class HumanVConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`HumanVModel`]. It is used to instantiate a
     HumanV model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    [nebularesearchtrain/nilla-story](https://huggingface.co/nebularesearchtrain/nilla-story).
+    nilla-story [nebularesearchtrain/nilla-story](https://huggingface.co/nebularesearchtrain/nilla-story).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the model.
+            Vocabulary size of the HumanV model.
         hidden_size (`int`, *optional*, defaults to 256):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 1024):
@@ -33,50 +30,59 @@ class HumanVConfig(PreTrainedConfig):
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads.
         num_key_value_heads (`int`, *optional*, defaults to 8):
-            Number of key/value heads. If equals `num_attention_heads`, the model uses MHA, otherwise GQA.
+            Number of key/value heads. If equal to `num_attention_heads`, the model uses MHA. If set to `1`, the model
+            uses MQA. Otherwise it uses GQA.
         head_dim (`int`, *optional*, defaults to 32):
-            Dimension per attention head.
+            Dimension of each attention head.
         hidden_act (`str`, *optional*, defaults to `"silu"`):
-            Activation function.
+            Activation function used in the MLP.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
-            Maximum sequence length.
+            Maximum sequence length supported by the model.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            Weight initialization range.
+            Standard deviation used for weight initialization.
         rms_norm_eps (`float`, *optional*, defaults to 1e-5):
-            RMSNorm epsilon.
+            Epsilon used by RMSNorm layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use KV cache during generation.
+            Whether the model should return the key/value cache during generation.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie input and output embeddings.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            RoPE base theta.
+            Whether to tie the input and output embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether QKV/O projections use bias.
+            Whether to use bias terms in attention projections.
         attention_dropout (`float`, *optional*, defaults to 0.0):
-            Attention dropout probability.
+            Dropout probability applied to attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether MLP projections use bias.
-        attn_implementation (`str`, *optional*, defaults to `"eager"`):
-            Attention backend selector. Keep `"eager"` for TPU-first stability.
+            Whether to use bias terms in MLP projections.
+        rope_parameters (`dict`, *optional*):
+            RoPE parameters dict. Common key: `rope_theta`.
         layer_types (`list[str]`, *optional*):
-            Per-layer attention pattern. Supported: `"full_attention"`, `"sliding_attention"`.
+            Per-layer attention type. Supported values: `"full_attention"`, `"sliding_attention"`.
+        attn_backend (`str`, *optional*, defaults to `"sdpa"`):
+            Backend for dense attention. Supported values: `"sdpa"`, `"matmul"`.
+        sliding_window (`int`, *optional*, defaults to 0):
+            Sliding window size for `"sliding_attention"` layers when using dense mode.
         use_sparse_attention (`bool`, *optional*, defaults to `False`):
-            Enables sparse attention path for layers with `"sliding_attention"`.
+            Whether to enable sparse attention for `"sliding_attention"` layers.
         sparse_attention_impl (`str`, *optional*, defaults to `"local_global_block"`):
-            Sparse attention implementation name.
+            Sparse attention implementation selector.
         sparse_block_size (`int`, *optional*, defaults to 64):
-            Block size (tokens per block) for block-sparse.
+            Block size (tokens) for block-sparse attention.
+        sparse_prefill_chunk_blocks (`int`, *optional*, defaults to 0):
+            If > 0 and `use_cache=True`, splits long prefill into chunks of `sparse_prefill_chunk_blocks * sparse_block_size`.
         sparse_local_num_blocks (`int`, *optional*, defaults to 4):
-            Number of local (lookback) blocks per query block (causal).
+            Number of local blocks per query block.
         sparse_global_num_blocks (`int`, *optional*, defaults to 2):
-            Number of global summary blocks per query block (causal, strided).
+            Number of global blocks per query block.
         sparse_global_block_stride (`int`, *optional*, defaults to 4):
-            Stride in blocks for selecting global summary blocks.
-        sparse_attention_window (`int`, *optional*, defaults to 256):
-            Max token window for sliding/sparse layers. Used to cap local blocks (TPU-friendly).
-        attention_compute_dtype (`str`, *optional*, defaults to `"fp32"`):
-            Compute dtype for attention math (QK^T + softmax + PV). `"fp32"` recommended for stability on TPU.
-    """
+            Stride (in blocks) for selecting global blocks.
+        sparse_attention_window (`int`, *optional*, defaults to 0):
+            Optional window size (tokens) to limit selection range for sparse attention.
+
+    ```python
+    >>> from transformers import HumanVConfig, HumanVModel
+    >>> config = HumanVConfig()
+    >>> model = HumanVModel(config)
+    >>> config = model.config
+    ```"""
 
     model_type = "humanv"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -88,7 +94,7 @@ class HumanVConfig(PreTrainedConfig):
         intermediate_size: int = 1024,
         num_hidden_layers: int = 8,
         num_attention_heads: int = 8,
-        num_key_value_heads: Optional[int] = 8,
+        num_key_value_heads: int = 8,
         head_dim: int = 32,
         hidden_act: str = "silu",
         max_position_embeddings: int = 1024,
@@ -96,20 +102,21 @@ class HumanVConfig(PreTrainedConfig):
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         tie_word_embeddings: bool = True,
-        rope_theta: float = 10000.0,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         mlp_bias: bool = False,
-        attn_implementation: str = "eager",
+        rope_parameters: Optional[dict] = None,
         layer_types: Optional[list[str]] = None,
+        attn_backend: str = "sdpa",
+        sliding_window: int = 0,
         use_sparse_attention: bool = False,
         sparse_attention_impl: str = "local_global_block",
         sparse_block_size: int = 64,
+        sparse_prefill_chunk_blocks: int = 0,
         sparse_local_num_blocks: int = 4,
         sparse_global_num_blocks: int = 2,
         sparse_global_block_stride: int = 4,
-        sparse_attention_window: int = 256,
-        attention_compute_dtype: str = "fp32",
+        sparse_attention_window: int = 0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -117,38 +124,34 @@ class HumanVConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
         self.hidden_act = hidden_act
         self.max_position_embeddings = max_position_embeddings
-
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-
-        self.rope_theta = float(rope_theta)
-
+        self.tie_word_embeddings = tie_word_embeddings
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-
-        self.attn_implementation = attn_implementation
-
-        if layer_types is None:
-            layer_types = ["full_attention"] * num_hidden_layers
+        self.rope_parameters = rope_parameters
         self.layer_types = layer_types
-
+        self.attn_backend = attn_backend
+        self.sliding_window = sliding_window
         self.use_sparse_attention = use_sparse_attention
         self.sparse_attention_impl = sparse_attention_impl
-        self.sparse_block_size = int(sparse_block_size)
-        self.sparse_local_num_blocks = int(sparse_local_num_blocks)
-        self.sparse_global_num_blocks = int(sparse_global_num_blocks)
-        self.sparse_global_block_stride = int(sparse_global_block_stride)
-        self.sparse_attention_window = int(sparse_attention_window)
+        self.sparse_block_size = sparse_block_size
+        self.sparse_prefill_chunk_blocks = sparse_prefill_chunk_blocks
+        self.sparse_local_num_blocks = sparse_local_num_blocks
+        self.sparse_global_num_blocks = sparse_global_num_blocks
+        self.sparse_global_block_stride = sparse_global_block_stride
+        self.sparse_attention_window = sparse_attention_window
 
-        self.attention_compute_dtype = attention_compute_dtype
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
 __all__ = ["HumanVConfig"]
