@@ -43,9 +43,106 @@ Key capabilities include:
 you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) for more details and our 
 [github repo](https://github.com/zai-org/GLM-ASR).
 
-## Usage examples
+## Usage
 
-```python
+### Basic usage
+
+<options id="usage">
+<hfoption id="AutoModel">
+
+```py
+from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+
+inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
+```
+</hfoption>
+</hfoptions>
+
+### Advanced usage
+
+The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
+
+```py
+from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+
+processor = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+
+inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
+
+# which is equivalent to
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+            },
+            {"type": "text", "text": "Please transcribe this audio into text"},
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+)
+```
+
+One can also use audio arrays directly:
+
+```py
+from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+from datasets import load_dataset
+
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+
+# loading audio directly from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio_array = ds[0]["audio"]["array"]
+
+inputs = processor.apply_transcription_request(audio_array)
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
+```
+
+### Batched inference
+
+You can process multiple audio files at once:
+
+```py
+from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+
+inputs = processor.apply_transcription_request([
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
+])
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ## GlmAsrEncoderConfig

@@ -30,29 +30,37 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 51866):
-            Vocabulary size of the model.
         hidden_size (`int`, *optional*, defaults to 1280):
             Dimensionality of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 6144):
+        intermediate_size (`int`, *optional*, defaults to 5120):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads for each attention layer in the Transformer encoder.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by dividing by sqrt(hidden_size) if True.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
+            `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler.
+        max_position_embeddings (`int`, *optional*, defaults to 1500):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of mel features used per input features. Should correspond to the value used in the
             `GlmAsrProcessor` class.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import GlmAsrEncoderConfig, GlmAsrEncoder
@@ -119,8 +127,8 @@ class GlmAsrConfig(PreTrainedConfig):
             The config object or dictionary of the audio encoder.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text model.
-        audio_token_id (`int`, *optional*):
-            The image token index to encode the image prompt.
+        audio_token_id (`int`, *optional*, defaults to 59260):
+            The audio token index to encode the audio prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function (function or string) in the multi-modal projector.
 
@@ -128,9 +136,9 @@ class GlmAsrConfig(PreTrainedConfig):
     >>> from transformers import GlmAsrForConditionalGeneration, GlmAsrConfig
 
     >>> # Initializing a glmasr configuration
-    >>> configuration = GlmAsrConfig(audio_token_id=24, projector_hidden_act="gelu")
+    >>> configuration = GlmAsrConfig()
 
-    >>> # Initializing a 3B model with random weights
+    >>> # Initializing a GLM-ASR-Nano-2512 model with random weights
     >>> model = GlmAsrForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
