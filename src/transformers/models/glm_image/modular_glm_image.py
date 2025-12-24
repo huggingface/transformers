@@ -18,6 +18,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ... import GlmImagePreTrainedModel
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -25,7 +26,8 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ..glm4.configuration_glm4 import Glm4Config
-from ..glm4.modeling_glm4 import Glm4DecoderLayer, Glm4ForCausalLM, Glm4MLP, Glm4Model, Glm4PreTrainedModel
+from ..glm4.modeling_glm4 import Glm4ForCausalLM, Glm4MLP, Glm4Model, Glm4PreTrainedModel
+from ..glm4v.modeling_glm4v import Glm4vTextDecoderLayer, Glm4vTextAttention
 
 
 def build_mode_mix_input(vision_input, txt_input, type_ids, dim=2):
@@ -108,9 +110,18 @@ class GlmImageMLP(Glm4MLP):
     pass
 
 
-class GlmImageDecoderLayer(Glm4DecoderLayer):
-    pass
+class GlmImageAttention(Glm4vTextAttention):
+    def __init__(self, config: GlmImageConfig, layer_idx: Optional[int] = None):
+        super().__init__(config)
 
+
+class GlmImageDecoderLayer(Glm4vTextDecoderLayer):
+    def __init__(self, config: GlmImageConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = GlmImageAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GlmImageMLP(config)
 
 class GlmImagePreTrainedModel(Glm4PreTrainedModel):
     pass
