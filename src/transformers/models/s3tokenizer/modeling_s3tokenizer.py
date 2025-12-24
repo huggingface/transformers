@@ -126,7 +126,7 @@ def apply_rotary_emb(
 class FSMNMultiHeadAttention(LlamaAttention):
     """FSMN (Feed-forward Sequential Memory Network) Multi-Head Attention."""
 
-    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
+    def __init__(self, config: S3TokenizerConfig, layer_idx: Optional[int] = None, kernel_size: int = 31):
         super().__init__(config, layer_idx)
         self.is_causal = False
         self.n_head = config.num_attention_heads
@@ -286,7 +286,7 @@ class FSQVectorQuantization(torch.nn.Module):
 class ResidualAttentionBlock(torch.nn.Module):
     """Residual attention block with FSMN."""
 
-    def __init__(self, config: S3TokenizerConfig, layer_idx: int = None, kernel_size: int = 31):
+    def __init__(self, config: S3TokenizerConfig, layer_idx: Optional[int] = None, kernel_size: int = 31):
         super().__init__()
         self.attn = FSMNMultiHeadAttention(config, layer_idx, kernel_size)
         self.attn_ln = torch.nn.LayerNorm(config.hidden_size, eps=1e-6)
