@@ -239,13 +239,13 @@ class Qwen3VLConfig(PreTrainedConfig):
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3VLVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
+            The token id used as the placeholder for image inputs.
         video_token_id (`int`, *optional*, defaults to 151656):
-            The video token index to encode the image prompt.
+            The token id used as the placeholder for video inputs.
         vision_start_token_id (`int`, *optional*, defaults to 151652):
-            The start token index to encode the image prompt.
+            The token id that marks the start of a vision segment (image or video).
         vision_end_token_id (`int`, *optional*, defaults to 151653):
-            The end token index to encode the image prompt.
+            The token id that marks the end of a vision segment (image or video).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie the word embeddings.
 
