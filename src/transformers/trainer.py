@@ -1671,6 +1671,12 @@ class Trainer:
                 optimizer_cls = AdamW8bit
             else:
                 raise ValueError("Invalid optimizer")
+            optimizer_kwargs.update(
+                {
+                    "block_size": optim_args.get("block_size", 256),
+                    "bf16_stochastic_round": strtobool(optim_args.get("bf16_stochastic_round", "False")),
+                }
+            )
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_RADAM,
