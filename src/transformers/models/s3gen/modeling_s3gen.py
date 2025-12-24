@@ -2633,7 +2633,7 @@ class S3GenModel(S3GenPreTrainedModel):
         }
 
     @add_start_docstrings_to_model_forward(S3GEN_INPUTS_DOCSTRING)
-    def forward(self, speech_tokens, ref_wav=None, ref_sr=None, ref_dict=None, finalize=False):
+    def forward(self, speech_tokens, ref_wav=None, ref_sr=None, ref_dict=None, finalize=False, **kwargs):
         """Generate mel spectrograms from tokens."""
         assert (ref_wav is None) ^ (ref_dict is None), "Must provide exactly one of ref_wav or ref_dict"
 

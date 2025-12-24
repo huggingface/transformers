@@ -546,6 +546,7 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         max_len: Optional[int] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, S3TokenizerOutput]:
         """
         Args:
