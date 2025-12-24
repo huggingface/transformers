@@ -187,6 +187,7 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .isaac import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *

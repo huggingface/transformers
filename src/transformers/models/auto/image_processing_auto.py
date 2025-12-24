@@ -122,6 +122,7 @@ else:
             ("imagegpt", ("ImageGPTImageProcessor", "ImageGPTImageProcessorFast")),
             ("instructblip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("internvl", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
+            ("isaac", (None, "IsaacImageProcessorFast")),
             ("janus", ("JanusImageProcessor", "JanusImageProcessorFast")),
             ("kosmos-2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("kosmos-2.5", ("Kosmos2_5ImageProcessor", "Kosmos2_5ImageProcessorFast")),
