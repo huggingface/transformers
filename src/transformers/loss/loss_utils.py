@@ -22,6 +22,7 @@ from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, Deformab
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_vit_nepa import ViTNepaPreTrainingLoss
 
 
 def fixed_cross_entropy(
@@ -163,4 +164,5 @@ LOSS_MAPPING = {
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
+    "ViTNepaForPreTraining": ViTNepaPreTrainingLoss,
 }
