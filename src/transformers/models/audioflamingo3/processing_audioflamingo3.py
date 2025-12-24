@@ -60,15 +60,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
     [`Qwen2TokenizerFast`]. See the [`~AudioFlamingo3Processor.__call__`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-            template will be used.
-        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-            Special token used to represent audio inputs in the chat template.
+            feature_extractor (`<fill_type>`): <fill_docstring>
+            tokenizer (`<fill_type>`): <fill_docstring>
+            chat_template (`<fill_type>`, *optional*): <fill_docstring>
+            audio_token (`<fill_type>`, *optional*, defaults to `"<sound>"`): <fill_docstring>
+            default_transcription_prompt (`<fill_type>`, *optional*, defaults to `"Transcribe the input speech."`): <fill_docstring>
+            max_audio_len (`<fill_type>`, *optional*, defaults to 600): <fill_docstring>
     """
 
     def __init__(
