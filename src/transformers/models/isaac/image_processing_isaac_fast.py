@@ -32,9 +32,7 @@ from ...utils import TensorType, auto_docstring
 # Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
-from ...utils.import_utils import (
-    is_torch_available,
-)
+from ...utils.import_utils import is_torch_available
 from .modeling_isaac import IsaacImageProcessorFastKwargs
 
 
@@ -121,7 +119,8 @@ def get_image_size_for_max_num_patches(
     num_patches = (adjusted_height / patch_size) * (adjusted_width / patch_size)
 
     if min_num_patches is not None and num_patches < min_num_patches:
-        # Scale up
+        # Scale up via binary search to satisfy the minimum patch budget while
+        # preserving divisibility by patch_size * pixel_shuffle_scale.
         scale_min, scale_max = 1.0, 100.0
         while (scale_max - scale_min) >= eps:
             scale = (scale_min + scale_max) / 2
@@ -156,19 +155,6 @@ def get_image_size_for_max_num_patches(
         return target_height, target_width
 
 
-def _compute_residual_p_frames(frames: torch.Tensor, is_p_frame: list[bool]) -> torch.Tensor:
-    """Compute residuals for P-frames to stay in sync with the training pipeline."""
-    if not any(is_p_frame):
-        return frames
-
-    frame_indices = torch.arange(len(is_p_frame), device=frames.device)
-    i_frame_mask = torch.tensor([not flag for flag in is_p_frame], device=frames.device)
-    last_i_indices = torch.cummax((i_frame_mask * (1 + frame_indices)), dim=0).values.long() - 1
-    p_indices = frame_indices[torch.tensor(is_p_frame, device=frames.device)]
-    frames[p_indices] = frames[p_indices] - frames[last_i_indices[p_indices]]
-    return frames
-
-
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
@@ -177,7 +163,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
     valid_kwargs = IsaacImageProcessorFastKwargs
-    unused_kwargs = ["size", "do_center_crop", "crop_size"]
+    unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
     do_resize = True
     do_center_crop = False
@@ -192,18 +178,12 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
     image_std = list(VISION_STD)
     do_convert_rgb = True
     disable_grouping = False
-    size_divisor: Optional[int] = None
 
     def __init__(
         self,
         **kwargs: Unpack[IsaacImageProcessorFastKwargs],
     ) -> None:
         super().__init__(**kwargs)
-
-        pixel_shuffle_scale = 1 if self.pixel_shuffle_scale is None else int(self.pixel_shuffle_scale)
-        if pixel_shuffle_scale < 1:
-            raise ValueError("`pixel_shuffle_scale` must be >= 1")
-        self.pixel_shuffle_scale = pixel_shuffle_scale
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
@@ -218,29 +198,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional[Any] = None,
-        antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
-        if size.height is None or size.width is None:
-            raise ValueError("IsaacImageProcessorFast requires explicit `height` and `width` when resizing.")
-
-        resize_mode: Any = interpolation
-        if hasattr(resize_mode, "value"):
-            resize_mode = resize_mode.value
-        elif hasattr(resize_mode, "name"):
-            resize_mode = resize_mode.name.lower()
-        elif resize_mode is None:
-            resize_mode = "bilinear"
-
-        if isinstance(resize_mode, str):
-            mode_key = resize_mode.lower()
-        else:
-            mode_key = resize_mode
-
-        resize_kwargs: dict[str, Any] = {}
-        if mode_key in {"linear", "bilinear", "bicubic", "trilinear"}:
-            resize_kwargs["align_corners"] = False
+        resize_kwargs: dict[str, Any] = {"align_corners": False}
+        resize_mode = "bilinear"
 
         return F.interpolate(
             image,
@@ -253,10 +214,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list[torch.Tensor],
         do_resize: bool,
-        size: Optional[SizeDict],
         interpolation: Optional[Any],
-        do_center_crop: bool,
-        crop_size: Optional[SizeDict],
         do_rescale: Optional[bool],
         rescale_factor: Optional[float],
         do_normalize: Optional[bool],
@@ -264,8 +222,6 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, Sequence[float]]],
         disable_grouping: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        do_pad: Optional[bool] = None,
-        pad_size: Optional[SizeDict] = None,
         *,
         patch_size: Optional[int] = None,
         max_num_patches: Optional[int] = None,
@@ -273,20 +229,15 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         pixel_shuffle_scale: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
-        if do_center_crop:
-            raise ValueError("`do_center_crop` is not supported by IsaacImageProcessorFast.")
-        if do_pad:
-            raise ValueError("`do_pad` is not supported by IsaacImageProcessorFast.")
-
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        processed_patches_grouped: dict[tuple[int, ...], torch.Tensor] = {}
-        token_grids_grouped: dict[tuple[int, ...], torch.Tensor] = {}
-        virtual_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
-        real_dims_grouped: dict[tuple[int, ...], torch.Tensor] = {}
+
+        grouped_outputs = {}
 
         for shape, stacked_images in grouped_images.items():
             if stacked_images.ndim != 4:
-                raise ValueError("Expected batched channel-first image tensors.")
+                raise ValueError(
+                    f"Expected images shaped as (batch, channels, height, width); got shape {tuple(stacked_images.shape)}."
+                )
 
             batch_size, channels, original_height, original_width = stacked_images.shape
 
@@ -295,7 +246,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 channels = 3
 
             if original_height * original_width > self.MAX_PIXELS:
-                raise ValueError(f"Image (w={original_width}, h={original_height}) > MAX=`{self.MAX_PIXELS}`")
+                raise ValueError(
+                    f"Image area {original_height * original_width} (h={original_height}, w={original_width}) exceeds MAX_PIXELS={self.MAX_PIXELS}; enable resizing or provide smaller inputs."
+                )
 
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
@@ -315,7 +268,9 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 )
             else:
                 if ((original_height % patch_size) != 0) or ((original_width % patch_size) != 0):
-                    raise ValueError("Image dimensions must be divisible by patch_size when resize is disabled.")
+                    raise ValueError(
+                        f"Image dimensions (h={original_height}, w={original_width}) must be divisible by patch_size={patch_size} when resize is disabled; enable resizing or adjust the input resolution."
+                    )
                 image_batch = stacked_images
                 target_height, target_width = original_height, original_width
 
@@ -329,10 +284,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                     image_std=image_std,
                 )
 
-            nhwc_images = image_batch.permute(0, 2, 3, 1)
-            nhwc_images = _compute_residual_p_frames(nhwc_images, is_p_frame=[False] * batch_size)
-
-            patches = torch_extract_patches(nhwc_images.permute(0, 3, 1, 2), patch_size, patch_size)
+            patches = torch_extract_patches(image_batch, patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
@@ -357,7 +309,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
 
             if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
                 raise ValueError(
-                    "Spatial dimensions must be divisible by pixel_shuffle_scale when pixel shuffle is enabled."
+                    f"Token grid (h={height_tokens}, w={width_tokens}) must be divisible by pixel_shuffle_scale={pixel_shuffle_scale}; adjust resize/patch parameters or disable pixel shuffle."
                 )
             virtual_height = height_tokens // pixel_shuffle_scale
             virtual_width = width_tokens // pixel_shuffle_scale
@@ -371,31 +323,24 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 .unsqueeze(0)
                 .repeat(batch_size, 1)
             )
+            grouped_outputs[shape] = (patches, token_grid, virtual_dim, real_dim)
 
-            processed_patches_grouped[shape] = patches
-            token_grids_grouped[shape] = token_grid
-            virtual_dims_grouped[shape] = virtual_dim
-            real_dims_grouped[shape] = real_dim
+        # Helper to reorder a single item of the tuple payloads using the same grouped_images_index
+        def _reorder_grouped_item(
+            grouped: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
+            grouped_index: dict[tuple[int, ...], list[int]],
+            item_idx: int,
+        ) -> list[torch.Tensor]:
+            return reorder_images({k: v[item_idx] for k, v in grouped.items()}, grouped_index)
 
-        patches_slices = reorder_images(processed_patches_grouped, grouped_images_index)
-        token_grid_slices = reorder_images(token_grids_grouped, grouped_images_index)
-        virtual_dim_slices = reorder_images(virtual_dims_grouped, grouped_images_index)
-        real_dim_slices = reorder_images(real_dims_grouped, grouped_images_index)
+        keys = ("patches", "token_grids", "virtual_pixel_size", "real_pixel_size")
+        tensors: dict[str, torch.Tensor] = {}
 
-        patches_tensor = torch.stack(patches_slices, dim=0)
-        token_grids_tensor = torch.stack(token_grid_slices, dim=0)
-        virtual_dims_tensor = torch.stack(virtual_dim_slices, dim=0)
-        real_dims_tensor = torch.stack(real_dim_slices, dim=0)
+        for i, key in enumerate(keys):
+            slices = _reorder_grouped_item(grouped_outputs, grouped_images_index, i)
+            tensors[key] = torch.stack(slices, dim=0)
 
-        return BatchFeature(
-            data={
-                "patches": patches_tensor,
-                "token_grids": token_grids_tensor,
-                "virtual_pixel_size": virtual_dims_tensor,
-                "real_pixel_size": real_dims_tensor,
-            },
-            tensor_type=return_tensors,
-        )
+        return BatchFeature(data=tensors, tensor_type=return_tensors)
 
 
 __all__ = ["IsaacImageProcessorFast"]

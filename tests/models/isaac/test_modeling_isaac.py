@@ -36,12 +36,10 @@ from transformers import (
     is_torch_available,
 )
 from transformers.image_utils import load_image
-from transformers.masking_utils import eager_mask, sdpa_mask
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
-    document_mask_function_from_cu_seqlens,
 )
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import (
@@ -151,74 +149,6 @@ def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
         "sum": _rounded(flat.sum()),
         "l2_norm": _rounded(torch.linalg.vector_norm(flat, ord=2)),
     }
-
-
-@require_torch
-class IsaacDocumentMaskingTest(unittest.TestCase):
-    def test_document_mask_function_from_cu_seqlens(self):
-        cu_seqlens = torch.tensor([0, 3, 5], dtype=torch.int32)
-        mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
-
-        self.assertIsNotNone(mask_fn)
-        # Same document (indices 1 and 2)
-        self.assertTrue(mask_fn(0, 0, 1, 2))
-        # Cross-document (index 1 in first doc, 3 in second doc)
-        self.assertFalse(mask_fn(0, 0, 1, 3))
-        # Same second document (indices 3 and 4)
-        self.assertTrue(mask_fn(0, 0, 4, 3))
-
-    def test_document_mask_function_materializes_with_masking_utils(self):
-        cu_seqlens = torch.tensor([0, 2, 4], dtype=torch.int32)
-        total_tokens = 4
-        mask_fn = document_mask_function_from_cu_seqlens(cu_seqlens)
-
-        cache_position = torch.arange(total_tokens, device=cu_seqlens.device, dtype=torch.long)
-        expected_bool = torch.tensor(
-            [
-                [
-                    [
-                        [True, True, False, False],
-                        [True, True, False, False],
-                        [False, False, True, True],
-                        [False, False, True, True],
-                    ]
-                ]
-            ],
-            device=cu_seqlens.device,
-        )
-
-        sdpa = sdpa_mask(
-            batch_size=1,
-            cache_position=cache_position,
-            kv_length=total_tokens,
-            kv_offset=0,
-            mask_function=mask_fn,
-            attention_mask=None,
-            allow_is_causal_skip=False,
-            allow_is_bidirectional_skip=False,
-            allow_torch_fix=False,
-            use_vmap=False,
-        )
-        # sdpa_mask returns True for allowed positions; SDPA expects True to mean "mask out"
-        self.assertTrue(torch.equal(sdpa, expected_bool))
-
-        eager = eager_mask(
-            batch_size=1,
-            cache_position=cache_position,
-            kv_length=total_tokens,
-            kv_offset=0,
-            mask_function=mask_fn,
-            attention_mask=None,
-            allow_is_bidirectional_skip=False,
-            use_vmap=False,
-            dtype=torch.float32,
-        )
-        expected_additive = torch.where(
-            expected_bool,
-            torch.tensor(0.0, device=cu_seqlens.device, dtype=torch.float32),
-            torch.tensor(torch.finfo(torch.float32).min, device=cu_seqlens.device, dtype=torch.float32),
-        )
-        self.assertTrue(torch.equal(eager, expected_additive))
 
 
 def create_isaac_processor(
@@ -481,6 +411,10 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
+    @unittest.skip(reason="Unsupported")
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
     @unittest.skip(reason="Assisted decoding not supported; Qwen3 backbone does not implement returning attentions")
     def test_assisted_decoding_sample(self):
         pass
@@ -508,33 +442,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
 
     @require_tensorstream
-    def test_modality_tensor_requires_matching_shape(self):
-        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = IsaacModel(config).to(torch_device)
-        model.eval()
-
-        modality_tensor = torch.zeros(
-            (self.model_tester.batch_size, self.model_tester.seq_length),
-            device=torch_device,
-            dtype=torch.long,
-        )
-        with torch.no_grad():
-            result = model(input_ids=input_ids, attention_mask=attention_mask, modality_tensor=modality_tensor)
-
-        self.assertEqual(
-            result.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
-        )
-
-        bad_modality_tensor = torch.zeros(
-            (self.model_tester.batch_size, self.model_tester.seq_length + 1),
-            device=torch_device,
-            dtype=torch.long,
-        )
-        with self.assertRaisesRegex(ValueError, "modality_tensor must have shape"):
-            model(input_ids=input_ids, attention_mask=attention_mask, modality_tensor=bad_modality_tensor)
-
-    @require_tensorstream
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         model = IsaacForConditionalGeneration(config)
@@ -549,15 +456,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
         self.assertIsNotNone(result.loss)
 
-    def test_prepare_inputs_for_generation(self):
-        config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
-        model = IsaacForConditionalGeneration(config)
-        model.to(torch_device)
-
-        prepared_inputs = model.prepare_inputs_for_generation(input_ids=input_ids, attention_mask=attention_mask)
-        self.assertIn("input_ids", prepared_inputs)
-        self.assertIn("position_ids", prepared_inputs)
-
     @require_tensorstream
     def test_isaac_for_conditional_generation_initialization(self):
         config = self.model_tester.get_config()
@@ -567,7 +465,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(hasattr(model, "model"))
         self.assertTrue(hasattr(model, "lm_head"))
         self.assertTrue(hasattr(model.model, "vision_embedding"))
-        self.assertTrue(hasattr(model.model, "embed_fns"))
 
         input_ids = torch.randint(0, config.vocab_size, (1, 10), device=torch_device, dtype=torch.long)
         with torch.no_grad():
@@ -589,46 +486,115 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertEqual(outputs.loss.ndim, 0)
         self.assertEqual(outputs.logits.shape, (batch_size, seq_len, config.vocab_size))
 
-    @require_vision
-    @require_tensorstream
-    def test_isaac_generation_with_tensor_stream(self):
-        config = self.model_tester.get_config()
-        tokenizer = SimpleIsaacTokenizer()
-        image_processor = IsaacImageProcessorFast(
-            patch_size=config.vision_config.patch_size,
-            max_num_patches=config.vision_config.num_patches,
-            pixel_shuffle_scale=config.vision_config.pixel_shuffle_scale_factor,
-            rescale_factor=config.vision_rescale_factor,
-        )
-        processor = IsaacProcessor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            config=config,
-        )
 
-        model = IsaacForConditionalGeneration(config).to(torch_device)
-        model.eval()
-
-        messages = [{"role": "user", "content": "Hello there!"}]
-        prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        processed = processor(text=prompt, images=None, return_tensors="pt")
-
-        input_ids = processed["input_ids"].to(torch_device)
-        tensor_stream = processed["tensor_stream"].to(torch_device)
-        generated = model.generate(
-            input_ids=input_ids,
-            tensor_stream=tensor_stream,
-            max_new_tokens=5,
-            do_sample=False,
-            pad_token_id=processor.tokenizer.pad_token_id,
-            eos_token_id=processor.tokenizer.eos_token_id,
+@require_torch
+@require_flash_attn
+class IsaacAttentionDtypeTest(unittest.TestCase):
+    def _make_config(self):
+        return IsaacVisionConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_channels=3,
+            num_patches=64,
+            patch_size=4,
+            attention_dropout=0.0,
+            pixel_shuffle_scale_factor=1,
         )
 
-        self.assertEqual(generated.shape[0], 1)
-        self.assertGreaterEqual(generated.shape[1], input_ids.shape[1])
-        decoded_prompt = processor.tokenizer.decode(generated[0], skip_special_tokens=True)
-        self.assertIsInstance(decoded_prompt, str)
-        self.assertNotEqual(decoded_prompt.strip(), "")
+    def _skip_if_no_cuda_bf16(self):
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for flash attention dtype/parity tests.")
+        if not torch.cuda.is_bf16_supported():
+            pytest.skip("CUDA bfloat16 support required.")
+
+    def test_flash_attention_matches_weight_dtype_bf16(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_matches_weight_dtype_bf16_with_padding(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
+        attention_mask = torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]], device=device, dtype=torch.bool)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states, attention_mask=attention_mask)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_matches_weight_dtype_bf16_with_cu_seqlens(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config = self._make_config()
+        config._attn_implementation = "flash_attention_2"
+
+        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
+
+        hidden_states = torch.randn(1, 5, config.hidden_size, device=device, dtype=torch.bfloat16)
+        cu_seqlens = torch.tensor([0, 3, 5], device=device, dtype=torch.int32)
+
+        with torch.no_grad():
+            attn_output, _ = attn(hidden_states, cu_seqlens=cu_seqlens, max_seqlen=3)
+
+        assert attn_output.dtype == attn.out_proj.weight.dtype
+        assert attn_output.dtype == hidden_states.dtype
+
+    def test_flash_attention_parity_with_sdpa_bf16(self):
+        self._skip_if_no_cuda_bf16()
+        torch.manual_seed(0)
+
+        device = torch.device("cuda")
+        config_sdpa = self._make_config()
+        config_sdpa._attn_implementation = "sdpa"
+
+        config_fa2 = self._make_config()
+        config_fa2._attn_implementation = "flash_attention_2"
+
+        attn_sdpa = IsaacVisionAttention(config_sdpa).to(device=device, dtype=torch.bfloat16).eval()
+        attn_fa2 = IsaacVisionAttention(config_fa2).to(device=device, dtype=torch.bfloat16).eval()
+
+        # Align weights so the only difference is the backend
+        attn_fa2.load_state_dict(attn_sdpa.state_dict())
+
+        hidden_states = torch.randn(2, 4, config_sdpa.hidden_size, device=device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            out_sdpa, _ = attn_sdpa(hidden_states)
+            out_fa2, _ = attn_fa2(hidden_states)
+
+        torch.testing.assert_close(
+            out_fa2.float(),
+            out_sdpa.float(),
+            rtol=1e-3,
+            atol=1e-3,
+            msg="FlashAttention2 output deviates from SDPA baseline beyond tolerance",
+        )
 
 
 @require_torch
@@ -769,11 +735,18 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
     def _generate_from_messages(self, messages, images, num_tokens=None):
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        tensor_stream = processor_output["tensor_stream"].to(self.device)
+        packed_inputs = processor_output["packed_inputs"]
+        input_ids = processor_output["input_ids"].to(self.device)
+        prompt_len = input_ids.shape[1]
+        packed_inputs = {
+            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
+            for key, value in packed_inputs.items()
+        }
 
         with torch.no_grad():
             outputs = self.model.generate(
-                tensor_stream=tensor_stream,
+                input_ids=input_ids,
+                packed_inputs=packed_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -783,7 +756,8 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
             )
 
         generated_ids = outputs.sequences
-        generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        generated_tail = generated_ids[:, prompt_len:]
+        generated_text = self.tokenizer.decode(generated_tail[0], skip_special_tokens=True)
         return generated_text
 
     def test_generate_from_image_text(self):
@@ -846,11 +820,17 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         ]
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        tensor_stream = processor_output["tensor_stream"].to(self.device)
+        packed_inputs = processor_output["packed_inputs"]
+        input_ids = processor_output["input_ids"]
+        device = next(self.model.parameters()).device
+        input_ids = input_ids.to(device)
+        # Move packed tensors to model device
+        packed_inputs = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in packed_inputs.items()}
 
         with torch.no_grad():
             outputs = self.model.generate(
-                tensor_stream=tensor_stream,
+                input_ids=input_ids,
+                packed_inputs=packed_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -919,11 +899,18 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         messages, images = document_to_messages(document, vision_token=self.hf_config.vision_token)
         prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
-        tensor_stream = processor_output["tensor_stream"].to(self.device)
+        packed_inputs = processor_output["packed_inputs"]
+        input_ids = processor_output["input_ids"].to(self.device)
+        prompt_len = input_ids.shape[1]
+        packed_inputs = {
+            key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
+            for key, value in packed_inputs.items()
+        }
 
         with torch.no_grad():
             outputs = self.model.generate(
-                tensor_stream=tensor_stream,
+                input_ids=input_ids,
+                packed_inputs=packed_inputs,
                 max_new_tokens=self.max_new_tokens,
                 do_sample=False,
                 pad_token_id=self.tokenizer.eos_token_id,
@@ -932,7 +919,8 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
             )
 
         generated_ids = outputs.sequences
-        hf_generated_text = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        hf_generated_tail = generated_ids[:, prompt_len:]
+        hf_generated_text = self.tokenizer.decode(hf_generated_tail[0], skip_special_tokens=True)
         points = extract_points(hf_generated_text)
         assert len(points) == 1
         first_point = points[0]

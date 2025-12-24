@@ -19,20 +19,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-import re
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...models.auto.tokenization_auto import AutoTokenizer
 from ...processing_utils import ProcessorMixin
 from ...utils import TensorType
-from ...utils.import_utils import (
-    is_perceptron_available,
-    is_torch_available,
-    is_vision_available,
-)
+from ...utils.import_utils import is_torch_available, is_vision_available
 from .configuration_isaac import IsaacConfig
+from .modeling_isaac import ModalityType
 
 
 if is_torch_available():
@@ -44,73 +38,26 @@ if is_vision_available():
 else:
     Image = None
 
-if is_perceptron_available():
-    from perceptron.tensorstream.ops import slice as ts_slice
-    from perceptron.tensorstream.ops import tensor_stream_token_view
-    from perceptron.tensorstream.tensorstream import Event, Stream, TensorStream, TextType, VisionType, create_stream
-else:
-    ts_slice = None
-    Event = None
-    Stream = None
-    TensorStream = None
-    TextType = None
-    VisionType = None
-    create_stream = None
-    group_streams = None
-
-
-# ============================================================================
-# Processor Components
-# ============================================================================
-
-
-def create_text_event(tokenizer: AutoTokenizer, text: str, time: float = 0.0) -> Event:
-    r"""Wrap a text into an `Event` compatible with the multimodal TensorStream.
-
-    Args:
-        tokenizer (`AutoTokenizer`):
-            Tokenizer used to convert text into model vocabulary ids.
-        text (`str`):
-            Plain-text fragment to encode.
-        time (`float`, *optional*, defaults to 0.0):
-            Timeline coordinate associated with the event. Both start and end times use the same value because text
-            segments are instantaneous in the scheduler.
-
-    Returns:
-        `Event`: Event carrying a `(num_tokens, 1)` tensor of token ids with matching
-        metadata so that downstream processors can compute modality-specific embeddings.
-    """
-    tokens = tokenizer.encode(text, add_special_tokens=False, return_tensors="pt").squeeze(0)
-
-    # Calculate dimensions for the event
-    num_tokens = len(tokens)
-    dims_virtual = [num_tokens, 1]  # [sequence_length, 1]
-    dims_real = dims_virtual.copy()
-
-    # Ensure tokens has the right shape for tensor_stream_token_view
-    # It expects a 2D tensor where sum(dim=-1) gives the token IDs
-    if tokens.dim() == 1:
-        tokens = tokens.unsqueeze(-1)
-
-    return Event(
-        data=tokens,
-        type=TextType.text,
-        time=(time, time),
-        dims_virtual=dims_virtual,
-        dims_real=dims_real,
-        idx_range=(0, num_tokens),
-    )
-
-
-# ============================================================================
-# Processor
-# ============================================================================
-
 
 class IsaacProcessor(ProcessorMixin):
+    """Processor that pairs the Isaac image processor with the Qwen2 tokenizer.
+
+    Args:
+        image_processor: Vision preprocessor (fast) used for patch extraction.
+        tokenizer: Qwen2 tokenizer instance.
+        vision_token (str, optional): Placeholder token marking image locations. Defaults to "<image>".
+        max_sequence_length (int, optional): Maximum combined text+vision tokens kept. Defaults to 16384.
+        rescale_factor (float, optional): Image rescale factor; defaults to 1/255.
+        config (IsaacConfig | dict, optional): If provided, overrides processor defaults from the model config.
+
+    Returns:
+        BatchFeature: Contains ``input_ids`` and ``packed_inputs`` (patch tensors, grids, offsets, lengths, modality, positions).
+    """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = ("IsaacImageProcessorFast",)
     tokenizer_class = ("Qwen2Tokenizer",)
+    pad_token_id = 151643
 
     def __init__(
         self,
@@ -122,79 +69,174 @@ class IsaacProcessor(ProcessorMixin):
         rescale_factor: Optional[float] = None,
         config: Optional[Union[IsaacConfig, dict]] = None,
     ) -> None:
-        if tokenizer is None:
-            raise ValueError("`tokenizer` must be provided to initialize IsaacProcessor.")
-
         if isinstance(config, dict):
             config = IsaacConfig(**config)
 
         if config is not None:
-            max_sequence_length = config.max_sequence_length
             vision_token = config.vision_token
+            max_sequence_length = config.max_sequence_length
             rescale_factor = config.vision_rescale_factor
 
         resolved_rescale_factor = float(rescale_factor) if rescale_factor is not None else float(1 / 255)
-
         if config is not None:
             config.vision_rescale_factor = resolved_rescale_factor
 
         self.image_processor = image_processor
-
         super().__init__(image_processor, tokenizer)
+
         self.current_processor = self.image_processor
         self.config = config
-
-        # Mirror tokenizer chat template so ProcessorMixin.apply_chat_template works.
         self.chat_template = getattr(self.tokenizer, "chat_template", None)
-
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def build_event_stream_simple(
-        self,
-        text: str,
-        images: Optional[list[Image]] = None,
-    ) -> Stream:
-        events = []
-        # Process text and images
-        # Find all occurrences of vision token
+    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
+        # Parse by vision_token; interleave text segments and image segments.
+        segments = text.split(self.vision_token)
+        num_images = len(segments) - 1
+        if num_images and (images is None or len(images) != num_images):
+            raise ValueError(
+                f"Expected one image per '{self.vision_token}' token: found {num_images} token(s) but received {0 if images is None else len(images)} image(s)."
+            )
 
-        pattern = re.escape(self.vision_token)
-        parts = re.split(f"({pattern})", text)  # Keep the delimiter in the result
+        items: list[dict[str, Any]] = []
+        total = 0
 
-        image_idx = 0
-        for current_time, part in enumerate(parts):
-            if part == self.vision_token:
-                # Replace vision token with image event
-                if images is None or image_idx >= len(images):
-                    raise ValueError("Encountered vision token without a corresponding image.")
-
-                features = self.image_processor(
-                    images=images[image_idx],
-                    return_tensors=TensorType.PYTORCH,
+        for index, segment in enumerate(segments):
+            if segment:
+                tok = (
+                    self.tokenizer.encode(segment, add_special_tokens=False, return_tensors="pt")
+                    .squeeze(0)
+                    .to(torch.long)
                 )
+                segment_length = int(tok.numel())
+                items.append({"type": "text", "segment_length": segment_length, "tok": tok})
+                total += segment_length
 
-                patches = features["patches"][0]  # (H_tokens, W_tokens, embed)
-                virtual_dims = features["virtual_pixel_size"][0].tolist()
-                real_dims = features["real_pixel_size"][0].tolist()
+            if index < num_images:
+                feat = self.image_processor(images=images[index], return_tensors=TensorType.PYTORCH)
+                patches = feat["patches"][0].reshape(-1, feat["patches"].shape[-1])
 
-                vision_event = Event(
-                    data=patches.reshape(-1, patches.shape[-1]),
-                    type=VisionType.image,
-                    time=(current_time, current_time),
-                    dims_virtual=virtual_dims,
-                    dims_real=real_dims,
-                    idx_range=(0, math.prod(virtual_dims)),
+                virtual_pixel_size = feat["virtual_pixel_size"][0].to(torch.long).tolist()
+                real_pixel_size = feat["real_pixel_size"][0].to(torch.long).tolist()
+                dims = tuple((virtual_pixel_size + [1, 1, 1])[:3])  # (T,H,W) in virtual space
+                segment_length = int(dims[0] * dims[1] * dims[2])
+
+                items.append(
+                    {
+                        "type": "image",
+                        "segment_length": segment_length,
+                        "dims": dims,
+                        "patches": patches,
+                        "grid": (int(real_pixel_size[1]), int(real_pixel_size[2])),
+                    }
                 )
-                events.append(vision_event)
-                image_idx += 1
-            elif part:  # Non-empty text part
-                # tokens = self.text_processor.tokenize(part, add_special_tokens=False)
-                text_event = create_text_event(self.tokenizer, part, time=current_time)
-                events.append(text_event)
+                total += segment_length
 
-        # Create stream without scheduling (events already in order)
-        return create_stream(events, priority=[TextType.text, VisionType.image], schedule=True)
+        # Tail crop window.
+        start = max(0, total - self.max_sequence_length)
+        end = total
+
+        fill_value = self.pad_token_id
+        base_device: Optional[torch.device] = None
+        position_ids, modality, input_ids = [], [], []
+        vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
+
+        global_offset = 0
+        position_offset = 0
+
+        for item in items:
+            segment_length = int(item["segment_length"])
+            current_window_start = max(start, global_offset)
+            current_window_end = min(end, global_offset + segment_length)
+            has_overlap = current_window_end > current_window_start
+
+            if has_overlap and base_device is None:
+                base_device = item["patches"].device if item["type"] == "image" else item["tok"].device
+
+            if has_overlap:
+                segment_local_start = int(current_window_start - global_offset)
+                segment_local_end = int(current_window_end - global_offset)
+                segment_local_indices = torch.arange(
+                    segment_local_start, segment_local_end, device=base_device, dtype=torch.long
+                )
+                segment_kept_length = segment_local_end - segment_local_start
+
+                if item["type"] == "text":
+                    slice_index = segment_local_indices + position_offset
+                    zero_axis_pad = torch.zeros_like(slice_index)
+                    position_ids.append(torch.stack((slice_index, zero_axis_pad, zero_axis_pad), -1))
+                    modality.append(
+                        torch.full(
+                            (segment_kept_length,), ModalityType.text.value, device=base_device, dtype=torch.long
+                        )
+                    )
+                    input_ids.append(item["tok"].to(base_device)[segment_local_start:segment_local_end])
+                    position_offset += segment_length
+                else:
+                    num_pos_slices, grid_height_tokens, grid_width_tokens = item["dims"]
+                    hw = grid_height_tokens * grid_width_tokens
+                    slice_index = (segment_local_indices // hw) + position_offset
+                    rem = segment_local_indices % hw
+                    row_index = rem // grid_width_tokens
+                    col_index = rem % grid_width_tokens
+                    position_ids.append(torch.stack((slice_index, row_index, col_index), -1))
+                    modality.append(
+                        torch.full(
+                            (segment_kept_length,), ModalityType.image.value, device=base_device, dtype=torch.long
+                        )
+                    )
+                    input_ids.append(
+                        torch.full((segment_kept_length,), fill_value, device=base_device, dtype=torch.long)
+                    )
+
+                    vpatches.append(item["patches"].to(base_device))  # full patches; slice later via offsets/lengths
+                    # Record per-image slice boundaries so we can drop cropped virtual tokens
+                    # after pixel shuffle without re-packing the entire vision stream.
+                    grids.append(item["grid"])
+                    vision_token_offsets.append(segment_local_start)
+                    vision_token_lengths.append(segment_kept_length)
+
+                    position_offset += int(num_pos_slices)
+
+            else:
+                position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
+
+            global_offset += segment_length
+
+        modality_tensor = (
+            torch.cat(modality, 0).unsqueeze(0)
+            if modality
+            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
+        )
+        position_ids = (
+            torch.cat(position_ids, 0).unsqueeze(0)
+            if position_ids
+            else torch.zeros((1, 0, 3), device=base_device, dtype=torch.long)
+        )
+        input_ids = (
+            torch.cat(input_ids, 0).unsqueeze(0)
+            if input_ids
+            else torch.zeros((1, 0), device=base_device, dtype=torch.long)
+        )
+
+        if vpatches:
+            vision_patches = torch.cat(vpatches, 0)
+            vision_token_grids = torch.tensor(grids, device=base_device, dtype=torch.long)
+            vision_token_offsets = torch.tensor(vision_token_offsets, device=base_device, dtype=torch.long)
+            vision_token_lengths = torch.tensor(vision_token_lengths, device=base_device, dtype=torch.long)
+        else:
+            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = None
+
+        return {
+            "input_ids": input_ids,
+            "vision_patches": vision_patches,
+            "vision_token_grids": vision_token_grids,
+            "vision_token_offsets": vision_token_offsets,
+            "vision_token_lengths": vision_token_lengths,
+            "modality_tensor": modality_tensor,
+            "position_ids": position_ids,
+        }
 
     def __call__(
         self,
@@ -203,68 +245,24 @@ class IsaacProcessor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Process text and images into TensorStream format.
-        Args:
-            text: Input text or list of texts with vision tokens
-            images: PIL image or list of images (optional)
-            return_tensors: Format for output tensors
-
-        Returns:
-            BatchFeature with input_ids and tensor_stream
-        """
-        # Normalize inputs to lists
-        if isinstance(text, str):
-            texts = [text]
-        else:
-            texts = text
-
-        if images is not None:
-            if isinstance(images, Image):
-                images_list = [images]
-            else:
-                images_list = images
-        else:
-            images_list = None
-
+        texts = [text] if isinstance(text, str) else text
         if len(texts) != 1:
-            raise ValueError("IsaacProcessor currently supports batch_size=1")
-        if images_list is not None:
-            # Count vision tokens in text to validate image count
-            vision_token_count = texts[0].count(self.vision_token)
-            if vision_token_count != len(images_list):
+            raise ValueError(
+                f"IsaacProcessor currently supports batch_size=1; received {len(texts)} text prompts. Split the batch and call the processor per sample."
+            )
+
+        images_list = None
+        if images is not None:
+            images_list = [images] if isinstance(images, Image) else images
+            n_tok = texts[0].count(self.vision_token)
+            if n_tok != len(images_list):
                 raise ValueError(
-                    f"Number of {self.vision_token} tokens in text ({vision_token_count}) "
-                    f"must match number of images ({len(images_list)})"
+                    f"Expected {len(images_list)} occurrences of '{self.vision_token}' (one per provided image), but found {n_tok} in the text."
                 )
 
-        # Build event stream
-        stream = self.build_event_stream_simple(
-            text=texts[0],
-            images=images_list,
-        )
-
-        # Create TensorStream
-        tensor_stream = TensorStream([stream])
-
-        # Slice to max length if needed
-        _, T = tensor_stream.shape
-        if T > self.max_sequence_length:
-            tensor_stream = ts_slice(tensor_stream, start=T - self.max_sequence_length, end=T)
-
-        # Get token view
-        tokens = tensor_stream_token_view(tensor_stream)
-        if return_tensors in (TensorType.PYTORCH, "pt"):
-            input_ids = torch.as_tensor(tokens, dtype=torch.long)
-        else:
-            input_ids = tokens
-
-        data = {
-            "input_ids": input_ids,
-            "tensor_stream": tensor_stream,
-        }
-
-        return BatchFeature(data=data)
+        packed = self._pack_single(texts[0], images_list)
+        input_ids = packed.pop("input_ids")
+        return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
 
 
 __all__ = ["IsaacProcessor"]
