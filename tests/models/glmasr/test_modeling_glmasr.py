@@ -213,7 +213,7 @@ class GlmAsrForConditionalGenerationModelTest(
 @require_torch
 class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint_name = "eustlb/GLM-ASR-Nano-2512"
+        self.checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def tearDown(self):
