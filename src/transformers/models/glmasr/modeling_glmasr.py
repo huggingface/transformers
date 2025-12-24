@@ -287,6 +287,11 @@ class GlmAsrPreTrainedModel(PreTrainedModel):
 
 # TODO: @eustlb, this is what WhisperEncoder should look like
 class GlmAsrEncoder(GlmAsrPreTrainedModel):
+    config: GlmAsrEncoderConfig
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    _no_split_modules = ["GlmAsrEncoderLayer"]
+
     def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)
         self.conv1 = nn.Conv1d(config.num_mel_bins, config.hidden_size, kernel_size=3, padding=1)
