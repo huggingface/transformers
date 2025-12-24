@@ -1,6 +1,4 @@
 # coding=utf-8
-# Copyright 2025 The HumanV Team.
-# Licensed under the Apache License, Version 2.0
 
 from typing import Optional
 
@@ -61,7 +59,9 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
     return torch.cat([-x2, x1], dim=-1)
 
 
-def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     cos = cos.unsqueeze(1)
     sin = sin.unsqueeze(1)
     return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
@@ -128,7 +128,7 @@ class HumanVAttention(nn.Module):
             scores = scores + attention_mask_4d.to(dtype=scores.dtype)
 
         if window is not None and window > 0:
-            b, h, tq, tk = scores.shape
+            _, _, tq, tk = scores.shape
             device = scores.device
             qi = torch.arange(tq, device=device)[:, None]
             kj = torch.arange(tk, device=device)[None, :]
@@ -160,7 +160,9 @@ class HumanVAttention(nn.Module):
         if key_padding_mask_2d is None:
             key_padding_mask_2d = torch.ones((b, t), device=device, dtype=torch.bool)
         else:
-            key_padding_mask_2d = key_padding_mask_2d.to(device=device, dtype=torch.bool)
+            if key_padding_mask_2d.dtype != torch.bool:
+                key_padding_mask_2d = key_padding_mask_2d.to(dtype=torch.bool)
+            key_padding_mask_2d = key_padding_mask_2d.to(device=device)
 
         n_blocks = (t + block_size - 1) // block_size
         t_pad = n_blocks * block_size
@@ -208,8 +210,13 @@ class HumanVAttention(nn.Module):
             km_gblk = km_gblk & valid_g
 
             denom = km_gblk.to(torch.float32).sum(dim=-1).clamp_min(1.0)
-            k_gsum = (k_gblk * km_gblk[:, None, :, :, :, None].to(k_gblk.dtype)).sum(dim=-2) / denom[:, None, :, :, None]
-            v_gsum = (v_gblk * km_gblk[:, None, :, :, :, None].to(v_gblk.dtype)).sum(dim=-2) / denom[:, None, :, :, None]
+
+            k_gsum = (k_gblk * km_gblk[:, None, :, :, :, None].to(k_gblk.dtype)).sum(dim=-2) / denom[
+                :, None, :, :, None
+            ]
+            v_gsum = (v_gblk * km_gblk[:, None, :, :, :, None].to(v_gblk.dtype)).sum(dim=-2) / denom[
+                :, None, :, :, None
+            ]
             km_gsum = valid_global[None, :, :].expand(b, -1, -1)
         else:
             k_gsum = None
@@ -233,7 +240,8 @@ class HumanVAttention(nn.Module):
                 v_gsum_f = v_gsum
 
         s_local = torch.einsum("bhnqd,bhnlkd->bhnqlk", qf, k_local_f) * self.scaling
-        s_local = s_local + (~km_local[:, None, :, :, None, :]).to(s_local.dtype)[:, :, :, None, :, :] * (-1e9)
+        mask_local = (~km_local).to(dtype=s_local.dtype)[:, None, :, None, :, :]
+        s_local = s_local + mask_local * (-1e9)
 
         intra = torch.triu(torch.full((block_size, block_size), -1e9, device=device, dtype=s_local.dtype), diagonal=1)
         s_local[:, :, :, :, -1, :] = s_local[:, :, :, :, -1, :] + intra[None, None, None, :, :]
@@ -243,7 +251,6 @@ class HumanVAttention(nn.Module):
         if global_num_blocks > 0:
             s_global = torch.einsum("bhnqd,bhngd->bhnqg", qf, k_gsum_f) * self.scaling
             s_global = s_global + (~km_gsum[:, None, :, None, :]).to(s_global.dtype) * (-1e9)
-
             scores = torch.cat([s_local, s_global], dim=-1)
         else:
             scores = s_local
@@ -252,7 +259,9 @@ class HumanVAttention(nn.Module):
         if dropout_p > 0:
             probs = nn.functional.dropout(probs, p=dropout_p, training=self.training)
 
-        p_local = probs[..., : local_num_blocks * block_size].reshape(b, h, n_blocks, block_size, local_num_blocks, block_size)
+        p_local = probs[..., : local_num_blocks * block_size].reshape(
+            b, h, n_blocks, block_size, local_num_blocks, block_size
+        )
         out_local = torch.einsum("bhnqlk,bhnlkd->bhnqd", p_local, v_local_f)
 
         if global_num_blocks > 0:
@@ -317,7 +326,6 @@ class HumanVAttention(nn.Module):
 class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
         layer_type = config.layer_types[layer_idx] if layer_idx < len(config.layer_types) else "full_attention"
         self.self_attn = HumanVAttention(config=config, layer_idx=layer_idx, layer_type=layer_type)
         self.mlp = HumanVMLP(config)
@@ -402,6 +410,8 @@ class HumanVModel(HumanVPreTrainedModel):
 
         if attention_mask_2d is not None:
             am = attention_mask_2d[:, None, None, :].to(device=device, dtype=torch.float32)
+            if am.max() > 1.0:
+                am = (am > 0).to(torch.float32)
             mask = mask + (1.0 - am) * -1e9
 
         return mask
@@ -465,7 +475,12 @@ class HumanVModel(HumanVPreTrainedModel):
                 )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+            hidden_states=None,
+            attentions=None,
+        )
 
 
 class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
