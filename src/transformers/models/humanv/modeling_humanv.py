@@ -1,21 +1,51 @@
+# Copyright 2025 The HumanV Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_humanv import HumanVConfig
 
 logger = logging.get_logger(__name__)
+
+
+def _get_dtype_from_str(name: str, fallback: torch.dtype) -> torch.dtype:
+    name = (name or "").lower()
+    if name in {"bf16", "bfloat16"}:
+        return torch.bfloat16
+    if name in {"fp16", "float16"}:
+        return torch.float16
+    if name in {"fp32", "float32"}:
+        return torch.float32
+    return fallback
 
 
 class HumanVRMSNorm(nn.Module):
@@ -29,19 +59,60 @@ class HumanVRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(dtype=input_dtype)
+
+
+class HumanVScaleNorm(nn.Module):
+    def __init__(self, hidden_size: int, eps: float = 1e-5):
+        super().__init__()
+        self.g = nn.Parameter(torch.ones(()))
+        self.eps = eps
+        self.hidden_size = hidden_size
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dtype = x.dtype
+        x_f = x.to(torch.float32)
+        denom = torch.linalg.vector_norm(x_f, ord=2, dim=-1, keepdim=True).clamp_min(self.eps)
+        y = x_f * (self.g * (self.hidden_size**0.5)) / denom
+        return y.to(dtype=dtype)
+
+
+def _make_norm(config: HumanVConfig) -> type[nn.Module]:
+    backend = getattr(config, "norm_backend", None)
+    backend = (backend or "rmsnorm").lower()
+    if backend in {"layernorm", "ln"}:
+        return nn.LayerNorm
+    if backend in {"scalenorm", "sn"}:
+        return HumanVScaleNorm
+    return HumanVRMSNorm
+
+
+def _make_activation_fn(config: HumanVConfig):
+    backend = getattr(config, "activation_backend", None)
+    if backend is None:
+        return ACT2FN[config.hidden_act]
+    backend = backend.lower()
+    if backend in ACT2FN:
+        return ACT2FN[backend]
+    if backend in {"sqrelu", "relu2", "squared_relu"}:
+
+        def _sqrelu(x: torch.Tensor) -> torch.Tensor:
+            return torch.square(torch.relu(x))
+
+        return _sqrelu
+    raise ValueError(f"Unknown activation_backend={backend}")
 
 
 class HumanVRotaryEmbedding(nn.Module):
     def __init__(self, config: HumanVConfig, device=None):
         super().__init__()
-        dim = int(config.head_dim)
-        rope_theta = 10000.0
-        rope_parameters = getattr(config, "rope_parameters", None)
-        if rope_parameters:
-            rope_theta = float(rope_parameters.get("rope_theta", rope_theta))
+        self.dim = int(config.head_dim)
+        self.base = float(getattr(config, "rope_theta", None) or 10000.0)
         inv_freq = 1.0 / (
-            rope_theta ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float32) / dim)
+            self.base
+            ** (
+                torch.arange(0, self.dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float32) / self.dim
+            )
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -65,107 +136,143 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
 def apply_rotary_pos_emb(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    cos = cos.unsqueeze(1)
-    sin = sin.unsqueeze(1)
-    q = (q * cos) + (rotate_half(q) * sin)
-    k = (k * cos) + (rotate_half(k) * sin)
-    return q, k
+    if cos.dim() == 3:
+        cos = cos.unsqueeze(1)
+        sin = sin.unsqueeze(1)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    bsz, n_kv, slen, head_dim = hidden_states.shape
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(bsz, n_kv, n_rep, slen, head_dim)
-    return hidden_states.reshape(bsz, n_kv * n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class HumanVMLP(nn.Module):
     def __init__(self, config: HumanVConfig):
         super().__init__()
-        mlp_bias = bool(getattr(config, "mlp_bias", False))
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=mlp_bias)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=mlp_bias)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=getattr(config, "mlp_bias", False))
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=getattr(config, "mlp_bias", False))
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=getattr(config, "mlp_bias", False))
+        self.act_fn = _make_activation_fn(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+
+def _make_causal_mask(
+    input_shape: tuple[int, int],
+    past_key_values_length: int,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    bsz, tgt_len = input_shape
+    src_len = tgt_len + past_key_values_length
+    mask = torch.full((tgt_len, src_len), -1e9, device=device, dtype=dtype)
+    mask = torch.triu(mask, diagonal=1 + past_key_values_length)
+    return mask[None, None, :, :].expand(bsz, 1, tgt_len, src_len)
+
+
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: int) -> torch.Tensor:
+    bsz, src_len = mask.shape
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    inverted = (1.0 - expanded_mask) * -1e9
+    return inverted
 
 
 class HumanVAttention(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.layer_idx = int(layer_idx)
+        self.layer_idx = layer_idx
         self.head_dim = int(config.head_dim)
         self.num_heads = int(config.num_attention_heads)
         self.num_kv_heads = int(config.num_key_value_heads)
-        self.num_kv_groups = self.num_heads // self.num_kv_heads
+        self.num_key_value_groups = self.num_heads // self.num_kv_heads
         self.scaling = self.head_dim**-0.5
-
         self.attention_dropout = float(getattr(config, "attention_dropout", 0.0))
-        self.attention_bias = bool(getattr(config, "attention_bias", False))
+        self.is_causal = True
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=self.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=self.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=self.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=self.attention_bias)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=getattr(config, "attention_bias", False))
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=getattr(config, "attention_bias", False))
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=getattr(config, "attention_bias", False))
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=getattr(config, "attention_bias", False))
+
+        self.use_selective_rope = bool(getattr(config, "use_selective_rope", False))
+        self.selective_rope_scale = float(getattr(config, "selective_rope_scale", 0.25))
+        if self.use_selective_rope:
+            self.rope_phase = nn.Linear(config.hidden_size, self.num_heads, bias=False)
 
     def _get_layer_type(self) -> str:
         layer_types = getattr(self.config, "layer_types", None)
-        if layer_types is None:
-            return "full_attention"
-        if self.layer_idx >= len(layer_types):
-            return layer_types[-1]
-        return layer_types[self.layer_idx]
+        if isinstance(layer_types, list) and self.layer_idx < len(layer_types):
+            return str(layer_types[self.layer_idx])
+        use_sliding = bool(getattr(self.config, "use_sliding_window", False))
+        if use_sliding:
+            max_window_layers = int(getattr(self.config, "max_window_layers", 0))
+            if self.layer_idx >= max_window_layers:
+                return "sliding_attention"
+        return "full_attention"
 
-    def _get_backend(self) -> str:
-        backend = getattr(self.config, "attn_backend", None)
-        if backend is not None:
-            return str(backend)
-        impl = getattr(self.config, "attn_implementation", None)
-        if impl is None:
-            return "sdpa"
-        impl = str(impl)
-        if impl in {"sdpa", "flash_attention_2"}:
-            return "sdpa"
-        return "matmul"
+    def _maybe_apply_selective_rope(
+        self,
+        cos: torch.Tensor,
+        sin: torch.Tensor,
+        hidden_states: torch.Tensor,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if not self.use_selective_rope:
+            return cos, sin
+        phase = self.rope_phase(hidden_states).transpose(1, 2).unsqueeze(-1)
+        phase = phase.to(dtype=torch.float32)
+        delta = torch.tanh(phase) * self.selective_rope_scale
+        cos_d = torch.cos(delta).to(dtype=dtype, device=device)
+        sin_d = torch.sin(delta).to(dtype=dtype, device=device)
 
-    def _dense_sdpa(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask_4d: Optional[torch.Tensor]):
-        dropout_p = self.attention_dropout if self.training else 0.0
-        q = q.contiguous()
-        k = k.contiguous()
-        v = v.contiguous()
-        try:
-            return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask_4d, dropout_p=dropout_p, is_causal=False)
-        except TypeError:
-            return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask_4d, dropout_p=dropout_p)
+        cos_b = cos.unsqueeze(1)
+        sin_b = sin.unsqueeze(1)
+        cos_new = cos_b * cos_d - sin_b * sin_d
+        sin_new = sin_b * cos_d + cos_b * sin_d
+        return cos_new, sin_new
 
-    def _dense_matmul_fp32(
-        self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask_4d: Optional[torch.Tensor]
-    ):
-        scores = torch.matmul(q.to(torch.float32), k.to(torch.float32).transpose(-2, -1)) * self.scaling
-        if attn_mask_4d is not None:
-            scores = scores + attn_mask_4d.to(dtype=torch.float32)
-        probs = torch.softmax(scores, dim=-1)
-        if self.training and self.attention_dropout > 0.0:
-            probs = F.dropout(probs, p=self.attention_dropout, training=True)
-        return torch.matmul(probs, v.to(torch.float32)).to(dtype=q.dtype)
+    def _full_attention(
+        self,
+        query_states: torch.Tensor,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        attention_mask_4d: Optional[torch.Tensor],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        attn_implementation = str(getattr(self.config, "attn_implementation", "eager") or "eager").lower()
+        if attn_implementation in {"sdpa", "flash_attention_2", "flash_attention"} and hasattr(
+            torch.nn.functional, "scaled_dot_product_attention"
+        ):
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=attention_mask_4d,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+                is_causal=False,
+            )
+            return attn_output, torch.empty(0, device=query_states.device, dtype=query_states.dtype)
 
-    def _sliding_mask_4d(self, q_len: int, k_len: int, past_len: int, device: torch.device) -> torch.Tensor:
-        window = int(getattr(self.config, "sliding_window", 0) or 0)
-        if window <= 0:
-            window = int(getattr(self.config, "sparse_attention_window", 0) or 0)
-        if window <= 0:
-            return torch.zeros((1, 1, q_len, k_len), device=device, dtype=torch.float32)
-        q_pos = torch.arange(past_len, past_len + q_len, device=device)
-        k_pos = torch.arange(0, k_len, device=device)
-        dist = q_pos[:, None] - k_pos[None, :]
-        invalid = (dist < 0) | (dist >= window)
-        mask = torch.zeros((q_len, k_len), device=device, dtype=torch.float32)
-        mask = mask.masked_fill(invalid, -1e9)
-        return mask[None, None, :, :]
+        attn_scores = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_scores = attn_scores.to(torch.float32)
+
+        if attention_mask_4d is not None:
+            attn_scores = attn_scores + attention_mask_4d.to(dtype=torch.float32)
+
+        attn_probs = torch.nn.functional.softmax(attn_scores, dim=-1)
+        attn_probs = torch.nn.functional.dropout(attn_probs, p=self.attention_dropout, training=self.training)
+
+        attn_probs_v = attn_probs.to(dtype=query_states.dtype)
+        attn_output = torch.matmul(attn_probs_v, value_states)
+        return attn_output, attn_probs_v
 
     def _local_global_block_sparse(
         self,
@@ -173,281 +280,274 @@ class HumanVAttention(nn.Module):
         k: torch.Tensor,
         v: torch.Tensor,
         attention_mask_2d: Optional[torch.Tensor],
-        past_len: int,
-        block_size: int,
-        local_num_blocks: int,
-        global_num_blocks: int,
-        global_stride: int,
-        window_tokens: int,
     ) -> torch.Tensor:
-        bsz, nheads, q_len, d = q.shape
-        _, _, k_len, _ = k.shape
+        bsz, num_heads, q_len, head_dim = q.shape
+        block_size = int(getattr(self.config, "sparse_block_size", 64))
+        local_num_blocks = int(getattr(self.config, "sparse_local_num_blocks", 4))
+        global_num_blocks = int(getattr(self.config, "sparse_global_num_blocks", 2))
+        global_stride = int(getattr(self.config, "sparse_global_block_stride", 4))
+        window = int(getattr(self.config, "sparse_attention_window", 0) or 0)
+        if window > 0:
+            local_num_blocks = min(local_num_blocks, max(1, (window + block_size - 1) // block_size))
+        prefill_chunk_blocks = int(getattr(self.config, "sparse_prefill_chunk_blocks", 0) or 0)
 
-        if (
-            q_len % block_size != 0
-            or k_len % block_size != 0
-            or past_len % block_size != 0
-            or q_len < block_size
-            or k_len < block_size
-        ):
-            return self._local_global_gather_sparse(
-                q=q,
-                k=k,
-                v=v,
-                attention_mask_2d=attention_mask_2d,
-                past_len=past_len,
-                block_size=block_size,
-                global_num_blocks=global_num_blocks,
-                global_stride=global_stride,
-                window_tokens=window_tokens,
-            )
+        if block_size <= 0:
+            raise ValueError("sparse_block_size must be > 0")
 
-        q_blocks = q_len // block_size
-        k_blocks = k_len // block_size
-        base_q_block = past_len // block_size
+        k_len = k.shape[2]
+        if q_len != k_len:
+            if q_len != 1:
+                attn_mask_4d = None
+                if attention_mask_2d is not None:
+                    attn_mask_4d = _expand_mask(attention_mask_2d, dtype=torch.float32, tgt_len=q_len)
+                out, _ = self._full_attention(q, k, v, attn_mask_4d)
+                return out
+            pos = k_len - 1
+            block = pos // block_size
+            offset = pos % block_size
 
-        q_block_ids = base_q_block + torch.arange(q_blocks, device=q.device, dtype=torch.long)
-        local_offsets = torch.arange(local_num_blocks, device=q.device, dtype=torch.long)
-        local_idx = q_block_ids[:, None] - (local_num_blocks - 1 - local_offsets[None, :])
-        local_idx = local_idx.clamp(min=0, max=max(k_blocks - 1, 0))
+            block_start = block * block_size
+            block_end = block_start + block_size
+            kv_pad = (block_end - k_len)
+            if kv_pad > 0:
+                k = torch.nn.functional.pad(k, (0, 0, 0, kv_pad))
+                v = torch.nn.functional.pad(v, (0, 0, 0, kv_pad))
+                if attention_mask_2d is not None:
+                    attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, (0, kv_pad), value=0)
+                k_len = k.shape[2]
 
-        if global_num_blocks > 0:
-            g = torch.arange(global_num_blocks, device=q.device, dtype=torch.long) * max(int(global_stride), 1)
-            g = g.clamp(min=0, max=max(k_blocks - 1, 0))
-            global_idx = g[None, :].expand(q_blocks, -1)
-        else:
-            global_idx = torch.zeros((q_blocks, 0), device=q.device, dtype=torch.long)
+            local_blocks = torch.arange(max(0, block - local_num_blocks + 1), block + 1, device=q.device, dtype=torch.long)
+            global_blocks = torch.arange(0, block + 1, global_stride, device=q.device, dtype=torch.long)
+            if global_num_blocks > 0 and global_blocks.numel() > global_num_blocks:
+                global_blocks = global_blocks[-global_num_blocks:]
+            sel_blocks = torch.unique(torch.cat([local_blocks, global_blocks], dim=0), sorted=True)
 
-        sel_idx = torch.cat([global_idx, local_idx], dim=1)
-        sel_len = sel_idx.shape[1]
+            k_sel = []
+            v_sel = []
+            m_sel = []
+            for b in sel_blocks.tolist():
+                s = b * block_size
+                e = s + block_size
+                k_sel.append(k[:, :, s:e, :])
+                v_sel.append(v[:, :, s:e, :])
+                if attention_mask_2d is None:
+                    m_sel.append(torch.ones((bsz, block_size), device=q.device, dtype=torch.float32))
+                else:
+                    m_sel.append(attention_mask_2d[:, s:e].to(dtype=torch.float32))
+            k_sel = torch.cat(k_sel, dim=2)
+            v_sel = torch.cat(v_sel, dim=2)
+            km = torch.cat(m_sel, dim=1)
 
-        valid = sel_idx <= q_block_ids[:, None]
-        if window_tokens and window_tokens > 0:
-            window_blocks = (int(window_tokens) + block_size - 1) // block_size
-            min_k = (q_block_ids - (window_blocks - 1)).clamp(min=0)
-            valid = valid & (sel_idx >= min_k[:, None])
+            scores = torch.matmul(q.to(torch.float32), k_sel.transpose(2, 3).to(torch.float32)) * self.scaling
+            if sel_blocks.numel() > 0:
+                cur_in_sel = (sel_blocks == block).nonzero(as_tuple=False)
+                if cur_in_sel.numel() > 0:
+                    cur_idx = int(cur_in_sel[0].item())
+                    start = cur_idx * block_size
+                    end = start + block_size
+                    causal = torch.arange(block_size, device=q.device) > offset
+                    scores[:, :, :, start:end] = scores[:, :, :, start:end] + causal.to(dtype=torch.float32).view(
+                        1, 1, 1, block_size
+                    ) * -1e9
 
-        if sel_len > 1:
-            eq = sel_idx[:, :, None].eq(sel_idx[:, None, :])
-            lower = torch.tril(torch.ones((sel_len, sel_len), device=q.device, dtype=torch.bool), diagonal=-1)
-            has_prev = (eq & lower[None, :, :]).any(dim=-1)
-            keep = (~has_prev) & valid
-        else:
-            keep = valid
+            scores = scores + (1.0 - km.view(bsz, 1, 1, -1)) * -1e9
+            probs = torch.softmax(scores, dim=-1).to(dtype=v_sel.dtype)
+            probs = torch.nn.functional.dropout(probs, p=self.attention_dropout, training=self.training)
+            out = torch.matmul(probs, v_sel)
+            return out
+
+        pad_len = (block_size - (q_len % block_size)) % block_size
+        if pad_len:
+            q = torch.nn.functional.pad(q, (0, 0, 0, pad_len))
+            k = torch.nn.functional.pad(k, (0, 0, 0, pad_len))
+            v = torch.nn.functional.pad(v, (0, 0, 0, pad_len))
+            if attention_mask_2d is not None:
+                attention_mask_2d = torch.nn.functional.pad(attention_mask_2d, (0, pad_len), value=0)
+
+        seq_len = q.shape[2]
+        n_blocks = seq_len // block_size
+
+        q_b = q.view(bsz, num_heads, n_blocks, block_size, head_dim)
+        k_b = k.view(bsz, num_heads, n_blocks, block_size, head_dim)
+        v_b = v.view(bsz, num_heads, n_blocks, block_size, head_dim)
 
         if attention_mask_2d is None:
-            key_valid = torch.ones((bsz, k_len), device=q.device, dtype=torch.float32)
+            attn_mask_blocks = torch.ones((bsz, n_blocks, block_size), device=q.device, dtype=torch.float32)
         else:
-            key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
-            if key_valid.shape[-1] != k_len:
-                key_valid = key_valid[..., :k_len]
+            attn_mask_blocks = attention_mask_2d.view(bsz, n_blocks, block_size).to(dtype=torch.float32)
 
-        k_blk = k.reshape(bsz, nheads, k_blocks, block_size, d)
-        v_blk = v.reshape(bsz, nheads, k_blocks, block_size, d)
-        key_valid_blk = key_valid.reshape(bsz, k_blocks, block_size)
+        t = torch.arange(n_blocks, device=q.device)
+        local_offsets = torch.arange(local_num_blocks - 1, -1, -1, device=q.device)
+        local_idx = t[:, None] - local_offsets[None, :]
+        local_valid = local_idx >= 0
+        local_idx = local_idx.clamp_min(0)
 
-        flat_sel = sel_idx.reshape(-1)
+        global_idx = torch.arange(global_num_blocks, device=q.device)[None, :] * global_stride
+        global_idx = global_idx.expand(n_blocks, -1)
+        global_valid = global_idx <= t[:, None]
 
-        k_sel = torch.index_select(k_blk, dim=2, index=flat_sel).reshape(bsz, nheads, q_blocks, sel_len, block_size, d)
-        v_sel = torch.index_select(v_blk, dim=2, index=flat_sel).reshape(bsz, nheads, q_blocks, sel_len, block_size, d)
+        out_num_blocks = global_num_blocks
+        out_offsets = torch.arange(out_num_blocks, device=q.device)
+        out_idx = (t[:, None] - local_num_blocks) - out_offsets[None, :] * global_stride
+        out_valid = out_idx >= 0
+        out_idx = out_idx.clamp_min(0)
 
-        kv_sel = torch.index_select(key_valid_blk, dim=1, index=flat_sel).reshape(bsz, q_blocks, sel_len, block_size)
-        kv_sel = kv_sel[:, None, :, :, :].expand(bsz, nheads, q_blocks, sel_len, block_size)
+        sel_idx = torch.cat([local_idx, global_idx], dim=1)
+        sel_valid = torch.cat([local_valid, global_valid], dim=1)
 
-        keep_tok = keep[:, :, None].expand(q_blocks, sel_len, block_size).reshape(q_blocks, sel_len * block_size)
-        keep_tok = keep_tok[None, None, :, :].expand(bsz, nheads, q_blocks, sel_len * block_size)
+        sel_count = sel_idx.shape[1]
 
-        kv_flat = kv_sel.reshape(bsz, nheads, q_blocks, sel_len * block_size) * keep_tok.to(dtype=torch.float32)
+        gather_idx = sel_idx.view(1, 1, n_blocks, sel_count, 1, 1).expand(bsz, num_heads, n_blocks, sel_count, block_size, head_dim)
+        k_sel = torch.gather(
+            k_b.unsqueeze(3).expand(bsz, num_heads, n_blocks, sel_count, block_size, head_dim),
+            dim=2,
+            index=gather_idx,
+        )
+        v_sel = torch.gather(
+            v_b.unsqueeze(3).expand(bsz, num_heads, n_blocks, sel_count, block_size, head_dim),
+            dim=2,
+            index=gather_idx,
+        )
 
-        q_blk = q.reshape(bsz, nheads, q_blocks, block_size, d)
+        km_gather_idx = sel_idx.view(1, n_blocks, sel_count, 1).expand(bsz, n_blocks, sel_count, block_size)
+        km_sel = torch.gather(
+            attn_mask_blocks.unsqueeze(2).expand(bsz, n_blocks, sel_count, block_size),
+            dim=1,
+            index=km_gather_idx,
+        )
+        km_sel = km_sel * sel_valid.view(1, n_blocks, sel_count, 1).to(dtype=km_sel.dtype)
 
-        q2 = q_blk.to(torch.float32).reshape(bsz * nheads * q_blocks, block_size, d)
-        k2 = k_sel.to(torch.float32).reshape(bsz * nheads * q_blocks, sel_len * block_size, d)
-        v2 = v_sel.to(torch.float32).reshape(bsz * nheads * q_blocks, sel_len * block_size, d)
+        intra = torch.triu(torch.full((block_size, block_size), -1e9, device=q.device, dtype=torch.float32), diagonal=1)
+        same_block = sel_idx == t[:, None]
+        causal = (same_block[:, :, None, None].to(dtype=torch.float32) * intra[None, None, :, :])
+        causal = causal.permute(0, 2, 1, 3).reshape(n_blocks, block_size, sel_count * block_size)
 
-        scores = torch.matmul(q2, k2.transpose(1, 2)) * self.scaling
-        mask = (1.0 - kv_flat).reshape(bsz * nheads * q_blocks, 1, sel_len * block_size) * -1e9
-        scores = scores + mask
+        k_flat = k_sel.reshape(bsz, num_heads, n_blocks, sel_count * block_size, head_dim)
+        v_flat = v_sel.reshape(bsz, num_heads, n_blocks, sel_count * block_size, head_dim)
+        km_flat = km_sel.reshape(bsz, n_blocks, sel_count * block_size)
 
-        same = sel_idx.eq(q_block_ids[:, None])
-        if same.any():
-            scores6 = scores.reshape(bsz, nheads, q_blocks, block_size, sel_len, block_size)
-            intra = torch.triu(
-                torch.full((block_size, block_size), -1e9, device=q.device, dtype=torch.float32), diagonal=1
+        k_pool = k_b.mean(dim=3)
+        v_pool = v_b.mean(dim=3)
+        kp_idx = out_idx
+        kp_valid = out_valid
+        kp_gather = kp_idx.view(1, 1, n_blocks, out_num_blocks, 1).expand(bsz, num_heads, n_blocks, out_num_blocks, head_dim)
+        k_pool_sel = torch.gather(
+            k_pool.unsqueeze(3).expand(bsz, num_heads, n_blocks, out_num_blocks, head_dim),
+            dim=2,
+            index=kp_gather,
+        )
+        v_pool_sel = torch.gather(
+            v_pool.unsqueeze(3).expand(bsz, num_heads, n_blocks, out_num_blocks, head_dim),
+            dim=2,
+            index=kp_gather,
+        )
+
+        km_pool_idx = kp_idx.view(1, n_blocks, out_num_blocks).expand(bsz, n_blocks, out_num_blocks)
+        km_pool = torch.gather(attn_mask_blocks.amax(dim=2), dim=1, index=km_pool_idx)
+        km_pool = km_pool * kp_valid.view(1, n_blocks, out_num_blocks).to(dtype=km_pool.dtype)
+
+        def _sparse_attend(q_chunk: torch.Tensor, start_block: int, end_block: int) -> torch.Tensor:
+            qb = q_chunk[:, :, start_block:end_block]
+            qf = qb.to(torch.float32)
+            kf = k_flat[:, :, start_block:end_block].to(torch.float32)
+            vf = v_flat[:, :, start_block:end_block]
+            scores = torch.einsum("bhntqd,bhntkd->bhntqk", qf, kf) * self.scaling
+            scores = scores + causal[start_block:end_block].view(1, 1, -1, block_size, sel_count * block_size)
+            scores = scores + (1.0 - km_flat[:, start_block:end_block].view(bsz, 1, -1, 1, sel_count * block_size)) * -1e9
+
+            kpf = k_pool_sel[:, :, start_block:end_block].to(torch.float32)
+            sp = torch.einsum("bhntqd,bhntpd->bhntqp", qf, kpf) * self.scaling
+            sp = sp + (1.0 - km_pool[:, start_block:end_block].view(bsz, 1, -1, 1, out_num_blocks)) * -1e9
+
+            scores = torch.cat([scores, sp], dim=-1)
+            probs = torch.softmax(scores, dim=-1)
+            probs = torch.nn.functional.dropout(probs, p=self.attention_dropout, training=self.training)
+
+            p_full = probs[..., : sel_count * block_size].to(dtype=vf.dtype)
+            p_pool = probs[..., sel_count * block_size :].to(dtype=vf.dtype)
+
+            out_full = torch.einsum("bhntqk,bhntkd->bhntqd", p_full, vf)
+            out_pool = torch.einsum(
+                "bhntqp,bhntpd->bhntqd", p_pool, v_pool_sel[:, :, start_block:end_block].to(dtype=vf.dtype)
             )
-            same_m = same[None, None, :, None, :, None].to(dtype=torch.float32)
-            scores6 = scores6 + intra[None, None, None, :, None, :] * same_m
-            scores = scores6.reshape(bsz * nheads * q_blocks, block_size, sel_len * block_size)
+            return out_full + out_pool
 
-        probs = torch.softmax(scores, dim=-1)
-        if self.training and self.attention_dropout > 0.0:
-            probs = F.dropout(probs, p=self.attention_dropout, training=True)
-
-        out = torch.matmul(probs, v2).to(dtype=q.dtype)
-        out = out.reshape(bsz, nheads, q_blocks, block_size, d).reshape(bsz, nheads, q_len, d)
-        return out
-
-    def _local_global_gather_sparse(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        v: torch.Tensor,
-        attention_mask_2d: Optional[torch.Tensor],
-        past_len: int,
-        block_size: int,
-        global_num_blocks: int,
-        global_stride: int,
-        window_tokens: int,
-    ) -> torch.Tensor:
-        bsz, nheads, q_len, d = q.shape
-        _, _, k_len, _ = k.shape
-
-        if attention_mask_2d is None:
-            key_valid = torch.ones((bsz, k_len), device=q.device, dtype=torch.float32)
+        if prefill_chunk_blocks and q_len > 1:
+            outs = []
+            for s in range(0, n_blocks, prefill_chunk_blocks):
+                e = min(n_blocks, s + prefill_chunk_blocks)
+                outs.append(_sparse_attend(q_b, s, e))
+            out_b = torch.cat(outs, dim=2)
         else:
-            key_valid = attention_mask_2d.to(device=q.device, dtype=torch.float32)
-            if key_valid.shape[-1] != k_len:
-                key_valid = key_valid[..., :k_len]
+            out_b = _sparse_attend(q_b, 0, n_blocks)
 
-        window = int(window_tokens) if window_tokens and window_tokens > 0 else k_len
-        t0 = past_len
-        q_pos = t0 + torch.arange(q_len, device=q.device, dtype=torch.long)
-
-        k_indices_all = []
-        for i in range(q_len):
-            t = int(q_pos[i].item())
-            local_start = max(0, t - window + 1)
-            local_idx = torch.arange(local_start, t + 1, device=q.device, dtype=torch.long)
-
-            if global_num_blocks > 0:
-                g_blocks = torch.arange(global_num_blocks, device=q.device, dtype=torch.long) * max(int(global_stride), 1)
-                g_blocks = g_blocks.clamp(min=0, max=max((k_len - 1) // max(block_size, 1), 0))
-                g_tok = []
-                for b in g_blocks.tolist():
-                    s = b * block_size
-                    e = min((b + 1) * block_size, t + 1, k_len)
-                    if s < e:
-                        g_tok.append(torch.arange(s, e, device=q.device, dtype=torch.long))
-                global_idx = torch.cat(g_tok, dim=0) if len(g_tok) else torch.empty((0,), device=q.device, dtype=torch.long)
-            else:
-                global_idx = torch.empty((0,), device=q.device, dtype=torch.long)
-
-            idx = torch.cat([global_idx, local_idx], dim=0)
-            idx, _ = torch.sort(idx)
-            idx = torch.unique_consecutive(idx)
-            k_indices_all.append(idx)
-
-        max_k = max(int(x.numel()) for x in k_indices_all) if k_indices_all else 0
-        if max_k == 0:
-            max_k = 1
-
-        idx_mat = torch.full((q_len, max_k), 0, device=q.device, dtype=torch.long)
-        valid_mat = torch.zeros((q_len, max_k), device=q.device, dtype=torch.float32)
-
-        for i, idx in enumerate(k_indices_all):
-            n = int(idx.numel())
-            idx_mat[i, :n] = idx
-            valid_mat[i, :n] = 1.0
-
-        k_sel = k.index_select(dim=2, index=idx_mat.reshape(-1)).reshape(bsz, nheads, q_len, max_k, d)
-        v_sel = v.index_select(dim=2, index=idx_mat.reshape(-1)).reshape(bsz, nheads, q_len, max_k, d)
-
-        kv = key_valid.index_select(dim=1, index=idx_mat.reshape(-1)).reshape(bsz, q_len, max_k)
-        kv = kv[:, None, :, :].expand(bsz, nheads, q_len, max_k)
-        kv = kv * valid_mat[None, None, :, :]
-
-        qf = q.to(torch.float32)
-        kf = k_sel.to(torch.float32)
-        vf = v_sel.to(torch.float32)
-
-        scores = torch.einsum("bhqd,bhqkd->bhqk", qf, kf) * self.scaling
-        scores = scores + (1.0 - kv) * -1e9
-
-        probs = torch.softmax(scores, dim=-1)
-        if self.training and self.attention_dropout > 0.0:
-            probs = F.dropout(probs, p=self.attention_dropout, training=True)
-
-        out = torch.einsum("bhqk,bhqkd->bhqd", probs, vf).to(dtype=q.dtype)
+        out = out_b.reshape(bsz, num_heads, seq_len, head_dim)
+        if pad_len:
+            out = out[:, :, :q_len, :]
         return out
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask_4d: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         attention_mask_2d: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
         use_cache: Optional[bool] = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         bsz, q_len, _ = hidden_states.size()
-        layer_type = self._get_layer_type()
 
-        q = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(hidden_states).view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
-        v = self.v_proj(hidden_states).view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_kv_heads, self.head_dim).transpose(1, 2)
 
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            q, k = apply_rotary_pos_emb(q, k, cos, sin)
+        cos, sin = position_embeddings
+        cos, sin = self._maybe_apply_selective_rope(cos, sin, hidden_states, query_states.dtype, query_states.device)
 
-        past_len = 0
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
         if past_key_values is not None:
-            past_len = int(past_key_values.get_seq_length())
-            k, v = past_key_values.update(k, v, self.layer_idx)
+            kv_dtype = _get_dtype_from_str(getattr(self.config, "kv_cache_dtype", "bf16"), key_states.dtype)
+            key_states = key_states.to(dtype=kv_dtype)
+            value_states = value_states.to(dtype=kv_dtype)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        k = repeat_kv(k, self.num_kv_groups)
-        v = repeat_kv(v, self.num_kv_groups)
+        layer_type = self._get_layer_type()
+        use_sparse = bool(getattr(self.config, "use_sparse_attention", False)) and layer_type == "sliding_attention"
+        sparse_impl = str(getattr(self.config, "sparse_attention_impl", "local_global_block") or "local_global_block")
 
-        use_sparse = bool(getattr(self.config, "use_sparse_attention", False))
-        sparse_impl = str(getattr(self.config, "sparse_attention_impl", "local_global_block"))
-
-        if use_sparse and layer_type == "sliding_attention" and sparse_impl == "local_global_block":
-            block_size = int(getattr(self.config, "sparse_block_size", 64))
-            local_num_blocks = int(getattr(self.config, "sparse_local_num_blocks", 4))
-            global_num_blocks = int(getattr(self.config, "sparse_global_num_blocks", 2))
-            global_stride = int(getattr(self.config, "sparse_global_block_stride", 4))
-            window_tokens = int(getattr(self.config, "sparse_attention_window", 0) or 0)
-
-            attn_out = self._local_global_block_sparse(
-                q=q,
-                k=k,
-                v=v,
-                attention_mask_2d=attention_mask_2d,
-                past_len=past_len,
-                block_size=block_size,
-                local_num_blocks=local_num_blocks,
-                global_num_blocks=global_num_blocks,
-                global_stride=global_stride,
-                window_tokens=window_tokens,
-            )
+        if use_sparse and sparse_impl == "local_global_block":
+            attn_output = self._local_global_block_sparse(query_states, key_states, value_states, attention_mask_2d)
+            attn_weights = torch.empty(0, device=attn_output.device, dtype=attn_output.dtype)
         else:
-            backend = self._get_backend()
-            attn_mask = attention_mask_4d
-            if layer_type == "sliding_attention":
-                slide = self._sliding_mask_4d(q_len=q_len, k_len=k.shape[-2], past_len=past_len, device=q.device)
-                attn_mask = slide if attn_mask is None else (attn_mask.to(torch.float32) + slide)
-            if backend == "matmul":
-                attn_out = self._dense_matmul_fp32(q, k, v, attn_mask)
-            else:
-                attn_out = self._dense_sdpa(q, k, v, attn_mask)
+            attn_output, attn_weights = self._full_attention(query_states, key_states, value_states, attention_mask)
 
-        attn_out = attn_out.transpose(1, 2).contiguous().reshape(bsz, q_len, self.num_heads * self.head_dim)
-        return self.o_proj(attn_out), None
+        attn_output = attn_output.transpose(1, 2).contiguous().view(bsz, q_len, self.num_heads * self.head_dim)
+        return self.o_proj(attn_output), attn_weights
 
 
 class HumanVDecoderLayer(nn.Module):
     def __init__(self, config: HumanVConfig, layer_idx: int):
         super().__init__()
+        norm_cls = _make_norm(config)
+        if norm_cls is nn.LayerNorm:
+            self.input_layernorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_attention_layernorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.input_layernorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_attention_layernorm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+
         self.self_attn = HumanVAttention(config=config, layer_idx=layer_idx)
         self.mlp = HumanVMLP(config)
-        self.input_layernorm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask_4d: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         attention_mask_2d: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         past_key_values: Optional[Cache] = None,
@@ -456,14 +556,14 @@ class HumanVDecoderLayer(nn.Module):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask_4d=attention_mask_4d,
+            attention_mask=attention_mask,
             attention_mask_2d=attention_mask_2d,
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -481,7 +581,7 @@ class HumanVPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["HumanVDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module):
         std = float(getattr(self.config, "initializer_range", 0.02))
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -500,38 +600,40 @@ class HumanVModel(HumanVPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([HumanVDecoderLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.norm = HumanVRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList([HumanVDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        norm_cls = _make_norm(config)
+        if norm_cls is nn.LayerNorm:
+            self.norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+        else:
+            self.norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps)
+
         self.rotary_emb = HumanVRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
-    def _normalize_attention_mask_2d(
-        self, attention_mask_2d: Optional[torch.Tensor], bsz: int, total_len: int, device: torch.device
-    ) -> torch.Tensor:
-        if attention_mask_2d is None:
-            return torch.ones((bsz, total_len), device=device, dtype=torch.float32)
-        m = attention_mask_2d.to(device=device, dtype=torch.float32)
-        if m.dim() != 2:
-            m = m.view(bsz, -1)
-        if m.shape[-1] == total_len:
-            return m
-        if m.shape[-1] < total_len:
-            pad = torch.ones((bsz, total_len - m.shape[-1]), device=device, dtype=torch.float32)
-            return torch.cat([pad, m], dim=-1)
-        return m[:, -total_len:]
+    def _prepare_attention_masks(
+        self,
+        attention_mask: Optional[torch.Tensor],
+        input_shape: tuple[int, int],
+        inputs_embeds: torch.Tensor,
+        past_key_values_length: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        bsz, tgt_len = input_shape
+        device = inputs_embeds.device
+        dtype = torch.float32
 
-    def _build_attention_mask_4d(self, attention_mask_2d_full: torch.Tensor, q_len: int, past_len: int) -> torch.Tensor:
-        bsz, k_len = attention_mask_2d_full.shape
-        device = attention_mask_2d_full.device
-        causal = torch.triu(
-            torch.full((q_len, k_len), -1e9, device=device, dtype=torch.float32),
-            diagonal=1 + past_len,
-        )
-        causal = causal[None, None, :, :]
-        expanded = attention_mask_2d_full[:, None, None, :].to(dtype=torch.float32)
-        inverted = (1.0 - expanded) * -1e9
-        return causal + inverted
+        if attention_mask is None:
+            attention_mask_2d = torch.ones((bsz, tgt_len + past_key_values_length), device=device, dtype=torch.long)
+        else:
+            attention_mask_2d = attention_mask.to(device=device)
+            if attention_mask_2d.dim() == 2 and attention_mask_2d.shape[1] == tgt_len and past_key_values_length > 0:
+                prefix = torch.ones((bsz, past_key_values_length), device=device, dtype=attention_mask_2d.dtype)
+                attention_mask_2d = torch.cat([prefix, attention_mask_2d], dim=-1)
+
+        causal_mask = _make_causal_mask((bsz, tgt_len), past_key_values_length, dtype=dtype, device=device)
+        padding_mask = _expand_mask(attention_mask_2d, dtype=dtype, tgt_len=tgt_len)
+        attention_mask_4d = causal_mask + padding_mask
+        return attention_mask_4d, attention_mask_2d
 
     def forward(
         self,
@@ -542,91 +644,37 @@ class HumanVModel(HumanVPreTrainedModel):
         use_cache: Optional[bool] = None,
         **kwargs,
     ) -> BaseModelOutputWithPast:
+        use_cache = bool(use_cache if use_cache is not None else getattr(self.config, "use_cache", True))
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache is None:
-            use_cache = bool(getattr(self.config, "use_cache", True))
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
-        bsz, seq_len = inputs_embeds.shape[:2]
-        past_len = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
-        total_len = past_len + seq_len
-
+        batch_size, seq_length = inputs_embeds.shape[:2]
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         max_pos = int(getattr(self.config, "max_position_embeddings", 0) or 0)
-        if max_pos > 0 and total_len > max_pos:
-            raise ValueError(f"Sequence length {total_len} exceeds max_position_embeddings={max_pos}.")
+        if max_pos > 0 and (past_length + seq_length) > max_pos:
+            raise ValueError(f"Sequence length {past_length + seq_length} exceeds max_position_embeddings={max_pos}")
 
-        position_ids = torch.arange(past_len, total_len, dtype=torch.long, device=inputs_embeds.device)
-        position_ids = position_ids.unsqueeze(0).expand(bsz, -1)
+        position_ids = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=inputs_embeds.device)
+        position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
-        cos, sin = self.rotary_emb(inputs_embeds, position_ids[:, -seq_len:])
+        cos, sin = self.rotary_emb(inputs_embeds, position_ids)
         position_embeddings = (cos, sin)
 
-        attn_2d_full = self._normalize_attention_mask_2d(attention_mask, bsz, total_len, inputs_embeds.device)
-        attn_4d = self._build_attention_mask_4d(attn_2d_full, q_len=seq_len, past_len=past_len)
+        attention_mask_4d, attention_mask_2d = self._prepare_attention_masks(attention_mask, (batch_size, seq_length), inputs_embeds, past_length)
 
         hidden_states = inputs_embeds
-
-        use_sparse = bool(getattr(self.config, "use_sparse_attention", False))
-        block_size = int(getattr(self.config, "sparse_block_size", 64))
-        chunk_blocks = int(getattr(self.config, "sparse_prefill_chunk_blocks", 0) or 0)
-        chunk_tokens = chunk_blocks * block_size if chunk_blocks > 0 else 0
-
-        if use_cache and use_sparse and chunk_tokens > 0 and seq_len > chunk_tokens:
-            outs = []
-            start = 0
-            while start < seq_len:
-                end = min(seq_len, start + chunk_tokens)
-                hs = inputs_embeds[:, start:end, :]
-
-                past_len_i = int(past_key_values.get_seq_length()) if past_key_values is not None else 0
-                total_len_i = past_len_i + (end - start)
-
-                pos_i = torch.arange(past_len_i, total_len_i, dtype=torch.long, device=hs.device)
-                pos_i = pos_i.unsqueeze(0).expand(bsz, -1)
-                cos_i, sin_i = self.rotary_emb(hs, pos_i[:, -hs.shape[1] :])
-                pos_emb_i = (cos_i, sin_i)
-
-                attn_2d_i = attn_2d_full[:, :total_len_i]
-                attn_4d_i = self._build_attention_mask_4d(attn_2d_i, q_len=hs.shape[1], past_len=past_len_i)
-
-                for layer in self.layers:
-                    if self.gradient_checkpointing and self.training:
-                        hs = self._gradient_checkpointing_func(
-                            layer.__call__,
-                            hs,
-                            attn_4d_i,
-                            attn_2d_i,
-                            pos_emb_i,
-                            past_key_values,
-                            use_cache,
-                        )
-                    else:
-                        hs = layer(
-                            hs,
-                            attention_mask_4d=attn_4d_i,
-                            attention_mask_2d=attn_2d_i,
-                            position_embeddings=pos_emb_i,
-                            past_key_values=past_key_values,
-                            use_cache=use_cache,
-                        )
-
-                outs.append(hs)
-                start = end
-
-            hidden_states = torch.cat(outs, dim=1)
-            hidden_states = self.norm(hidden_states)
-            return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
         for layer in self.layers:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
                     layer.__call__,
                     hidden_states,
-                    attn_4d,
-                    attn_2d_full,
+                    attention_mask_4d,
+                    attention_mask_2d,
                     position_embeddings,
                     past_key_values,
                     use_cache,
@@ -634,8 +682,8 @@ class HumanVModel(HumanVPreTrainedModel):
             else:
                 hidden_states = layer(
                     hidden_states,
-                    attention_mask_4d=attn_4d,
-                    attention_mask_2d=attn_2d_full,
+                    attention_mask=attention_mask_4d,
+                    attention_mask_2d=attention_mask_2d,
                     position_embeddings=position_embeddings,
                     past_key_values=past_key_values,
                     use_cache=use_cache,
@@ -683,10 +731,10 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            **kwargs,
         )
+
         hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states).to(torch.float32)
 
         loss = None
         if labels is not None:
@@ -700,17 +748,129 @@ class HumanVForCausalLM(HumanVPreTrainedModel, GenerationMixin):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
         return {
             "input_ids": input_ids,
             "past_key_values": past_key_values,
             "attention_mask": attention_mask,
+            "inputs_embeds": inputs_embeds,
             "use_cache": kwargs.get("use_cache", True),
         }
 
 
-__all__ = ["HumanVForCausalLM", "HumanVModel", "HumanVPreTrainedModel"]
+class HumanVForSequenceClassification(HumanVPreTrainedModel):
+    def __init__(self, config: HumanVConfig):
+        super().__init__(config)
+        self.num_labels = int(getattr(config, "num_labels", 2))
+        self.model = HumanVModel(config)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> SequenceClassifierOutputWithPast:
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False)
+        hidden = outputs.last_hidden_state
+        pooled = hidden[:, -1, :]
+        logits = self.score(pooled).to(torch.float32)
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                loss = torch.nn.functional.mse_loss(logits.view(-1), labels.view(-1).to(logits.dtype))
+            else:
+                loss = torch.nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class HumanVForTokenClassification(HumanVPreTrainedModel):
+    def __init__(self, config: HumanVConfig):
+        super().__init__(config)
+        self.num_labels = int(getattr(config, "num_labels", 2))
+        self.model = HumanVModel(config)
+        self.dropout = nn.Dropout(float(getattr(config, "classifier_dropout", 0.0)))
+        self.classifier = nn.Linear(config.hidden_size, self.num_labels)
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> TokenClassifierOutput:
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False)
+        sequence_output = self.dropout(outputs.last_hidden_state)
+        logits = self.classifier(sequence_output).to(torch.float32)
+
+        loss = None
+        if labels is not None:
+            loss = torch.nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+
+        return TokenClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+
+
+class HumanVForQuestionAnswering(HumanVPreTrainedModel):
+    def __init__(self, config: HumanVConfig):
+        super().__init__(config)
+        self.model = HumanVModel(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> QuestionAnsweringModelOutput:
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False)
+        logits = self.qa_outputs(outputs.last_hidden_state).to(torch.float32)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        loss = None
+        if start_positions is not None and end_positions is not None:
+            ignored_index = start_logits.size(1)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            loss = (start_loss + end_loss) / 2
+
+        return QuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "HumanVForCausalLM",
+    "HumanVForQuestionAnswering",
+    "HumanVForSequenceClassification",
+    "HumanVForTokenClassification",
+    "HumanVModel",
+    "HumanVPreTrainedModel",
+]
