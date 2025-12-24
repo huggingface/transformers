@@ -32,8 +32,9 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
@@ -1093,7 +1094,7 @@ class AlignModel(AlignPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1102,7 +1103,8 @@ class AlignModel(AlignPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -1121,21 +1123,24 @@ class AlignModel(AlignPreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            **kwargs,
         )
         last_hidden_state = text_outputs[0][:, 0, :]
-        text_features = self.text_projection(last_hidden_state)
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -1158,9 +1163,7 @@ class AlignModel(AlignPreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(pixel_values=pixel_values)
-        image_features = vision_outputs.pooler_output
-        return image_features
+        return self.vision_model(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

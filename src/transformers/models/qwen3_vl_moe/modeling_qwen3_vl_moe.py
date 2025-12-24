@@ -35,7 +35,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -439,6 +439,17 @@ class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    """
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
+
+
 class Qwen3VLMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -752,7 +763,10 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -800,9 +814,13 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        return BaseModelOutputWithDeepstackFeatures(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+            deepstack_features=deepstack_feature_lists,
+        )
 
 
 class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
@@ -1222,9 +1240,13 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
-    ):
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -1235,9 +1257,15 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 The temporal, height and width of feature shape of each video in LLM.
         """
         # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw)
+        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    @can_return_tuple
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -1248,10 +1276,15 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds, deepstack_image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
+            pixel_values, grid_thw=image_grid_thw, **kwargs
+        )
+        image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds, deepstack_image_embeds
+        vision_output.pooler_output = image_embeds
+
+        return vision_output
 
     def get_placeholder_mask(
         self,
@@ -1325,7 +1358,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         video_mask = None
 
         if pixel_values is not None:
-            image_embeds, deepstack_image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True
+            )
+            image_embeds = image_outputs.pooler_output
+            deepstack_image_embeds = image_outputs.deepstack_features
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1333,7 +1370,11 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds, deepstack_video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            )
+            video_embeds = video_outputs.pooler_output
+            deepstack_video_embeds = video_outputs.deepstack_features
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1507,12 +1548,22 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         self.model.set_input_embeddings(value)
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     def forward(

@@ -37,7 +37,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecoderConfig, Sam3TrackerPromptEncoderConfig
@@ -831,7 +831,8 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -987,10 +988,12 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
+            image_outputs: Sam3TrackerVisionEncoderOutput = self.get_image_features(
+                pixel_values, return_dict=True, **kwargs
             )
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1050,6 +1053,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
             vision_attentions=vision_attentions,
         )
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1074,10 +1078,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
                 - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
                 - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
         """
-        vision_outputs: Sam3TrackerVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: Sam3TrackerVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -1094,8 +1095,12 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
+        # fpn hidden states/position encoding order, still have to double-check
+        return vision_outputs
 
 
 __all__ = ["Sam3TrackerModel", "Sam3TrackerPreTrainedModel"]

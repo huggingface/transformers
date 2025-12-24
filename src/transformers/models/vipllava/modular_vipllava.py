@@ -28,7 +28,8 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_vipllava import VipLlavaConfig
 
 
@@ -72,8 +73,12 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 
 class VipLlavaModel(LlavaModel):
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -84,13 +89,14 @@ class VipLlavaModel(LlavaModel):
             vision_feature_layers (`Union[int, list[int]]`):
                 The vision feature layer, or the list of indexes of the layers to select
                 the vision feature.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.
@@ -101,7 +107,9 @@ class VipLlavaModel(LlavaModel):
             image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     @auto_docstring
     def forward(
@@ -142,8 +150,8 @@ class VipLlavaModel(LlavaModel):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
-            )
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -175,9 +183,14 @@ class VipLlavaModel(LlavaModel):
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_image_features(pixel_values=pixel_values, vision_feature_layers=vision_feature_layers)
+        return self.model.get_image_features(
+            pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
+        )
 
     def forward(
         self,

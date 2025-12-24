@@ -39,12 +39,12 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig, Qwen2_5_VLVisionConfig
 
@@ -417,7 +417,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         return window_index, cu_window_seqlens
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -471,11 +474,14 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states[reverse_indices, :]
+        merged_hidden_states = merged_hidden_states[reverse_indices, :]
 
-        return hidden_states
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+        )
 
 
 @dataclass
@@ -1170,8 +1176,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1183,12 +1193,20 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        return video_embeds
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        return vision_outputs
+
+    @can_return_tuple
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1199,10 +1217,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -1286,7 +1306,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1294,7 +1314,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1396,12 +1416,22 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         self.model.set_input_embeddings(value)
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

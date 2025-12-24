@@ -36,7 +36,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     torch_int,
 )
 from ...utils.generic import check_model_inputs
@@ -790,14 +789,15 @@ class SiglipModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.text_model.embeddings.token_embedding = value
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -817,16 +817,14 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
-        pooled_output = text_outputs.pooler_output
 
-        return pooled_output
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
@@ -857,14 +855,11 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        return pooled_output
 
     # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     @can_return_tuple

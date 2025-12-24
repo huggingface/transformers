@@ -831,10 +831,10 @@ class JanusVQVAE(ChameleonVQVAE):
         **kwargs,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
-        quant, embedding_loss, indices = self.encode(pixel_values)
-        decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        encode_outputs = self.encode(pixel_values, return_dict=True, **kwargs)
+        decoded_pixel_values = self.decode(encode_outputs.image_tokens.view(batch_size, -1))
 
-        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
+        return JanusVQVAEOutput(decoded_pixel_values, encode_outputs.embedding_loss)
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -904,10 +904,13 @@ class JanusModel(JanusPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        image_embeds = self.vision_model(pixel_values)
-        image_embeds = self.aligner(image_embeds.last_hidden_state)
-        return image_embeds
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        vision_outputs = self.vision_model(pixel_values, **kwargs)
+        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -956,7 +959,7 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(

@@ -28,7 +28,8 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -996,7 +997,7 @@ class FlavaModel(FlavaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1004,7 +1005,8 @@ class FlavaModel(FlavaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1042,13 +1044,14 @@ class FlavaModel(FlavaPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            **kwargs,
         )
-        pooled_output = text_outputs.last_hidden_state
-        text_features = self.text_projection(pooled_output)
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
@@ -1056,7 +1059,8 @@ class FlavaModel(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1089,11 +1093,12 @@ class FlavaModel(FlavaPreTrainedModel):
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
-        pooled_output = image_outputs.last_hidden_state
-        image_features = self.image_projection(pooled_output)
+        last_hidden_state = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.image_projection(last_hidden_state)
 
-        return image_features
+        return image_outputs
 
     @auto_docstring
     def forward(

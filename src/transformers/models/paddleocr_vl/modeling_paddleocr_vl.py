@@ -1196,8 +1196,12 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1209,12 +1213,20 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
                 The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(video_embeds, split_sizes)
-        return video_embeds
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        return vision_outputs
+
+    @can_return_tuple
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1238,10 +1250,13 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens,
+            **kwargs,
         )
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
-        return image_embeds
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1292,9 +1307,8 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             inputs_embeds = self.language_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -1361,12 +1375,22 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         self.model.set_input_embeddings(value)
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

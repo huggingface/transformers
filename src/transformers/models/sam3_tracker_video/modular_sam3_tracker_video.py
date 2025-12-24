@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import ModelOutput
 from ...processing_utils import Unpack
-from ...utils.generic import TransformersKwargs
+from ...utils import TransformersKwargs, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
@@ -51,6 +53,38 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionRotaryEmbedding,
 )
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
+
+
+@dataclass
+class BaseModelOutputWithFeatureMaps(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        feature_maps (`list[torch.Tensor]`):
+            List of feature maps from different layers of the model.
+        feature_maps_position_embeddings (`list[torch.Tensor]`):
+            List of position embeddings corresponding to the feature maps.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    feature_maps: Optional[list[torch.Tensor]] = None
+    feature_maps_position_embeddings: Optional[list[torch.Tensor]] = None
 
 
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
@@ -546,6 +580,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
 
         self.post_init()
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -570,10 +605,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
                 - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
                 - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
         """
-        vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -590,8 +622,12 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
+        # fpn hidden states/position encoding order, still have to double-check
+        return vision_outputs
 
 
 __all__ = [

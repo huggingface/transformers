@@ -147,12 +147,13 @@ class LlavaModel(LlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -182,7 +183,6 @@ class LlavaModel(LlavaPreTrainedModel):
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
@@ -201,7 +201,7 @@ class LlavaModel(LlavaPreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature)
 
-        if "image_sizes" in kwargs:
+        if kwargs.get("image_sizes") is not None:
             split_sizes = (
                 (torch.as_tensor(kwargs["image_sizes"], device=image_features.device) // self.vision_tower.patch_size)
                 .prod(dim=-1)
@@ -210,7 +210,9 @@ class LlavaModel(LlavaPreTrainedModel):
             image_features = torch.split(image_features.squeeze(0), split_sizes)
         else:
             image_features = list(image_features)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -273,7 +275,8 @@ class LlavaModel(LlavaPreTrainedModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -332,7 +335,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

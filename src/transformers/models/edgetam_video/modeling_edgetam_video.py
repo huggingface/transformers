@@ -42,7 +42,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import TransformersKwargs
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
@@ -2075,7 +2075,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2220,6 +2221,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             frame_idx=frame_idx,
         )
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -2244,10 +2246,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
                 - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
                 - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
         """
-        vision_outputs: EdgeTamVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
-        )
+        vision_outputs: EdgeTamVideoVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
@@ -2264,8 +2263,12 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
+        # fpn hidden states/position encoding order, still have to double-check
+        return vision_outputs
 
     def _prepare_vision_features(
         self,
@@ -2282,7 +2285,9 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_embeddings
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -2387,10 +2392,10 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding

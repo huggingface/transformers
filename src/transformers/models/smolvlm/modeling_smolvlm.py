@@ -32,7 +32,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -519,9 +519,13 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
         return merged_embeds
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -561,12 +565,16 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
         # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states = image_hidden_states.last_hidden_state
+        image_outputs = self.vision_model(
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
+        )
+        image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states)
-        return image_hidden_states
+        image_features = self.connector(image_hidden_states)
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(
@@ -635,7 +643,10 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
 
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask).to(inputs_embeds.device)
+            image_hidden_states = self.get_image_features(
+                pixel_values, pixel_attention_mask, return_dict=True
+            ).pooler_output
+            image_hidden_states = image_hidden_states.to(inputs_embeds.device)
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 

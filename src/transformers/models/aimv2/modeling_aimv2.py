@@ -23,7 +23,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -37,7 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
@@ -604,14 +604,15 @@ class Aimv2Model(Aimv2PreTrainedModel):
 
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -635,19 +636,21 @@ class Aimv2Model(Aimv2PreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -674,11 +677,12 @@ class Aimv2Model(Aimv2PreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     @can_return_tuple

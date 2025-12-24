@@ -557,11 +557,14 @@ class MetaClip2Model(CLIPModel):
             **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Returns:
@@ -583,12 +586,16 @@ class MetaClip2Model(CLIPModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Returns:
@@ -615,6 +622,7 @@ class MetaClip2Model(CLIPModel):
         return super().get_image_features(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
 
 

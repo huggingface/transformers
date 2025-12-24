@@ -114,12 +114,13 @@ class FastVlmModel(FastVlmPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -144,15 +145,15 @@ class FastVlmModel(FastVlmPreTrainedModel):
             else self.config.vision_feature_select_strategy
         )
 
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
         image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = list(image_features)
-        return image_features
+        image_outputs.pooler_output = list(image_features)
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -191,7 +192,6 @@ class FastVlmModel(FastVlmPreTrainedModel):
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmModelOutputWithPast]:
         r"""
@@ -221,8 +221,8 @@ class FastVlmModel(FastVlmPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -306,7 +306,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
@@ -330,7 +330,6 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, FastVlmCausalLMOutputWithPast]:
         r"""
@@ -397,7 +396,6 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             cache_position=cache_position,
-            image_sizes=image_sizes,
             **kwargs,
         )
 

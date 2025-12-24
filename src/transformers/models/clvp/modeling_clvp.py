@@ -37,10 +37,13 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logging,
 )
 from .configuration_clvp import (
@@ -1485,12 +1488,14 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         return speech_ids
 
+    @can_return_tuple
     def get_text_features(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, ClvpEncoderOutput]:
         r"""
         This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
         projection layer to the pooled output of the CLVP text encoder model.
@@ -1533,14 +1538,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         >>> text_embeds = model.get_text_features(input_ids=processor_output["input_ids"])
         ```
         """
-
-        outputs = self.text_encoder_model(
+        return self.text_encoder_model(
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
+            **kwargs,
         )
-
-        return outputs[0]
 
     def get_speech_features(
         self,

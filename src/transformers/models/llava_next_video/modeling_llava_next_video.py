@@ -398,12 +398,14 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -450,13 +452,13 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_features.hidden_states[vision_feature_layer]
+            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -470,7 +472,9 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             vision_feature_select_strategy,
             image_newline=self.image_newline,
         )
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -565,7 +569,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 image_sizes,
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -577,7 +582,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 pixel_values_videos,
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
@@ -611,11 +617,13 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
+    @can_return_tuple
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -630,6 +638,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+
         Returns:
             video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
@@ -645,14 +654,14 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
-        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        video_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_video_features = video_features.hidden_states[vision_feature_layer]
+            selected_video_features = video_outputs.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [video_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_video_features = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -662,7 +671,9 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
-        return video_features
+        video_outputs.pooler_output = video_features
+
+        return video_outputs
 
 
 @auto_docstring(
@@ -709,12 +720,14 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
             image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
         )
 
     @can_return_tuple
@@ -955,11 +968,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_video_features(
             pixel_values=pixel_values,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
         )
 
 

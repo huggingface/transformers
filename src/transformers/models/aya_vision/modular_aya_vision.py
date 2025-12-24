@@ -25,13 +25,12 @@ from transformers.models.llava.modeling_llava import (
     LlavaModel,
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
-    TransformersKwargs,
 )
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
 from .configuration_aya_vision import AyaVisionConfig
 
@@ -107,12 +106,13 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -127,6 +127,7 @@ class AyaVisionModel(LlavaModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -159,8 +160,9 @@ class AyaVisionModel(LlavaModel):
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+
+        return image_outputs
 
     @check_model_inputs
     @auto_docstring
@@ -198,7 +200,8 @@ class AyaVisionModel(LlavaModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

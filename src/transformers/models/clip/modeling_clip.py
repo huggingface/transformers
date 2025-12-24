@@ -33,7 +33,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     logging,
     torch_int,
 )
@@ -783,14 +782,15 @@ class CLIPModel(CLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -814,19 +814,21 @@ class CLIPModel(CLIPPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
@@ -853,11 +855,12 @@ class CLIPModel(CLIPPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        return image_features
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring

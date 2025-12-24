@@ -49,7 +49,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs, maybe_autocast
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
@@ -62,6 +62,28 @@ from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerConfig,
     Qwen3OmniMoeVisionEncoderConfig,
 )
+
+
+@dataclass
+class BaseModelOutputWithDeepstackFeatures(ModelOutput):
+    """
+    Base class for model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token) after further processing
+            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
+            the classification token after processing through a linear layer and a tanh activation function. The linear
+            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+        deepstack_features (`List[torch.FloatTensor]`, *optional*):
+            List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
 
 
 class SinusoidsPositionEmbedding(nn.Module):
@@ -726,6 +748,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
         return attention_mask
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1192,7 +1215,10 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
         return patch_pos_embeds
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -1240,9 +1266,13 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
                 )
                 deepstack_feature_lists.append(deepstack_feature)
 
-        hidden_states = self.merger(hidden_states)
+        merged_hidden_states = self.merger(hidden_states)
 
-        return hidden_states, deepstack_feature_lists
+        return BaseModelOutputWithDeepstackFeatures(
+            last_hidden_state=hidden_states,
+            pooler_output=merged_hidden_states,
+            deepstack_features=deepstack_feature_lists,
+        )
 
     @property
     def deepstack_merger_list(self):
@@ -1929,8 +1959,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
@@ -1942,10 +1976,15 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
-        return video_embeds
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    @can_return_tuple
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
@@ -1956,14 +1995,15 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        return image_embeds
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
+    @can_return_tuple
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         feature_attention_mask: Optional[torch.LongTensor] = None,
         audio_feature_lengths: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Encodes audios into continuous embeddings that can be forwarded to the language model.
@@ -1986,10 +2026,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
+            **kwargs,
         )
-        audio_features = audio_outputs.last_hidden_state
 
-        return audio_features
+        return audio_outputs
 
     def get_placeholder_mask(
         self,
@@ -2136,13 +2176,18 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 input_features,
                 feature_attention_mask=feature_attention_mask,
                 audio_feature_lengths=audio_feature_lengths,
-            )
+                return_dict=True,
+            ).last_hidden_state
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
         if pixel_values is not None:
-            image_embeds, image_embeds_multiscale = self.get_image_features(pixel_values, image_grid_thw)
+            image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True
+            )
+            image_embeds = image_outputs.pooler_output
+            image_embeds_multiscale = image_outputs.deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -2150,7 +2195,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds, video_embeds_multiscale = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds, video_embeds_multiscale = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            ).pooler_output
 
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(

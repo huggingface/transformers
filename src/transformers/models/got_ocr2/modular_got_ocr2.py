@@ -22,6 +22,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -307,20 +308,26 @@ class GotOcr2Model(LlavaModel):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values).last_hidden_state
-        return self.multi_modal_projector(image_outputs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        last_hidden_state = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
+
+        return image_outputs
 
     def forward(
         self,
@@ -350,7 +357,9 @@ class GotOcr2Model(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            image_features = self.get_image_features(
+                pixel_values=pixel_values.to(inputs_embeds.dtype), return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

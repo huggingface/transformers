@@ -443,8 +443,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
@@ -464,14 +468,16 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         """
 
         # Encode audio
-        encoder_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
-        audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
+        audio_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_output.pooler_output = audio_embeds
+
+        return audio_output
 
     @can_return_tuple
     @auto_docstring
@@ -557,7 +563,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)

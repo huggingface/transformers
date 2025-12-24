@@ -92,12 +92,13 @@ class Lfm2VlModel(LlavaModel):
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -109,6 +110,7 @@ class Lfm2VlModel(LlavaModel):
                 The spatial shapes of the input images.
             pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
                 The pixel attention mask of the input images.
+
         Returns:
             image_features (`list[torch.Tensor]`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -116,13 +118,15 @@ class Lfm2VlModel(LlavaModel):
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
             pixel_attention_mask=pixel_attention_mask,
-        ).last_hidden_state
+            **kwargs,
+        )
+        last_hidden_state = image_outputs.last_hidden_state
 
         img_feature_lengths = pixel_attention_mask.sum(dim=1)
         image_features = []
 
-        for img_idx in range(image_outputs.size(0)):
-            feature = image_outputs[img_idx]
+        for img_idx in range(last_hidden_state.size(0)):
+            feature = last_hidden_state[img_idx]
             # unpad the image representation
             feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
 
@@ -137,7 +141,8 @@ class Lfm2VlModel(LlavaModel):
             img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
             image_features.append(img_embedding)
 
-        return image_features
+        image_outputs.pooler_output = image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -197,7 +202,8 @@ class Lfm2VlModel(LlavaModel):
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,
@@ -233,7 +239,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

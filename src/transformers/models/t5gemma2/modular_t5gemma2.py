@@ -864,13 +864,19 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """Convert pixel image to image features via the encoder and projector."""
+    @can_return_tuple
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        """
+        Convert pixel image to image features via the encoder and projector.
+        """
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(last_hidden_state)
+        vision_outputs.pooler_output = image_features
+
+        return vision_outputs
 
     def get_image_placeholder_mask(
         self,
@@ -909,7 +915,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ):
         """Convert pixel images to image features and merge into input embeds."""
-        image_features = self.get_image_features(pixel_values)
+        image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
         image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
         image_mask = self.get_image_placeholder_mask(
@@ -1261,8 +1267,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def get_image_features(self, pixel_values):
-        return self.get_encoder().get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        return self.get_encoder().get_image_features(pixel_values, **kwargs)
 
     @property
     def vision_tower(self):

@@ -33,8 +33,9 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, meshgrid
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
@@ -1553,14 +1554,15 @@ class ClapModel(ClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
@@ -1580,20 +1582,24 @@ class ClapModel(ClapPreTrainedModel):
         ...     text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs: BaseModelOutputWithPooling = self.text_model(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            **kwargs,
         )
         text_features = self.text_projection(text_outputs.pooler_output)
-        text_features = F.normalize(text_features, dim=-1)
+        text_outputs.pooler_output = F.normalize(text_features, dim=-1)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,
         is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
@@ -1619,12 +1625,12 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer
+            input_features=input_features, is_longer=is_longer, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
-        audio_features = F.normalize(audio_features, dim=-1)
+        audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)
 
-        return audio_features
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring

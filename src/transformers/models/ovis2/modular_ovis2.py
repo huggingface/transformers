@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import math
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -22,10 +23,11 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
@@ -43,6 +45,17 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     ret = y_hard - y_soft.detach() + y_soft
 
     return ret
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
+    """
+    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    """
+
+    visual_indicator_features: Optional[torch.FloatTensor] = None
 
 
 class Ovis2ModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -184,7 +197,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
         self.post_init()
 
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -217,7 +233,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         elif self.config.tokenize_function == "softmax":
             prob_token = nn.functional.softmax(logits, dim=-1)
 
-        return prob_token
+        return BaseModelOutputWithVisualIndicatorFeatures(
+            last_hidden_state=last_hidden_state,
+            pooler_output=prob_token,
+        )
 
 
 class Ovis2Model(LlavaModel):
@@ -234,11 +253,14 @@ class Ovis2Model(LlavaModel):
         self.language_model = AutoModel.from_config(config.text_config)
         del self.multi_modal_projector
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
-        image_features = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -255,9 +277,10 @@ class Ovis2Model(LlavaModel):
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
+        image_outputs.pooler_output = image_features
+        image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
-        return image_features, visual_indicator_features
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -290,7 +313,9 @@ class Ovis2Model(LlavaModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
+            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            image_features = image_outputs.pooler_output
+            visual_indicator_features = image_outputs.visual_indicator_features
 
             special_image_mask = self.get_placeholder_mask(
                 input_ids,
@@ -346,8 +371,10 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.FloatTensor:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

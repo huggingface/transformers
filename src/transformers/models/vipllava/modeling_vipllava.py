@@ -30,7 +30,8 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_vipllava import VipLlavaConfig
 
@@ -150,8 +151,12 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -162,13 +167,14 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             vision_feature_layers (`Union[int, list[int]]`):
                 The vision feature layer, or the list of indexes of the layers to select
                 the vision feature.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.
@@ -179,7 +185,9 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
             image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -244,8 +252,8 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
-            )
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, return_dict=True
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -305,9 +313,14 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return self.lm_head
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layers: Optional[Union[int, list[int]]] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layers: Optional[Union[int, list[int]]] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_image_features(pixel_values=pixel_values, vision_feature_layers=vision_feature_layers)
+        return self.model.get_image_features(
+            pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring

@@ -260,21 +260,25 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    @can_return_tuple
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -378,7 +382,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -447,8 +451,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

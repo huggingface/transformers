@@ -181,12 +181,13 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -201,6 +202,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             vision_feature_select_strategy (`str`, *optional*):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -233,8 +235,9 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 hs_pool = [hs[:, 1:] for hs in hs_pool]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -296,7 +299,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -356,7 +360,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

@@ -30,10 +30,11 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
@@ -542,12 +543,16 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs):
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
                 hidden_states = layer(hidden_states)
-        return hidden_states
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states,
+        )
 
 
 class Florence2MultiModalProjector(nn.Module):
@@ -665,7 +670,8 @@ class Florence2Model(Florence2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    @can_return_tuple
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -675,9 +681,10 @@ class Florence2Model(Florence2PreTrainedModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = self.vision_tower(pixel_values, **kwargs)
-        image_embeds = self.multi_modal_projector(image_features)
-        return image_embeds
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
+
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -737,7 +744,7 @@ class Florence2Model(Florence2PreTrainedModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values)
+                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -832,7 +839,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
@@ -914,7 +921,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -997,7 +1004,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

@@ -33,12 +33,24 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
+    """
+    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+        Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
+    """
+
+    visual_indicator_features: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -465,7 +477,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
         self.post_init()
 
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
@@ -498,7 +513,10 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
         elif self.config.tokenize_function == "softmax":
             prob_token = nn.functional.softmax(logits, dim=-1)
 
-        return prob_token
+        return BaseModelOutputWithVisualIndicatorFeatures(
+            last_hidden_state=last_hidden_state,
+            pooler_output=prob_token,
+        )
 
 
 @auto_docstring(
@@ -526,9 +544,11 @@ class Ovis2Model(Ovis2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -546,7 +566,8 @@ class Ovis2Model(Ovis2PreTrainedModel):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_features = self.vision_tower(pixel_values)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(
             (batch_size, img_seq_len, self.vision_tower.num_visual_indicator_tokens),
@@ -563,9 +584,10 @@ class Ovis2Model(Ovis2PreTrainedModel):
             self.visual_vocab_size,
             dtype=torch.long,
         ).to(image_features.device)
-        visual_indicator_features = self.visual_embeddings_table(visual_indicator)
+        image_outputs.pooler_output = image_features
+        image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
-        return image_features, visual_indicator_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -622,7 +644,9 @@ class Ovis2Model(Ovis2PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features, visual_indicator_features = self.get_image_features(pixel_values=pixel_values)
+            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            image_features = image_outputs.pooler_output
+            visual_indicator_features = image_outputs.visual_indicator_features
 
             special_image_mask = self.get_placeholder_mask(
                 input_ids,
@@ -690,8 +714,10 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        return self.model.get_image_features(pixel_values=pixel_values)
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.FloatTensor:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

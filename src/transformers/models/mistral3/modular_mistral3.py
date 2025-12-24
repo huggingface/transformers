@@ -123,7 +123,7 @@ class Mistral3Model(LlavaModel):
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -137,6 +137,7 @@ class Mistral3Model(LlavaModel):
                 vision features.
             image_sizes (`torch.Tensor`, *optional*):
                 Tensor containing the image sizes as returned by the processor.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
@@ -144,7 +145,6 @@ class Mistral3Model(LlavaModel):
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
 
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         image_outputs = self.vision_tower(pixel_values, image_sizes=image_sizes, output_hidden_states=True, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
@@ -161,7 +161,9 @@ class Mistral3Model(LlavaModel):
             (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1).tolist()
         )
         image_features = torch.split(image_features.squeeze(0), split_sizes)
-        return image_features
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def forward(
         self,
@@ -200,7 +202,8 @@ class Mistral3Model(LlavaModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -235,7 +238,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,

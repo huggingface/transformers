@@ -486,13 +486,14 @@ class InternVLModel(LlavaModel):
 
         return vision_features
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -501,6 +502,7 @@ class InternVLModel(LlavaModel):
                The tensors corresponding to the input images.
             vision_feature_layer (`int` or `list[int]`):
                 Layer index or list of layer indices to extract features from.
+
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
@@ -515,10 +517,11 @@ class InternVLModel(LlavaModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         if vision_feature_layer == -1:
-            vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
+            vision_features = vision_outputs.last_hidden_state
         else:
-            vision_features = self.vision_model(pixel_values=pixel_values).hidden_states[vision_feature_layer]
+            vision_features = vision_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
@@ -538,7 +541,9 @@ class InternVLModel(LlavaModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-        return vision_features
+        vision_outputs.pooler_output = vision_features
+
+        return vision_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -575,7 +580,8 @@ class InternVLModel(LlavaModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features

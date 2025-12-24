@@ -21,7 +21,9 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -145,10 +147,11 @@ class PerceptionLMModel(LlavaModel):
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
+    @can_return_tuple
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -156,15 +159,18 @@ class PerceptionLMModel(LlavaModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_tiles, channels, height, width)`)
                The tensors corresponding to the input images.
+
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_tiles, num_patches, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
-        image_outputs = image_outputs.last_hidden_state
+        image_outputs = self.vision_tower(pixel_values.flatten(0, 1), **kwargs)
+        last_hidden_state = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
-            image_outputs = image_outputs[:, 1:, :]
-        image_features = self.multi_modal_projector(image_outputs)
-        return image_features
+            last_hidden_state = last_hidden_state[:, 1:, :]
+        image_features = self.multi_modal_projector(last_hidden_state)
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -240,7 +246,7 @@ class PerceptionLMModel(LlavaModel):
 
         image_features = None
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values)
+            image_features = self.get_image_features(pixel_values=pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -249,7 +255,7 @@ class PerceptionLMModel(LlavaModel):
 
         video_features = None
         if pixel_values_videos is not None:
-            video_features = self.get_image_features(pixel_values=pixel_values_videos)
+            video_features = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True).pooler_output
             video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
