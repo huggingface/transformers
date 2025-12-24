@@ -65,12 +65,19 @@ class GlmAsrProcessor(ProcessorMixin):
     [`Qwen2TokenizerFast`]. See the [`~GlmAsrProcessor.__call__`] for more information.
 
     Args:
-            feature_extractor (`<fill_type>`): <fill_docstring>
-            tokenizer (`<fill_type>`): <fill_docstring>
-            chat_template (`<fill_type>`, *optional*): <fill_docstring>
-            audio_token (`<fill_type>`, *optional*, defaults to `"<|pad|>"`): <fill_docstring>
-            default_transcription_prompt (`<fill_type>`, *optional*, defaults to `"Please transcribe this audio into text"`): <fill_docstring>
-            max_audio_len (`<fill_type>`, *optional*, defaults to 600): <fill_docstring>
+            feature_extractor ([`WhisperFeatureExtractor`]):
+                The feature extractor is a required input.
+            tokenizer ([`Qwen2TokenizerFast`]):
+                The tokenizer is a required input.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+                template will be used.
+            audio_token (`Optional[str]`, *optional*, defaults to `"<|pad|>`"):
+                Special token used to represent audio inputs in the chat template.
+            default_transcription_prompt (`str`, *optional*, defaults to `"Please transcribe this audio into text"`):
+                Default prompt to use for transcription tasks when applying transcription requests.
+            max_audio_len (`int`, *optional*, defaults to 600):
+                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
     def __init__(
