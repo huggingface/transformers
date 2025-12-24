@@ -581,7 +581,7 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Glm4MoeLiteModel(Glm4MoeLitePreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.47.*"]
 
     def __init__(self, config: Glm4MoeLiteConfig):
         super().__init__(config)
