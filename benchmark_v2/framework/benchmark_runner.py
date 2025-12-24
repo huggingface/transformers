@@ -197,6 +197,10 @@ class BenchmarkRunner:
             if not config.continuous_batching:
                 generation_config_kwargs.update(cache_implementation="static")
 
+        # Disable CUDA graphs for non-CUDA devices (e.g., XPU)
+        if config.device != "cuda" and config.continuous_batching:
+            generation_config_kwargs.update(use_cuda_graph=False)
+
         generation_config = GenerationConfig(**generation_config_kwargs)
 
         # Load model
