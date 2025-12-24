@@ -138,9 +138,9 @@ print(output)
 
 [[autodoc]] PixtralVisionConfig
 
-## MistralCommonTokenizer
+## MistralCommonBackend
 
-[[autodoc]] MistralCommonTokenizer
+[[autodoc]] MistralCommonBackend
 
 ## PixtralVisionModel
 

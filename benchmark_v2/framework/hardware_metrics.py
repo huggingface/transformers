@@ -7,7 +7,6 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from logging import Logger
-from typing import Optional, Union
 
 import gpustat
 import psutil
@@ -42,7 +41,7 @@ class HardwareInfo:
         self.cpu_count = psutil.cpu_count()
         self.memory_total_mb = int(psutil.virtual_memory().total / (1024 * 1024))
 
-    def to_dict(self) -> dict[str, Union[None, int, float, str]]:
+    def to_dict(self) -> dict[str, None | int | float | str]:
         return {
             "gpu_name": self.gpu_name,
             "gpu_memory_total_gb": self.gpu_memory_total_gb,
@@ -109,7 +108,7 @@ class GPURawMetrics:
     timestamp_0: float  # in seconds
     monitoring_status: GPUMonitoringStatus
 
-    def to_dict(self) -> dict[str, Union[None, int, float, str]]:
+    def to_dict(self) -> dict[str, None | int | float | str]:
         return {
             "utilization": self.utilization,
             "memory_used": self.memory_used,
@@ -123,7 +122,7 @@ class GPURawMetrics:
 class GPUMonitor:
     """Monitor GPU utilization during benchmark execution."""
 
-    def __init__(self, sample_interval_sec: float = 0.1, logger: Optional[Logger] = None):
+    def __init__(self, sample_interval_sec: float = 0.1, logger: Logger | None = None):
         self.sample_interval_sec = sample_interval_sec
         self.logger = logger if logger is not None else logging.getLogger(__name__)
 

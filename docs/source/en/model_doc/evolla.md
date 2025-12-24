@@ -61,7 +61,7 @@ message_list = [
     ]
 ]
 input_dict = processor(
-    protein_informations, messages_list, return_tensors="pt", text_max_length=512, protein_max_length=1024
+    protein_inputs, messages_list, return_tensors="pt", text_max_length=512, protein_max_length=1024
 )
 with torch.no_grad():
     generated_ids = hf_model.generate(**input_dict)

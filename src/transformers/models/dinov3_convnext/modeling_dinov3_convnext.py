@@ -20,6 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -188,20 +189,16 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
     base_model_prefix = "dinov3_convnext"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, DINOv3ConvNextLayerNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, DINOv3ConvNextLayer):
+        super()._init_weights(module)
+        if isinstance(module, DINOv3ConvNextLayer):
             if module.gamma is not None:
-                module.gamma.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -217,7 +214,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None
+        self, pixel_values: torch.FloatTensor, output_hidden_states: Optional[bool] = None, **kwargs
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 

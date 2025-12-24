@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -60,7 +60,7 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(image: "Image.Image", lang: str | None, tesseract_config: str | None):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     # apply OCR
     data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
@@ -146,7 +146,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+        if self.tokenizer is not None and not (
+            self.tokenizer.__class__.__name__.endswith("Fast") or self.tokenizer.backend == "tokenizers"
+        ):
             raise ValueError(
                 "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
                 f"(`{self.tokenizer.__class__.__name__}`) is provided."
@@ -168,8 +170,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding=None,
         doc_stride=None,
         max_question_len=None,
-        lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
+        lang: str | None = None,
+        tesseract_config: str | None = None,
         max_answer_len=None,
         max_seq_len=None,
         top_k=None,
@@ -199,7 +201,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len})")
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
@@ -218,7 +220,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: str,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
@@ -231,10 +233,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     def __call__(
         self,
         image: Union["Image.Image", str, list[dict[str, Any]]],
-        question: Optional[str] = None,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        question: str | None = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
@@ -313,7 +315,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         lang=None,
         tesseract_config="",
         timeout=None,

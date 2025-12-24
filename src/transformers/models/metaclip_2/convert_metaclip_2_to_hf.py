@@ -349,10 +349,10 @@ def verify_conversion(
 
     # Check if they're close
     if orig_logits.shape == hf_logits.shape and torch.allclose(orig_logits, hf_logits, atol=1e-4):
-        print("✅ Conversion verified! Outputs match.")
+        print("[SUCCESS] Conversion verified! Outputs match.")
         return True
     else:
-        print("❌ Conversion failed! Outputs don't match.")
+        print("[FAIL] Conversion failed! Outputs don't match.")
         if orig_logits.numel() > 0 and hf_logits.numel() > 0:
             print(f"Max difference: {(orig_logits - hf_logits).abs().max()}")
         return False
@@ -365,9 +365,9 @@ def push_to_hub(hf_model: MetaClip2Model, processor: CLIPProcessor, repo_name: s
     try:
         hf_model.push_to_hub(repo_name)
         processor.push_to_hub(repo_name)
-        print(f"✅ Successfully pushed to {repo_name}")
+        print(f"[SUCCESS] Successfully pushed to {repo_name}")
     except Exception as e:
-        print(f"❌ Failed to push to hub: {e}")
+        print(f"[FAIL] Failed to push to hub: {e}")
 
 
 def main():

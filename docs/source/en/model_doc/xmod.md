@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The X-MOD model was proposed in [Lifting the Curse of Multilinguality by Pre-training Modular Transformers](https://huggingface.co/papers/2205.06266) by Jonas Pfeiffer, Naman Goyal, Xi Lin, Xian Li, James Cross, Sebastian Riedel, and Mikel Artetxe.
-X-MOD extends multilingual masked language models like [XLM-R](xlm-roberta) to include language-specific modular components (_language adapters_) during pre-training. For fine-tuning, the language adapters in each transformer layer are frozen.
+X-MOD extends multilingual masked language models like [XLM-R](xlm-roberta) to include language-specific modular components (*language adapters*) during pre-training. For fine-tuning, the language adapters in each transformer layer are frozen.
 
 The abstract from the paper is the following:
 
@@ -76,6 +76,7 @@ output = model(input_ids, lang_ids=lang_ids)
 ```
 
 ### Fine-tuning
+
 The paper recommends that the embedding layer and the language adapters are frozen during fine-tuning. A method for doing this is provided:
 
 ```python
@@ -84,6 +85,7 @@ model.freeze_embeddings_and_language_adapters()
 ```
 
 ### Cross-lingual transfer
+
 After fine-tuning, zero-shot cross-lingual transfer can be tested by activating the language adapter of the target language:
 
 ```python

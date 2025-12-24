@@ -60,11 +60,6 @@ class VideoLlavaProcessor(ProcessorMixin):
             extra tokens appended, no need to set this arg.
     """
 
-    attributes = ["image_processor", "video_processor", "tokenizer"]
-    image_processor_class = "VideoLlavaImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,

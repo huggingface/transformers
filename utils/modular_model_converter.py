@@ -22,7 +22,6 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from functools import partial
-from typing import Optional, Union
 
 import libcst as cst
 from create_dependency_mapping import find_priority_list
@@ -177,7 +176,7 @@ DOCSTRING_NODE = m.SimpleStatementLine(
 )
 
 
-def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
+def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
@@ -378,11 +377,11 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
 
 def find_all_dependencies(
     dependency_mapping: dict[str, set],
-    start_entity: Optional[str] = None,
-    initial_dependencies: Optional[set] = None,
-    initial_checked_dependencies: Optional[set] = None,
+    start_entity: str | None = None,
+    initial_dependencies: set | None = None,
+    initial_checked_dependencies: set | None = None,
     return_parent: bool = False,
-) -> Union[list, set]:
+) -> list | set:
     """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
@@ -476,7 +475,7 @@ class ClassDependencyMapper(CSTVisitor):
     """
 
     def __init__(
-        self, class_name: str, global_names: set[str], objects_imported_from_modeling: Optional[set[str]] = None
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
     ):
         super().__init__()
         self.class_name = class_name
@@ -504,7 +503,7 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
 
 
 def augmented_dependencies_for_class_node(
-    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: Optional[set[str]] = None
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
 ) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
@@ -559,7 +558,8 @@ class ModuleMapper(CSTVisitor, ABC):
         """This keeps track of objects imported from neighbor modeling files (e.g. in `modeling_xxx.py, we have
         `from .configuration_xxx import Config`, then `Config` should be recorded as it is not a dependency that needs
         to be added (because it will be part of the imports)"""
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if re.search(rf"^\.({self.match_patterns}).*", import_statement):
             for imported_object in node.names:
@@ -1228,7 +1228,8 @@ class ModularFileMapper(ModuleMapper):
         """When visiting imports from modeling files (i.e. `transformers.models.xxx`) we get the code, parse it,
         and save it in `self.model_specific_modules` to later visit. The imported objects are saved in `self.model_specific_imported_objects`.
         """
-        import_module = self.python_module.code_for_node(node.module)
+        # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
+        import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
         if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
             return
@@ -1284,7 +1285,10 @@ class ModularFileMapper(ModuleMapper):
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
-                import_module = self.python_module.code_for_node(node.body[0].module)
+                # `node.body[0].module` is None for fully relative imports, e.g. `from ... import initialization as init`
+                import_module = (
+                    self.python_module.code_for_node(node.body[0].module) if node.body[0].module is not None else ""
+                )
                 import_statement = "." * len(node.body[0].relative) + import_module
                 if any(
                     external_file["name"] in import_statement for external_file in self.excluded_external_files
@@ -1474,10 +1478,15 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
-                    # If both the old model and new model share the last part of their name, is detected as a common
+                    # If both the old model and new model share the last part of their name, it is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
                     if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
                         cased_model_name = cased_default_name
+                # If the new class name is of the form ` class NewNameOldNameClass(OldNameClass):`, i.e. it contains both names,
+                # add the OldName as suffix (see `examples/modular-transformers/modular_test_suffix.py`)
+                elif class_name.replace(cased_default_name, "") == modeling_bases[0]:
+                    file_model_name = filename.split(".")[-2]
+                    cased_model_name = cased_default_name + get_cased_name(file_model_name)
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1659,8 +1668,8 @@ def get_class_node_and_dependencies(
 
 def create_modules(
     modular_mapper: ModularFileMapper,
-    file_path: Optional[str] = None,
-    package_name: Optional[str] = "transformers",
+    file_path: str | None = None,
+    package_name: str | None = "transformers",
 ) -> dict[str, cst.Module]:
     """Create all the new modules based on visiting the modular file. It replaces all classes as necessary."""
     files = defaultdict(dict)
@@ -1747,7 +1756,7 @@ def run_ruff(code, check=False):
     return stdout.decode()
 
 
-def convert_modular_file(modular_file: str, source_library: Optional[str] = "transformers") -> dict[str, str]:
+def convert_modular_file(modular_file: str, source_library: str | None = "transformers") -> dict[str, str]:
     """Convert a `modular_file` into all the different model-specific files it depicts."""
     pattern = re.search(r"modular_(.*)(?=\.py$)", modular_file)
     output = {}
@@ -1818,7 +1827,7 @@ def count_loc(file_path: str) -> int:
     return len([line for line in comment_less_code.split("\n") if line.strip()])
 
 
-def run_converter(modular_file: str, source_library: Optional[str] = "transformers"):
+def run_converter(modular_file: str, source_library: str | None = "transformers"):
     """Convert a modular file, and save resulting files."""
     print(f"Converting {modular_file} to a single model single file format")
     converted_files = convert_modular_file(modular_file, source_library=source_library)

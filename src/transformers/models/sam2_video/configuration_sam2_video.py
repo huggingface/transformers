@@ -186,6 +186,8 @@ class Sam2VideoConfig(PreTrainedConfig):
             Whether to use multimask output for tracking.
         max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
             The maximum number of object pointers in the encoder.
+        max_cond_frame_num (`int`, *optional*, defaults to -1):
+            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
         enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
             Whether to enable temporal positional encoding for object pointers.
         memory_attention_hidden_size (`int`, *optional*, defaults to 256):
@@ -293,6 +295,7 @@ class Sam2VideoConfig(PreTrainedConfig):
         multimask_max_pt_num=1,
         multimask_output_for_tracking=True,
         max_object_pointers_in_encoder=16,
+        max_cond_frame_num=-1,
         enable_temporal_pos_encoding_for_object_pointers=True,
         # memory attention
         memory_attention_hidden_size=256,
@@ -354,6 +357,7 @@ class Sam2VideoConfig(PreTrainedConfig):
         self.multimask_max_pt_num = multimask_max_pt_num
         self.multimask_output_for_tracking = multimask_output_for_tracking
         self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
+        self.max_cond_frame_num = max_cond_frame_num
         # The next 4 are True for sam2.1 and False for sam2
         self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
         self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers

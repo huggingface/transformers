@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import os
+import shutil
+import tempfile
 import unittest
 
 from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
@@ -30,6 +32,9 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+
+        old_tmpdirname = cls.tmpdirname
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = [
             "<d>",
@@ -52,6 +57,8 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+        shutil.rmtree(old_tmpdirname, ignore_errors=True)
 
     @tooslow
     def test_pre_tokenization(self):

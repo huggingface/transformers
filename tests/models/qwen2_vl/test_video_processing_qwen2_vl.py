@@ -343,3 +343,22 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             # Assign back the actual num frames in tester
             self.video_processor_tester.num_frames = prev_num_frames
+
+    def test_num_frames_equal_temporal_patch_size_plus_two(self):
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = self.video_processor_dict.copy()
+            video_processor_dict["size"] = {"longest_edge": 5 * 28 * 28, "shortest_edge": 28 * 28}
+            video_processor_dict["do_sample_frames"] = False
+            temporal_patch_size = 3
+            video_processor_dict["temporal_patch_size"] = temporal_patch_size
+            video_processing = video_processing_class(**video_processor_dict)
+
+            n, w, h = 5, 28, 28
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
+
+            video_processed = video_processing(video_inputs, return_tensors="pt")
+            encoded_videos = video_processed[self.input_name]
+            self.assertEqual(list(encoded_videos.shape), [8, temporal_patch_size * 3 * 14 * 14])
+
+            video_grid_thw = video_processed["video_grid_thw"]
+            self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])

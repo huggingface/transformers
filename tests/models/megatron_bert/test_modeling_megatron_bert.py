@@ -288,7 +288,6 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     # test_resize_embeddings = False
 
     # special case for ForPreTraining model

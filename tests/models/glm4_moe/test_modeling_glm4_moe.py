@@ -58,10 +58,10 @@ class Glm4MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    fx_compatible = False
     model_tester_class = Glm4MoeModelTester
     # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
     _torch_compile_train_cls = None
+    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
 
 
 @require_torch_accelerator

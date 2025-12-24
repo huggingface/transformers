@@ -423,7 +423,7 @@ class WhisperGenerationMixin(GenerationMixin):
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 
@@ -658,6 +658,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
         # 1. prepare generation config
+        generation_config = self.generation_config if generation_config is None else generation_config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables
@@ -1180,12 +1181,14 @@ class WhisperGenerationMixin(GenerationMixin):
                     return None
                 all_past_key_values = []
                 for layer_idx in range(self.config.decoder_layers):
-                    layer_past_key_values = []
-                    for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                        for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
-                            layer_past_key_values.append(v[batch_idx][None].cpu())
-                    all_past_key_values.append(tuple(layer_past_key_values))
-                return EncoderDecoderCache(tuple(all_past_key_values))
+                    layer_cache = (
+                        values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.self_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                    )
+                    all_past_key_values.append(layer_cache)
+                return EncoderDecoderCache(all_past_key_values)
 
             return values[batch_idx].cpu()
 
@@ -1224,7 +1227,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 if seek_outputs[0][key] is not None:
                     all_past_key_values = []
                     for layer_idx in range(len(seek_outputs[0][key])):
-                        layer_past_key_values = tuple(
+                        self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
                             torch.stack(
                                 [
                                     getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
@@ -1236,7 +1239,9 @@ class WhisperGenerationMixin(GenerationMixin):
                             for sub_cache in ["self_attention_cache", "cross_attention_cache"]
                             for sub_key in ["keys", "values"]
                         )
-                        all_past_key_values.append(layer_past_key_values)
+                        all_past_key_values.append(
+                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
+                        )
                     outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
                     outputs[key] = None

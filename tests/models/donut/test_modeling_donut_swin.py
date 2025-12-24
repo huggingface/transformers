@@ -166,7 +166,6 @@ class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
     test_resize_embeddings = False
 
