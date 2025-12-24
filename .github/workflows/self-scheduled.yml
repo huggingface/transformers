@@ -238,7 +238,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
@@ -311,7 +311,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_examples_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_examples_gpu_test_reports
@@ -413,7 +413,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
           path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
@@ -500,7 +500,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
@@ -574,7 +574,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_kernels_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_kernels_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_kernels_gpu_test_reports
@@ -589,7 +589,7 @@ jobs:
       # Checkout in order to run `utils/extract_warnings.py`. Avoid **explicit** checkout (i.e. don't specify `ref`) for
       # security reason.
       - name: Checkout transformers
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install transformers
         run: pip install transformers
@@ -600,7 +600,7 @@ jobs:
       - name: Create output directory
         run: mkdir warnings_in_ci
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: warnings_in_ci
 
@@ -618,7 +618,7 @@ jobs:
 
       - name: Upload artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: warnings_in_ci
           path: warnings_in_ci/selected_warnings.json

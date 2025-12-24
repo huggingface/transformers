@@ -12,11 +12,11 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get changed files using `actions/github-script`
         id: get-changed-files
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             let files = [];
