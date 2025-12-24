@@ -131,13 +131,15 @@ class BlockManager:
         later copy the physical cache."""
         # First phase: reference all complete blocks
         forked_by_reference = []
-        for block_id in parent_blocks:
-            block = self._id_to_block[block_id]
-            if shareable and block.is_complete:
-                forked_by_reference.append(block.id)
-                block.ref_count += num_forks
-            else:
-                break
+
+        if shareable:
+            for block_id in parent_blocks:
+                block = self._id_to_block[block_id]
+                if block.is_complete:
+                    forked_by_reference.append(block.id)
+                    block.ref_count += num_forks
+                else:
+                    break
 
         # Early return if we have forked all blocks by reference
         blocks_to_copy = len(parent_blocks) - len(forked_by_reference)
