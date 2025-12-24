@@ -116,8 +116,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         if generation_config.temperature is not None and generation_config.temperature < 1.0:
             logger.warning_once(
-                f"temperature < 1.0 is not supported for Dia; clamping to 1.0 "
-                f"(got {generation_config.temperature})"
+                f"temperature < 1.0 is not supported for Dia; clamping to 1.0 (got {generation_config.temperature})"
             )
             generation_config.temperature = 1.0
         # We allow generation up to max length + max delay pattern
