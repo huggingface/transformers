@@ -340,7 +340,6 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
 
 
-
 def eager_attention_forward(
     module: "ModernBertAttention",
     query: torch.Tensor,
