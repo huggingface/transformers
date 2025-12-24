@@ -26,7 +26,7 @@ that the prompt is pointing out.
 - Segment Everything mode: In segment everything, given an image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image for inference.
 - Video Inference: The model accepts a video, and a point or box prompt in a video frame, which is tracked throughout the video. You can get more information on how to do video inference by following [SAM 2 docs](../model_doc/sam2).
 
-Mask generation task is supported by [Segment Anything Model (SAM)](../model_doc/sam) and [Segment Anything Model 2 (SAM2)](../model_doc/sam2), while video inference is supported by [Segment Anything Model 2 (SAM2)](../model_doc/sam2). SAM is a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks.  Meanwhile, SAM 2 extends SAM by adding a memory module to track the masks. 
+Mask generation task is supported by [Segment Anything Model (SAM)](../model_doc/sam) and [Segment Anything Model 2 (SAM2)](../model_doc/sam2), while video inference is supported by [Segment Anything Model 2 (SAM2)](../model_doc/sam2). SAM is a powerful model that consists of a Vision Transformer-based image encoder, a prompt encoder, and a two-way transformer mask decoder. Images and prompts are encoded, and the decoder takes these embeddings and generates valid masks. Meanwhile, SAM 2 extends SAM by adding a memory module to track the masks.
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
@@ -228,11 +228,11 @@ plt.show()
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/box_inference.png" alt="Visualized Inference"/>
 </div>
 
-## Fine-tuning for Mask Generation 
+## Fine-tuning for Mask Generation
 
 We will fine-tune SAM2.1 on small part of MicroMat dataset for image matting. We need to install the [monai](https://github.com/Project-MONAI/MONAI) library to use DICE loss, and [trackio](https://huggingface.co/docs/trackio/index) for logging the masks during training.
 
-```bash 
+```bash
 pip install -q datasets monai trackio
 ``` 
 We can now load our dataset and take a look.
@@ -247,6 +247,7 @@ dataset
 # 'image_path', 'mask_path', 'prompt_path'],  num_rows: 94
 #})
 ```
+
 We need image, mask and prompt columns. We split for train and test.
 
 ```python
@@ -256,9 +257,11 @@ val_ds = dataset["test"]
 ```
 
 Let's take a look at a sample.
+
 ```python
 train_ds[0]
-``` 
+```
+
 ```
  {'image': <PIL.PngImagePlugin.PngImageFile image mode=RGB size=2040x1356>,
  'mask': <PIL.PngImagePlugin.PngImageFile image mode=L size=2040x1356>,
@@ -271,13 +274,15 @@ train_ds[0]
  'mask_path': '/content/MicroMat-mini/mask/0034_34.png',
  'prompt_path': '/content/MicroMat-mini/prompt/0034_34.json'}
 ```
+
 Prompts are string of dictionaries, so you can get the bounding boxes as shown below.
+
 ```python
 import json
 
 json.loads(train_ds["prompt"][0])["bbox"]
 # [0, 701, 251, 1356]
-``` 
+```
 
 Visualize an example image, prompt and mask.
 
@@ -335,11 +340,11 @@ class SAMDataset(Dataset):
 
 
     return inputs
-``` 
+```
 
-We can initialize the processor and the dataset with it. 
+We can initialize the processor and the dataset with it.
 
-```python 
+```python
 from transformers import Sam2Processor
 
 processor = Sam2Processor.from_pretrained("facebook/sam2.1-hiera-small")
@@ -380,7 +385,7 @@ train_dataloader = DataLoader(
     shuffle=True,
     collate_fn=collate_fn,
 )
-``` 
+```
 
 Let's take a look at what the data loader yields.
 
@@ -395,7 +400,8 @@ for k,v in batch.items():
 # ground_truth_mask torch.Size([4, 1, 256, 256])
 #original_image_size torch.Size([4, 2])
 ```
-We will now load the model and freeze the vision and the prompt encoder to only train the mask decoder. 
+
+We will now load the model and freeze the vision and the prompt encoder to only train the mask decoder.
 
 ```python
 from transformers import Sam2Model
@@ -443,7 +449,7 @@ plt.show()
 
 ![SAM2 result after training](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam2_before_training.png)
 
-We need to log our predictions to trackio so we can monitor the model improvement in the middle of the training. 
+We need to log our predictions to trackio so we can monitor the model improvement in the middle of the training.
 
 ```python
 from PIL import Image
@@ -478,6 +484,7 @@ def log_eval_masks_trackio(dataset, indices, step, predict_fn,  project=None, sa
         
     trackio.log(logs)
 ```
+
 We can now write our training loop and train!
 
 Notice how we log our loss and evaluation masks with trackio.
@@ -520,7 +527,6 @@ for epoch in range(num_epochs):
 trackio.finish()
 ```
 
-
 Let's put the trained model to test.
 
 ```python
@@ -547,6 +553,7 @@ plt.imshow(overlay)
 plt.axis("off")
 plt.show()
 ```
+
 Great improvement after only training for 20 epochs on a small dataset!
 
 ![SAM2 result after training](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam2_after_training.png)

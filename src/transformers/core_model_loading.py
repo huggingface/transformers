@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 import torch
 
-from .integrations.accelerate import offload_weight
+from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
 
@@ -712,13 +712,13 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
+    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -796,20 +796,17 @@ def set_param_for_module(
     if ref is None:
         unexpected_keys.add(target_name)
     else:
-        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None:
-                param_value = DTensor.from_local(
-                    param_value,
-                    distributed_operation.device_mesh,
-                    getattr(distributed_operation, "shard", Replicate()),
-                    run_check=False,
-                    shape=ref.size(),
-                    stride=ref.stride(),
-                )
-                if not use_dtensor:
-                    # we convert to local
-                    param_value = param_value.to_local()
+                if getattr(distributed_operation, "use_dtensor", False):
+                    param_value = DTensor.from_local(
+                        param_value,
+                        distributed_operation.device_mesh,
+                        getattr(distributed_operation, "shard", Replicate()),
+                        run_check=False,
+                        shape=ref.size(),
+                        stride=ref.stride(),
+                    )
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
@@ -989,10 +986,6 @@ def convert_and_load_state_dict_in_model(
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
-    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
-    device_map_regex = re.compile(
-        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
-    )
     dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
@@ -1079,14 +1072,12 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
+                        device_map[""],
                         _dtype,
                     )
 
             if future_or_tensor is None:
-                device_match = device_map_regex.match(renamed_key)
-                param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
-                # If disk, we need to materialize on cpu first
-                param_device = "cpu" if param_device == "disk" else param_device
+                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -1115,8 +1106,7 @@ def convert_and_load_state_dict_in_model(
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
-                        device_match = device_map_regex.match(target_name)
-                        param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                        param_device = get_device(device_map, target_name)
                         # Offloading support
                         if param_device == "disk":
                             disk_offload_index = offload_and_maybe_resave_param(

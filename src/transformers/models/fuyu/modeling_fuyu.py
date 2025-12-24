@@ -359,6 +359,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches=None,
         image_patches_indices=None,
         cache_position=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -371,10 +372,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
             cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and kwargs.get("use_cache", True):
             # set image_patches and image_patches_indices to `None` for decoding stage
             model_inputs["image_patches_indices"] = None
             model_inputs["image_patches"] = None

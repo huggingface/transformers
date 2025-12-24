@@ -608,6 +608,7 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, config.projection_size)
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
