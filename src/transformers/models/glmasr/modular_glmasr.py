@@ -66,7 +66,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             max_audio_len=max_audio_len,
         )
 
-    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         merge_factor = 4
         for padding, kernel_size, stride in [(1, 3, 1), (1, 3, 2)]:
             audio_lengths = (audio_lengths + 2 * padding - (kernel_size - 1) - 1) // stride + 1

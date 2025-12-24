@@ -86,7 +86,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
         conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
         audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
         return audio_tokens_lengths
