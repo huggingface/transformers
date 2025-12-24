@@ -36,20 +36,20 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 129280):
+        vocab_size (`int`, *optional*, defaults to 154880):
             Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Glm4MoeLiteModel`]
-        hidden_size (`int`, *optional*, defaults to 7168):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 18432):
+        intermediate_size (`int`, *optional*, defaults to 10240):
             Dimension of the MLP representations.
-        moe_intermediate_size (`int`, *optional*, defaults to 2048):
+        moe_intermediate_size (`int`, *optional*, defaults to 1536):
             Dimension of the MoE representations.
-        num_hidden_layers (`int`, *optional*, defaults to 61):
+        num_hidden_layers (`int`, *optional*, defaults to 47):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 128):
+        num_attention_heads (`int`, *optional*, defaults to 20):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 128):
+        num_key_value_heads (`int`, *optional*, defaults to 20):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -59,38 +59,38 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
             `num_attention_heads`.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 256):
+        n_routed_experts (`int`, *optional*, defaults to 64):
             Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+        routed_scaling_factor (`float`, *optional*, defaults to 1.8):
             Scaling factor or routed experts.
         kv_lora_rank (`int`, *optional*, defaults to 512):
             Rank of the LoRA matrices for key and value projections.
-        q_lora_rank (`int`, *optional*, defaults to 1536):
+        q_lora_rank (`int`, *optional*, defaults to 768):
             Rank of the LoRA matrices for query projections.
         qk_rope_head_dim (`int`, *optional*, defaults to 64):
             Dimension of the query/key heads that use rotary position embeddings.
-        v_head_dim (`int`, *optional*, defaults to 128):
+        v_head_dim (`int`, *optional*, defaults to 256):
             Dimension of the value heads.
-        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+        qk_nope_head_dim (`int`, *optional*, defaults to 192):
             Dimension of the query/key heads that don't use rotary position embeddings.
-        n_group (`int`, *optional*, defaults to 8):
+        n_group (`int`, *optional*, defaults to 1):
             Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 4):
+        topk_group (`int`, *optional*, defaults to 1):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
+        num_experts_per_tok (`int`, *optional*, defaults to 4):
             Number of selected experts, None means dense model.
-        first_k_dense_replace (`int`, *optional*, defaults to 3):
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
             Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the weights of the routed experts.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
+        max_position_embeddings (`int`, *optional*, defaults to 202752):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -132,12 +132,10 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     model_type = "glm4_moe_lite"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
         "layers.*.mlp.experts.down_proj": "local_rowwise",
         "layers.*.mlp.experts": "gather",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -153,30 +151,30 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 129280,
-        hidden_size: Optional[int] = 7168,
-        intermediate_size: Optional[int] = 18432,
-        moe_intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 61,
-        num_attention_heads: Optional[int] = 128,
-        num_key_value_heads: Optional[int] = 128,
+        vocab_size: Optional[int] = 154880,
+        hidden_size: Optional[int] = 2048,
+        intermediate_size: Optional[int] = 10240,
+        moe_intermediate_size: Optional[int] = 1536,
+        num_hidden_layers: Optional[int] = 47,
+        num_attention_heads: Optional[int] = 20,
+        num_key_value_heads: Optional[int] = 20,
         n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 256,
-        routed_scaling_factor: Optional[float] = 2.5,
+        n_routed_experts: Optional[int] = 64,
+        routed_scaling_factor: Optional[float] = 1.8,
         kv_lora_rank: Optional[int] = 512,
-        q_lora_rank: Optional[int] = 1536,
+        q_lora_rank: Optional[int] = 768,
         qk_rope_head_dim: Optional[int] = 64,
-        v_head_dim: Optional[int] = 128,
-        qk_nope_head_dim: Optional[int] = 128,
-        n_group: Optional[int] = 8,
-        topk_group: Optional[int] = 4,
-        num_experts_per_tok: Optional[int] = 8,
-        first_k_dense_replace: Optional[int] = 3,
+        v_head_dim: Optional[int] = 256,
+        qk_nope_head_dim: Optional[int] = 192,
+        n_group: Optional[int] = 1,
+        topk_group: Optional[int] = 1,
+        num_experts_per_tok: Optional[int] = 4,
+        first_k_dense_replace: Optional[int] = 1,
         norm_topk_prob: Optional[bool] = True,
         hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 4096,
+        max_position_embeddings: Optional[int] = 202752,
         initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
+        rms_norm_eps: Optional[int] = 1e-5,
         use_cache: Optional[bool] = True,
         pad_token_id: Optional[int] = None,
         bos_token_id: Optional[int] = 0,
@@ -234,22 +232,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
-
-        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
-        return kwargs
 
 
 __all__ = ["Glm4MoeLiteConfig"]
