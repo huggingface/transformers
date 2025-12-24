@@ -429,6 +429,11 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("vibevoice", "VibeVoiceConfig"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
+        ("vibevoice_realtime", "VibeVoiceRealTimeConfig"),
+        ("vibevoice_realtime_acoustic_decoder", "VibeVoiceRealTimeAcousticDecoderConfig"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizerConfig"),
         ("video_llama_3", "VideoLlama3Config"),
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
@@ -899,6 +904,11 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("vaultgemma", "VaultGemma"),
+        ("vibevoice", "VibeVoice"),
+        ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
+        ("vibevoice_realtime", "VibeVoiceRealTime"),
+        ("vibevoice_realtime_acoustic_decoder", "VibeVoiceRealTimeAcousticDecoder"),
+        ("vibevoice_semantic_tokenizer", "VibeVoiceSemanticTokenizer"),
         ("video_llama_3", "VideoLlama3"),
         ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
@@ -948,7 +958,31 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
 
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
-DEPRECATED_MODELS = []
+DEPRECATED_MODELS = [
+    "deta",
+    "efficientformer",
+    "ernie_m",
+    "gptsan_japanese",
+    "graphormer",
+    "jukebox",
+    "mctct",
+    "mega",
+    "mmbt",
+    "nat",
+    "nezha",
+    "open_llama",
+    "qdqbert",
+    "realm",
+    "retribert",
+    "speech_to_text_2",
+    "tapex",
+    "trajectory_transformer",
+    "transfo_xl",
+    "tvlt",
+    "van",
+    "vit_hybrid",
+    "xlm_prophetnet",
+]
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
@@ -1014,6 +1048,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
+        ("vibevoice_realtime_acoustic_decoder", "vibevoice_realtime"),
+        ("vibevoice_semantic_tokenizer", "vibevoice"),
     ]
 )
 
