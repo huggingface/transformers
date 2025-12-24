@@ -480,7 +480,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             attentions=transformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
+    ):
         # Overwritten -- inputs_embeds not working properly
 
         # only last tokens for inputs_ids if past is defined in kwargs

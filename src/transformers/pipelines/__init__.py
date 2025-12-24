@@ -22,7 +22,7 @@ from huggingface_hub import is_offline_mode, model_info
 
 from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..feature_extraction_utils import FeatureExtractionMixin, PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
@@ -988,12 +988,13 @@ def pipeline(
                 feature_extractor = AutoFeatureExtractor.from_pretrained(
                     feature_extractor, _from_pipeline=task, **hub_kwargs, **model_kwargs
                 )
+                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                    pretrained_model_name_or_path or model_name,
+                    **hub_kwargs,
+                )
+                processor_class = config_dict.get("processor_class", None)
 
-                if (
-                    feature_extractor._processor_class
-                    and feature_extractor._processor_class.endswith("WithLM")
-                    and isinstance(model_name, str)
-                ):
+                if processor_class is not None and processor_class.endswith("WithLM") and isinstance(model_name, str):
                     try:
                         import kenlm  # to trigger `ImportError` if not installed
                         from pyctcdecode import BeamSearchDecoderCTC
