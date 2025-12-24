@@ -345,7 +345,7 @@ class GlmAsrMultiModalProjector(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
@@ -450,51 +450,17 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> model_id = "zai-org/GLM-ASR-Nano-2512"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = GlmAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        >>> model = GlmAsrForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
+        >>> inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
-        >>> conversations = [
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {"type": "text", "text": "Transcribe the input speech."},
-        >>>                 {
-        >>>                     "type": "audio",
-        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
-        >>>                 },
-        >>>             ],
-        >>>         }
-        >>>     ],
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {
-        >>>                     "type": "text",
-        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
-        >>>                 },
-        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
-        >>>             ],
-        >>>         }
-        >>>     ],
-        >>> ]
+        >>> inputs = inputs.to(model.device, dtype=model.dtype)
 
-        >>> inputs = processor.apply_chat_template(
-        >>>     conversations,
-        >>>     tokenize=True,
-        >>>     add_generation_prompt=True,
-        >>>     return_dict=True,
-        >>> ).to(model.device)
+        >>> outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-        >>> outputs = model.generate(**inputs, max_new_tokens=500)
-
-        >>> decoded_outputs = processor.batch_decode(
-        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        >>> )
+        >>> decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         >>> print(decoded_outputs)
-        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
 
         if inputs_embeds is None:
