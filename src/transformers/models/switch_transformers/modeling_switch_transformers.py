@@ -111,7 +111,7 @@ class SwitchTransformersTop1Router(nn.Module):
         router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
-        # mask if the token routed to to the expert will overflow
+        # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)

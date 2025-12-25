@@ -74,7 +74,7 @@ class DiaProcessor(ProcessorMixin):
         tokenizer (`DiaTokenizer`):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
         audio_tokenizer (`DacModel`):
-            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
+            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is a required input.
     """
 
     audio_tokenizer_class = "DacModel"
