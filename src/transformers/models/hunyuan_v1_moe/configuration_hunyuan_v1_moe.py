@@ -177,7 +177,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
 
         if not isinstance(self.rope_parameters, dict) or len(self.rope_parameters) != 2:
             raise ValueError(
-                "`rope_parameters` must be a dictionary with with two fields, `type` and `factor` or `type` and `alpha`, "
+                "`rope_parameters` must be a dictionary with two fields, `type` and `factor` or `type` and `alpha`,"
                 f"got {self.rope_parameters}"
             )
         rope_parameters_type = self.rope_parameters.get("type", None)
