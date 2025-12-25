@@ -1106,7 +1106,7 @@ class UdopStack(UdopPreTrainedModel):
         return_dict=None,
         cache_position=None,
         **kwargs,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithAttentionMask]:
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1436,12 +1436,10 @@ class UdopModel(UdopPreTrainedModel):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_word_embeddings = True
         self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_word_embeddings = True
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config)
 
@@ -1476,7 +1474,7 @@ class UdopModel(UdopPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[Tensor, ...]:
+    ) -> Union[tuple, Seq2SeqModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1611,12 +1609,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_config = deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = UdopStack(encoder_config)
 
         decoder_config = deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config)
 
@@ -1655,7 +1651,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
-    ) -> tuple[Tensor, ...]:
+    ) -> Union[tuple, Seq2SeqLMOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,

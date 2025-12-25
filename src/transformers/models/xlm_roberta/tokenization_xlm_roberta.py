@@ -14,7 +14,7 @@
 # limitations under the License
 """Tokenization classes for XLM-RoBERTa model (Tokenizers backend)."""
 
-from typing import Optional
+from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -47,16 +47,17 @@ class XLMRobertaTokenizer(TokenizersBackend):
         pad_token (`str`, optional, defaults to `"<pad>"`): The padding token.
         mask_token (`str`, optional, defaults to `"<mask>"`): The mask token.
         add_prefix_space (`bool`, optional, defaults to `True`): Whether to add an initial space.
-        vocab (`dict`, optional): Custom vocabulary dictionary.
-        merges (`list`, optional): Custom merges list.
+        vocab (`str`, `dict` or `list`, optional): Custom vocabulary dictionary.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = Unigram
 
     def __init__(
         self,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        add_prefix_space: bool = True,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         sep_token: str = "</s>",
@@ -64,9 +65,6 @@ class XLMRobertaTokenizer(TokenizersBackend):
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
-        add_prefix_space: bool = True,
-        vocab: Optional[dict] = None,
-        vocab_file: Optional[str] = None,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -99,11 +97,7 @@ class XLMRobertaTokenizer(TokenizersBackend):
             ]
         )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
@@ -116,14 +110,13 @@ class XLMRobertaTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=["$A", "</s>"],
-            pair=["$A", "</s>", "$B", "</s>"],
+            single=[str(bos_token), "$A", str(eos_token)],
+            pair=[str(bos_token), "$A", str(eos_token), "$B", str(eos_token)],
             special_tokens=[
-                ("</s>", self.eos_token_id),
+                (str(bos_token), self.bos_token_id),
+                (str(eos_token), self.eos_token_id),
             ],
         )
-
-        self.vocab_file = vocab_file
 
 
 __all__ = ["XLMRobertaTokenizer"]

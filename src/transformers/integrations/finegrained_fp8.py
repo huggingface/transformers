@@ -15,7 +15,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -25,23 +25,16 @@ if is_torch_available():
     import triton.language as tl
     from torch.nn import functional as F
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
-
 
 logger = logging.get_logger(__name__)
 try:
     _FP8_DTYPE = torch.float8_e4m3fn
     _FP8_MIN = torch.finfo(_FP8_DTYPE).min
     _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-    _FP8_IS_INT = False
 except AttributeError:
-    _FP8_DTYPE = torch.int8
-    _FP8_MIN, _FP8_MAX = -127, 127
-    _FP8_IS_INT = True
-    logger.warning_once(
-        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
-    )
+    _FP8_DTYPE = None
+    _FP8_MIN, _FP8_MAX = -448, 448
+    logger.warning_once("torch.float8_e4m3fn not available")
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -466,9 +459,11 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+
                 else:
                     raise NotImplementedError("Not supported")
+
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
@@ -483,7 +478,8 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
-            output = torch.nan_to_num(output, nan=0.0)
+
+            #            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
@@ -589,12 +585,22 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-    pre_quantized=False,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
-    """Helper function to replace model layers with FP8 versions."""
+    """
+    A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
+
+    Parameters:
+        model (`torch.nn.Module`):
+            Input model or `torch.nn.Module` as the function is run recursively.
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
+            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
+        quantization_config (`FbgemmFp8Config`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
+    """
+
     if quantization_config.dequantize:
         return model
 
@@ -605,7 +611,7 @@ def replace_with_fp8_linear(
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
-        with init_empty_weights():
+        with torch.device("meta"):
             if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
@@ -688,10 +694,7 @@ class Fp8Quantize(ConversionOps):
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
 
-        if _FP8_IS_INT:
-            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        else:
-            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
 
         quantized = quantized.reshape(original_shape)
 
