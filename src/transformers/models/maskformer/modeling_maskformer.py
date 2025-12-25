@@ -174,7 +174,7 @@ class MaskFormerModelOutput(ModelOutput):
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
 
-    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or or
+    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or
     [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
     [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] depending on the task. Please, see
     [`~MaskFormerImageProcessor] for details regarding usage.
