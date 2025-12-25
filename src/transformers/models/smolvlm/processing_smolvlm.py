@@ -19,6 +19,8 @@ Processor class for SmolVLM.
 from datetime import timedelta
 from typing import TYPE_CHECKING, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
@@ -102,6 +104,7 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
             "add_special_tokens": True,
             "padding": False,
             "is_split_into_words": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "return_row_col_info": True,
@@ -150,6 +153,16 @@ class SmolVLMProcessor(ProcessorMixin):
         self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
         self.image_seq_len = image_seq_len
         self.video_token = getattr(tokenizer, "video_token", "<video>")
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+
+        row_col_ids = [
+            tokenizer.convert_tokens_to_ids(f"<row_{i + 1}_col_{j + 1}>") for i in range(1, 7) for j in range(1, 7)
+        ]
+        self.image_ids = row_col_ids + [
+            self.image_token_id,
+            tokenizer.convert_tokens_to_ids(self.global_image_token),
+            tokenizer.convert_tokens_to_ids(self.fake_image_token),
+        ]
 
         if not num2words:
             raise ImportError(
@@ -341,11 +354,18 @@ class SmolVLMProcessor(ProcessorMixin):
             inputs.update(vision_inputs)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
 
         if text is not None:
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
             inputs.update(text_inputs)
+
+            if return_mm_token_type_ids:
+                array_ids = np.array(text_inputs["input_ids"])
+                mm_token_type_ids = np.zeros_like(array_ids)
+                mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+                text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(inputs, tensor_type=return_tensors)
 
