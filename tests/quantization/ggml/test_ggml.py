@@ -1054,6 +1054,31 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(GGUF_TO_FAST_CONVERTERS["deci"], GGUFLlamaConverter)
         self.assertEqual(GGUF_TO_FAST_CONVERTERS["decilm"], GGUFLlamaConverter)
 
+    def test_gemma_softcap_config_mapping(self):
+        """Test that Gemma2/Gemma3 GGUF config mapping includes softcapping parameters.
+
+        Gemma2 and Gemma3 models use attention logit softcapping for numerical stability.
+        These values are stored in GGUF metadata as 'attn_logit_softcapping' and
+        'final_logit_softcapping', and must be mapped to the HuggingFace config.
+        """
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        # Test Gemma2
+        self.assertIn("gemma2", GGUF_CONFIG_MAPPING)
+        gemma2_mapping = GGUF_CONFIG_MAPPING["gemma2"]
+        self.assertIn("attn_logit_softcapping", gemma2_mapping)
+        self.assertEqual(gemma2_mapping["attn_logit_softcapping"], "attn_logit_softcapping")
+        self.assertIn("final_logit_softcapping", gemma2_mapping)
+        self.assertEqual(gemma2_mapping["final_logit_softcapping"], "final_logit_softcapping")
+
+        # Test Gemma3
+        self.assertIn("gemma3", GGUF_CONFIG_MAPPING)
+        gemma3_mapping = GGUF_CONFIG_MAPPING["gemma3"]
+        self.assertIn("attn_logit_softcapping", gemma3_mapping)
+        self.assertEqual(gemma3_mapping["attn_logit_softcapping"], "attn_logit_softcapping")
+        self.assertIn("final_logit_softcapping", gemma3_mapping)
+        self.assertEqual(gemma3_mapping["final_logit_softcapping"], "final_logit_softcapping")
+
     @require_read_token
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen3_q8_0(self):
