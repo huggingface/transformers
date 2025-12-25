@@ -27,6 +27,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+from ...utils.auto_docstring import auto_docstring
 from ...video_utils import VideoInput
 
 
@@ -70,25 +71,8 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Qwen2_5OmniProcessor(ProcessorMixin):
-    r"""
-    Constructs a Qwen2.5Omni processor.
-    [`Qwen2_5OmniProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`], [`WhisperFeatureExtractor`], and [`Qwen2TokenizerFast`]. See the
-    [`~Qwen2_5OmniProcessor.__call__`] and [`~Qwen2_5OmniProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`Qwen2VLImageProcessor`], *optional*):
-            The image processor.
-        video_processor ([`Qwen2VLVideoProcessor`], *optional*):
-            The video processor.
-        feature_extractor ([`WhisperFeatureExtractor`], *optional*):
-            The audio feature extractor.
-        tokenizer ([`Qwen2TokenizerFast`], *optional*):
-            The text tokenizer.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
-    """
-
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
     ):
@@ -101,6 +85,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
 
+    @auto_docstring
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
@@ -109,30 +94,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. To prepare the vision inputs,
-        this method forwards the `vision_infos` and `kwargs` arguments to Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`]
-        if `vision_infos` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            audio (`np.ndarray`, `list[np.ndarray]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array.
-        """
-
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
 

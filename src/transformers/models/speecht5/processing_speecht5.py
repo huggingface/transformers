@@ -15,25 +15,15 @@
 """Speech processor class for SpeechT5."""
 
 from ...processing_utils import ProcessorMixin
+from ...utils.auto_docstring import auto_docstring
 
 
+@auto_docstring
 class SpeechT5Processor(ProcessorMixin):
-    r"""
-    Constructs a SpeechT5 processor which wraps a feature extractor and a tokenizer into a single processor.
-
-    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and [`SpeechT5Tokenizer`]. See
-    the docstring of [`~SpeechT5Processor.__call__`] and [`~SpeechT5Processor.decode`] for more information.
-
-    Args:
-        feature_extractor (`SpeechT5FeatureExtractor`):
-            An instance of [`SpeechT5FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`SpeechT5Tokenizer`):
-            An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
         """
         Processes audio and text input, as well as audio and text targets.

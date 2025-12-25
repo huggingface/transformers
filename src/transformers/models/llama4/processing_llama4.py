@@ -21,6 +21,7 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
+from ...utils.auto_docstring import auto_docstring
 
 
 class Llama4ProcessorKwargs(ProcessingKwargs, total=False):
@@ -34,16 +35,25 @@ class Llama4ProcessorKwargs(ProcessingKwargs, total=False):
 chat_template = "{{- bos_token }}\n{%- if custom_tools is defined %}\n    {%- set tools = custom_tools %}\n{%- endif %}\n{%- if not tools_in_user_message is defined %}\n    {%- set tools_in_user_message = true %}\n{%- endif %}\n{%- if not date_string is defined %}\n    {%- if strftime_now is defined %}\n        {%- set date_string = strftime_now(\"%d %b %Y\") %}\n    {%- else %}\n        {%- set date_string = \"26 Jul 2024\" %}\n    {%- endif %}\n{%- endif %}\n{%- if not tools is defined %}\n    {%- set tools = none %}\n{%- endif %}\n\n{#- This block extracts the system message, so we can slot it into the right place. #}\n{%- if messages[0]['role'] == 'system' %}    \n    {%- if messages[0]['content'] is string %}\n        {%- set system_message = messages[0]['content']|trim %}\n    {%- else %}\n        {#- FIXME: The processor requires an array, always. #}\n        {%- set system_message = messages[0]['content'][0]['text']|trim %}\n    {%- endif %}\n    {%- set messages = messages[1:] %}\n    {%- set user_supplied_system_message = true %}\n{%- else %}\n    {%- set system_message = \"\" %}\n    {%- set user_supplied_system_message = false %}\n{%- endif %}\n\n{#- System message if the user supplied one #}\n{%- if user_supplied_system_message %}\n    {{- \"<|header_start|>system<|header_end|>\n\n\" }}\n    {%- if tools is not none %}\n        {{- \"Environment: ipython\n\" }}\n    {%- endif %}\n    {%- if tools is not none and not tools_in_user_message %}\n        {{- \"You have access to the following functions. To call a function, please respond with JSON for a function call.\" }}\n        {{- 'Respond in the format {\"name\": function name, \"parameters\": dictionary of argument name and its value}.' }}\n        {{- \"Do not use variables.\n\n\" }}\n        {%- for t in tools %}\n            {{- t | tojson(indent=4) }}\n            {{- \"\n\n\" }}\n        {%- endfor %}\n    {%- endif %}\n    {{- system_message }}\n    {{- \"<|eot|>\" }}\n{%- endif %}\n\n{#- Custom tools are passed in a user message with some extra guidance #}\n{%- if tools_in_user_message and not tools is none %}\n    {#- Extract the first user message so we can plug it in here #}\n    {%- if messages | length != 0 %}\n        {%- set first_user_message = messages[0]['content']|trim %}\n        {%- set messages = messages[1:] %}\n    {%- else %}\n        {{- raise_exception(\"Cannot put tools in the first user message when there's no first user message!\") }}\n{%- endif %}\n    {{- '<|header_start|>user<|header_end|>\n\n' -}}\n    {{- \"Given the following functions, please respond with a JSON for a function call \" }}\n    {{- \"with its proper arguments that best answers the given prompt.\n\n\" }}\n    {{- 'Respond in the format {\"name\": function name, \"parameters\": dictionary of argument name and its value}.' }}\n    {{- \"Do not use variables.\n\n\" }}\n    {%- for t in tools %}\n        {{- t | tojson(indent=4) }}\n        {{- \"\n\n\" }}\n    {%- endfor %}\n    {{- first_user_message + \"<|eot|>\"}}\n{%- endif %}\n\n{%- for message in messages %}\n    {%- if not (message.role == 'ipython' or message.role == 'tool' or 'tool_calls' in message) %}\n    {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}\n        {%- if message['content'] is string %}\n            {{- message['content'] }}\n        {%- else %}\n            {%- for content in message['content'] %}\n                {%- if content['type'] == 'image' %}\n                    {{- '<|image|>' }}\n                {%- elif content['type'] == 'text' %}\n                    {{- content['text'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n        {{- \"<|eot|>\" }}\n    {%- elif 'tool_calls' in message and message.tool_calls|length > 0 %}\n       {{- '<|header_start|>assistant<|header_end|>\n\n' -}}\n       {{- '<|python_start|>' }}\n        {%- if message['content'] is string %}\n            {{- message['content'] }}\n        {%- else %}\n            {%- for content in message['content'] %}\n                {%- if content['type'] == 'image' %}\n                    {{- '<|image|>' }}\n                {%- elif content['type'] == 'text' %}\n                    {{- content['text'] }}\n                {%- endif %}\n            {%- endfor %}\n        {%- endif %}\n       {{- '<|python_end|>' }}\n        {%- for tool_call in message.tool_calls %}\n           {{- '{\"name\": \"' + tool_call.function.name + '\", ' }}\n           {{- '\"parameters\": ' }}\n           {{- tool_call.function.arguments | tojson }}\n           {{- \"}\" }}\n        {%- endfor %}\n       {{- \"<|eot|>\" }}\n    {%- elif message.role == \"tool\" or message.role == \"ipython\" %}\n        {{- \"<|header_start|>ipython<|header_end|>\n\n\" }}\n        {%- if message.content is mapping or message.content is iterable %}\n            {{- message.content | tojson }}\n        {%- else %}\n            {{- message.content }}\n        {%- endif %}\n        {{- \"<|eot|>\" }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|header_start|>assistant<|header_end|>\n\n' }}\n{%- endif %}\n"
 
 
+@auto_docstring
 class Llama4Processor(ProcessorMixin):
-    r"""
-    Constructs a Llama4 processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~Llama4Processor.__call__`] and [`~Llama4Processor.decode`] for more information.
-    Args:
-        image_processor ([`AutoImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size: int = 14,
+        pixel_shuffle_ratio: float = 0.5,
+        fake_image_token="<|image|>",
+        image_token="<|image|>",
+        start_of_image_token="<|image_start|>",
+        end_of_image_token="<|image_end|>",
+        patch_token="<|patch|>",
+        tile_x_separator_token="<|tile_x_separator|>",
+        tile_y_separator_token="<|tile_y_separator|>",
+        chat_template=chat_template,
+        **kwargs,
+    ):
+        """
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
@@ -64,26 +74,7 @@ class Llama4Processor(ProcessorMixin):
             The token to be used to represent an image patch in the text.
         tile_global_token (`str`, *optional*, defaults to `"TILE_GLOBAL"`):
             The token to be used to represent the cover image in the text.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        patch_size: int = 14,
-        pixel_shuffle_ratio: float = 0.5,
-        fake_image_token="<|image|>",
-        image_token="<|image|>",
-        start_of_image_token="<|image_start|>",
-        end_of_image_token="<|image_end|>",
-        patch_token="<|patch|>",
-        tile_x_separator_token="<|tile_x_separator|>",
-        tile_y_separator_token="<|tile_y_separator|>",
-        chat_template=chat_template,
-        **kwargs,
-    ):
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.downsample_ratio = int(round(1.0 / (pixel_shuffle_ratio**2)))
@@ -125,6 +116,7 @@ class Llama4Processor(ProcessorMixin):
 
         return img_string
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -132,24 +124,6 @@ class Llama4Processor(ProcessorMixin):
         **kwargs: Unpack[Llama4ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
-        To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
-        Llama4ImageProcessor's [`~Llama4ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
