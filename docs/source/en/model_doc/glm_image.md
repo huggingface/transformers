@@ -54,14 +54,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] GlmImageModel
     - forward
 
-## GlmImageForCausalLM
+## GlmImageForConditionalGeneration
 
-[[autodoc]] GlmImageForCausalLM
-
-## GlmImageForSequenceClassification
-
-[[autodoc]] GlmImageForSequenceClassification
-
-## GlmImageForTokenClassification
-
-[[autodoc]] GlmImageForTokenClassification
+[[autodoc]] GlmImageForConditionalGeneration
+    - forward
