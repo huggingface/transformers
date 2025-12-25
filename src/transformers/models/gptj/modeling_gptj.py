@@ -155,7 +155,7 @@ class GPTJAttention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
         attn_weights = attn_weights / self.scale_attn
 
-        if attention_mask is not None:  # no matter the length, we just slice it
+        if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
