@@ -1,4 +1,3 @@
-
 # coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
@@ -15,14 +14,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch SAM3 model."""
 
-
-import platform
 import gc
+import platform
 import tempfile
 import unittest
-import warnings
-import requests
-import torch
 
 import requests
 import torch
@@ -51,6 +46,7 @@ class Sam3MaskDecoderUnitTest(unittest.TestCase):
 
     def test_single_scale_forward(self):
         import torch
+
         batch_size = 2
         C, H, W = self.config.hidden_size, 16, 16
         img_embed = torch.randn(batch_size, C, H, W).to(self.device)
@@ -65,6 +61,7 @@ class Sam3MaskDecoderUnitTest(unittest.TestCase):
 
     def test_multi_scale_forward(self):
         import torch
+
         batch_size = 2
         C, H, W = self.config.hidden_size, 16, 16
         img_embeds = [torch.randn(batch_size, C, H, W).to(self.device) for _ in range(3)]
@@ -76,7 +73,6 @@ class Sam3MaskDecoderUnitTest(unittest.TestCase):
             encoder_hidden_states=encoder_hidden_states,
         )
         self.assertIsNotNone(outputs.pred_masks)
-
 
 
 if is_torch_available():
@@ -185,7 +181,9 @@ class Sam3VisionModelTester:
 
 
 @require_torch
-@unittest.skipIf(platform.system() == "Windows", "safetensors serialization is not supported on Windows for this test.")
+@unittest.skipIf(
+    platform.system() == "Windows", "safetensors serialization is not supported on Windows for this test."
+)
 class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Tests for SAM3 Vision Model (ViT backbone + FPN neck).
@@ -465,7 +463,9 @@ class Sam3ModelTester:
 
 
 @require_torch
-@unittest.skipIf(platform.system() == "Windows", "safetensors serialization is not supported on Windows for this test.")
+@unittest.skipIf(
+    platform.system() == "Windows", "safetensors serialization is not supported on Windows for this test."
+)
 class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Tests for SAM3 full model.

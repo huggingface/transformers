@@ -2032,7 +2032,6 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             Sam3MaskDecoderOutput containing predicted masks and semantic segmentation.
         """
 
-
         import warnings
 
         # --- [Step 1] Input Normalization ---
@@ -2050,7 +2049,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
                     f"Sam3MaskDecoder detected single-scale input (1 level), but config expects "
                     f"{expected_levels} levels. Output will be generated using the provided scale only, "
                     f"bypassing multi-scale fusion.",
-                    UserWarning
+                    UserWarning,
                 )
             else:
                 raise ValueError(
@@ -2061,21 +2060,20 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         # --- [Step 3] Adaptive Processing Logic ---
         if actual_levels == 1:
             # [Path A: Single-Scale]
-            src = backbone_features[0]
-            if hasattr(self, "input_projections"):
-                src = self.input_projections[0](src)
-            pixel_embed = src
+            srcs = [self.input_projections[0](backbone_features[0])] if hasattr(self, "input_projections") else [backbone_features[0]]
         else:
             # [Path B: Standard Multi-Scale FPN]
-            # Inline _embed_pixels logic here
-            backbone_visual_feats = list(backbone_features)
-            spatial_dim = backbone_features[-1].shape[-2] * backbone_features[-1].shape[-1]
-            encoder_visual_embed = encoder_hidden_states[:, :spatial_dim, :]
-            batch_size, _, hidden_size = encoder_visual_embed.shape
-            height, width = backbone_features[-1].shape[-2:]
-            encoder_visual_embed = encoder_visual_embed.transpose(1, 2).reshape(batch_size, hidden_size, height, width)
-            backbone_visual_feats[-1] = encoder_visual_embed
-            pixel_embed = self.pixel_decoder(backbone_visual_feats)
+            srcs = []
+            for i in range(expected_levels):
+                srcs.append(self.input_projections[i](backbone_features[i]))
+            # Add positional embeddings if available
+            if hasattr(self, "image_position_embeddings"):
+                srcs = [src + pos for src, pos in zip(srcs, self.image_position_embeddings)]
+            # Fuse multi-scale features if method exists
+            if hasattr(self, "fuse_multiscale"):
+                srcs = self.fuse_multiscale(srcs)
+        # The rest of the logic expects pixel_embed to be the output of the pixel decoder
+        pixel_embed = self.pixel_decoder(srcs)
 
         if prompt_features is not None:
             # Cross-attention: encoder features attend to prompt features
