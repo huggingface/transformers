@@ -22,6 +22,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
@@ -48,7 +49,7 @@ def load_wkv_cuda_kernel(context_length):
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
 
-    from kernels import get_kernel
+    from ...integrations.hub_kernels import get_kernel
 
     rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
     rwkv_cuda_kernel.max_seq_length = context_length
@@ -366,6 +367,7 @@ class RwkvPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         if isinstance(module, RwkvSelfAttention):
@@ -398,12 +400,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 * 0.5
             )
 
-            module.time_decay.data = decay_speed
-            module.time_first.data = torch.ones_like(module.time_first * math.log(0.3) + zigzag)
+            init.copy_(module.time_decay, decay_speed)
+            init.copy_(module.time_first, torch.ones_like(module.time_first * math.log(0.3) + zigzag))
 
-            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-            module.time_mix_value.data = torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1
-            module.time_mix_receptance.data = torch.pow(time_weight, 0.5 * ratio_1_to_almost0)
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_value, torch.pow(time_weight, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, 0.5 * ratio_1_to_almost0))
         elif isinstance(module, RwkvFeedForward):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -418,28 +420,28 @@ class RwkvPreTrainedModel(PreTrainedModel):
             )
             time_weight = time_weight[None, None, :]
 
-            module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
-            module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
+            init.copy_(module.time_mix_key, torch.pow(time_weight, ratio_1_to_almost0))
+            init.copy_(module.time_mix_receptance, torch.pow(time_weight, ratio_1_to_almost0))
         elif isinstance(module, nn.Linear):
-            shape = module.weight.data.shape
+            shape = module.weight.shape
             gain = 1.0
             scale = 1.0  # extra scale for gain
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
             if shape[0] > shape[1]:
                 gain = math.sqrt(shape[0] / shape[1])
             if shape[0] == self.config.vocab_size and shape[1] == self.config.hidden_size:  # final projection?
                 scale = 0.5
 
             gain *= scale
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.Embedding):
-            shape = module.weight.data.shape
+            shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
-            nn.init.orthogonal_(module.weight, gain=gain)
+            init.orthogonal_(module.weight, gain=gain)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 @dataclass
@@ -518,6 +520,7 @@ class RwkvModel(RwkvPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, RwkvOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
@@ -666,7 +669,7 @@ class RwkvModel(RwkvPreTrainedModel):
     """
 )
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["head.weight"]
+    _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -717,6 +720,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple, RwkvCausalLMOutput]:
         r"""
@@ -753,18 +757,15 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = rwkv_outputs[0]
 
-        logits = self.head(hidden_states)
+        hidden_states = rwkv_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + rwkv_outputs[1:]

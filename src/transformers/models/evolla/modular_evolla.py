@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -90,6 +91,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
 
     def __init__(self, dim: int):
         super().__init__()
+        self.dim = dim
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
@@ -203,19 +205,10 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, EvollaSaProtRotaryEmbedding):
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
+            init.copy_(module.inv_freq, inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
@@ -223,6 +216,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
         self.encoder = EvollaSaProtEncoder(config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -230,7 +224,7 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
@@ -669,7 +663,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -732,15 +726,16 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
         "EvollaSequenceAlignerCrossAttention",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EvollaSequenceAlignerCrossAttention):
-            module.gate_attention.zero_()
-            module.gate_ffw.zero_()
-            module.attention_norm.weight.data.fill_(1.0)
+            init.zeros_(module.gate_attention)
+            init.zeros_(module.gate_ffw)
+            init.ones_(module.attention_norm.weight)
         elif isinstance(module, EvollaSequenceCompressorResampler):
-            module.latents.data.normal_(mean=0.0, std=std)
+            init.normal_(module.latents, mean=0.0, std=std)
 
 
 class EvollaModel(EvollaPreTrainedModel):
@@ -761,8 +756,8 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
+        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -772,7 +767,7 @@ class EvollaModel(EvollaPreTrainedModel):
         self.embed_tokens = value
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -842,9 +837,7 @@ class EvollaModel(EvollaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
@@ -854,7 +847,6 @@ class EvollaModel(EvollaPreTrainedModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
-                position_embeddings=position_embeddings,
                 protein_kv_states=protein_feats,
                 structure_kv_states=structure_feats,
                 msa_kv_states=msa_feats,
@@ -862,6 +854,7 @@ class EvollaModel(EvollaPreTrainedModel):
                 structure_batch_mask=structure_batch_mask,
                 msa_batch_mask=msa_batch_mask,
                 query_attn_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -900,6 +893,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         protein_input_ids: Optional[torch.LongTensor] = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
         r"""
@@ -930,8 +924,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
 
         >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
         ```"""
-
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -940,8 +933,11 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

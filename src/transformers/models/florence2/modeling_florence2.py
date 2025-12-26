@@ -26,6 +26,7 @@ from typing import Any, Optional, Union
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -485,6 +486,7 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -540,7 +542,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, **kwargs):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -614,7 +616,8 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 @auto_docstring
 class Florence2PreTrainedModel(PreTrainedModel):
     config: Florence2Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
 
@@ -627,6 +630,18 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = False
     config_class = Florence2Config
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Florence2VisionPositionalEmbeddingCosine1D):
+            pos_idx_to_embed = torch.empty((module.max_seq_len, module.embed_dim))
+            sine, cosine = module.get_sinusoid_embeddings(
+                max_positions=module.max_seq_len,
+                embed_dim=module.embed_dim,
+            )
+            pos_idx_to_embed[:, 0::2] = sine
+            pos_idx_to_embed[:, 1::2] = cosine
+            init.copy_(module.pos_idx_to_embed, pos_idx_to_embed)
+
 
 @auto_docstring(
     custom_intro="""
@@ -635,10 +650,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
 )
 class Florence2Model(Florence2PreTrainedModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "language_model.encoder.embed_tokens.weight",
-        "language_model.decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -653,12 +664,6 @@ class Florence2Model(Florence2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
@@ -716,6 +721,7 @@ class Florence2Model(Florence2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -777,8 +783,11 @@ class Florence2Model(Florence2PreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -804,11 +813,9 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "model.language_model.encoder.embed_tokens.weight",
-        "model.language_model.decoder.embed_tokens.weight",
-        "lm_head.weight",
-    ]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -825,27 +832,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
 
     @can_return_tuple
     @auto_docstring
@@ -882,8 +870,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         >>> import requests
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
-        >>> model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-large")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+        >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
+        >>> processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
@@ -962,6 +950,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -973,18 +962,18 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
-
-    def get_encoder(self):
-        return self.model.get_encoder()
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

@@ -24,6 +24,7 @@ Transformer models can be efficiently deployed using libraries such as vLLM, Tex
 You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
+
 - [Jan (text and MCP user interface)](./jan)
 - [Cursor (IDE)](./cursor)
 - [Open WebUI (text, image, speech user interface)](./open_webui)
@@ -43,6 +44,12 @@ The server supports the following REST APIs:
 - `/v1/audio/transcriptions`
 - `/v1/models`
 
+Please make sure to have the correct dependencies installed for the instructions below:
+
+```shell
+pip install transformers[serving]
+```
+
 To launch a server, simply use the `transformers serve` CLI command:
 
 ```shell
@@ -52,7 +59,7 @@ transformers serve
 The simplest way to interact with the server is through our `transformers chat` CLI
 
 ```shell
-transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B
+transformers chat Qwen/Qwen3-4B
 ```
 
 or by sending an HTTP request, like we'll see below.
@@ -379,7 +386,31 @@ CB is opt-in and currently applies to chat completions.
 ```sh
 transformers serve \
   --continuous-batching
-  --attn_implementation sdpa_paged
+  --attn_implementation "sdpa"
+```
+
+### Quantization
+
+transformers serve is compatible with all [quantization methods](https://huggingface.co/docs/transformers/main/quantization/overview) supported in transformers. Quantization can significantly reduce memory usage and improve inference speed, with two main workflows: pre-quantized models and on-the-fly quantization.
+
+#### Pre-quantized Models
+
+For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply choose a quantized model name for serving.
+Make sure to install the required libraries listed in the quantization documentation.
+
+> [!TIP]
+> Pre-quantized models generally provide the best balance of performance and accuracy.
+
+#### On the fly quantization
+
+If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview).
+
+Currently, with transformers serve, we only supports some methods: ["bnb-4bit", "bnb-8bit"]
+
+For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bnb-4bit`:
+
+```sh
+transformers serve --quantization bnb-4bit
 ```
 
 ### Performance tips
@@ -389,14 +420,11 @@ transformers serve \
 ```sh
 transformers serve \
   --continuous_batching \
-  --attn_implementation paged_attention
+  --attn_implementation "flash_attention_2"
 ```
 
 > [!TIP]
-> If you choose `paged_attention`, you must install `flash-attn` separately: `pip install flash-attn --no-build-isolation`
 
 - `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
-
-- `--load_in_4bit`/`--load_in_8bit` can reduce memory footprint for LoRA setups
 
 - `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs

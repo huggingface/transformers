@@ -22,11 +22,11 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D
 from ...utils import (
     auto_docstring,
     logging,
@@ -189,18 +189,11 @@ class CTRLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, CTRLModel):
+            init.copy_(
+                module.pos_encoding, positional_encoding(module.config.n_positions, module.d_model_size, torch.float)
+            )
 
 
 @auto_docstring
@@ -211,7 +204,9 @@ class CTRLModel(CTRLPreTrainedModel):
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
 
-        self.pos_encoding = positional_encoding(config.n_positions, self.d_model_size, torch.float)
+        self.register_buffer(
+            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        )
 
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
@@ -384,7 +379,7 @@ class CTRLModel(CTRLPreTrainedModel):
     """
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.w.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -409,6 +404,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
@@ -459,31 +455,34 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-
-        lm_logits = self.lm_head(hidden_states)
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                lm_logits,
+                logits,
                 labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
+    ):
         # Overwritten -- inputs_embeds not working properly
 
         # only last tokens for inputs_ids if past is defined in kwargs
@@ -547,6 +546,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

@@ -164,7 +164,7 @@ image_pose_result = pose_results[0]
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
-from accelerate import Accelerator
+    from accelerate import Accelerator
 
     device = Accelerator().device
 
@@ -292,6 +292,12 @@ Refer to resources below to learn more about using ViTPose.
 ## VitPoseImageProcessor
 
 [[autodoc]] VitPoseImageProcessor
+    - preprocess
+    - post_process_pose_estimation
+
+## VitPoseImageProcessorFast
+
+[[autodoc]] VitPoseImageProcessorFast
     - preprocess
     - post_process_pose_estimation
 

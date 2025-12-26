@@ -15,11 +15,7 @@
 # limitations under the License.
 """RoBERTa-PreLayerNorm configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
 from ...configuration_utils import PreTrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -29,7 +25,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
 class RobertaPreLayerNormConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RobertaPreLayerNormModel`] or a [`TFRobertaPreLayerNormModel`]. It is
+    This is the configuration class to store the configuration of a [`RobertaPreLayerNormModel`]. It is
     used to instantiate a RoBERTa-PreLayerNorm model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa-PreLayerNorm
     [andreasmadsen/efficient_mlm_m0.40](https://huggingface.co/andreasmadsen/efficient_mlm_m0.40) architecture.
@@ -41,7 +37,7 @@ class RobertaPreLayerNormConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the RoBERTa-PreLayerNorm model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`RobertaPreLayerNormModel`] or [`TFRobertaPreLayerNormModel`].
+            `inputs_ids` passed when calling [`RobertaPreLayerNormModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -61,7 +57,7 @@ class RobertaPreLayerNormConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`RobertaPreLayerNormModel`] or [`TFRobertaPreLayerNormModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RobertaPreLayerNormModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -130,20 +126,4 @@ class RobertaPreLayerNormConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
 
-# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->RobertaPreLayerNorm
-class RobertaPreLayerNormOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["RobertaPreLayerNormConfig", "RobertaPreLayerNormOnnxConfig"]
+__all__ = ["RobertaPreLayerNormConfig"]

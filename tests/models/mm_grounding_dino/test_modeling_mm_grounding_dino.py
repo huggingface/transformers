@@ -249,7 +249,6 @@ class MMGroundingDinoModelTester:
 class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MMGroundingDinoModel, MMGroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_torchscript = False
 
     test_missing_keys = False
     pipeline_model_mapping = (
@@ -322,6 +321,10 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    def test_load_save_without_tied_weights(self):
         pass
 
     def test_attention_outputs(self):

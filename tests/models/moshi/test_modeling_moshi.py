@@ -533,7 +533,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     # training is not supported yet for Moshi
     test_resize_embeddings = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = MoshiTester(self)
@@ -834,6 +833,10 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         super().test_prepare_inputs_for_generation_kwargs_forwards(
             last_hidden_state=torch.randn(2, 3, 32), kwargs_depth_decoder={}
         )
+
+    @unittest.skip(reason="Moshi has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
 
 
 def place_dict_on_device(dict_to_place, device):

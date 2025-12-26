@@ -65,9 +65,6 @@ class SamHQProcessor(ProcessorMixin):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
 
-    attributes = ["image_processor"]
-    image_processor_class = "SamImageProcessor"
-
     def __init__(self, image_processor):
         super().__init__(image_processor)
         # Ensure image_processor is properly initialized
@@ -96,6 +93,7 @@ class SamHQProcessor(ProcessorMixin):
         input_points = output_kwargs["images_kwargs"].pop("input_points", None)
         input_labels = output_kwargs["images_kwargs"].pop("input_labels", None)
         input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", None)
+        point_pad_value = output_kwargs["images_kwargs"].pop("point_pad_value", None)
 
         encoding_image_processor = self.image_processor(
             images,
@@ -120,7 +118,7 @@ class SamHQProcessor(ProcessorMixin):
             input_labels=input_labels,
             input_boxes=input_boxes,
             return_tensors=output_kwargs["images_kwargs"].get("return_tensors"),
-            point_pad_value=output_kwargs["images_kwargs"].get("point_pad_value"),
+            point_pad_value=point_pad_value,
         )
 
         return encoding_image_processor

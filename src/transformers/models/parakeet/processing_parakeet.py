@@ -28,6 +28,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
         "audio_kwargs": {
             "sampling_rate": 16000,
             "padding": "longest",
+            "return_attention_mask": True,
         },
         "text_kwargs": {
             "padding": True,
@@ -39,9 +40,8 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class ParakeetProcessor(ProcessorMixin):
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "ParakeetFeatureExtractor"
-    tokenizer_class = "ParakeetTokenizerFast"
+    def __init__(self, feature_extractor, tokenizer):
+        super().__init__(feature_extractor, tokenizer)
 
     def __call__(
         self,

@@ -27,18 +27,15 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.import_utils import (
-    is_causal_conv1d_available,
-    is_kernels_available,
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -46,14 +43,6 @@ if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
     pscan = None
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
 
 logger = logging.get_logger(__name__)
@@ -162,33 +151,6 @@ class FalconMambaCache:
             self.ssm_states[layer_idx].zero_()
 
 
-def _lazy_load_causal_conv1d():
-    global _causal_conv1d_cache
-    if _causal_conv1d_cache is not None:
-        return _causal_conv1d_cache
-
-    if is_kernels_available():
-        from kernels import get_kernel
-
-        try:
-            _causal_conv1d_kernel = get_kernel("kernels-community/causal-conv1d")
-        except FileNotFoundError:
-            # no kernel binary match, fallback to slow path
-            _causal_conv1d_cache = (None, None)
-        else:
-            _causal_conv1d_cache = (_causal_conv1d_kernel.causal_conv1d_update, _causal_conv1d_kernel.causal_conv1d_fn)
-    elif is_causal_conv1d_available():
-        from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-
-        _causal_conv1d_cache = (causal_conv1d_update, causal_conv1d_fn)
-    else:
-        _causal_conv1d_cache = (None, None)
-    return _causal_conv1d_cache
-
-
-_causal_conv1d_cache = None
-
-
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """
     Calculates simple RMSNorm with no learnable weights. `MambaRMSNorm` will
@@ -257,7 +219,27 @@ class FalconMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update, causal_conv1d_fn = (
+            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
+            if causal_conv1d is not None
+            else (None, None)
+        )
+        global falcon_mamba_ssm, selective_state_update, selective_scan_fn, falcon_mamba_inner_fn
+        falcon_mamba_ssm = lazy_load_kernel("falcon_mamba-ssm")
+        selective_state_update, selective_scan_fn, falcon_mamba_inner_fn = (
+            (
+                falcon_mamba_ssm.selective_state_update,
+                falcon_mamba_ssm.selective_scan_fn,
+                falcon_mamba_ssm.falcon_mamba_inner_fn,
+            )
+            if falcon_mamba_ssm is not None
+            else (None, None, None)
+        )
+
         self.warn_slow_implementation()
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -268,9 +250,8 @@ class FalconMambaMixer(nn.Module):
         self.rms_eps = config.mixer_rms_eps
 
     def warn_slow_implementation(self):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if not is_fast_path_available:
             if self.use_falcon_mambapy:
@@ -300,9 +281,8 @@ class FalconMambaMixer(nn.Module):
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            contextualized_states = mamba_inner_fn(
+            contextualized_states = falcon_mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -323,7 +303,6 @@ class FalconMambaMixer(nn.Module):
             )
 
         else:
-            causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -366,7 +345,7 @@ class FalconMambaMixer(nn.Module):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            if hasattr(self.config, "quantization_config"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
@@ -518,11 +497,10 @@ class FalconMambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d_update, causal_conv1d_fn = _lazy_load_causal_conv1d()
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
@@ -581,6 +559,7 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         std = self.config.initializer_range
@@ -589,14 +568,14 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
             A = torch.arange(1, module.ssm_state_size + 1, dtype=torch.float32)[None, :]
             A = A.expand(module.intermediate_size, -1).contiguous()
-            module.A_log.copy_(torch.log(A))
-            module.D.data.fill_(1.0)
+            init.copy_(module.A_log, torch.log(A))
+            init.ones_(module.D)
 
             dt_init_std = self.config.time_step_rank**-0.5 * self.config.time_step_scale
             if self.config.time_step_init_scheme == "constant":
-                nn.init.constant_(module.dt_proj.weight, dt_init_std)
+                init.constant_(module.dt_proj.weight, dt_init_std)
             elif self.config.time_step_init_scheme == "random":
-                nn.init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
+                init.uniform_(module.dt_proj.weight, -dt_init_std, dt_init_std)
 
             dt = torch.exp(
                 torch.rand(self.config.intermediate_size)
@@ -605,14 +584,12 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
             ).clamp(min=self.config.time_step_floor)
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_proj.bias.copy_(inv_dt)
-            module.dt_proj.bias._no_reinit = True
+            init.copy_(module.dt_proj.bias, inv_dt)
 
-            nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
-                if not getattr(module.conv1d.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.conv1d.bias)
-            nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
+                init.zeros_(module.conv1d.bias)
+            init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
 
             if self.config.rescale_prenorm_residual:
                 # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
@@ -629,15 +606,16 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
                 p /= math.sqrt(self.config.num_hidden_layers)
 
         if isinstance(module, nn.Linear):
-            if not getattr(module.weight, "_no_reinit", False):
-                nn.init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, FalconMambaRMSNorm):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
+        if isinstance(module, FalconMambaMixer):
+            init.ones_(module.b_c_rms)
+            init.ones_(module.dt_rms)
 
 
 @dataclass
@@ -717,6 +695,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, FalconMambaOutput]:
         r"""
         cache_params (`FalconMambaCache`, *optional*):
@@ -793,7 +772,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     """
 )
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -835,6 +814,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[FalconMambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
@@ -887,6 +867,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # for now we need this for generation
     ) -> Union[tuple, FalconMambaCausalLMOutput]:
         r"""
@@ -912,9 +893,11 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             attention_mask=attention_mask,
         )
-        hidden_states = falcon_mamba_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        hidden_states = falcon_mamba_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:

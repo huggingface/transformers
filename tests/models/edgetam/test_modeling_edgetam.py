@@ -234,10 +234,8 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = (
         {"feature-extraction": EdgeTamModel, "mask-generation": EdgeTamModel} if is_torch_available() else {}
     )
-    fx_compatible = False
 
     test_resize_embeddings = False
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -361,10 +359,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="vision_hidden_states from TimmWrapperModel")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Timm weights cannot be fully constructed in _init_weights")
-    def test_can_init_all_missing_weights(self):
         pass
 
     @unittest.skip(

@@ -821,14 +821,26 @@ def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_widt
     return image
 
 
-def _cast_tensor_to_float(x):
-    if x.is_floating_point():
-        return x
-    return x.float()
-
-
 def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
-    """Helper function to flatten a single level of nested image and batch structures and group by shape."""
+    """
+    Helper function to flatten a single level of nested image and batch structures and group by shape.
+    Args:
+        nested_images (list):
+            A list of images or a single tensor
+        paired_inputs (Any, *optional*):
+            Zero or more lists that mirror the structure of `nested_images` (flat list, or list of lists when
+            `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
+            same shape key. These paired values are grouped alongside `nested_images` but are not stacked in the output, so
+            they do not need to be tensors.
+        is_nested (bool, *optional*, defaults to False):
+            Whether the images are nested.
+    Returns:
+        tuple[dict, ...]:
+            - A dictionary with shape as key and list of images with that shape as value
+            - A dictionary with shape as key and list of paired values with that shape as value
+            - A dictionary mapping original indices to (shape, index) tuples
+            - A dictionary mapping original indices to (shape, index) tuples for each paired input
+    """
     grouped_images = defaultdict(list)
     grouped_images_index = {}
     paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
@@ -880,27 +892,20 @@ def _reconstruct_nested_structure(indices, processed_images):
     return result
 
 
-def _disable_grouping_output_nested(images, *paired_inputs):
-    """Build the disable_grouping output tuple for a single-level nested structure."""
-    outer_range = range(len(images))
-    inner_ranges = [range(len(images[i])) for i in outer_range]
+def _iterate_items(items, is_nested: bool):
+    """
+    Helper function to iterate over items yielding (key, item) pairs.
 
-    # Precompute all (i, j) pairs
-    ij_pairs = [(i, j) for i in outer_range for j in inner_ranges[i]]
-
-    images_dict = {(i, j): images[i][j].unsqueeze(0) for (i, j) in ij_pairs}
-    paired_dicts = [{(i, j): paired_list[i][j].unsqueeze(0) for (i, j) in ij_pairs} for paired_list in paired_inputs]
-    index_map = {(i, j): ((i, j), 0) for (i, j) in ij_pairs}
-    return images_dict, *paired_dicts, index_map
-
-
-def _disable_grouping_output_flat(images, *paired_inputs):
-    """Build the disable_grouping output tuple for a flat list structure."""
-    idx_range = range(len(images))
-    images_dict = {i: images[i].unsqueeze(0) for i in idx_range}
-    paired_dicts = [{i: paired_list[i].unsqueeze(0) for i in idx_range} for paired_list in paired_inputs]
-    index_map = {i: (i, 0) for i in idx_range}
-    return images_dict, *paired_dicts, index_map
+    For nested structures, yields ((row_index, col_index), item).
+    For flat structures, yields (index, item).
+    """
+    if is_nested:
+        for i, row in enumerate(items):
+            for j, item in enumerate(row):
+                yield (i, j), item
+    else:
+        for i, item in enumerate(items):
+            yield i, item
 
 
 def group_images_by_shape(
@@ -920,7 +925,7 @@ def group_images_by_shape(
     Args:
         images (Union[list["torch.Tensor"], "torch.Tensor"]):
             A list of images or a single tensor
-        *paired_inputs (Any):
+        paired_inputs (Any, *optional*):
             Zero or more lists that mirror the structure of `images` (flat list, or list of lists when
             `is_nested=True`). Each element is paired 1:1 with the corresponding image so it can be grouped by the
             same shape key. These paired values are grouped alongside `images` but are not stacked in the output, so
@@ -944,10 +949,14 @@ def group_images_by_shape(
         disable_grouping = device == "cpu"
 
     if disable_grouping:
-        if is_nested:
-            return _disable_grouping_output_nested(images, *paired_inputs)
-        else:
-            return _disable_grouping_output_flat(images, *paired_inputs)
+        return (
+            {key: img.unsqueeze(0) for key, img in _iterate_items(images, is_nested)},
+            *[
+                {key: item.unsqueeze(0) for key, item in _iterate_items(paired_list, is_nested)}
+                for paired_list in paired_inputs
+            ],
+            {key: (key, 0) for key, _ in _iterate_items(images, is_nested)},
+        )
 
     # Handle single level nested structure
     grouped_images, *paired_grouped_values, grouped_images_index = _group_images_by_shape(
@@ -990,14 +999,3 @@ def reorder_images(
         ]
 
     return _reconstruct_nested_structure(grouped_images_index, processed_images)
-
-
-class NumpyToTensor:
-    """
-    Convert a numpy array to a PyTorch tensor.
-    """
-
-    def __call__(self, image: np.ndarray):
-        # Same as in PyTorch, we assume incoming numpy images are in HWC format
-        # c.f. https://github.com/pytorch/vision/blob/61d97f41bc209e1407dcfbd685d2ee2da9c1cdad/torchvision/transforms/functional.py#L154
-        return torch.from_numpy(image.transpose(2, 0, 1)).contiguous()

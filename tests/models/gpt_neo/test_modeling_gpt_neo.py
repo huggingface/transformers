@@ -375,7 +375,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
     test_missing_keys = False
 
     # special case for DoubleHeads model

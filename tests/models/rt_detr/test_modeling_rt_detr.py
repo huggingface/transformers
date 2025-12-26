@@ -258,7 +258,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
 
     test_missing_keys = False
     test_torch_exportable = True
@@ -664,6 +663,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):

@@ -64,7 +64,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_features,
@@ -86,7 +86,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
         if input_features.shape[-1] != expected_seq_length:
             raise ValueError(
-                f"Qwen2Audio expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
+                f"Voxtral expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}."
             )
 
         input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
@@ -132,9 +132,6 @@ class VoxtralMultiModalProjector(nn.Module):
     """
 )
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-    _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
     def __init__(self, config):
@@ -270,11 +267,11 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
 
         input_features = kwargs.pop("input_features", None)
-        cache_position = kwargs.get("cache_position")
+        is_first_iteration = kwargs.get("is_first_iteration", False)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             # input_features should only be passed when we are not in cached decoding stage
             model_inputs["input_features"] = input_features
 

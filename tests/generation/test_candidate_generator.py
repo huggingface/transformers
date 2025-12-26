@@ -237,8 +237,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.target_config = AutoConfig.from_pretrained(self.target_name)
         self.assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
         self.assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
-
-        self.generation_config = GenerationConfig()
+        self.generation_config = GenerationConfig(max_length=20, min_length=0)
 
         # Ensure required tokens exist
         if self.target_tokenizer.pad_token_id is None:
@@ -275,7 +274,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         input_text = "The quick brown fox"
         input_ids = self.target_tokenizer.encode(input_text, return_tensors="pt")
         self.generator.input_ids = input_ids
-        candidates, scores = self.generator.get_candidates(input_ids)
+        candidates, scores = self.generator.get_candidates(input_ids, is_first_iteration=True)
 
         self.assertIsNotNone(candidates)
         self.assertIsNotNone(scores)
@@ -296,7 +295,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         )
         input_ids = torch.tensor([[self.target_tokenizer.convert_tokens_to_ids(missing_token)]])
         self.generator.input_ids = input_ids
-        candidates, _ = self.generator.get_candidates(input_ids)
+        candidates, _ = self.generator.get_candidates(input_ids, is_first_iteration=True)
         self.assertIsNotNone(candidates)
 
     def test_speculation_depth(self):
@@ -306,14 +305,14 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
         for depth in [1, 8, 17]:
             self.generator.num_assistant_tokens = depth
-            candidates, _ = self.generator.get_candidates(input_ids)
+            candidates, _ = self.generator.get_candidates(input_ids, is_first_iteration=True)
             self.assertLessEqual(candidates.shape[1] - input_ids.shape[1], depth)
 
     def test_device_consistency(self):
         """Test handling of inputs on different devices"""
         input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
         self.generator.input_ids = input_ids
-        candidates, _ = self.generator.get_candidates(input_ids)
+        candidates, _ = self.generator.get_candidates(input_ids, is_first_iteration=True)
         self.assertEqual(candidates.device, input_ids.device)
 
     def test_usd_vs_vanilla_sampling(cls):

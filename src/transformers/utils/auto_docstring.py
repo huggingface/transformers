@@ -17,7 +17,8 @@ import inspect
 import os
 import textwrap
 from pathlib import Path
-from typing import Optional, Union, get_args
+from types import UnionType
+from typing import Union, get_args, get_origin
 
 import regex as re
 
@@ -67,6 +68,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
+    "lasr": "LasrCTCConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -236,6 +238,14 @@ class ImageProcessorArgs:
     Whether to disable grouping of images by size to process them individually and not in batches.
     If None, will be set to True if the images are on CPU, and False otherwise. This choice is based on
     empirical observations, as detailed here: https://github.com/huggingface/transformers/pull/38157
+    """,
+        "shape": None,
+    }
+
+    image_seq_length = {
+        "description": """
+    The number of image tokens to be used for each image in the input.
+    Added for backward compatibility but this should be set as a processor attribute in future models.
     """,
         "shape": None,
     }
@@ -1084,7 +1094,7 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     return params, remainder_docstring
 
 
-def contains_type(type_hint, target_type) -> tuple[bool, Optional[object]]:
+def contains_type(type_hint, target_type) -> tuple[bool, object | None]:
     """
     Check if a "nested" type hint contains a specific target type,
     return the first-level type containing the target_type if found.
@@ -1118,7 +1128,7 @@ def get_model_name(obj):
         if file_name.startswith(start) and file_name.endswith(end):
             model_name_lowercase = file_name[len(start) : -len(end)]
             return model_name_lowercase
-    print(f"🚨 Something went wrong trying to find the model name in the path: {path}")
+    print(f"[ERROR] Something went wrong trying to find the model name in the path: {path}")
     return "model"
 
 
@@ -1173,7 +1183,7 @@ def format_args_docstring(docstring, model_name):
     return docstring
 
 
-def get_args_doc_from_source(args_classes: Union[object, list[object]]) -> dict:
+def get_args_doc_from_source(args_classes: object | list[object]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
@@ -1265,44 +1275,52 @@ def _get_model_info(func, parent_class):
             else:
                 config_class = "ModelConfig"
                 print(
-                    f"🚨 Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
+                    f"[ERROR] Config not found for {model_name_lowercase}. You can manually add it to HARDCODED_CONFIG_FOR_MODELS in utils/auto_docstring.py"
                 )
 
     return model_name_lowercase, class_name, config_class
 
 
-def _process_parameter_type(param, param_name, func):
+def _process_parameter_type(param):
     """
     Process and format a parameter's type annotation.
 
     Args:
         param (`inspect.Parameter`): The parameter from the function signature
-        param_name (`str`): The name of the parameter
-        func (`function`): The function the parameter belongs to
     """
     optional = False
-    if param.annotation != inspect.Parameter.empty:
-        param_type = param.annotation
-        if "typing" in str(param_type):
-            param_type = "".join(str(param_type).split("typing.")).replace("transformers.", "~")
-        elif hasattr(param_type, "__module__"):
-            param_type = f"{param_type.__module__.replace('transformers.', '~').replace('builtins', '')}.{param.annotation.__name__}"
-            if param_type[0] == ".":
-                param_type = param_type[1:]
-        else:
-            if False:
-                print(
-                    f"🚨 {param_type} for {param_name} of {func.__qualname__} in file {func.__code__.co_filename} has an invalid type"
-                )
-        if "ForwardRef" in param_type:
-            param_type = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", param_type)
-        if "Optional" in param_type:
-            param_type = re.sub(r"Optional\[(.*?)\]", r"\1", param_type)
-            optional = True
+    if param.annotation == inspect.Parameter.empty:
+        return "", False
+    elif param.annotation is None:
+        return "None", True
+    # This is, astonishingly, the right way to do it: https://docs.python.org/3/library/typing.html#typing.Union
+    elif get_origin(param.annotation) is Union or get_origin(param.annotation) is UnionType:
+        subtypes = get_args(param.annotation)
     else:
-        param_type = ""
+        subtypes = [param.annotation]  # Just pretend it's a single-element union so we don't need two code paths
+    out_str = []
+    for subtype in subtypes:
+        if subtype is type(None):
+            optional = True
+            continue
+        if hasattr(subtype, "__module__") and hasattr(subtype, "__name__"):
+            subtype = f"{subtype.__module__.replace('transformers.', '~').replace('builtins', '').replace('typing.', '')}.{subtype.__name__}".removeprefix(
+                "."
+            )
+        else:
+            subtype = str(subtype)  # Just give up
+        if "ForwardRef" in subtype:
+            subtype = re.sub(r"ForwardRef\('([\w.]+)'\)", r"\1", subtype)
+        out_str.append(subtype)
 
-    return param_type, optional
+    if param.default is not inspect.Parameter.empty:
+        optional = True
+    if not out_str:
+        return "", optional
+    elif len(out_str) == 1:
+        return out_str[0], optional
+    else:
+        return f"Union[{', '.join(out_str)}]", optional
 
 
 def _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional):
@@ -1383,7 +1401,7 @@ def _process_regular_parameters(
             continue
 
         # Process parameter type and optional status
-        param_type, optional = _process_parameter_type(param, param_name, func)
+        param_type, optional = _process_parameter_type(param)
 
         # Check for default value
         param_default = ""
@@ -1401,7 +1419,7 @@ def _process_regular_parameters(
                 else:
                     param_type = f"[`{param_type.split('.')[-1]}`]"
             # elif param_type == "" and False:  # TODO: Enforce typing for all parameters
-            #     print(f"🚨 {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
+            #     print(f"[ERROR] {param_name} for {func.__qualname__} in file {func.__code__.co_filename} has no type")
             param_type = param_type if "`" in param_type else f"`{param_type}`"
             # Format the parameter docstring
             if additional_info:
@@ -1423,7 +1441,7 @@ def _process_regular_parameters(
                 "default": param_default,
             }
             undocumented_parameters.append(
-                f"🚨 `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                f"[ERROR] `{param_name}` is part of {func.__qualname__}'s signature, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
             )
 
     return docstring, missing_args
@@ -1516,7 +1534,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     # Check if type is missing
                     if param_type == "":
                         print(
-                            f"🚨 {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
+                            f"[ERROR] {param_name} for {kwarg_param.annotation.__args__[0].__qualname__} in file {func.__code__.co_filename} has no type"
                         )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
@@ -1532,7 +1550,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         )
                 else:
                     undocumented_parameters.append(
-                        f"🚨 `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
+                        f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
 
     return docstring
@@ -1684,7 +1702,7 @@ def _process_example_section(
                 example_docstring = set_min_indent(example_annotation, indent_level + 4)
             else:
                 print(
-                    f"🚨 No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
+                    f"[ERROR] No checkpoint found for {class_name}.{func.__name__}. Please add a `checkpoint` arg to `auto_docstring` or add one in {config_class}'s docstring"
                 )
         else:
             # Check if the model is in a pipeline to get an example
@@ -1721,9 +1739,9 @@ def auto_method_docstring(
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
     if custom_args is not None and func_documentation is not None:
-        func_documentation = set_min_indent(custom_args, indent_level + 4) + "\n" + func_documentation
+        func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
     elif custom_args is not None:
-        func_documentation = custom_args
+        func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0)
 
     # Add intro to the docstring before args description if needed
     if custom_intro is not None:
@@ -1857,7 +1875,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 if is_documented:
                     # Check if type is missing
                     if param_type == "":
-                        print(f"🚨 {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type")
+                        print(
+                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                        )
                     param_type = param_type if "`" in param_type else f"`{param_type}`"
                     # Format the parameter docstring
                     if additional_info:

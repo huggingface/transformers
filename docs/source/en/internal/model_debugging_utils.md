@@ -320,7 +320,7 @@ df.sort_values(by=['skipped_proportion'], ascending=False)
 You can focus on a specific test method using `--test_method_name`:
 
 ```bash
-$ python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
+python utils/scan_skipped_tests.py --test_method_name test_inputs_embeds --output_dir path/to/output
 ```
 
 - `--test_method_name`: Name of the test method to scan (e.g., `test_inputs_embeds`).
@@ -364,6 +364,7 @@ This utility analyzes code similarities between model implementations to identif
 When adding a new model to transformers, many components (attention layers, MLPs, outputs, etc.) may already exist in similar form in other models. Instead of implementing everything from scratch, model adders can identify which existing classes are similar and potentially reusable through modularization.
 
 The tool computes two similarity scores:
+
 - **Embedding score**: Uses semantic code embeddings (via `Qwen/Qwen3-Embedding-4B`) to detect functionally similar code even with different naming
 - **Jaccard score**: Measures token set overlap to identify structurally similar code patterns
 

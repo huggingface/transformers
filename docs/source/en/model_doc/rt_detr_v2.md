@@ -43,6 +43,7 @@ This second version of RT-DETR improves how the decoder finds objects in an imag
 - **optimized processing** – improves how attention weights mix information
 
 The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
+
 ```py
 >>> import torch
 >>> import requests

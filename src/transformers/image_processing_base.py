@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 import json
 import os
-import warnings
 from typing import Any, Optional, TypeVar, Union
 
 import numpy as np
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -29,10 +28,8 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     copy_func,
-    download_url,
-    is_offline_mode,
-    is_remote_url,
     logging,
+    safe_load_json_file,
 )
 from .utils.hub import cached_file
 
@@ -74,8 +71,8 @@ class ImageProcessingMixin(PushToHubMixin):
         # This key was saved while we still used `XXXFeatureExtractor` for image processing. Now we use
         # `XXXImageProcessor`, this attribute and its value are misleading.
         kwargs.pop("feature_extractor_type", None)
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", should not be saved with image processing config anymore
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -83,10 +80,6 @@ class ImageProcessingMixin(PushToHubMixin):
             except AttributeError as err:
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
-
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
 
     @classmethod
     def from_pretrained(
@@ -180,18 +173,6 @@ class ImageProcessingMixin(PushToHubMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
-
         if token is not None:
             kwargs["token"] = token
 
@@ -214,19 +195,6 @@ class ImageProcessingMixin(PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        use_auth_token = kwargs.pop("use_auth_token", None)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -235,7 +203,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -284,7 +252,6 @@ class ImageProcessingMixin(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         proxies = kwargs.pop("proxies", None)
         token = kwargs.pop("token", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
@@ -292,17 +259,6 @@ class ImageProcessingMixin(PushToHubMixin):
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            token = use_auth_token
 
         user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -318,35 +274,37 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
+            resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            image_processor_file = pretrained_model_name_or_path
-            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
             image_processor_file = image_processor_filename
             try:
-                # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_files = [
-                    resolved_file
-                    for filename in [image_processor_file, PROCESSOR_NAME]
-                    if (
-                        resolved_file := cached_file(
-                            pretrained_model_name_or_path,
-                            filename=filename,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            local_files_only=local_files_only,
-                            token=token,
-                            user_agent=user_agent,
-                            revision=revision,
-                            subfolder=subfolder,
-                            _raise_exceptions_for_missing_entries=False,
-                        )
-                    )
-                    is not None
-                ]
-                resolved_image_processor_file = resolved_image_processor_files[0]
+                resolved_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=PROCESSOR_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
+                resolved_image_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=image_processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -360,16 +318,24 @@ class ImageProcessingMixin(PushToHubMixin):
                     f" directory containing a {image_processor_filename} file"
                 )
 
-        try:
-            # Load image_processor dict
-            with open(resolved_image_processor_file, encoding="utf-8") as reader:
-                text = reader.read()
-            image_processor_dict = json.loads(text)
-            image_processor_dict = image_processor_dict.get("image_processor", image_processor_dict)
+        # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
+        # We are downloading both configs because almost all models have a `processor_config.json` but
+        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        image_processor_dict = None
+        if resolved_processor_file is not None:
+            processor_dict = safe_load_json_file(resolved_processor_file)
+            if "image_processor" in processor_dict:
+                image_processor_dict = processor_dict["image_processor"]
 
-        except json.JSONDecodeError:
+        if resolved_image_processor_file is not None and image_processor_dict is None:
+            image_processor_dict = safe_load_json_file(resolved_image_processor_file)
+
+        if image_processor_dict is None:
             raise OSError(
-                f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
+                f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                f" directory containing a {image_processor_filename} file"
             )
 
         if is_local:
@@ -400,25 +366,13 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-
-        # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
-        # We set `size` here directly to the `image_processor_dict` so that it is converted to the appropriate
-        # dict within the image processor and isn't overwritten if `size` is passed in as a kwarg.
-        if "size" in kwargs and "size" in image_processor_dict:
-            image_processor_dict["size"] = kwargs.pop("size")
-        if "crop_size" in kwargs and "crop_size" in image_processor_dict:
-            image_processor_dict["crop_size"] = kwargs.pop("crop_size")
-
+        image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
-        # Update image_processor with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
+        # Remove kwargs that are used to initialize the image processor attributes
+        for key in list(kwargs):
             if hasattr(image_processor, key):
-                setattr(image_processor, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+                kwargs.pop(key)
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
@@ -469,12 +423,6 @@ class ImageProcessingMixin(PushToHubMixin):
         for key, value in dictionary.items():
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
-
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 

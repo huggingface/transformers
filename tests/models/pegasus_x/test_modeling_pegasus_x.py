@@ -220,12 +220,6 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.model_tester = PegasusXModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
 
-    @unittest.skip(
-        "`PegasusXGlobalLocalAttention` returns attentions as dictionary - not compatible with torchscript "
-    )
-    def test_torchscript_output_attentions(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -237,7 +231,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -551,7 +545,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:

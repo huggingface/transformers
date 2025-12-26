@@ -313,7 +313,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
@@ -335,9 +334,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`VideoInput`):
-                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -357,7 +353,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
-                The max pixels of the image to resize the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 The spatial patch size of the vision encoder.
             temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
@@ -384,12 +379,9 @@ class Glm4vImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
-        # Try to use config values if set, otherwise fallback to global defaults
         size = size if size is not None else self.size
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        elif size is None:
-            size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample

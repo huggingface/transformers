@@ -164,12 +164,8 @@ class ImageGPTImageProcessorFast(BaseImageProcessorFast):
 
             input_ids = reorder_images(input_ids_grouped, grouped_images_index)
 
-            return BatchFeature(
-                data={"input_ids": torch.stack(input_ids, dim=0) if return_tensors else input_ids},
-                tensor_type=return_tensors,
-            )
+            return BatchFeature(data={"input_ids": input_ids}, tensor_type=return_tensors)
 
-        pixel_values = torch.stack(pixel_values, dim=0) if return_tensors else pixel_values
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
     def to_dict(self):

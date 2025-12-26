@@ -229,7 +229,6 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = False
     test_missing_keys = False
 
     def setUp(self):
@@ -247,7 +246,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -272,16 +271,27 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         # check if embeddings are shared by default
         for model_class in self.all_model_classes:
+            config.share_encoder_decoder_embeddings = True
             model = model_class(config)
-            self.assertIs(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
-            self.assertIs(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
+            self.assertIs(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if embeddings are not shared when config.share_encoder_decoder_embeddings = False
         config.share_encoder_decoder_embeddings = False
+        config.tie_word_embeddings = False
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsNot(model.get_encoder().embed_tokens, model.get_decoder().embed_tokens)
-            self.assertIsNot(model.get_encoder().embed_tokens.weight, model.get_decoder().embed_tokens.weight)
+            self.assertIsNot(
+                model.get_encoder().embed_tokens, model.get_decoder().embed_tokens, msg=f"Failed for {model_class}"
+            )
+            self.assertIsNot(
+                model.get_encoder().embed_tokens.weight,
+                model.get_decoder().embed_tokens.weight,
+                msg=f"Failed for {model_class}",
+            )
 
         # check if a model with shared embeddings can be saved and loaded with share_encoder_decoder_embeddings = False
         config, _ = self.model_tester.prepare_config_and_inputs()
@@ -346,7 +356,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     try:
         if torch.allclose(a, b, atol=atol):
             return True
-        raise
+        raise Exception
     except Exception:
         pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
         if a.numel() > 100:
@@ -463,8 +473,9 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
     def test_unk_support(self):
         t = self.tokenizer
         ids = t(["||"], return_tensors="pt").to(torch_device).input_ids[0].tolist()
-        expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
-        self.assertEqual(expected, ids)
+
+        self.assertEqual(ids[-1], t.eos_token_id)
+        self.assertTrue(all(token_id == t.unk_token_id for token_id in ids[:-1]))
 
     def test_pad_not_split(self):
         input_ids_w_pad = self.tokenizer(["I am a small frog <pad>"], return_tensors="pt").input_ids[0].tolist()

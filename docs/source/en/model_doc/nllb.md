@@ -55,7 +55,7 @@ pipeline("UN Chief says there is no military solution in Syria")
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementaiton="sdpa")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementation="sdpa")
 
 article = "UN Chief says there is no military solution in Syria"
 inputs = tokenizer(article, return_tensors="pt")
@@ -151,7 +151,6 @@ visualizer("UN Chief says there is no military solution in Syria")
 ## NllbTokenizer
 
 [[autodoc]] NllbTokenizer
-    - build_inputs_with_special_tokens
 
 ## NllbTokenizerFast
 

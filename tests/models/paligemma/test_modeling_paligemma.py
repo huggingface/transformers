@@ -190,9 +190,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     )
     pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     additional_model_inputs = ["token_type_ids"]
-    fx_compatible = False
 
-    test_torchscript = False
     _is_composite = True
 
     def setUp(self):

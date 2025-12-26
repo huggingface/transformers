@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
@@ -181,11 +182,11 @@ class GotOcr2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=151859,
-        image_seq_length=576,
-        pad_token_id=-1,
+        vision_config: Optional[dict] = None,
+        text_config: Optional[dict] = None,
+        image_token_index: Optional[int] = 151859,
+        image_seq_length: Optional[int] = 576,
+        pad_token_id: Optional[int] = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -217,7 +218,7 @@ class GotOcr2Config(PreTrainedConfig):
                 use_cache=True,
                 tie_word_embeddings=True,
                 rope_theta=1000000.0,
-                rope_scaling=None,
+                rope_parameters=None,
                 use_sliding_window=False,
                 sliding_window=4096,
                 max_window_layers=21,
@@ -248,11 +249,11 @@ class GotOcr2VisionLayer(SamVisionLayer):
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    pass
+    input_modalities = ("image", "text")
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
-    pass
+    input_modalities = ("image",)
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -289,15 +290,16 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, GotOcr2VisionEncoder):
             if module.pos_embed is not None:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
 
 
 class GotOcr2Model(LlavaModel):

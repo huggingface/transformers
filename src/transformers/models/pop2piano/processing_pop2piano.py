@@ -21,7 +21,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...tokenization_python import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
 from ...utils.import_utils import requires
 
@@ -41,10 +41,6 @@ class Pop2PianoProcessor(ProcessorMixin):
         tokenizer (`Pop2PianoTokenizer`):
             An instance of ['Pop2PianoTokenizer`]. The tokenizer is a required input.
     """
-
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "Pop2PianoFeatureExtractor"
-    tokenizer_class = "Pop2PianoTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)

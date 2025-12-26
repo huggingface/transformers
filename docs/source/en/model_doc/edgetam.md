@@ -305,7 +305,6 @@ EdgeTAM can use masks from previous predictions as input to refine segmentation:
 ...     )
 ```
 
-
 ## EdgeTamConfig
 
 [[autodoc]] EdgeTamConfig
