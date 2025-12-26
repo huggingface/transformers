@@ -229,27 +229,27 @@ Reproducible Usage
 
 ```
 git lfs install
-git clone https://huggingface.co/nvidia/audio-flamingo-3
+git clone https://huggingface.co/nvidia/music-flamingo
 ```
 
-This will create a folder `audio-flamingo-3/` containing the original components:
+This will create a folder `music-flamingo/` containing the original components:
 `llm/`, `sound_tower/`, and `sound_mm_projector/`.
 
 2) Convert to the Hugging Face Transformers format (locally):
 
 ```
 python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir audio-flamingo-3 \
-  --dst_dir audio-flamingo-3-hf
+  --src_dir music-flamingo \
+  --dst_dir music-flamingo-hf
 ```
 
 3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
 
 ```
 python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir audio-flamingo-3 \
-  --dst_dir audio-flamingo-3-hf \
-  --push_to_hub <username-or-org>/audio-flamingo-3
+  --src_dir music-flamingo \
+  --dst_dir music-flamingo-hf \
+  --push_to_hub <username-or-org>/music-flamingo-hf
 ```
 
 This command uploads both the processor (tokenizer + feature extractor) and the converted
@@ -267,7 +267,7 @@ def main() -> None:
         type=str,
         help=(
             "Optional repository ID to push the converted assets to the Hugging Face Hub, "
-            "e.g. 'username/audio-flamingo-3'."
+            "e.g. 'username/music-flamingo-hf'."
         ),
     )
     args = ap.parse_args()

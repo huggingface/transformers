@@ -46,6 +46,18 @@ from .rotary_embedding import RotaryEmbedding, apply_rotary_emb
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+class MusicFlamingoPreTrainedModel(PreTrainedModel):
+    config: MusicFlamingoConfig
+    base_model_prefix = "model"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MusicFlamingoAttention"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -255,18 +267,6 @@ class MusicFlamingoEncoderLayer(GradientCheckpointingLayer):
         return hidden_states, attn_weights
 
 
-@auto_docstring
-class MusicFlamingoPreTrainedModel(PreTrainedModel):
-    config: MusicFlamingoConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MusicFlamingoAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-
 @auto_docstring(
     custom_intro="""
     The audio model from MusicFlamingo without any head or projection on top.
@@ -274,7 +274,7 @@ class MusicFlamingoPreTrainedModel(PreTrainedModel):
 )
 class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
     """
-    MusicFlamingo encoder: Whisper encoder, average pool (time/2), then LayerNorm.
+    MusicFlamingo encoder: Whisper encoder with rotary embeddings for time information.
     """
 
     # Ignore copy
@@ -340,7 +340,6 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
         """
-
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
@@ -376,15 +375,14 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
             times = audio_times.to(hidden_states.device)
             freqs = self.pos_emb.get_axial_freqs(times.shape[0], hidden_states.shape[-2]).to(self.conv1.weight.device)
             angle = (-times * 2 * np.pi).to(self.conv1.weight.device)
-            angle_expanded = angle.unsqueeze(2)
-            angle_expanded = angle_expanded.expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
-
+            # audio_times is [batch_size], need to expand to [batch_size, seq_len, freq_dim]
+            angle_expanded = (
+                angle.unsqueeze(1).unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
+            )
             freqs = freqs * angle_expanded
             hidden_states = apply_rotary_emb(freqs, hidden_states)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -479,15 +477,14 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
             `torch.FloatTensor`:
                 The audio embeddings.
         """
-
-        # Encode audio
+        # Encode audio with dtype conversion and audio_times
         input_features = input_features.to(dtype=self.audio_tower.conv1.weight.dtype)
         encoder_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, audio_times=audio_times
         )
         audio_embeds = self.multi_modal_projector(encoder_output.last_hidden_state)
 
-        # Mask according to avg pooling (which is after attention blocks)
+        # Mask according to avg pooling
         post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
@@ -517,8 +514,6 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        audio_times (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Time embeddings for the audio features.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -575,7 +570,6 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         >>> print(decoded_outputs)
         ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -602,23 +596,11 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         return outputs
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
-        # Overwritten -- we should not pass input_features when we are in cached decoding stage
-
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
         audio_times = kwargs.pop("audio_times", None)
-        cache_position = kwargs.get("cache_position")
-
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
-            # input_features should only be passed when we are not in cached decoding stage
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-            if audio_times is not None:
-                model_inputs["audio_times"] = audio_times
+        if "input_features" in model_inputs and audio_times is not None:
+            model_inputs["audio_times"] = audio_times
 
         return model_inputs
 
