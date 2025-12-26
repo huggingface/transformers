@@ -2059,20 +2059,17 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
         # --- [Step 3] Adaptive Processing Logic ---
         if actual_levels == 1:
-            # [Path A: Single-Scale]
-            srcs = [self.input_projections[0](backbone_features[0])] if hasattr(self, "input_projections") else [backbone_features[0]]
+            # Single-scale path
+            x = self.input_projections[0](backbone_features[0]) if hasattr(self, "input_projections") else backbone_features[0]
+            pos = self.image_position_embeddings[0] if hasattr(self, "image_position_embeddings") else 0
+            srcs = [x + pos]
         else:
-            # [Path B: Standard Multi-Scale FPN]
+            # Multi-scale path
             srcs = []
             for i in range(expected_levels):
-                srcs.append(self.input_projections[i](backbone_features[i]))
-            # Add positional embeddings if available
-            if hasattr(self, "image_position_embeddings"):
-                srcs = [src + pos for src, pos in zip(srcs, self.image_position_embeddings)]
-            # Fuse multi-scale features if method exists
-            if hasattr(self, "fuse_multiscale"):
-                srcs = self.fuse_multiscale(srcs)
-        # The rest of the logic expects pixel_embed to be the output of the pixel decoder
+                src = self.input_projections[i](backbone_features[i]) if hasattr(self, "input_projections") else backbone_features[i]
+                pos = self.image_position_embeddings[i] if hasattr(self, "image_position_embeddings") else 0
+                srcs.append(src + pos)
         pixel_embed = self.pixel_decoder(srcs)
 
         if prompt_features is not None:
@@ -2110,12 +2107,6 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             pred_masks=pred_masks,
             semantic_seg=semantic_seg,
         )
-        backbone_visual_feats[-1] = encoder_visual_embed
-
-        # Process through FPN decoder
-        pixel_embed = self.pixel_decoder(backbone_visual_feats)
-
-        return pixel_embed
 
 
 class Sam3Model(Sam3PreTrainedModel):
