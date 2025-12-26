@@ -1,4 +1,52 @@
+import unittest
+import warnings
+class Sam3MaskDecoderUnitTest(unittest.TestCase):
+    def setUp(self):
+        from transformers.models.sam3.configuration_sam3 import Sam3MaskDecoderConfig
+        from transformers.models.sam3.modeling_sam3 import Sam3MaskDecoder
+        import torch
+        self.config = Sam3MaskDecoderConfig(hidden_size=32, num_multiscale_features=3, decoder_num_layers=2)
+        self.decoder = Sam3MaskDecoder(self.config)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.decoder.to(self.device)
+
+    def test_single_scale_forward_logic(self):
+        import torch
+        batch_size = 2
+        C, H, W = self.config.hidden_size, 16, 16
+        img_embed = torch.randn(batch_size, C, H, W).to(self.device)
+        pos_embed = torch.randn(batch_size, C, H, W).to(self.device)
+        decoder_queries = torch.randn(batch_size, 4, C).to(self.device)
+        encoder_hidden_states = torch.randn(batch_size, H * W, C).to(self.device)
+        # Should warn about single-scale fallback
+        with warnings.catch_warnings(record=True) as wlist:
+            warnings.simplefilter("always")
+            outputs = self.decoder(
+                decoder_queries=decoder_queries,
+                backbone_features=img_embed,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+        self.assertTrue(any("single-scale input" in str(w.message) for w in wlist))
+        self.assertTrue(hasattr(outputs, "pred_masks"))
+        self.assertEqual(outputs.pred_masks.shape[0], batch_size)
+        self.assertEqual(outputs.pred_masks.shape[-2:], (H, W))
+
+    def test_multi_scale_backward_compatibility(self):
+        import torch
+        batch_size = 1
+        C, H, W = self.config.hidden_size, 16, 16
+        img_embeds = [torch.randn(batch_size, C, H, W).to(self.device) for _ in range(3)]
+        pos_embeds = [torch.randn(batch_size, C, H, W).to(self.device) for _ in range(3)]
+        decoder_queries = torch.randn(batch_size, 4, C).to(self.device)
+        encoder_hidden_states = torch.randn(batch_size, H * W, C).to(self.device)
+        outputs = self.decoder(
+            decoder_queries=decoder_queries,
+            backbone_features=img_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        self.assertIsNotNone(outputs.pred_masks)
 # coding=utf-8
+import unittest
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
