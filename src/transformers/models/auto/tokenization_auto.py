@@ -131,6 +131,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("ernie4_5_vl_moe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
         ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("exaone_moe", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("falcon", "TokenizersBackend" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
