@@ -34,6 +34,18 @@ class HumanVRMSNorm(nn.Module):
         return (self.weight * x).to(dtype)
 
 
+class HumanVTorchRMSNorm(nn.Module):
+    def __init__(self, hidden_size: int, eps: float):
+        super().__init__()
+        if hasattr(nn, "RMSNorm"):
+            self.norm = nn.RMSNorm(hidden_size, eps=eps, elementwise_affine=True)
+        else:
+            self.norm = HumanVRMSNorm(hidden_size, eps=eps)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.norm(x)
+
+
 class HumanVLayerNorm(nn.Module):
     def __init__(self, hidden_size: int, eps: float):
         super().__init__()
@@ -525,7 +537,10 @@ class HumanVDecoderLayer(nn.Module):
 
         eps = float(getattr(config, "rms_norm_eps", 1e-6))
         norm_backend = str(getattr(config, "norm_backend", "rmsnorm")).lower()
-        Norm = HumanVRMSNorm if norm_backend == "rmsnorm" else HumanVLayerNorm
+        if norm_backend in ("torch_rmsnorm", "rmsnorm_torch", "fused_rmsnorm"):
+            Norm = HumanVTorchRMSNorm
+        else:
+            Norm = HumanVRMSNorm if norm_backend == "rmsnorm" else HumanVLayerNorm
 
         self.input_layernorm = Norm(config.hidden_size, eps=eps)
         self.post_attention_layernorm = Norm(config.hidden_size, eps=eps)
@@ -590,7 +605,11 @@ class HumanVModel(HumanVPreTrainedModel):
 
         eps = float(getattr(config, "rms_norm_eps", 1e-6))
         norm_backend = str(getattr(config, "norm_backend", "rmsnorm")).lower()
-        self.norm = (HumanVRMSNorm if norm_backend == "rmsnorm" else HumanVLayerNorm)(config.hidden_size, eps=eps)
+        if norm_backend in ("torch_rmsnorm", "rmsnorm_torch", "fused_rmsnorm"):
+            FinalNorm = HumanVTorchRMSNorm
+        else:
+            FinalNorm = HumanVRMSNorm if norm_backend == "rmsnorm" else HumanVLayerNorm
+        self.norm = FinalNorm(config.hidden_size, eps=eps)
 
         self.rotary_emb = HumanVRotaryEmbedding(config=config)
 
