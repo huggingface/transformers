@@ -28,5 +28,5 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    _file = globals()["__file__"]
+    _file = globals().get("__file__", "")
     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
