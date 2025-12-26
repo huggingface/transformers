@@ -2068,7 +2068,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         else:
             # [Path B: Standard Multi-Scale FPN]
             # Inline _embed_pixels logic here
-            backbone_visual_feats = [feat.clone() for feat in backbone_features]
+            backbone_visual_feats = list(backbone_features)
             spatial_dim = backbone_features[-1].shape[-2] * backbone_features[-1].shape[-1]
             encoder_visual_embed = encoder_hidden_states[:, :spatial_dim, :]
             batch_size, _, hidden_size = encoder_visual_embed.shape
