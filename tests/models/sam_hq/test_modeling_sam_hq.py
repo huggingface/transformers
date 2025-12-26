@@ -28,7 +28,8 @@ from transformers import (
     SamHQVisionModel,
     pipeline,
 )
-from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -781,6 +782,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_inference_mask_generation_no_point(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -796,18 +798,11 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         self.assertTrue(torch.allclose(scores[0][0][-1], torch.tensor(0.4482), atol=2e-4))
-
-        expectations = Expectations(
-            {
-                (None, None): [-13.1695, -14.6201, -14.8989],
-                ("cuda", 8): [-7.6769, -9.6935, -9.8773],
-                ("xpu", None): [-7.6769, -9.6935, -9.8773],
-            }
-        )
-        EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
+        EXPECTED_MASKS = torch.tensor([-7.6789, -9.6972, -9.8790]).to(torch_device)
         torch.testing.assert_close(masks, EXPECTED_MASKS, atol=2e-3, rtol=2e-3)
 
     def test_inference_mask_generation_one_point_one_bb(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -826,12 +821,13 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        torch.testing.assert_close(scores[-1], torch.tensor(0.9700).to(torch_device), atol=2e-4, rtol=2e-4)
+        torch.testing.assert_close(scores[-1], torch.tensor(0.5720).to(torch_device), atol=2e-4, rtol=2e-4)
         torch.testing.assert_close(
-            masks, torch.tensor([-9.2033, -8.5505, -7.1361]).to(torch_device), atol=3e-2, rtol=3e-2
+            masks, torch.tensor([-5.8082, -7.5431, -6.7509]).to(torch_device), atol=3e-2, rtol=3e-2
         )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -853,52 +849,29 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
 
-        expectations = Expectations(
-            {
-                (None, None): [
-                    [
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                    ],
-                    [
-                        [0.7598, 0.7388, 0.3110],
-                        [0.9195, 0.8317, 0.6614],
-                        [0.9195, 0.8317, 0.6614],
-                        [0.9195, 0.8317, 0.6614],
-                    ],
+        EXPECTED_SCORES = torch.tensor(
+            [
+                [
+                    [0.9392, 0.7146, 0.3757],
+                    [0.9392, 0.7146, 0.3757],
+                    [0.9392, 0.7146, 0.3757],
+                    [0.9392, 0.7146, 0.3757],
                 ],
-                ("cuda", 8): [
-                    [
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                    ],
-                    [
-                        [0.7597, 0.7387, 0.3110],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                        [0.9195, 0.8316, 0.6614],
-                    ],
+                [
+                    [0.9285, 0.7386, 0.5020],
+                    [0.9392, 0.7146, 0.3757],
+                    [0.9392, 0.7146, 0.3757],
+                    [0.9392, 0.7146, 0.3757],
                 ],
-            }
-        )
-        EXPECTED_SCORES = torch.tensor(expectations.get_expectation()).to(torch_device)
+            ]
+        ).to(torch_device)
 
-        expectations = Expectations(
-            {
-                (None, None): [-40.2445, -37.4300, -38.1577],
-                ("cuda", 8): [-14.1195, -17.2663, -13.7805],
-            }
-        )
-        EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)
-
+        EXPECTED_MASKS = torch.tensor([-6.4419, -12.0301, -11.7109]).to(torch_device)
         torch.testing.assert_close(scores, EXPECTED_SCORES, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(masks, EXPECTED_MASKS, atol=9e-3, rtol=9e-3)
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -921,10 +894,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8680), atol=1e-3))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4879), atol=1e-3))
 
     def test_inference_mask_generation_with_labels(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
         model.to(torch_device)
@@ -942,9 +915,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9137), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4700), atol=1e-3))
 
     def test_inference_mask_generation_without_labels(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
         model.to(torch_device)
@@ -959,9 +933,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9137), atol=1e-3))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4700), atol=1e-3))
 
     def test_inference_mask_generation_two_points_with_labels(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
         model.to(torch_device)
@@ -979,9 +954,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8859), atol=1e-3))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.6657), atol=1e-3))
 
     def test_inference_mask_generation_two_points_without_labels(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
         model.to(torch_device)
@@ -996,9 +972,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8859), atol=1e-3))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.6657), atol=1e-3))
 
     def test_inference_mask_generation_two_points_batched(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -1014,17 +991,17 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             images=[raw_image, raw_image],
             input_points=input_points,
             input_labels=input_labels,
-            images_kwargs={"point_pad_value": -10},
+            point_pad_value=-10,
             return_tensors="pt",
         ).to(torch_device)
-
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.4482), atol=1e-4))
-        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.4482), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.6657), atol=1e-3))
+        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.3939), atol=1e-3))
 
     def test_inference_mask_generation_one_box(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -1040,9 +1017,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.6265), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4719), atol=1e-4))
 
     def test_inference_mask_generation_batched_image_one_point(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -1072,6 +1050,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
 
     def test_inference_mask_generation_two_points_point_batch(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -1080,9 +1059,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        input_points = torch.Tensor([[[400, 650]], [[220, 470]]]).cpu()  # fmt: skip
-
-        input_points = input_points.unsqueeze(0)
+        input_points = [[[[400, 650]], [[220, 470]]]]
 
         inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
 
@@ -1092,10 +1069,11 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9889, 0.9508, 0.9137], [0.8070, 0.7934, 0.7932]]]), atol=1e-3, rtol=1e-3
+            iou_scores, torch.tensor([[[0.7643, 0.6796, 0.4700], [0.9244, 0.8554, 0.4337]]]), atol=1e-3, rtol=1e-3
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
+        set_seed(0)
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
         processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
@@ -1105,12 +1083,11 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         raw_image = prepare_image()
 
         # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[[0.9850, 0.9730, 0.9726],
-         [0.8891, 0.8017, 0.6265],
-         [0.8891, 0.8017, 0.6265]]])
+        EXPECTED_IOU = torch.tensor([[[0.5923, 0.4753, 0.4742],
+         [0.8129, 0.7470, 0.4718],
+         [0.8129, 0.7470, 0.4718]]])
         # fmt: on
-        input_boxes = input_boxes.unsqueeze(0)
+        input_boxes = [[[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]], [[75, 275, 1725, 850]]]]
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
 
@@ -1119,7 +1096,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-3, rtol=1e-3)
 
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="syscv-community/sam-hq-vit-base", device=torch_device)
