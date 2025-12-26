@@ -25,6 +25,85 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
+class GlmImageVisionConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
+    GlmImage vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the GlmImage
+    [google/glm_image-base-patch16-224](https://huggingface.co/google/glm_image-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    Example:
+
+    ```python
+    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+
+    >>> # Initializing a GlmImageVisionConfig with google/glm_image-base-patch16-224 style configuration
+    >>> configuration = GlmImageVisionConfig()
+
+    >>> # Initializing a GlmImageVisionModel (with random weights) from the google/glm_image-base-patch16-224 style configuration
+    >>> model = GlmImageVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glm_image_vision_model"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=224,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+
+
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageModel`]. It is used to instantiate a
@@ -170,99 +249,6 @@ class GlmImageTextConfig(PreTrainedConfig):
         )
 
 
-class GlmImageVisionConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate an GlmImageVisionModel
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
-
-    Args:
-            depth (`int`, *optional*, defaults to 24):
-                Number of layers (depth) in the model.
-            hidden_size (`int`, *optional*, defaults to 1536):
-                Dimensionality of the encoder layers and the pooler layer.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-                `"relu"`, `"selu"` and `"gelu_new"` are supported.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to add a bias to the queries, keys and values.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for attention weights.
-            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            image_size (`int` or `list[int]`, *optional*, defaults to 336):
-                The size (resolution) of each image.
-            patch_size (`int`, *optional*, defaults to 14):
-                The size (resolution) of each patch.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            spatial_merge_size (`int`, *optional*, defaults to 2):
-                The size used for merging spatial dimensions.
-            temporal_patch_size (`int`, *optional*, defaults to 2):
-                The size used for patches along the temporal dimension.
-            out_hidden_size (`int`, *optional*, defaults to 4096):
-                The output hidden size of the vision model.
-            intermediate_size (`int`, *optional*, defaults to 13696):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    Example:
-
-    ```python
-    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
-
-    >>> # Initializing a GlmImageVisionConfig GLM-4.1V-9B style configuration
-    >>> configuration = GlmImageVisionConfig()
-
-    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
-    >>> model = GlmImageVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "glm_image_vision"
-    base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1536,
-        hidden_act="silu",
-        attention_bias=False,
-        attention_dropout=0.0,
-        num_heads=12,
-        in_channels=3,
-        image_size=336,
-        patch_size=14,
-        rms_norm_eps=1e-05,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=4096,
-        intermediate_size=13696,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-
 class GlmImageConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageModel`]. It is used to instantiate a
@@ -341,4 +327,4 @@ class GlmImageConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["GlmImageConfig"]
+__all__ = ["GlmImageVisionConfig", "GlmImageConfig"]

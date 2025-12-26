@@ -15,17 +15,35 @@
 
 from typing import Optional
 
+import numpy as np
+import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...modeling_rope_utils import RopeParameters
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vModel,
-    Glm4vPreTrainedModel,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
 )
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import (
+    SiglipAttention,
+    SiglipEncoderLayer,
+    SiglipMLP,
+    SiglipMultiheadAttentionPoolingHead,
+    SiglipPreTrainedModel,
+    SiglipVisionEmbeddings,
+    SiglipVisionModel,
+    default_flax_embed_init,
+    lecun_normal_,
+)
+
+
+class GlmImageVisionConfig(SiglipVisionConfig):
+    pass
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -159,11 +177,129 @@ class GlmImageConfig(Glm4vConfig):
     pass
 
 
-class GlmImageDecoderLayer(Glm4vTextDecoderLayer):
+class GlmImageVisionMLP(SiglipMLP):
     pass
 
 
-class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
+class GlmImageVisionAttention(SiglipAttention):
+    pass
+
+
+class GlmImageVisionBlock(SiglipEncoderLayer):
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = GlmImageVisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = GlmImageVisionMLP(config)
+
+
+class GlmImagePreTrainedModel(SiglipPreTrainedModel):
+    config: GlmImageConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = [
+        "GlmImageVisionEmbeddings",
+        "GlmImageVisionBlock",
+        "GlmImageVisionMultiheadAttentionPoolingHead",
+    ]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": GlmImageVisionBlock,
+        "attentions": GlmImageVisionAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, GlmImageVisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, GlmImageConfig)
+                else self.config.hidden_size
+            )
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, GlmImageVisionAttention):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, GlmImageVisionMLP):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            init.xavier_uniform_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
+        elif isinstance(module, GlmImageModel):
+            init.zeros_(module.logit_scale)
+            init.zeros_(module.logit_bias)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+
+
+class GlmImageTextDecoderLayer(Glm4vTextDecoderLayer):
+    pass
+
+
+class GlmImageVisionEmbeddings(SiglipVisionEmbeddings):
+    pass
+
+
+class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__()
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = GlmImageVisionMLP(config)
+
+
+class GlmImageVisionTransformer(GlmImagePreTrainedModel):
+    _input_embed_layer = "patch_embedding"
+    _can_record_outputs = {
+        "hidden_states": GlmImageVisionBlock,
+        "attentions": GlmImageVisionAttention,
+    }
+
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = GlmImageVisionEmbeddings(config)
+        self.encoder = GlmImageVisionBlock(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        if self.use_head:
+            self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
+
+        self.post_init()
+
+
+class GlmImageVisionModel(SiglipVisionModel):
     pass
 
 
@@ -182,4 +318,11 @@ class GlmImageForConditionalGeneration(Glm4vForConditionalGeneration):
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)
 
 
-__all__ = ["GlmImageConfig", "GlmImagePreTrainedModel", "GlmImageTextModel", "GlmImageForConditionalGeneration"]
+__all__ = [
+    "GlmImageVisionConfig",
+    "GlmImageConfig",
+    "GlmImagePreTrainedModel",
+    "GlmImageVisionModel",
+    "GlmImageTextModel",
+    "GlmImageForConditionalGeneration",
+]

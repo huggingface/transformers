@@ -20,14 +20,15 @@
 # limitations under the License.
 
 import itertools
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import LayerNorm
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -37,13 +38,243 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, torch_int
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig
+
+
+class GlmImageVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class GlmImageVisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class GlmImageVisionBlock(GradientCheckpointingLayer):
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = GlmImageVisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = GlmImageVisionMLP(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
+def default_flax_embed_init(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+
+
+@auto_docstring
+class GlmImagePreTrainedModel(PreTrainedModel):
+    config: GlmImageConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = [
+        "GlmImageVisionEmbeddings",
+        "GlmImageVisionBlock",
+        "GlmImageVisionMultiheadAttentionPoolingHead",
+    ]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": GlmImageVisionBlock,
+        "attentions": GlmImageVisionAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, GlmImageVisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, GlmImageConfig)
+                else self.config.hidden_size
+            )
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, GlmImageVisionAttention):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, GlmImageVisionMLP):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            init.xavier_uniform_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
+        elif isinstance(module, GlmImageModel):
+            init.zeros_(module.logit_scale)
+            init.zeros_(module.logit_bias)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -77,32 +308,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 def rotate_half_llm(x):
@@ -261,74 +466,6 @@ class GlmImageTextMLP(nn.Module):
         return self.down_proj(up_states)
 
 
-class GlmImageDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: GlmImageTextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = GlmImageTextAttention(config, layer_idx)
-        self.mlp = GlmImageTextMLP(config)
-        self.input_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            **kwargs,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class GlmImageVisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
-
-
 class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GlmImageTextConfig, layer_idx: int):
         super().__init__()
@@ -381,29 +518,179 @@ class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
-class GlmImagePreTrainedModel(PreTrainedModel):
-    config: GlmImageConfig
-    base_model_prefix = "model"
-    input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
+class GlmImageVisionEmbeddings(nn.Module):
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
 
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
+class GlmImageVisionMultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
+
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__()
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = GlmImageVisionMLP(config)
+
+    def forward(self, hidden_state):
+        batch_size = hidden_state.shape[0]
+        probe = self.probe.repeat(batch_size, 1, 1)
+
+        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
+
+        residual = hidden_state
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
+
+
+class GlmImageVisionTransformer(GlmImagePreTrainedModel):
+    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
-        "hidden_states": GlmImageTextDecoderLayer,
-        "attentions": GlmImageTextAttention,
+        "hidden_states": GlmImageVisionBlock,
+        "attentions": GlmImageVisionAttention,
     }
 
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, GlmImageVisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = GlmImageVisionEmbeddings(config)
+        self.encoder = GlmImageVisionBlock(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        if self.use_head:
+            self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
+
+        self.post_init()
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision model from GlmImage without any head or projection on top.
+    """
+)
+class GlmImageVisionModel(GlmImagePreTrainedModel):
+    config: GlmImageVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    def __init__(self, config: GlmImageVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = GlmImageVisionTransformer(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, GlmImageVisionModel
+
+        >>> model = GlmImageVisionModel.from_pretrained("google/glm_image-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/glm_image-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
+        )
 
 
 class GlmImageTextRotaryEmbedding(nn.Module):
@@ -524,7 +811,7 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-        breakpoint()
+
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
@@ -582,274 +869,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
         )
 
 
-class GlmImageisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = False):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.out_hidden_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-
-
-class GlmImageVisionPatchEmbed(nn.Module):
-    def __init__(self, config: GlmImageVisionConfig) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
-
-
-class GlmImageVisionPatchMerger(nn.Module):
-    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
-        super().__init__()
-        self.proj = nn.Linear(dim, dim, bias=bias)
-        self.post_projection_norm = LayerNorm(dim)
-        self.gate_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.up_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.down_proj = nn.Linear(context_dim, dim, bias=bias)
-        self.act1 = nn.GELU()
-        self.act_fn = ACT2FN[hidden_act]
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.proj(hidden_state)
-        hidden_state = self.act1(self.post_projection_norm(hidden_state))
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-
-
-class GlmImageVisionEmbeddings(nn.Module):
-    def __init__(self, config: GlmImageVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-
-    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
-        """
-        Forward pass with integrated position encoding adaptation using 2D interpolation.
-
-        Args:
-            embeddings: Input embeddings tensor
-            lengths (torch.Tensor): Sequence lengths for each image in the batch.
-            image_shapes (torch.Tensor): Tensor of shape [batch_size, 3] representing the image shapes (t, h, w).
-            h_coords (torch.Tensor): Tensor of shape [total_seq] representing the h coordinate for each patch.
-            w_coords (torch.Tensor): Tensor of shape [total_seq] representing the w coordinate for each patch.
-
-        Returns:
-            torch.Tensor: Embeddings with adapted position encoding added.
-        """
-        # Get position embedding parameters
-        pos_embed_weight = self.position_embedding.weight
-        hidden_size = pos_embed_weight.shape[1]
-        total_seq = h_coords.shape[0]
-        device = pos_embed_weight.device
-
-        # Move coordinates to correct device
-        h_coords, w_coords = h_coords.to(device), w_coords.to(device)
-
-        # Handle empty sequence case
-        if total_seq == 0:
-            adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
-        else:
-            # Convert inputs to tensors if needed
-            if isinstance(lengths, list):
-                lengths = torch.tensor(lengths, device=device, dtype=torch.long)
-            if not isinstance(image_shapes, torch.Tensor):
-                image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
-
-            # Prepare 2D position embedding
-            orig_size_sq = pos_embed_weight.shape[0]
-            orig_size = int(orig_size_sq**0.5)
-            pos_embed_2d = (
-                pos_embed_weight.view(orig_size, orig_size, hidden_size)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .to(device=device, dtype=torch.float32)
-            )
-
-            # Calculate target dimensions for each patch
-            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                device=device, dtype=torch.float32
-            )
-            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-                device=device, dtype=torch.float32
-            )
-
-            # Normalize coordinates to [-1, 1] range for grid_sample
-            h_coords = h_coords.to(device=device, dtype=torch.float32)
-            w_coords = w_coords.to(device=device, dtype=torch.float32)
-            norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
-            norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
-
-            # Create sampling grid
-            grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
-
-            # Perform bicubic interpolation
-            interpolated_embed_fp32 = F.grid_sample(
-                pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
-            )
-
-            # Reshape and convert back to original dtype
-            adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
-
-        # Add adapted position encoding to embeddings
-        embeddings = embeddings + adapted_pos_embed
-        return embeddings
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
-
-
-class GlmImageVisionAttention(nn.Module):
-    def __init__(self, config: GlmImageVisionConfig) -> None:
-        super().__init__()
-        self.dim = config.hidden_size
-        self.num_heads = config.num_heads
-        self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.scaling = self.head_dim**-0.5
-        self.config = config
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = (
-            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        if "flash" in self.config._attn_implementation:
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.proj(attn_output)
-        return attn_output
-
-
-class GlmImageVisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.norm1 = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.norm2 = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn = GlmImageVisionAttention(config)
-        self.mlp = GlmImageisionMlp(config, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
-
-
 @dataclass
 @auto_docstring(
     custom_intro="""
@@ -872,117 +891,6 @@ class GlmImageModelOutputWithPast(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
-
-
-class GlmImageVisionModel(GlmImagePreTrainedModel):
-    config: GlmImageVisionConfig
-    input_modalities = ("image", "video")
-    _no_split_modules = ["GlmImageVisionBlock"]
-
-    def __init__(self, config) -> None:
-        super().__init__(config)
-        self.spatial_merge_size = config.spatial_merge_size
-        self.patch_size = config.patch_size
-
-        self.embeddings = GlmImageVisionEmbeddings(config)
-        self.patch_embed = GlmImageVisionPatchEmbed(config)
-
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = GlmImageVisionRotaryEmbedding(head_dim // 2)
-
-        self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
-        self.merger = GlmImageVisionPatchMerger(
-            dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
-        )
-
-        self.post_conv_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.downsample = nn.Conv2d(
-            in_channels=config.hidden_size,
-            out_channels=config.out_hidden_size,
-            kernel_size=config.spatial_merge_size,
-            stride=config.spatial_merge_size,
-        )
-        self.post_layernorm = GlmImageRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.gradient_checkpointing = False
-        self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
-
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
-
-        Returns:
-            `torch.Tensor`: hidden_states.
-        """
-        hidden_states = self.patch_embed(hidden_states)
-        hidden_states = self.post_conv_layernorm(hidden_states)
-
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
-
-        for blk in self.blocks:
-            hidden_states = blk(
-                hidden_states,
-                cu_seqlens=cu_seqlens,
-                position_embeddings=position_embeddings,
-            )
-
-        hidden_states = self.post_layernorm(hidden_states)
-
-        hidden_states = hidden_states.view(
-            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
-        )
-        hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
-
-        hidden_states = self.merger(hidden_states)
-        return hidden_states
 
 
 @auto_docstring
@@ -1346,7 +1254,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 (cache_position is not None and cache_position[0] == 0)
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             )
-            breakpoint()
             if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
@@ -1723,4 +1630,4 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
-__all__ = ["GlmImagePreTrainedModel", "GlmImageTextModel", "GlmImageForConditionalGeneration"]
+__all__ = ["GlmImagePreTrainedModel", "GlmImageVisionModel", "GlmImageTextModel", "GlmImageForConditionalGeneration"]
