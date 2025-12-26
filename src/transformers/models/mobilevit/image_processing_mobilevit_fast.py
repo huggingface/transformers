@@ -42,7 +42,7 @@ from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 @auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 224}
     default_to_square = False
     crop_size = {"height": 256, "width": 256}
