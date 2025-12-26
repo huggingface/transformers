@@ -239,6 +239,7 @@ for prompt in user_prompts:
     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
     messages.append({"role": "assistant", "content": completion})
 ```
+TODO: link to multimodal_chat_sample.py
 
 ## Prefill a cache (prefix caching)
 
