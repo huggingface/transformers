@@ -18,6 +18,7 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ... import initialization as init
 from ...modeling_rope_utils import RopeParameters
@@ -43,7 +44,94 @@ from ..siglip.modeling_siglip import (
 
 
 class GlmImageVisionConfig(SiglipVisionConfig):
-    pass
+    r"""
+    This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
+    GlmImage vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the GLM-Image
+    [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        vq_codebook_size (`int`, *optional*, defaults to 16384):
+            The size of the VQ codebook.
+        vq_codebook_dim (`int`, *optional*, defaults to 2048):
+            The dimension of the VQ codebook embeddings.
+        vq_num_conv_layers (`int`, *optional*, defaults to 2):
+            The number of convolutional layers in the VQ projector.
+
+    Example:
+
+    ```python
+    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+
+    >>> # Initializing a GlmImageVisionConfig with google/glm_image-base-patch16-224 style configuration
+    >>> configuration = GlmImageVisionConfig()
+
+    >>> # Initializing a GlmImageVisionModel (with random weights) from the google/glm_image-base-patch16-224 style configuration
+    >>> model = GlmImageVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glm_image_vision_model"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=224,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        vq_codebook_size: Optional[int] = 16384,
+        vq_codebook_dim: Optional[int] = 2048,
+        vq_num_conv_layers: Optional[int] = 2,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+        self.vq_codebook_size = vq_codebook_size
+        self.vq_codebook_dim = vq_codebook_dim
+        self.vq_num_conv_layers = vq_num_conv_layers
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -277,6 +365,207 @@ class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolin
         self.mlp = GlmImageVisionMLP(config)
 
 
+class GlmImageVisionResidualBlock(nn.Module):
+    """
+    Implementation of the GLM-Image residual block.
+    """
+
+    def __init__(self, channels: int, num_groups: int = 32):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, 3, padding="same")
+        self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
+        self.activate = nn.GELU()
+        self.conv2 = nn.Conv2d(channels, channels, 3, padding="same")
+        self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        res = x
+        x = self.norm1(x)
+        x = self.activate(x)
+        x = self.conv1(x)
+        x = self.norm2(x)
+        x = self.activate(x)
+        x = self.conv2(x)
+        return x + res
+
+
+class GlmImageVisionIBQ(nn.Module):
+    """
+    Index-Based Quantization Module of GLM-Image
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, l2_norm: bool = True):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.embedding_dim = embedding_dim
+        self.l2_norm = l2_norm
+
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+
+    @torch.no_grad()
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        前向传播（推理模式）
+
+        Args:
+            z: 输入特征，shape: [B, C, H, W]
+
+        Returns:
+            z_q: 量化后的特征，shape: [B, C, H, W]
+            indices: codebook 索引，shape: [B, H, W]
+        """
+        batch_size, channels, height, width = z.shape
+
+        # [B, C, H, W] -> [B, H, W, C] -> [B*H*W, C]
+        z_permuted = z.permute(0, 2, 3, 1).contiguous()
+        z_flattened = z_permuted.view(-1, self.embedding_dim)
+
+        # L2 normalization
+        if self.l2_norm:
+            z_flattened = F.normalize(z_flattened, p=2, dim=-1)
+            embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
+        else:
+            embedding = self.embedding.weight
+
+        # 计算距离: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
+        # z_flattened: [B*H*W, C], embedding: [N, C]
+        d = (
+            torch.sum(z_flattened**2, dim=1, keepdim=True)
+            + torch.sum(embedding**2, dim=1)
+            - 2 * torch.matmul(z_flattened, embedding.t())
+        )
+
+        # 找到最近的 codebook entry
+        indices = torch.argmin(d, dim=1)
+
+        # 获取量化后的向量: [B*H*W, C] -> [B, H, W, C]
+        z_q = embedding[indices].view(batch_size, height, width, self.embedding_dim)
+
+        # [B, H, W, C] -> [B, C, H, W]
+        z_q = z_q.permute(0, 3, 1, 2).contiguous()
+
+        # indices: [B*H*W] -> [B, H, W]
+        indices = indices.view(batch_size, height, width)
+
+        return z_q, indices
+
+    def get_codebook_entry(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
+        """
+        根据索引获取 codebook entry
+
+        Args:
+            indices: codebook 索引
+            bhwc: 目标形状 [batch, height, width, channel]
+
+        Returns:
+            z_q: 量化后的特征，shape: [B, C, H, W]
+        """
+        z_q = self.embedding(indices)
+
+        if bhwc is not None:
+            batch_size, height, width, channels = bhwc
+            # [B, H, W, C] -> [B, C, H, W]
+            z_q = z_q.view(batch_size, height, width, channels)
+            z_q = z_q.permute(0, 3, 1, 2).contiguous()
+
+        return z_q
+
+
+class GlmImageVisionVQProjector(nn.Module):
+    """
+    VQ Conv Projector of GLM-Image
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 1536,
+        codebook_size: int = 16384,
+        codebook_dim: int = 2048,
+        num_conv_layers: int = 2,
+        num_groups: int = 32,
+    ):
+        super().__init__()
+
+        self.in_channels = in_channels
+        self.codebook_dim = codebook_dim
+        self.quant_conv = nn.Conv2d(in_channels, codebook_dim, kernel_size=1)
+        self.quantize = GlmImageVisionIBQ(codebook_size, codebook_dim, l2_norm=True)
+        self.post_quant_conv = nn.Conv2d(codebook_dim, in_channels, kernel_size=1)
+        self.post_conv = nn.Sequential(
+            *[GlmImageVisionResidualBlock(in_channels, num_groups) for _ in range(num_conv_layers)]
+        )
+
+    def forward(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
+        """
+        前向传播
+
+        Args:
+            x: 视觉特征，shape: [B, N, C] 其中 N = H * W
+            h: 特征图高度
+            w: 特征图宽度
+
+        Returns:
+            z: 量化后的特征，shape: [B, N, C]
+        """
+        batch_size, seq_len, channels = x.shape
+
+        # [B, N, C] -> [B, H, W, C] -> [B, C, H, W]
+        x = x.view(batch_size, h, w, channels)
+        x = x.permute(0, 3, 1, 2).contiguous()
+
+        # 量化
+        z = self.quant_conv(x)
+        z_q, _ = self.quantize(z)
+
+        # 后处理
+        z = self.post_quant_conv(z_q)
+        z = self.post_conv(z)
+
+        # [B, C, H, W] -> [B, H, W, C] -> [B, N, C]
+        z = z.permute(0, 2, 3, 1).contiguous()
+        z = z.view(batch_size, seq_len, channels)
+
+        return z
+
+    def encode(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
+        """
+        编码为离散 token 索引
+
+        Args:
+            x: 视觉特征，shape: [B, N, C]
+            h: 特征图高度
+            w: 特征图宽度
+
+        Returns:
+            indices: codebook 索引，shape: [B, H, W]
+        """
+        batch_size, seq_len, channels = x.shape
+
+        # [B, N, C] -> [B, H, W, C] -> [B, C, H, W]
+        x = x.view(batch_size, h, w, channels)
+        x = x.permute(0, 3, 1, 2).contiguous()
+
+        z = self.quant_conv(x)
+        _, indices = self.quantize(z)
+        return indices
+
+    def decode(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
+        """
+        从离散 token 索引解码
+
+        Args:
+            indices: codebook 索引
+            bhwc: 目标形状 [batch, height, width, channel]
+
+        Returns:
+            z: 解码后的特征，shape: [B, C, H, W]
+        """
+        z_q = self.quantize.get_codebook_entry(indices, bhwc)
+        z = self.post_quant_conv(z_q)
+        z = self.post_conv(z)
+        return z
+
+
 class GlmImageVisionTransformer(GlmImagePreTrainedModel):
     _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
@@ -295,6 +584,13 @@ class GlmImageVisionTransformer(GlmImagePreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
+
+        self.vq_projector = GlmImageVisionVQProjector(
+            in_channels=config.hidden_size,
+            codebook_size=config.vq_codebook_size,
+            codebook_dim=config.vq_codebook_dim,
+            num_conv_layers=config.vq_num_conv_layers,
+        )
 
         self.post_init()
 

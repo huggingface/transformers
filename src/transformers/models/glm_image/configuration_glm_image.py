@@ -29,8 +29,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
     GlmImage vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the GlmImage
-    [google/glm_image-base-patch16-224](https://huggingface.co/google/glm_image-base-patch16-224) architecture.
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the GLM-Image
+    [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -57,6 +57,12 @@ class GlmImageVisionConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        vq_codebook_size (`int`, *optional*, defaults to 16384):
+            The size of the VQ codebook.
+        vq_codebook_dim (`int`, *optional*, defaults to 2048):
+            The dimension of the VQ codebook embeddings.
+        vq_num_conv_layers (`int`, *optional*, defaults to 2):
+            The number of convolutional layers in the VQ projector.
 
     Example:
 
@@ -88,6 +94,9 @@ class GlmImageVisionConfig(PreTrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        vq_codebook_size: Optional[int] = 16384,
+        vq_codebook_dim: Optional[int] = 2048,
+        vq_num_conv_layers: Optional[int] = 2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -102,6 +111,9 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.vq_codebook_size = vq_codebook_size
+        self.vq_codebook_dim = vq_codebook_dim
+        self.vq_num_conv_layers = vq_num_conv_layers
 
 
 class GlmImageTextConfig(PreTrainedConfig):
