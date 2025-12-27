@@ -266,9 +266,6 @@ class GlmImagePreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.probe)
             init.xavier_uniform_(module.attention.in_proj_weight)
             init.zeros_(module.attention.in_proj_bias)
-        elif isinstance(module, GlmImageModel):
-            init.zeros_(module.logit_scale)
-            init.zeros_(module.logit_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -816,12 +813,10 @@ class GlmImageVisionVQProjector(nn.Module):
         return z
 
 
-class GlmImageVisionTransformer(GlmImagePreTrainedModel):
-    _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": GlmImageVisionBlock,
-        "attentions": GlmImageVisionAttention,
-    }
+class GlmImageVisionModel(GlmImagePreTrainedModel):
+    config: GlmImageVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
@@ -829,7 +824,7 @@ class GlmImageVisionTransformer(GlmImagePreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = GlmImageVisionEmbeddings(config)
-        self.encoder = GlmImageVisionBlock(config)
+        self.blocks = GlmImageVisionBlock(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
@@ -844,27 +839,8 @@ class GlmImageVisionTransformer(GlmImagePreTrainedModel):
 
         self.post_init()
 
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from GlmImage without any head or projection on top.
-    """
-)
-class GlmImageVisionModel(GlmImagePreTrainedModel):
-    config: GlmImageVisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    def __init__(self, config: GlmImageVisionConfig):
-        super().__init__(config)
-
-        self.vision_model = GlmImageVisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.visual.embeddings.patch_embedding
 
     @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -895,11 +871,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled features
         ```"""
 
-        return self.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
-        )
+        pass
 
 
 class GlmImageTextRotaryEmbedding(nn.Module):

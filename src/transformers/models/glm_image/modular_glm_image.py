@@ -21,8 +21,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
-from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
+from ..glm4v.configuration_glm4v import Glm4vTextConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vModel,
@@ -37,7 +42,6 @@ from ..siglip.modeling_siglip import (
     SiglipMultiheadAttentionPoolingHead,
     SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
-    SiglipVisionModel,
     default_flax_embed_init,
     lecun_normal_,
 )
@@ -189,10 +193,10 @@ class GlmImageTextConfig(Glm4vTextConfig):
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
 
-    >>> # Initializing a GLM-4.1V style configuration
+    >>> # Initializing a GlmImageConfig style configuration
     >>> configuration = GlmImageConfig()
 
-    >>> # Initializing a model from the GLM-4.1V style configuration
+    >>> # Initializing a model from the GlmImageConfig style configuration
     >>> model = GlmImageTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -261,8 +265,69 @@ class GlmImageTextConfig(Glm4vTextConfig):
         )
 
 
-class GlmImageConfig(Glm4vConfig):
-    pass
+class GlmImageConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GLM-Image`]. It is used to instantiate a
+    GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmImageTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmImageVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 167855):
+            The image token index to encode the image prompt.
+        image_start_token_id (`int`, *optional*, defaults to 167851):
+            The image start token index to encode the start of image.
+        image_end_token_id (`int`, *optional*, defaults to 167852):
+            The image end token index to encode the end of image.
+
+    ```python
+    >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
+
+    >>> # Initializing a GLM-Image style configuration
+    >>> configuration = Glm4vConfig()
+
+    >>> # Initializing a model from the GLM-Image style configuration
+    >>> model = Glm4vForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glm_image"
+    sub_configs = {"vision_config": GlmImageVisionConfig, "text_config": GlmImageTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=167855,
+        image_start_token_id=167851,
+        image_end_token_id=167852,
+        **kwargs,
+    ):
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        self.image_token_id = image_token_id
+        self.image_start_token_id = image_start_token_id
+        self.image_end_token_id = image_end_token_id
+
+        super().__init__(**kwargs)
 
 
 class GlmImageVisionMLP(SiglipMLP):
@@ -335,9 +400,6 @@ class GlmImagePreTrainedModel(SiglipPreTrainedModel):
             init.xavier_uniform_(module.probe)
             init.xavier_uniform_(module.attention.in_proj_weight)
             init.zeros_(module.attention.in_proj_bias)
-        elif isinstance(module, GlmImageModel):
-            init.zeros_(module.logit_scale)
-            init.zeros_(module.logit_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -566,12 +628,10 @@ class GlmImageVisionVQProjector(nn.Module):
         return z
 
 
-class GlmImageVisionTransformer(GlmImagePreTrainedModel):
-    _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": GlmImageVisionBlock,
-        "attentions": GlmImageVisionAttention,
-    }
+class GlmImageVisionModel(GlmImagePreTrainedModel):
+    config: GlmImageVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
@@ -579,7 +639,7 @@ class GlmImageVisionTransformer(GlmImagePreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = GlmImageVisionEmbeddings(config)
-        self.encoder = GlmImageVisionBlock(config)
+        self.blocks = GlmImageVisionBlock(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
@@ -594,9 +654,39 @@ class GlmImageVisionTransformer(GlmImagePreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self) -> nn.Module:
+        return self.visual.embeddings.patch_embedding
 
-class GlmImageVisionModel(SiglipVisionModel):
-    pass
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, GlmImageVisionModel
+
+        >>> model = GlmImageVisionModel.from_pretrained("google/glm_image-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/glm_image-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
+
+        pass
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -613,9 +703,13 @@ class GlmImageForConditionalGeneration(Glm4vForConditionalGeneration):
         self.model = GlmImageModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
 
 __all__ = [
     "GlmImageVisionConfig",
+    "GlmImageTextConfig",
     "GlmImageConfig",
     "GlmImagePreTrainedModel",
     "GlmImageVisionModel",
