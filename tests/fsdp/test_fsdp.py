@@ -211,6 +211,37 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
 
+    def test_fsdp_version_2_config(self):
+        output_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "output_dir": output_dir,
+            "train_len": 128,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+            "fsdp": True,
+            "fsdp_config": {
+                "fsdp_version": 2,
+                "reshard_after_forward": True,
+                "auto_wrap_policy": "transformer_based_wrap",
+                "transformer_cls_names_to_wrap": ["BertLayer"],
+                "state_dict_type": "FULL_STATE_DICT",
+                "activation_checkpointing": True,
+                "cpu_offload": True,
+                "limit_all_gathers": True,
+            },
+        }
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            plugin_args = trainer.args._process_fsdp_args()
+            self.assertEqual(plugin_args["fsdp_version"], 2)
+            self.assertTrue(plugin_args["reshard_after_forward"])
+            self.assertEqual(plugin_args["auto_wrap_policy"], "transformer_based_wrap")
+            self.assertListEqual(plugin_args["transformer_cls_names_to_wrap"], ["BertLayer"])
+            self.assertEqual(plugin_args["state_dict_type"], "FULL_STATE_DICT")
+            self.assertTrue(plugin_args["activation_checkpointing"])
+            self.assertTrue(plugin_args["cpu_offload"])
+            self.assertTrue(plugin_args["limit_all_gathers"])
+
     @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_accelerator
     @run_first
