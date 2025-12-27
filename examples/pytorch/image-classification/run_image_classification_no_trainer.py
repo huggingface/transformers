@@ -416,9 +416,18 @@ def main():
         return {"pixel_values": pixel_values, "labels": labels}
 
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=args.per_device_train_batch_size
+        train_dataset,
+        shuffle=True,
+        collate_fn=collate_fn,
+        batch_size=args.per_device_train_batch_size,
+        pin_memory=True,
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        collate_fn=collate_fn,
+        batch_size=args.per_device_eval_batch_size,
+        pin_memory=True,
+    )
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.

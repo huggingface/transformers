@@ -49,6 +49,8 @@ from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
+    CONFIG_MAPPING,
+    MODEL_MAPPING,
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -253,7 +255,7 @@ def main():
         transformers.utils.logging.set_verbosity_info()
     else:
         datasets.utils.logging.set_verbosity_error()
-        transformers.utils.logging.set_verbosity_error()
+        datasets.utils.logging.set_verbosity_error()
 
     # If passed along, set the training seed now.
     if args.seed is not None:
@@ -303,7 +305,7 @@ def main():
             data_files["validation"] = args.validation_file
         extension = (args.train_file if args.train_file is not None else args.validation_file).split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files)
-    # See more about loading any type of standard or custom dataset at
+    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Labels
@@ -447,9 +449,18 @@ def main():
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
 
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset,
+        shuffle=True,
+        collate_fn=data_collator,
+        batch_size=args.per_device_train_batch_size,
+        pin_memory=True,
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        collate_fn=data_collator,
+        batch_size=args.per_device_eval_batch_size,
+        pin_memory=True,
+    )
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
@@ -667,7 +678,10 @@ def main():
         # Final evaluation on mismatched validation set
         eval_dataset = processed_datasets["validation_mismatched"]
         eval_dataloader = DataLoader(
-            eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+            eval_dataset,
+            collate_fn=data_collator,
+            batch_size=args.per_device_eval_batch_size,
+            pin_memory=True,
         )
         eval_dataloader = accelerator.prepare(eval_dataloader)
 

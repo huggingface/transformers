@@ -558,9 +558,18 @@ def main():
         data_collator = DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
 
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset,
+        shuffle=True,
+        collate_fn=data_collator,
+        batch_size=args.per_device_train_batch_size,
+        pin_memory=True,
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        collate_fn=data_collator,
+        batch_size=args.per_device_eval_batch_size,
+        pin_memory=True,
+    )
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
