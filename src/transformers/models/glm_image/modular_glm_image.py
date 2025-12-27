@@ -698,6 +698,11 @@ class GlmImageModel(Glm4vModel):
 
 
 class GlmImageForConditionalGeneration(Glm4vForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
+    _tied_weights_keys = {}
+    # Reference: fix gemma3 grad acc #37208
+    accepts_loss_kwargs = False
+
     def __init__(self, config):
         super().__init__(config)
         self.model = GlmImageModel(config)
