@@ -79,6 +79,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("glm4v_moe", "Glm4vProcessor"),
+        ("glmasr", "GlmAsrProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
