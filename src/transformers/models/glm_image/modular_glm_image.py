@@ -21,15 +21,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ..glm4v.configuration_glm4v import Glm4vTextConfig
-from ..glm4v.modeling_glm4v import (
-    Glm4vForConditionalGeneration,
-    Glm4vModel,
-    Glm4vTextDecoderLayer,
-    Glm4vTextModel,
-)
+from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vModel, Glm4vTextDecoderLayer, Glm4vTextModel
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
@@ -264,7 +258,7 @@ class GlmImageTextConfig(Glm4vTextConfig):
         )
 
 
-class GlmImageConfig(PreTrainedConfig):
+class GlmImageConfig(Glm4vConfig):
     r"""
     This is the configuration class to store the configuration of a [`GLM-Image`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
@@ -281,10 +275,16 @@ class GlmImageConfig(PreTrainedConfig):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 167855):
             The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 167856):
+            The video token index to encode the image prompt.
         image_start_token_id (`int`, *optional*, defaults to 167851):
             The image start token index to encode the start of image.
         image_end_token_id (`int`, *optional*, defaults to 167852):
             The image end token index to encode the end of image.
+        video_start_token_id (`int`, *optional*, defaults to 167853):
+            The video start token index to encode the start of video.
+        video_end_token_id (`int`, *optional*, defaults to 167854):
+            The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -308,24 +308,13 @@ class GlmImageConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         image_token_id=167855,
+        video_token_id=167856,
         image_start_token_id=167851,
         image_end_token_id=167852,
+        video_start_token_id=167853,
+        video_end_token_id=167854,
         **kwargs,
     ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        self.image_token_id = image_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-
         super().__init__(**kwargs)
 
 
