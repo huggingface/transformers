@@ -685,6 +685,12 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, ModernBertUnpaddedRotaryEmbedding):
+            inv_freq = module._compute_inv_freq()
+            module.register_buffer("inv_freq", inv_freq, persistent=False)
+            module._seq_len_cached = 0
+            module._cos_cached = None
+            module._sin_cached = None
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: Optional[str], is_init_check: bool = False

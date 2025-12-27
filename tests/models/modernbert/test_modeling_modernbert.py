@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -598,6 +599,63 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_inference_sequence_classification_flash_attention_2(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        device = torch.device("cuda")
+
+        model = ModernBertForSequenceClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-ModernBertForSequenceClassification",
+            reference_compile=False,
+            attn_implementation="flash_attention_2",
+            device_map=device,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            "hf-internal-testing/tiny-random-ModernBertForSequenceClassification"
+        )
+
+        inputs = tokenizer("Hello World!", return_tensors="pt")
+        inputs = {k: v.to(device=device) for k, v in inputs.items()}
+        with torch.no_grad():
+            output = model(**inputs)[0]
+            self.assertIsInstance(output, torch.Tensor)
+        expected_shape = torch.Size((1, 2))
+        self.assertEqual(output.shape, expected_shape)
+        self.assertFalse(torch.isnan(output).any().item())
+
+        expected = torch.tensor([[1.6466, 4.5662]], device=device)
+        torch.testing.assert_close(output, expected, rtol=1e-2, atol=1e-2)
+
+    @slow
+    @require_flash_attn
+    @require_torch_gpu
+    def test_inference_sequence_classification_flash_attention_2_modernbert_base(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        device = torch.device("cuda")
+
+        model = ModernBertForSequenceClassification.from_pretrained(
+            "answerdotai/ModernBERT-base",
+            reference_compile=False,
+            attn_implementation="flash_attention_2",
+            device_map=device,
+        )
+        tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
+
+        inputs = tokenizer("Hello World!", return_tensors="pt")
+        inputs = {k: v.to(device=device) for k, v in inputs.items()}
+        with torch.no_grad():
+            output = model(**inputs)[0]
+            self.assertIsInstance(output, torch.Tensor)
+        expected_shape = torch.Size((1, 2))
+        self.assertEqual(output.shape, expected_shape)
+        self.assertFalse(torch.isnan(output).any().item())
 
     @pytest.mark.torch_export_test
     @slow
