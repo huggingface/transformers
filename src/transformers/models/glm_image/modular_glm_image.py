@@ -22,11 +22,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
 from ..glm4v.configuration_glm4v import Glm4vTextConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -85,7 +81,8 @@ class GlmImageVisionConfig(SiglipVisionConfig):
             The dimension of the VQ codebook embeddings.
         vq_num_conv_layers (`int`, *optional*, defaults to 2):
             The number of convolutional layers in the VQ projector.
-
+         spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
     Example:
 
     ```python
@@ -116,9 +113,10 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        vq_codebook_size: Optional[int] = 16384,
-        vq_codebook_dim: Optional[int] = 2048,
-        vq_num_conv_layers: Optional[int] = 2,
+        vq_codebook_size=16384,
+        vq_codebook_dim=2048,
+        vq_num_conv_layers=2,
+        spatial_merge_size=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -136,6 +134,7 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         self.vq_codebook_size = vq_codebook_size
         self.vq_codebook_dim = vq_codebook_dim
         self.vq_num_conv_layers = vq_num_conv_layers
+        self.spatial_merge_size = spatial_merge_size
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -654,39 +653,53 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.visual.embeddings.patch_embedding
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
 
-    @check_model_inputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values,
-        interpolate_pos_encoding: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        hidden_states = self.patch_embed(hidden_states)
+        hidden_states = self.post_conv_layernorm(hidden_states)
 
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, GlmImageVisionModel
+        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
-        >>> model = GlmImageVisionModel.from_pretrained("google/glm_image-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/glm_image-base-patch16-224")
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        for blk in self.blocks:
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                position_embeddings=position_embeddings,
+            )
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        hidden_states = self.post_layernorm(hidden_states)
 
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled features
-        ```"""
+        hidden_states = hidden_states.view(
+            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
+        )
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
 
-        pass
+        hidden_states = self.merger(hidden_states)
+        return hidden_states
 
 
 class GlmImageTextModel(Glm4vTextModel):

@@ -63,7 +63,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
             The dimension of the VQ codebook embeddings.
         vq_num_conv_layers (`int`, *optional*, defaults to 2):
             The number of convolutional layers in the VQ projector.
-
+         spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
     Example:
 
     ```python
@@ -94,9 +95,10 @@ class GlmImageVisionConfig(PreTrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        vq_codebook_size: Optional[int] = 16384,
-        vq_codebook_dim: Optional[int] = 2048,
-        vq_num_conv_layers: Optional[int] = 2,
+        vq_codebook_size=16384,
+        vq_codebook_dim=2048,
+        vq_num_conv_layers=2,
+        spatial_merge_size=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -114,6 +116,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.vq_codebook_size = vq_codebook_size
         self.vq_codebook_dim = vq_codebook_dim
         self.vq_num_conv_layers = vq_num_conv_layers
+        self.spatial_merge_size = spatial_merge_size
 
 
 class GlmImageTextConfig(PreTrainedConfig):
