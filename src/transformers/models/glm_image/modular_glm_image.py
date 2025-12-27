@@ -75,7 +75,7 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -114,7 +114,7 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         image_size=2048,
         patch_size=16,
         hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         vq_codebook_size: Optional[int] = 16384,
         vq_codebook_dim: Optional[int] = 2048,
@@ -639,7 +639,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = GlmImageVisionEmbeddings(config)
-        self.blocks = GlmImageVisionBlock(config)
+        self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.num_hidden_layers)])
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:

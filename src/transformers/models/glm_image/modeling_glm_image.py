@@ -824,7 +824,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = GlmImageVisionEmbeddings(config)
-        self.blocks = GlmImageVisionBlock(config)
+        self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.num_hidden_layers)])
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:

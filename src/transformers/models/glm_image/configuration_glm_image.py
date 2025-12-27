@@ -53,7 +53,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -92,7 +92,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
         image_size=2048,
         patch_size=16,
         hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         vq_codebook_size: Optional[int] = 16384,
         vq_codebook_dim: Optional[int] = 2048,
