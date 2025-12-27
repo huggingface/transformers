@@ -666,6 +666,10 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(reason="MT5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->MT5
 class MT5EncoderOnlyModelTester:
@@ -851,6 +855,10 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         return False
 
+    @unittest.skip(reason="MT5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 @require_sentencepiece
@@ -870,7 +878,7 @@ class MT5IntegrationTest(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = AutoModelForSeq2SeqLM.from_pretrained("google/mt5-small", return_dict=True).to(torch_device)
+        model = AutoModelForSeq2SeqLM.from_pretrained("google/mt5-small", attn_implementation="eager").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids

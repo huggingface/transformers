@@ -675,6 +675,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_model_base_model_prefix(self):
         pass
 
+    @unittest.skip(reason="T5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(
@@ -858,6 +862,10 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         return False
 
+    @unittest.skip(reason="T5 always needs to include a relative bias into the mask")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 def use_task_specific_params(model, task):
     task_params = model.config.task_specific_params[task]
@@ -993,7 +1001,9 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small").to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("google-t5/t5-small", attn_implementation="eager").to(
+            torch_device
+        )
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -1024,7 +1034,9 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small", attn_implementation="eager").to(
+            torch_device
+        )
         tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -1048,7 +1060,9 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("google/byt5-small", attn_implementation="eager").to(
+            torch_device
+        )
         tokenizer = ByT5Tokenizer.from_pretrained("google/byt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
