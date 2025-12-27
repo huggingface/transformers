@@ -36,17 +36,17 @@ class GlmImageVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 6144):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 40):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 2048):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
@@ -84,12 +84,12 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1536,
+        intermediate_size=6144,
+        num_hidden_layers=40,
+        num_attention_heads=24,
         num_channels=3,
-        image_size=224,
+        image_size=2048,
         patch_size=16,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
