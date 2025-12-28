@@ -1191,7 +1191,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         # This is where vision token generation starts
         if attention_mask is not None:
             valid_lengths = attention_mask.sum(dim=1)
-            print(valid_lengths)
             self._gen_st_idx = valid_lengths[0].item()
         else:
             self._gen_st_idx = seq_length
