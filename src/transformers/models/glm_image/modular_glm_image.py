@@ -477,7 +477,7 @@ class GlmImageVisionIBQ(nn.Module):
         else:
             embedding = self.embedding.weight
 
-        # 计算距离: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
+        # Calculate distance: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
         # z_flattened: [B*H*W, C], embedding: [N, C]
         d = (
             torch.sum(z_flattened**2, dim=1, keepdim=True)
@@ -485,10 +485,10 @@ class GlmImageVisionIBQ(nn.Module):
             - 2 * torch.matmul(z_flattened, embedding.t())
         )
 
-        # 找到最近的 codebook entry
+        # find the nearest codebook entry
         indices = torch.argmin(d, dim=1)
 
-        # 获取量化后的向量: [B*H*W, C] -> [B, H, W, C]
+        # Get IBQ: [B*H*W, C] -> [B, H, W, C]
         z_q = embedding[indices].view(batch_size, height, width, self.embedding_dim)
 
         # [B, H, W, C] -> [B, C, H, W]
@@ -501,14 +501,14 @@ class GlmImageVisionIBQ(nn.Module):
 
     def get_codebook_entry(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
         """
-        根据索引获取 codebook entry
+        Get codebook entries by indices
 
         Args:
-            indices: codebook 索引
-            bhwc: 目标形状 [batch, height, width, channel]
+            indices: Codebook indices
+            bhwc: Target shape [batch, height, width, channel]
 
         Returns:
-            z_q: 量化后的特征，shape: [B, C, H, W]
+            z_q: Quantized features, shape: [B, C, H, W]
         """
         z_q = self.embedding(indices)
 
@@ -547,15 +547,15 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def forward(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
         """
-        前向传播
+        Forward pass
 
         Args:
-            x: 视觉特征，shape: [B, N, C] 其中 N = H * W
-            h: 特征图高度
-            w: 特征图宽度
+            x: Visual features, shape: [B, N, C] where N = H * W
+            h: Feature map height
+            w: Feature map width
 
         Returns:
-            z: 量化后的特征，shape: [B, N, C]
+            z: Quantized features, shape: [B, N, C]
         """
         batch_size, seq_len, channels = x.shape
 
@@ -579,15 +579,15 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def encode(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
         """
-        编码为离散 token 索引
+        Encode to discrete token indices
 
         Args:
-            x: 视觉特征，shape: [B, N, C]
-            h: 特征图高度
-            w: 特征图宽度
+            x: Visual features, shape: [B, N, C]
+            h: Feature map height
+            w: Feature map width
 
         Returns:
-            indices: codebook 索引，shape: [B, H, W]
+            indices: Codebook indices, shape: [B, H, W]
         """
         batch_size, seq_len, channels = x.shape
 
@@ -601,14 +601,14 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def decode(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
         """
-        从离散 token 索引解码
+        Decode from discrete token indices
 
         Args:
-            indices: codebook 索引
-            bhwc: 目标形状 [batch, height, width, channel]
+            indices: Codebook indices
+            bhwc: Target shape [batch, height, width, channel]
 
         Returns:
-            z: 解码后的特征，shape: [B, C, H, W]
+            z: Decoded features, shape: [B, C, H, W]
         """
         z_q = self.quantize.get_codebook_entry(indices, bhwc)
         z = self.post_quant_conv(z_q)
@@ -696,7 +696,106 @@ class GlmImageTextModel(Glm4vTextModel):
 
 
 class GlmImageModel(Glm4vModel):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.visual = GlmImageVisionModel._from_config(config.vision_config)
+        self.language_model = GlmImageTextModel._from_config(config.text_config)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_rope_index(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index for image generation task.
+
+        Explanation:
+            For image generation, the input sequence contains only text tokens (the prompt).
+            Vision tokens are generated autoregressively by the model during decoding.
+
+            For the text prompt (prefill stage), all three dimensions share the same position IDs,
+            identical to standard LLM rotary position embedding.
+
+            Examples:
+                input_ids: [T T T T T], here T is for text prompt.
+                temporal position_ids: [0, 1, 2, 3, 4]
+                height position_ids:   [0, 1, 2, 3, 4]
+                width position_ids:    [0, 1, 2, 3, 4]
+
+            For the generated vision tokens (decode stage), we use 2D spatial position encoding.
+            The temporal dimension is fixed at `gen_st_idx` (the position after the last text token),
+            while height and width dimensions follow a row-major 2D grid layout.
+
+            Examples:
+                Assuming prompt_length = 5, generated image latent size: height = 2, width = 3
+                gen_st_idx = 5 (the position where vision generation starts)
+
+                Generated vision tokens layout (row-major order):
+                [V0, V1, V2, V3, V4, V5] representing a 2x3 grid:
+                    V0(0,0)  V1(0,1)  V2(0,2)
+                    V3(1,0)  V4(1,1)  V5(1,2)
+
+                temporal position_ids: [5, 5, 5, 5, 5, 5]  (all fixed at gen_st_idx)
+                height position_ids:   [5, 5, 5, 6, 6, 6]  (gen_st_idx + row_index)
+                width position_ids:    [5, 6, 7, 5, 6, 7]  (gen_st_idx + col_index)
+
+            Complete sequence example (prompt + generated vision):
+                input_ids: [T T T T T V V V V V V]
+                temporal position_ids: [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5]
+                height position_ids:   [0, 1, 2, 3, 4, 5, 5, 5, 6, 6, 6]
+                width position_ids:    [0, 1, 2, 3, 4, 5, 6, 7, 5, 6, 7]
+
+        Note:
+            This function only handles the prefill stage (text prompt).
+            The decode stage position IDs are calculated in `prepare_inputs_for_generation`.
+            The `_gen_st_idx` attribute is saved here for use during decoding.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary (text prompt only).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of the generated image's latent feature shape.
+                For image generation, temporal is typically 1, and we use height and width
+                to determine the 2D grid layout.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                Not used for image generation, kept for API compatibility.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices.
+                - 1 for tokens that are **not masked**
+                - 0 for tokens that are **masked**
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`):
+                Position IDs for temporal, height, and width dimensions.
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
+                The difference between the maximum position and sequence length,
+                used for position calculation in subsequent decoding steps.
+        """
+        device = input_ids.device
+        batch_size = input_ids.shape[0]
+        seq_length = input_ids.shape[1]
+
+        # For text-only input, all three dimensions share the same positions: [0, 1, 2, ..., seq_length-1]
+        position_ids = torch.arange(seq_length, device=device).view(1, 1, -1).expand(3, batch_size, -1).clone()
+
+        # Save gen_st_idx for decode stage
+        # This is where vision token generation starts
+        if attention_mask is not None:
+            valid_lengths = attention_mask.sum(dim=1)
+            self._gen_st_idx = valid_lengths[0].item()
+        else:
+            self._gen_st_idx = seq_length
+
+        # mrope_position_deltas for pure text input
+        mrope_position_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=device)
+
+        return position_ids, mrope_position_deltas
 
 
 class GlmImageForConditionalGeneration(Glm4vForConditionalGeneration):
@@ -712,6 +811,70 @@ class GlmImageForConditionalGeneration(Glm4vForConditionalGeneration):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            **kwargs,
+        )
+
+        device = input_ids.device
+        batch_size = input_ids.shape[0]
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        if past_length == 0:
+            model_inputs["position_ids"] = None
+            self._prompt_length = input_ids.shape[1]
+            self._gen_latent_h = image_grid_thw[-1, 1].item()
+            self._gen_latent_w = image_grid_thw[-1, 2].item()
+        else:
+            gen_st_idx = self.model._gen_st_idx
+            generated_vision_count = past_length - self._prompt_length
+            h_idx = generated_vision_count // self._gen_latent_w
+            w_idx = generated_vision_count % self._gen_latent_w
+            position_ids = torch.tensor(
+                [
+                    [[gen_st_idx]],
+                    [[gen_st_idx + h_idx]],
+                    [[gen_st_idx + w_idx]],
+                ],
+                dtype=torch.long,
+                device=device,
+            ).expand(-1, batch_size, -1)
+
+            model_inputs["position_ids"] = position_ids
+
+        if past_length > 0 and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
 
 
 __all__ = [

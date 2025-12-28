@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -674,7 +673,7 @@ class GlmImageVisionIBQ(nn.Module):
         else:
             embedding = self.embedding.weight
 
-        # 计算距离: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
+        # Calculate distance: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
         # z_flattened: [B*H*W, C], embedding: [N, C]
         d = (
             torch.sum(z_flattened**2, dim=1, keepdim=True)
@@ -682,10 +681,10 @@ class GlmImageVisionIBQ(nn.Module):
             - 2 * torch.matmul(z_flattened, embedding.t())
         )
 
-        # 找到最近的 codebook entry
+        # find the nearest codebook entry
         indices = torch.argmin(d, dim=1)
 
-        # 获取量化后的向量: [B*H*W, C] -> [B, H, W, C]
+        # Get IBQ: [B*H*W, C] -> [B, H, W, C]
         z_q = embedding[indices].view(batch_size, height, width, self.embedding_dim)
 
         # [B, H, W, C] -> [B, C, H, W]
@@ -698,14 +697,14 @@ class GlmImageVisionIBQ(nn.Module):
 
     def get_codebook_entry(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
         """
-        根据索引获取 codebook entry
+        Get codebook entries by indices
 
         Args:
-            indices: codebook 索引
-            bhwc: 目标形状 [batch, height, width, channel]
+            indices: Codebook indices
+            bhwc: Target shape [batch, height, width, channel]
 
         Returns:
-            z_q: 量化后的特征，shape: [B, C, H, W]
+            z_q: Quantized features, shape: [B, C, H, W]
         """
         z_q = self.embedding(indices)
 
@@ -744,15 +743,15 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def forward(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
         """
-        前向传播
+        Forward pass
 
         Args:
-            x: 视觉特征，shape: [B, N, C] 其中 N = H * W
-            h: 特征图高度
-            w: 特征图宽度
+            x: Visual features, shape: [B, N, C] where N = H * W
+            h: Feature map height
+            w: Feature map width
 
         Returns:
-            z: 量化后的特征，shape: [B, N, C]
+            z: Quantized features, shape: [B, N, C]
         """
         batch_size, seq_len, channels = x.shape
 
@@ -776,15 +775,15 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def encode(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
         """
-        编码为离散 token 索引
+        Encode to discrete token indices
 
         Args:
-            x: 视觉特征，shape: [B, N, C]
-            h: 特征图高度
-            w: 特征图宽度
+            x: Visual features, shape: [B, N, C]
+            h: Feature map height
+            w: Feature map width
 
         Returns:
-            indices: codebook 索引，shape: [B, H, W]
+            indices: Codebook indices, shape: [B, H, W]
         """
         batch_size, seq_len, channels = x.shape
 
@@ -798,14 +797,14 @@ class GlmImageVisionVQProjector(nn.Module):
 
     def decode(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
         """
-        从离散 token 索引解码
+        Decode from discrete token indices
 
         Args:
-            indices: codebook 索引
-            bhwc: 目标形状 [batch, height, width, channel]
+            indices: Codebook indices
+            bhwc: Target shape [batch, height, width, channel]
 
         Returns:
-            z: 解码后的特征，shape: [B, C, H, W]
+            z: Decoded features, shape: [B, C, H, W]
         """
         z_q = self.quantize.get_codebook_entry(indices, bhwc)
         z = self.post_quant_conv(z_q)
@@ -1120,187 +1119,89 @@ class GlmImageModel(GlmImagePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+        Calculate the 3D rope index for image generation task.
 
         Explanation:
-            Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
+            For image generation, the input sequence contains only text tokens (the prompt).
+            Vision tokens are generated autoregressively by the model during decoding.
 
-            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
+            For the text prompt (prefill stage), all three dimensions share the same position IDs,
+            identical to standard LLM rotary position embedding.
+
             Examples:
-                input_ids: [T T T T T], here T is for text.
+                input_ids: [T T T T T], here T is for text prompt.
                 temporal position_ids: [0, 1, 2, 3, 4]
-                height position_ids: [0, 1, 2, 3, 4]
-                width position_ids: [0, 1, 2, 3, 4]
+                height position_ids:   [0, 1, 2, 3, 4]
+                width position_ids:    [0, 1, 2, 3, 4]
 
-            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
-            and 1D rotary position embedding for text part.
+            For the generated vision tokens (decode stage), we use 2D spatial position encoding.
+            The temporal dimension is fixed at `gen_st_idx` (the position after the last text token),
+            while height and width dimensions follow a row-major 2D grid layout.
+
             Examples:
-                Temporal (Time): 3 patches, representing different segments of the video in time.
-                Height: 2 patches, dividing each frame vertically.
-                Width: 2 patches, dividing each frame horizontally.
-                We also have some important parameters:
-                fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
-                tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
-                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
-                input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
-                vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
-                vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
-                vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
-                text temporal position_ids: [101, 102, 103, 104, 105]
-                text height position_ids: [101, 102, 103, 104, 105]
-                text width position_ids: [101, 102, 103, 104, 105]
-                Here we calculate the text start position_ids as the max vision position_ids plus 1.
+                Assuming prompt_length = 5, generated image latent size: height = 2, width = 3
+                gen_st_idx = 5 (the position where vision generation starts)
+
+                Generated vision tokens layout (row-major order):
+                [V0, V1, V2, V3, V4, V5] representing a 2x3 grid:
+                    V0(0,0)  V1(0,1)  V2(0,2)
+                    V3(1,0)  V4(1,1)  V5(1,2)
+
+                temporal position_ids: [5, 5, 5, 5, 5, 5]  (all fixed at gen_st_idx)
+                height position_ids:   [5, 5, 5, 6, 6, 6]  (gen_st_idx + row_index)
+                width position_ids:    [5, 6, 7, 5, 6, 7]  (gen_st_idx + col_index)
+
+            Complete sequence example (prompt + generated vision):
+                input_ids: [T T T T T V V V V V V]
+                temporal position_ids: [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5]
+                height position_ids:   [0, 1, 2, 3, 4, 5, 5, 5, 6, 6, 6]
+                width position_ids:    [0, 1, 2, 3, 4, 5, 6, 7, 5, 6, 7]
+
+        Note:
+            This function only handles the prefill stage (text prompt).
+            The decode stage position IDs are calculated in `prepare_inputs_for_generation`.
+            The `_gen_st_idx` attribute is saved here for use during decoding.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
+                Indices of input sequence tokens in the vocabulary (text prompt only).
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+                The temporal, height and width of the generated image's latent feature shape.
+                For image generation, temporal is typically 1, and we use height and width
+                to determine the 2D grid layout.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+                Not used for image generation, kept for API compatibility.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+                Mask to avoid performing attention on padding token indices.
+                - 1 for tokens that are **not masked**
+                - 0 for tokens that are **masked**
 
         Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`):
+                Position IDs for temporal, height, and width dimensions.
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
+                The difference between the maximum position and sequence length,
+                used for position calculation in subsequent decoding steps.
         """
+        device = input_ids.device
+        batch_size = input_ids.shape[0]
+        seq_length = input_ids.shape[1]
 
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_start_token_id = self.config.video_start_token_id
-        video_end_token_id = self.config.video_end_token_id
+        # For text-only input, all three dimensions share the same positions: [0, 1, 2, ..., seq_length-1]
+        position_ids = torch.arange(seq_length, device=device).view(1, 1, -1).expand(3, batch_size, -1).clone()
 
-        mrope_position_deltas = []
-        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
-            total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
-            position_ids = torch.ones(
-                3,
-                input_ids.shape[0],
-                input_ids.shape[1],
-                dtype=input_ids.dtype,
-                device=input_ids.device,
-            )
-            image_index, video_index = 0, 0
-            video_group_index = 0
-            attention_mask = attention_mask.to(total_input_ids.device)
-            for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
-                input_tokens = input_ids.tolist()
-
-                input_token_type = []
-                video_check_flg = False
-                for token in input_tokens:
-                    if token == video_start_token_id:
-                        video_check_flg = True
-                    elif token == video_end_token_id:
-                        video_check_flg = False
-
-                    if token == image_token_id and not video_check_flg:
-                        input_token_type.append("image")
-                    elif token == image_token_id and video_check_flg:
-                        input_token_type.append("video")
-                    else:
-                        input_token_type.append("text")
-
-                input_type_group = []
-                for key, group in itertools.groupby(enumerate(input_token_type), lambda x: x[1]):
-                    group = list(group)
-                    start_index = group[0][0]
-                    end_index = group[-1][0] + 1
-                    input_type_group.append((key, start_index, end_index))
-
-                llm_pos_ids_list = []
-                video_frame_num = 1
-                for modality_type, start_idx, end_idx in input_type_group:
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-
-                    if modality_type == "image":
-                        t, h, w = (
-                            image_grid_thw[image_index][0],
-                            image_grid_thw[image_index][1],
-                            image_grid_thw[image_index][2],
-                        )
-                        llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item(),
-                            h.item() // spatial_merge_size,
-                            w.item() // spatial_merge_size,
-                        )
-
-                        t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-
-                        image_index += 1
-                        video_frame_num = 1
-
-                    elif modality_type == "video":
-                        t, h, w = (
-                            video_frame_num,
-                            video_grid_thw[video_index][1],
-                            video_grid_thw[video_index][2],
-                        )
-
-                        llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t,
-                            h.item() // spatial_merge_size,
-                            w.item() // spatial_merge_size,
-                        )
-
-                        for t_idx in range(llm_grid_t):
-                            t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
-
-                            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-                            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-                            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-
-                        video_group_index += 1
-
-                        if video_group_index >= video_grid_thw[video_index][0]:
-                            video_index += 1
-                            video_group_index = 0
-
-                        video_frame_num += 1
-
-                    else:
-                        text_len = end_idx - start_idx
-                        llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                        video_frame_num = 1
-
-                llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-            return position_ids, mrope_position_deltas
+        # Save gen_st_idx for decode stage
+        # This is where vision token generation starts
+        if attention_mask is not None:
+            valid_lengths = attention_mask.sum(dim=1)
+            self._gen_st_idx = valid_lengths[0].item()
         else:
-            if attention_mask is not None:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-                max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-                mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
-            else:
-                position_ids = (
-                    torch.arange(input_ids.shape[1], device=input_ids.device)
-                    .view(1, 1, -1)
-                    .expand(3, input_ids.shape[0], -1)
-                )
-                mrope_position_deltas = torch.zeros(
-                    [input_ids.shape[0], 1],
-                    device=input_ids.device,
-                    dtype=input_ids.dtype,
-                )
+            self._gen_st_idx = seq_length
 
-            return position_ids, mrope_position_deltas
+        # mrope_position_deltas for pure text input
+        mrope_position_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=device)
+
+        return position_ids, mrope_position_deltas
 
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
@@ -1667,15 +1568,36 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
-        model_inputs["position_ids"] = None
+        device = input_ids.device
+        batch_size = input_ids.shape[0]
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
-        if not is_first_iteration and use_cache:
+        if past_length == 0:
+            model_inputs["position_ids"] = None
+            self._prompt_length = input_ids.shape[1]
+            self._gen_latent_h = image_grid_thw[-1, 1].item()
+            self._gen_latent_w = image_grid_thw[-1, 2].item()
+        else:
+            gen_st_idx = self.model._gen_st_idx
+            generated_vision_count = past_length - self._prompt_length
+            h_idx = generated_vision_count // self._gen_latent_w
+            w_idx = generated_vision_count % self._gen_latent_w
+            position_ids = torch.tensor(
+                [
+                    [[gen_st_idx]],
+                    [[gen_st_idx + h_idx]],
+                    [[gen_st_idx + w_idx]],
+                ],
+                dtype=torch.long,
+                device=device,
+            ).expand(-1, batch_size, -1)
+
+            model_inputs["position_ids"] = position_ids
+
+        if past_length > 0 and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
