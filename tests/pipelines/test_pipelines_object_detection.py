@@ -215,6 +215,39 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_batch_size_parameter(self):
+        # Regression test for issue #31356
+        # https://github.com/huggingface/transformers/issues/31356
+        # When using batch_size parameter, all images in batch should be processed
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        # Test with 4 images and batch_size=2
+        images = [
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+        ]
+
+        outputs = object_detector(images, threshold=0.0, batch_size=2)
+
+        # Should return results for all 4 images, not just the first
+        self.assertEqual(len(outputs), 4, "batch_size parameter should process all images")
+
+        # Each output should be a list of detections
+        for output in outputs:
+            self.assertIsInstance(output, list)
+            self.assertGreater(len(output), 0, "Each image should have detections")
+            for detection in output:
+                self.assertIn("score", detection)
+                self.assertIn("label", detection)
+                self.assertIn("box", detection)
+
+    @require_torch
     @slow
     def test_integration_torch_object_detection(self):
         model_id = "facebook/detr-resnet-50"
