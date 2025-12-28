@@ -21,14 +21,14 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...modeling_utils import PreTrainedModel
+from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging, torch_int
 from .configuration_flava import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -375,12 +375,9 @@ class FlavaTextEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -413,11 +410,11 @@ class FlavaTextEmbeddings(nn.Module):
 
         inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
         embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings += position_embeddings
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -446,7 +443,6 @@ class FlavaSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         batch_size, seq_length, _ = hidden_states.shape
@@ -480,10 +476,6 @@ class FlavaSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
@@ -519,35 +511,15 @@ class FlavaAttention(nn.Module):
         super().__init__()
         self.attention = FlavaSelfAttention(config)
         self.output = FlavaSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(
-            hidden_states, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -608,13 +580,11 @@ class FlavaLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -646,7 +616,6 @@ class FlavaEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -658,9 +627,7 @@ class FlavaEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -696,35 +663,28 @@ class FlavaPooler(nn.Module):
 class FlavaPreTrainedModel(PreTrainedModel):
     config: FlavaConfig
     base_model_prefix = "flava"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, FlavaMaskedPredictionHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, FlavaMaskedPredictionHead):
+            init.zeros_(module.bias)
         elif isinstance(module, FlavaImageEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
+        elif isinstance(module, FlavaTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
         elif isinstance(module, FlavaMultimodalModel):
             if module.use_cls_token:
-                module.cls_token.data.zero_()
+                init.zeros_(module.cls_token)
         elif isinstance(module, FlavaModel):
-            module.logit_scale.data.fill_(self.config.logit_scale_init_value)
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 @auto_docstring
@@ -733,6 +693,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
     # This override allows us to load FlavaImageModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.image_model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
     def __init__(self, config: FlavaImageConfig, add_pooling_layer: bool = True):
         r"""
@@ -757,14 +718,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.patch_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -772,10 +725,10 @@ class FlavaImageModel(FlavaPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -790,13 +743,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
@@ -804,7 +750,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -829,6 +774,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
     config: FlavaTextConfig
     # This override allows us to load FlavaTextModel from FlavaModel/FlavaForPreTraining checkpoints.
     base_model_prefix = "flava.text_model"
+    input_modalities = ("text",)
 
     def __init__(self, config: FlavaTextConfig, add_pooling_layer: bool = True):
         r"""
@@ -852,14 +798,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
@@ -867,10 +805,10 @@ class FlavaTextModel(FlavaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
@@ -898,12 +836,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=input_ids.device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, input_shape, input_ids.device
         )
@@ -917,7 +849,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -962,23 +893,15 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
 
         self.post_init()
 
-    def _prune_heads(self, heads_to_prune: dict[int, list[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         hidden_states (`torch.FloatTensor` of shape `(batch_size, image_num_patches + text_seq_len, hidden_size)`):
@@ -1000,12 +923,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, (batch_size, seq_length), hidden_states.device
         )
@@ -1013,7 +930,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1080,16 +996,14 @@ class FlavaModel(FlavaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_length)`):
@@ -1110,6 +1024,7 @@ class FlavaModel(FlavaPreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("{0}")
@@ -1118,35 +1033,29 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
         ... )
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```
         """
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
-
-        pooled_output = text_outputs[0]  # last_hidden_state
+        pooled_output = text_outputs.last_hidden_state
         text_features = self.text_projection(pooled_output)
 
         return text_features
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
@@ -1159,33 +1068,29 @@ class FlavaModel(FlavaPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, FlavaModel
+        >>> from transformers.image_utils import load_image
 
         >>> model = FlavaModel.from_pretrained("{0}")
         >>> processor = AutoProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```
         """
-        image_outputs = self.image_model(
+        image_outputs: BaseModelOutputWithPooling = self.image_model(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
         )
-
-        pooled_output = image_outputs[0]  # last_hidden_state
+        pooled_output = image_outputs.last_hidden_state
         image_features = self.image_projection(pooled_output)
 
         return image_features
@@ -1204,7 +1109,8 @@ class FlavaModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, FlavaOutput]:
+        **kwargs,
+    ) -> Union[tuple, FlavaModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, image_num_patches + text_seq_len)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -1399,9 +1305,10 @@ class FlavaImageCodebookLayerGroup(nn.Module):
     """
 )
 class FlavaImageCodebook(FlavaPreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     config: FlavaImageCodebookConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
     def __init__(
@@ -1480,7 +1387,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         z_logits = self.blocks(pixel_values)
         return nn.Softmax(dim=1)(z_logits)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> torch.Tensor:
         f"""
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1537,16 +1444,10 @@ class FlavaMaskedPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.transform = FlavaPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         if weight is not None:
             self.decoder.weight = weight
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, x):
         x = self.transform(x)
@@ -1614,12 +1515,12 @@ class FlavaGlobalContrastiveHead(nn.Module):
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
     # Those are linked to xxx.bias
-    _tied_weights_keys = [
-        "mmm_text_head.decoder.bias",
-        "mmm_image_head.decoder.bias",
-        "mlm_head.decoder.bias",
-        "mim_head.decoder.bias",
-    ]
+    _tied_weights_keys = {
+        "mmm_text_head.bias": "mmm_text_head.decoder.bias",
+        "mim_head.bias": "mim_head.decoder.bias",
+        "mlm_head.bias": "mlm_head.decoder.bias",
+        "mmm_image_head.bias": "mmm_image_head.decoder.bias",
+    }
 
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         r"""
@@ -1681,6 +1582,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`):

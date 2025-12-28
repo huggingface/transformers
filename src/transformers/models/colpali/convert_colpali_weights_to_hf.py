@@ -144,7 +144,15 @@ def convert_colpali_weights_to_hf(
 
     # Tie the weights (following ColPali's `__init__`` step)
     if model.vlm.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"vlm.language_model.{k}" for k in model.vlm.language_model._tied_weights_keys]
+        prefix = "vlm.language_model."
+        prefixed_mapping = {
+            f"{prefix}{target}": f"{prefix}{source}"
+            for target, source in model.vlm.language_model._tied_weights_keys.items()
+        }
+        if isinstance(model._tied_weights_keys, dict):
+            model._tied_weights_keys.update(prefixed_mapping)
+        else:
+            model._tied_weights_keys = prefixed_mapping
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())

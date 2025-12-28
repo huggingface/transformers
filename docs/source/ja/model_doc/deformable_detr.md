@@ -54,12 +54,6 @@ Deformable DETR の使用を開始するのに役立つ公式 Hugging Face お�
     - preprocess
     - post_process_object_detection
 
-## DeformableDetrFeatureExtractor
-
-[[autodoc]] DeformableDetrFeatureExtractor
-    - __call__
-    - post_process_object_detection
-
 ## DeformableDetrConfig
 
 [[autodoc]] DeformableDetrConfig

@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...modeling_outputs import ImageClassifierOutputWithNoAttention
@@ -45,6 +44,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
+    input_modalities = ("image", "text")
     _checkpoint_conversion_mapping = {
         "model.language_model.model": "model.model.language_model",
         "model.vision_tower": "model.model.vision_tower",
@@ -57,6 +57,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.yes_token_index = getattr(config, "yes_token_index", 10_784)
         self.no_token_index = getattr(config, "no_token_index", 3771)
         self.model = AutoModelForImageTextToText.from_config(config=config)
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.language_model.get_input_embeddings()
@@ -70,15 +71,6 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.model.language_model.set_output_embeddings(new_embeddings)
 
-    def set_decoder(self, decoder):
-        self.model.language_model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.model.language_model.tie_weights()
-
     @auto_docstring
     def forward(
         self,
@@ -86,7 +78,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Cache] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

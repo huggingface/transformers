@@ -71,7 +71,6 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "verbose": True,
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {},
     }
 
 
@@ -216,7 +215,7 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[in
 
     # Remove all spaces from num_ints
     num_ints = [float(num.strip()) for num in num_int_strs]
-    # scale to transformed image siz
+    # scale to transformed image size
     if len(num_ints) == 2:
         num_ints_translated = scale_point_to_transformed_image(x=num_ints[0], y=num_ints[1], scale_factor=scale_factor)
     elif len(num_ints) == 4:
@@ -338,19 +337,31 @@ class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
-    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`FuyuProcessor`] offers all the functionalities of [`FuyuImageProcessor`] and [`TokenizersBackend`]. See the
     [`~FuyuProcessor.__call__`] and [`~FuyuProcessor.decode`] for more information.
 
     Args:
         image_processor ([`FuyuImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
+        tokenizer ([`TokenizersBackend`]):
             The tokenizer is a required input.
     """
 
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FuyuImageProcessor"
-    tokenizer_class = "AutoTokenizer"
+    @classmethod
+    def _load_tokenizer_from_pretrained(
+        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
+    ):
+        """
+        Override for BC. Fuyu uses TokenizersBackend and requires token_type_ids to be removed from model_input_names
+        because Fuyu uses mm_token_type_ids instead for multimodal token identification.    `
+        """
+        from ...tokenization_utils_tokenizers import TokenizersBackend
+
+        tokenizer = TokenizersBackend.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        # Remove token_type_ids as Fuyu uses mm_token_type_ids instead
+        if "token_type_ids" in tokenizer.model_input_names:
+            tokenizer.model_input_names.remove("token_type_ids")
+        return tokenizer
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor=image_processor, tokenizer=tokenizer)
@@ -485,15 +496,13 @@ class FuyuProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to
+        and `kwargs` arguments to TokenizersBackend's [`~TokenizersBackend.__call__`] if `text` is not `None` to
         encode the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         FuyuImageProcessor's [`~FuyuImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
@@ -534,7 +543,6 @@ class FuyuProcessor(ProcessorMixin):
 
         if text is not None and images is None:
             logger.warning("You are processing a text with no associated image. Make sure it is intended.")
-            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             return text_encoding
 
@@ -561,7 +569,7 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
+        tensor_batch_images = torch.stack([img[0] for img in batch_images if img]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []

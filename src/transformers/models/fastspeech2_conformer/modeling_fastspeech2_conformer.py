@@ -21,6 +21,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -472,24 +474,47 @@ class FastSpeech2ConformerAttention(nn.Module):
 
 
 class FastSpeech2ConformerConvolutionModule(nn.Module):
-    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config=None):
+        """
+        Args:
+            config (FastSpeech2ConformerConfig): Configuration for the model.
+            module_config (dict): Configuration for the module (e.g., encoder or decoder).
+        """
         super().__init__()
-        # kernel_size should be an odd number for 'SAME' padding
         channels = config.hidden_size
-        kernel_size = module_config["kernel_size"]
-        self.pointwise_conv1 = nn.Conv1d(channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=True)
+        # kernel_size should be an odd number for 'SAME' padding
+        if module_config is None:
+            # e.g. using `ParakeetEncoderConfig` in src/transformers/models/parakeet/configuration_parakeet.py
+            kernel_size = config.conv_kernel_size
+            self.activation = ACT2FN[getattr(config, "hidden_act", "silu")]
+        else:
+            kernel_size = module_config["kernel_size"]
+            self.activation = ACT2FN[module_config.get("activation", "silu")]
+        self.padding = (kernel_size - 1) // 2
+        self.pointwise_conv1 = nn.Conv1d(
+            channels, 2 * channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
+        )
         self.depthwise_conv = nn.Conv1d(
-            channels, channels, kernel_size, stride=1, padding=(kernel_size - 1) // 2, groups=channels, bias=True
+            channels,
+            channels,
+            kernel_size,
+            stride=1,
+            padding=self.padding,
+            groups=channels,
+            bias=config.convolution_bias,
         )
         self.norm = nn.BatchNorm1d(channels)
-        self.pointwise_conv2 = nn.Conv1d(channels, channels, kernel_size=1, stride=1, padding=0, bias=True)
+        self.pointwise_conv2 = nn.Conv1d(
+            channels, channels, kernel_size=1, stride=1, padding=0, bias=config.convolution_bias
+        )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, attention_mask=None):
         """
         Compute convolution module.
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
+            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.
@@ -503,12 +528,18 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
         # (batch_size, channel, dim)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
+        # Apply padding mask before convolution
+        if attention_mask is not None:
+            if attention_mask.dtype == torch.bool:
+                all_masked_rows = torch.all(~attention_mask, dim=2)
+            else:
+                all_masked_rows = torch.all(~(attention_mask == 0.0), dim=2)
+            hidden_states = hidden_states.masked_fill(all_masked_rows, 0.0)
+
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.norm(hidden_states)
-
-        hidden_states = hidden_states * torch.sigmoid(hidden_states)
-
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
 
         return hidden_states.transpose(1, 2)
@@ -696,19 +727,20 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         self.embed_dim = config.hidden_size
         self.input_scale = math.sqrt(self.embed_dim)
         self.dropout = nn.Dropout(p=module_config["positional_dropout_rate"])
-        self.pos_enc = None
         self.max_len = 5000
-        self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len))
+        self.register_buffer(
+            "pos_enc", self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len)), persistent=False
+        )
 
-    def extend_pos_enc(self, x):
+    def extend_pos_enc(self, x, pos_enc=None):
         """Reset the positional encodings."""
-        if self.pos_enc is not None:
+        if pos_enc is not None:
             # self.pos_enc contains both positive and negative parts
             # the length of self.pos_enc is 2 * input_len - 1
-            if self.pos_enc.size(1) >= x.size(1) * 2 - 1:
-                if self.pos_enc.dtype != x.dtype or self.pos_enc.device != x.device:
-                    self.pos_enc = self.pos_enc.to(dtype=x.dtype, device=x.device)
-                return
+            if pos_enc.size(1) >= x.size(1) * 2 - 1:
+                if pos_enc.dtype != x.dtype or pos_enc.device != x.device:
+                    pos_enc = pos_enc.to(dtype=x.dtype, device=x.device)
+                return pos_enc
         # Suppose `i` means to the position of query vector and `j` means the
         # position of key vector. We use position relative positions when keys
         # are to the left (i>j) and negative relative positions otherwise (i<j).
@@ -729,7 +761,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         pos_enc_positive = torch.flip(pos_enc_positive, [0]).unsqueeze(0)
         pos_enc_negative = pos_enc_negative[1:].unsqueeze(0)
         pos_enc = torch.cat([pos_enc_positive, pos_enc_negative], dim=1)
-        self.pos_enc = pos_enc.to(device=x.device, dtype=x.dtype)
+        return pos_enc.to(device=x.device, dtype=x.dtype)
 
     def forward(self, feature_representation):
         """
@@ -740,7 +772,7 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         Returns:
             `torch.Tensor`: Encoded tensor (batch_size, time, `*`).
         """
-        self.extend_pos_enc(feature_representation)
+        self.pos_enc = self.extend_pos_enc(feature_representation, self.pos_enc)
         hidden_states = feature_representation * self.input_scale
         center_idx = self.pos_enc.size(1) // 2
         pos_emb = self.pos_enc[:, center_idx - hidden_states.size(1) + 1 : center_idx + hidden_states.size(1)]
@@ -964,27 +996,35 @@ class FastSpeech2ConformerPreTrainedModel(PreTrainedModel):
 
     main_input_name = "input_ids"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
+            init.normal_(module.weight, std=1.0 / math.sqrt(module.weight.size(1)))
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 key = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-key, b=key)
+                init.uniform_(module.bias, a=-key, b=key)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_()
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, FastSpeech2ConformerAttention):
-            nn.init.xavier_uniform_(module.pos_bias_u)
-            nn.init.xavier_uniform_(module.pos_bias_v)
+            init.xavier_uniform_(module.pos_bias_u)
+            init.xavier_uniform_(module.pos_bias_v)
+        elif isinstance(module, FastSpeech2ConformerRelPositionalEncoding):
+            init.copy_(module.pos_enc, module.extend_pos_enc(torch.tensor(0.0).expand(1, module.max_len)))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, FastSpeech2ConformerEncoder):
@@ -1088,6 +1128,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1376,12 +1417,11 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FastSpeech2ConformerHifiGan):
+            init.zeros_(module.mean)
+            init.ones_(module.scale)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -1410,7 +1450,7 @@ class FastSpeech2ConformerHifiGan(PreTrainedModel):
         waveform.
         """
     )
-    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         spectrogram (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
@@ -1469,6 +1509,8 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
 
         self.config = config
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
@@ -1484,6 +1526,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

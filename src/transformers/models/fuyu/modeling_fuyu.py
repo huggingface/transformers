@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache
@@ -36,6 +35,7 @@ logger = logging.get_logger(__name__)
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
     base_model_prefix = "fuyu"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -43,17 +43,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 @auto_docstring(
@@ -82,12 +71,6 @@ class FuyuModel(FuyuPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def gather_continuous_embeddings(
         self,
@@ -151,7 +134,7 @@ class FuyuModel(FuyuPreTrainedModel):
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -174,9 +157,10 @@ class FuyuModel(FuyuPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -256,7 +240,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         "^vision_embed_tokens": "model.vision_embed_tokens",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
@@ -270,19 +254,14 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches_indices: torch.Tensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches: Optional[torch.Tensor] = None,
+        image_patches_indices: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -380,6 +359,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches=None,
         image_patches_indices=None,
         cache_position=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -392,10 +372,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
             cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and kwargs.get("use_cache", True):
             # set image_patches and image_patches_indices to `None` for decoding stage
             model_inputs["image_patches_indices"] = None
             model_inputs["image_patches"] = None

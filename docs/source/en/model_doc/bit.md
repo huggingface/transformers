@@ -36,6 +36,7 @@ The original code can be found [here](https://github.com/google-research/big_tra
 ## Usage tips
 
 - BiT models are equivalent to ResNetv2 in terms of architecture, except that: 1) all batch normalization layers are replaced by [group normalization](https://huggingface.co/papers/1803.08494),
+
 2) [weight standardization](https://huggingface.co/papers/1903.10520) is used for convolutional layers. The authors show that the combination of both is useful for training with large batch sizes, and has a significant
 impact on transfer learning.
 

@@ -15,8 +15,9 @@
 """PyTorch SAM model."""
 
 import collections
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -25,16 +26,13 @@ from torch import Tensor, nn
 
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
@@ -148,34 +146,30 @@ class SamMLPBlock(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->Sam
-class SamLayerNorm(nn.Module):
+class SamLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 def eager_attention_forward(
@@ -266,7 +260,7 @@ class SamAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -554,7 +548,7 @@ class SamMaskDecoder(nn.Module):
 class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.scale = config.hidden_size // 2
+        self.scale = config.scale
         self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
@@ -851,16 +845,9 @@ class SamVisionSdpaAttention(SamVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`SamVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-            )
-
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -1012,19 +999,23 @@ class SamPreTrainedModel(PreTrainedModel):
     config: SamConfig
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["SamVisionAttention"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):
             if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
         elif isinstance(module, SamVisionEncoder):
             if self.config.use_abs_pos:
-                module.pos_embed.data.zero_()
+                init.zeros_(module.pos_embed)
+        elif isinstance(module, SamPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class SamVisionEncoder(SamPreTrainedModel):
@@ -1059,11 +1050,12 @@ class SamVisionEncoder(SamPreTrainedModel):
         self.neck = SamVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> SamVisionEncoderOutput:
@@ -1114,9 +1106,7 @@ class SamVisionModel(SamPreTrainedModel):
     """
 )
 class SamModel(SamPreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamTwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: SamConfig):
@@ -1128,13 +1118,7 @@ class SamModel(SamPreTrainedModel):
         # The module using it is not a PreTrainedModel subclass so we need this
         config.mask_decoder_config._attn_implementation = config._attn_implementation
         self.mask_decoder = SamMaskDecoder(config.mask_decoder_config)
-
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

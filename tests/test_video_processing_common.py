@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.video_utils import VideoMetadata
 
 
 if is_torch_available():
@@ -165,6 +166,35 @@ class VideoProcessingTestMixin:
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class()
             self.assertIsNotNone(video_processor)
+
+    def test_video_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = None
+        for attr in ["do_resize", "do_rescale", "do_normalize"]:
+            if getattr(self.fast_video_processing_class, attr, None) is not None:
+                test_attr = attr
+                break
+
+        if test_attr is None:
+            self.skipTest("Could not find a suitable attribute to test")
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.video_processor_dict.copy()
+        kwargs[test_attr] = None
+        video_processor = self.fast_video_processing_class(**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, video_processor.to_dict())
+        self.assertIsNone(video_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor.save_pretrained(tmpdirname)
+            reloaded = self.fast_video_processing_class.from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")
 
     @slow
     @require_torch_accelerator
@@ -327,8 +357,8 @@ class VideoProcessingTestMixin:
 
             # Sample with `fps` requires metadata to infer number of frames from total duration
             with self.assertRaises(ValueError):
-                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
-                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
+                metadata = VideoMetadata(**{"total_num_frames": 8})
+                video_processing.sample_frames(metadata=metadata, fps=3)
 
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
             batched_metadata = metadata * len(video_inputs)
@@ -340,6 +370,13 @@ class VideoProcessingTestMixin:
             )[self.input_name]
             self.assertEqual(encoded_videos.shape[1], 6)
             self.assertEqual(encoded_videos_batched.shape[1], 6)
+
+            # The same as above but uses a `VideoMetadata` object in the input
+            metadata = [[VideoMetadata(duration=2.0, total_num_frames=8, fps=4)]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
 
             # We should raise error when asked to sample more frames than there are in input video
             with self.assertRaises(ValueError):
@@ -390,8 +427,8 @@ class VideoProcessingTestMixin:
                 video_inputs[0],
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=0.0,
+                image_std=1.0,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             if video_processor.do_convert_rgb:
@@ -404,8 +441,8 @@ class VideoProcessingTestMixin:
                 video_inputs,
                 return_tensors="pt",
                 input_data_format="channels_last",
-                image_mean=0,
-                image_std=1,
+                image_mean=0.0,
+                image_std=1.0,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             if video_processor.do_convert_rgb:

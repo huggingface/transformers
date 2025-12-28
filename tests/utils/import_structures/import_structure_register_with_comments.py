@@ -30,27 +30,27 @@ def b0():
     pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 # That's a statement
 class B1:
     def __init__(self):
         pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 # That's a statement
 def b1():
     pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 # That's a statement
 class B2:
     def __init__(self):
         pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 # That's a statement
 def b2():
     pass
@@ -59,7 +59,6 @@ def b2():
 @requires(
     backends=(
         "torch",
-        "tf"
     )
 )
 # That's a statement
@@ -71,7 +70,6 @@ class B3:
 @requires(
     backends=(
         "torch",
-        "tf"
     )
 )
 # That's a statement

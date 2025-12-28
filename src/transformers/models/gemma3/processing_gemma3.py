@@ -20,21 +20,12 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import to_py_obj
 
 
-class Gemma3ImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-    do_convert_rgb: Optional[bool]
-
-
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -51,10 +42,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Gemma3Processor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -79,10 +66,8 @@ class Gemma3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos=None,
-        audio=None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None:
@@ -101,8 +86,9 @@ class Gemma3Processor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
-            image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
             # Create empty text to be replaced with placeholders
             if not text:

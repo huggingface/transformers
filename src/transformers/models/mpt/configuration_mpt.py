@@ -16,14 +16,14 @@
 
 from typing import Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MptAttentionConfig(PretrainedConfig):
+class MptAttentionConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
     attention layers according to the specified arguments, defining the layers architecture. Instantiating a
@@ -31,8 +31,8 @@ class MptAttentionConfig(PretrainedConfig):
     [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture. Most of the arguments are kept for backward
     compatibility with previous MPT models that are hosted on the Hub (previously with `trust_remote_code=True`).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
@@ -96,15 +96,15 @@ class MptAttentionConfig(PretrainedConfig):
             )
 
 
-class MptConfig(PretrainedConfig):
+class MptConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to the Mpt-7b architecture
     [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

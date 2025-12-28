@@ -39,6 +39,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -47,6 +48,21 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class TvpImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_flip_channel_order (`bool`, *optional*):
+        Whether to flip the channel order of the image from RGB to BGR.
+    constant_values (`float` or `List[float]`, *optional*):
+        Value used to fill the padding area when `pad_mode` is `'constant'`.
+    pad_mode (`str`, *optional*):
+        Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
+    """
+
+    do_flip_channel_order: bool
+    constant_values: Optional[Union[float, list[float]]]
+    pad_mode: Optional[str]
 
 
 # Copied from transformers.models.vivit.image_processing_vivit.make_batched
@@ -133,6 +149,7 @@ class TvpImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = TvpImageProcessorKwargs
 
     def __init__(
         self,
@@ -269,7 +286,7 @@ class TvpImageProcessor(BaseImageProcessor):
         image: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -277,7 +294,7 @@ class TvpImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         pad_size: Optional[dict[str, int]] = None,
         constant_values: Optional[Union[float, Iterable[float]]] = None,
-        pad_mode: PaddingMode = None,
+        pad_mode: Optional[PaddingMode] = None,
         do_normalize: Optional[bool] = None,
         do_flip_channel_order: Optional[bool] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
@@ -294,8 +311,6 @@ class TvpImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_pad=do_pad,
-            size_divisibility=pad_size,  # here the pad() method simply requires the pad_size argument.
             do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_resize=do_resize,
@@ -343,7 +358,7 @@ class TvpImageProcessor(BaseImageProcessor):
         videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -351,7 +366,7 @@ class TvpImageProcessor(BaseImageProcessor):
         do_pad: Optional[bool] = None,
         pad_size: Optional[dict[str, int]] = None,
         constant_values: Optional[Union[float, Iterable[float]]] = None,
-        pad_mode: PaddingMode = None,
+        pad_mode: Optional[PaddingMode] = None,
         do_normalize: Optional[bool] = None,
         do_flip_channel_order: Optional[bool] = None,
         image_mean: Optional[Union[float, list[float]]] = None,
@@ -401,10 +416,8 @@ class TvpImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -439,10 +452,7 @@ class TvpImageProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         if not valid_images(videos):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         videos = make_batched(videos)
 

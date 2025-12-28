@@ -2,17 +2,16 @@ import inspect
 import types
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
     add_end_docstrings,
-    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
     logging,
@@ -23,18 +22,11 @@ from .base import ArgumentHandler, ChunkPipeline, build_pipeline_init_args
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
-    from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
     if is_tokenizers_available():
         import tokenizers
 
-if is_tf_available():
-    import tensorflow as tf
-
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-
-    Dataset = None
 
 if is_torch_available():
     import torch
@@ -94,10 +86,10 @@ def decode_spans(
 
 
 def select_starts_ends(
-    start,
-    end,
-    p_mask,
-    attention_mask,
+    start: np.ndarray,
+    end: np.ndarray,
+    p_mask: np.ndarray,
+    attention_mask: np.ndarray,
     min_null_score=1000000,
     top_k=1,
     handle_impossible_answer=False,
@@ -265,10 +257,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: "PreTrainedModel",
         tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
+        modelcard: ModelCard | None = None,
         task: str = "",
         **kwargs,
     ):
@@ -276,22 +267,15 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
-            framework=framework,
             task=task,
             **kwargs,
         )
 
         self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES)
 
     @staticmethod
-    def create_sample(
-        question: Union[str, list[str]], context: Union[str, list[str]]
-    ) -> Union[SquadExample, list[SquadExample]]:
+    def create_sample(question: str | list[str], context: str | list[str]) -> SquadExample | list[SquadExample]:
         """
         QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
         logic for converting question(s) and context(s) to [`SquadExample`].
@@ -344,7 +328,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len})")
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
@@ -503,16 +487,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
             for k, v in feature.__dict__.items():
                 if k in model_input_names:
-                    if self.framework == "tf":
-                        tensor = tf.constant(v)
-                        if tensor.dtype == tf.int64:
-                            tensor = tf.cast(tensor, tf.int32)
-                        fw_args[k] = tf.expand_dims(tensor, 0)
-                    elif self.framework == "pt":
-                        tensor = torch.tensor(v)
-                        if tensor.dtype == torch.int32:
-                            tensor = tensor.long()
-                        fw_args[k] = tensor.unsqueeze(0)
+                    tensor = torch.tensor(v)
+                    if tensor.dtype == torch.int32:
+                        tensor = tensor.long()
+                    fw_args[k] = tensor.unsqueeze(0)
                 else:
                     others[k] = v
 
@@ -523,7 +501,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
         # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
-        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        model_forward = self.model.forward
         if "use_cache" in inspect.signature(model_forward).parameters:
             model_inputs["use_cache"] = False
         output = self.model(**model_inputs)
@@ -544,7 +522,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+            if output["start"].dtype == torch.bfloat16:
                 start_ = output["start"].to(torch.float32)
                 end_ = output["end"].to(torch.float32)
             else:
@@ -639,7 +617,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             return answers[0]
         return answers
 
-    def get_answer(self, answers: list[dict], target: str) -> Optional[dict]:
+    def get_answer(self, answers: list[dict], target: str) -> dict | None:
         for answer in answers:
             if answer["answer"].lower() == target.lower():
                 return answer
@@ -663,7 +641,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_index = enc.offsets[e][1]
         return start_index, end_index
 
-    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, Union[str, int]]:
+    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, str | int]:
         """
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 
@@ -678,7 +656,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         words = []
         token_idx = char_start_idx = char_end_idx = chars_idx = 0
 
-        for i, word in enumerate(text.split(" ")):
+        for word in text.split(" "):
             token = self.tokenizer.tokenize(word)
 
             # Append words if they are in the span

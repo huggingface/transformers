@@ -19,11 +19,12 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...integrations.hub_kernels import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -31,33 +32,10 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_mamba2 import Mamba2Config
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_mamba_2_ssm_available():
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
-else:
-    mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined, selective_state_update = None, None, None
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_update, causal_conv1d_fn = None, None
-
-is_fast_path_available = all(
-    (
-        selective_state_update,
-        mamba_chunk_scan_combined,
-        mamba_split_conv1d_scan_combined,
-        causal_conv1d_fn,
-        causal_conv1d_update,
-    )
-)
 
 
 # Helper methods for segment sum computation
@@ -118,6 +96,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
+    # NOTE: attention mask is a 2D boolean tensor
     if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
@@ -279,17 +258,37 @@ class Mamba2Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.A_log._no_weight_decay = True
         self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
         self.D = nn.Parameter(torch.ones(self.num_heads))
-        self.D._no_weight_decay = True
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
+        global causal_conv1d_update, causal_conv1d_fn
+        causal_conv1d = lazy_load_kernel("causal-conv1d")
+        causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
+        causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
+
+        global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update = getattr(mamba_ssm, "selective_state_update", None)
+        mamba_chunk_scan_combined = getattr(mamba_ssm, "mamba_chunk_scan_combined", None)
+        mamba_split_conv1d_scan_combined = getattr(mamba_ssm, "mamba_split_conv1d_scan_combined", None)
+
+        global is_fast_path_available
+        is_fast_path_available = all(
+            (
+                selective_state_update,
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+                causal_conv1d_fn,
+                causal_conv1d_update,
+            )
+        )
+
         if not is_fast_path_available:
             logger.warning_once(
-                "The fast path is not available because on of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
+                "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
@@ -719,6 +718,7 @@ class Mamba2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         std = self.config.initializer_range
@@ -726,10 +726,8 @@ class Mamba2PreTrainedModel(PreTrainedModel):
             # S4D real initialization. These are not discretized!
             # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
             A = torch.arange(1, self.config.num_heads + 1)
-            module.A_log.copy_(torch.log(A))
-            module.A_log._no_weight_decay = True
-            module.D._no_weight_decay = True
-            module.D.data.fill_(1.0)
+            init.copy_(module.A_log, torch.log(A))
+            init.ones_(module.D)
 
             dt = torch.exp(
                 torch.rand(self.config.num_heads)
@@ -739,14 +737,12 @@ class Mamba2PreTrainedModel(PreTrainedModel):
 
             # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            module.dt_bias.copy_(inv_dt)
-            module.dt_bias._no_reinit = True
+            init.copy_(module.dt_bias, inv_dt)
 
-            nn.init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
             if module.conv1d.bias is not None:
-                if not getattr(module.conv1d.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.conv1d.bias)
-            nn.init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
+                init.zeros_(module.conv1d.bias)
+            init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
 
             if self.config.rescale_prenorm_residual:
                 # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
@@ -763,15 +759,13 @@ class Mamba2PreTrainedModel(PreTrainedModel):
                 p /= math.sqrt(self.config.num_hidden_layers)
 
         if isinstance(module, nn.Linear):
-            if not getattr(module.weight, "_no_reinit", False):
-                nn.init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, (Mamba2RMSNorm, MambaRMSNormGated)):
-            module.weight.data.fill_(1.0)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, std=std)
+            init.normal_(module.weight, std=std)
 
 
 @dataclass
@@ -938,7 +932,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     """
 )
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = []
+    _tied_weights_keys = {}
 
     def __init__(self, config):
         super().__init__(config)
@@ -961,6 +955,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         cache_params: Optional[Mamba2Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
@@ -993,6 +988,12 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
                 "attention_mask": attention_mask,
             }
         )
+
+        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        for key, value in kwargs.items():
+            if key not in model_inputs:
+                model_inputs[key] = value
+
         return model_inputs
 
     @auto_docstring
@@ -1007,6 +1008,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,  # for now we need this for generation and loss_function
     ) -> Union[tuple, Mamba2CausalLMOutput]:
         r"""
@@ -1035,9 +1037,11 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             attention_mask=attention_mask,
         )
-        hidden_states = mamba2_outputs[0]
 
-        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
+        hidden_states = mamba2_outputs[0]
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:

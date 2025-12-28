@@ -151,22 +151,11 @@ pip install transformers datasets evaluate seqeval
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`].من الأفضل استخدام *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بالكامل إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorForTokenClassification
 
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DataCollatorForTokenClassification
-
->>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## التقييم(Evaluate)
 
@@ -246,8 +235,6 @@ pip install transformers datasets evaluate seqeval
 ... }
 ```
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 إذا لم تكن على دراية بتعديل نموذج باستخدام [`Trainer`], ألق نظرة على الدليل التعليمي الأساسي [هنا](../training#train-with-pytorch-trainer)!
@@ -302,101 +289,6 @@ pip install transformers datasets evaluate seqeval
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن على دراية بتعديل نموذج باستخدام Keras، ألق نظرة على الدليل التعليمي الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-للتعديل على نموذج في TensorFlow، ابدأ بإعداد دالة محسن، وجدول معدل التعلم، وبعض معلمات التدريب:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_train_epochs = 3
->>> num_train_steps = (len(tokenized_wnut["train"]) // batch_size) * num_train_epochs
->>> optimizer, lr_schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_train_steps=num_train_steps,
-...     weight_decay_rate=0.01,
-...     num_warmup_steps=0,
-... )
-```
-
-ثم يمكنك تحميل DistilBERT مع [`TFAutoModelForTokenClassification`] إلى جانب عدد التسميات المتوقعة، وتخطيطات التسميات:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained(
-...     "distilbert/distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
-... )
-```
-
-قم بتحويل مجموعات بياناتك إلى تنسيق `tf.data.Dataset` مع [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_wnut["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_wnut["validation"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-هيّئ النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن نماذج Transformers تتضمن دالة خسارة افتراضية مرتبطة بالمهمة، لذلك لا تحتاج إلى تحديد واحدة إلا إذا كنت ترغب في ذلك:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # No loss argument!
-```
-
-آخر أمرين يجب إعدادهما قبل بدء التدريب هو حساب درجات seqeval من التنبؤات، وتوفير طريقة لدفع نموذجك إلى Hub. يتم ذلك باستخدام [Keras callbacks](../main_classes/keras_callbacks).
-
-مرر دالة `compute_metrics` الخاصة بك إلى [`~transformers.KerasMetricCallback`]:
-
-```py
->>> from transformers.keras_callbacks import KerasMetricCallback
-
->>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
-```
-
-حدد مكان دفع نموذجك والمحلل اللغوي في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> push_to_hub_callback = PushToHubCallback(
-...     output_dir="my_awesome_wnut_model",
-...     tokenizer=tokenizer,
-... )
-```
-
-ثم جمّع callbacks الخاصة بك معًا:
-
-```py
->>> callbacks = [metric_callback, push_to_hub_callback]
-```
-
-أخيرًا، أنت جاهز الآن لبدء تدريب نموذجك! قم باستدعاء [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع بيانات التدريب والتحقق، وعدد الحقبات، وcallbacks لتعديل النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -457,8 +349,6 @@ pip install transformers datasets evaluate seqeval
 
 يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
 
-<frameworkcontent>
-<pt>
 قسّم النص إلى رموز وأرجع المُوتّرات بلغة PyTorch:
 
 ```py
@@ -502,49 +392,3 @@ pip install transformers datasets evaluate seqeval
  'O',
  'O']
 ```
-</pt>
-<tf>
-قسّم النص إلى رموز وأرجع المُوتّرات ب TensorFlow:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> inputs = tokenizer(text, return_tensors="tf")
-```
-
-مرر مدخلاتك إلى النموذج واحصل على `logits`:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("stevhliu/my_awesome_wnut_model")
->>> logits = model(**inputs).logits
-```
-
-استخرج الفئة ذات الاحتمالية الأعلى، واستخدم جدول `id2label` الخاصة بالنموذج لتحويلها إلى تسمية نصية:
-
-```py
->>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
->>> predicted_token_class = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
->>> predicted_token_class
-['O',
- 'O',
- 'B-location',
- 'I-location',
- 'B-group',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'O',
- 'B-location',
- 'B-location',
- 'O',
- 'O']
-```
-</tf>
-</frameworkcontent>

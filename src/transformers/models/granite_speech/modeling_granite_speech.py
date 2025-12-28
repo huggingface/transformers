@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
@@ -46,16 +47,15 @@ class GraniteSpeechCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -282,27 +282,23 @@ class GraniteSpeechCTCEncoder(nn.Module):
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechConfig
+    input_modalities = ("audio", "text")
 
     _supports_flash_attn = False  # `blip_2_qformer` dependency does not allow for this
     _supports_sdpa = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        std = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
-        elif isinstance(module, GraniteSpeechEncoderProjector):
-            module.query.data.normal_()
+        super()._init_weights(module)
+        if isinstance(module, GraniteSpeechEncoderProjector):
+            init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
 
 
 @auto_docstring(
@@ -319,9 +315,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         # model; don't need to consider it twice
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
-        if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
-
         self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
         self.projector = GraniteSpeechEncoderProjector(config)
 
@@ -334,6 +327,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         self.post_init()
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
@@ -356,8 +355,8 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         input_features_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -471,6 +470,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
@@ -482,13 +482,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # If we're in cached decoding stage, input_features should be None because
         # input ids do not contain special audio token anymore Otherwise we need
         # input feature values to be passed to the model
-        if cache_position[0] == 0:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
         return model_inputs
 
@@ -552,20 +553,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         self._hf_peft_config_loaded = False
         super().save_pretrained(save_directory, *args, **kwargs)
         self._hf_peft_config_loaded = prev_val
-
-    @staticmethod
-    def _fix_state_dict_key_on_save(key) -> tuple[str, bool]:
-        # save the model with the original weights format
-        return key.replace(".base_layer", ""), False
-
-    def _fix_state_dict_keys_on_save(self, state_dict):
-        if is_peft_available and self._hf_peft_config_loaded:
-            # state dict is only adapter, should keep the same
-            return state_dict
-        # rename back the base model state dict
-        return {
-            self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items() if ".lora_" not in key
-        }
 
     def _get_adapter_name(self):
         return list(self.peft_config.keys())[0]

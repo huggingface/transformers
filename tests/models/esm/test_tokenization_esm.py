@@ -16,14 +16,11 @@
 import os
 import tempfile
 import unittest
-from functools import lru_cache
 
 from transformers.models.esm.tokenization_esm import VOCAB_FILES_NAMES, EsmTokenizer
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_python import PreTrainedTokenizer
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-
-from ...test_tokenization_common import use_cache_if_possible
 
 
 @require_tokenizers
@@ -44,8 +41,6 @@ class ESMTokenizationTest(unittest.TestCase):
         return [cls.get_tokenizer(**kwargs)]
 
     @classmethod
-    @use_cache_if_possible
-    @lru_cache(maxsize=64)
     def get_tokenizer(cls, pretrained_name=None, **kwargs) -> PreTrainedTokenizer:
         pretrained_name = pretrained_name or cls.tmpdirname
         return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
@@ -106,13 +101,13 @@ class ESMTokenizationTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.add_special_tokens({}), 0)
         self.assertEqual(tokenizer.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
-        self.assertRaises(AssertionError, tokenizer.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
+        self.assertRaises(ValueError, tokenizer.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
         self.assertEqual(tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
         self.assertEqual(
             tokenizer.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
         )
-        self.assertIn("<testtoken3>", tokenizer.special_tokens_map["additional_special_tokens"])
-        self.assertIsInstance(tokenizer.special_tokens_map["additional_special_tokens"], list)
-        self.assertGreaterEqual(len(tokenizer.special_tokens_map["additional_special_tokens"]), 2)
+        self.assertIn("<testtoken3>", tokenizer.extra_special_tokens)
+        self.assertIsInstance(tokenizer.extra_special_tokens, list)
+        self.assertEqual(len(tokenizer.extra_special_tokens), 2)
 
         self.assertEqual(len(tokenizer), vocab_size + 8)

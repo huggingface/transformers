@@ -16,10 +16,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     get_max_height_width,
     group_images_by_shape,
     reorder_images,
@@ -28,41 +30,13 @@ from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILIma
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
+from .image_processing_vilt import ViltImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset
 MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
-
-
-class ViltFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    Args:
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image. If `True`, will pad the images in the batch to the largest height and width
-            in the batch. Padding will be applied to the bottom and right with zeros.
-        size_divisor (`int`, *optional*, defaults to 32):
-            The size to make the height and width divisible by.
-        rescale_factor (`float`, *optional*, defaults to 1/255):
-            The factor to rescale the image by.
-    """
-
-    do_pad: Optional[bool]
-    size_divisor: Optional[int]
-    rescale_factor: Optional[float]
 
 
 @auto_docstring
@@ -78,7 +52,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = ViltFastImageProcessorKwargs
+    valid_kwargs = ViltImageProcessorKwargs
 
     def _preprocess(
         self,

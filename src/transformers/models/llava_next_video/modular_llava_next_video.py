@@ -25,12 +25,13 @@ from transformers.models.llava_next.modeling_llava_next import (
     LlavaNextModel,
     LlavaNextModelOutputWithPast,
     LlavaNextMultiModalProjector,
+    LlavaNextPreTrainedModel,
     TransformersKwargs,
     image_size_to_num_patches,
 )
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -40,14 +41,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class LlavaNextVideoConfig(PretrainedConfig):
+class LlavaNextVideoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaNextVideoForConditionalGeneration`]. It is used to instantiate an
     Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the [llava-hf/LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf)
     model.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
@@ -71,8 +72,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         video_token_index (`int`, *optional*, defaults to 32000):
             The video token index to encode the image prompt.
         spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
@@ -120,7 +119,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
@@ -177,14 +175,19 @@ class LlavaNextVideoConfig(PretrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
+
+        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
+        # though it concerns the main model, while it was set to False by default in the main model... So we hardcode a fix here
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = True
+            self.text_config.tie_word_embeddings = False
 
 
 class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -206,8 +209,7 @@ class LlavaNextVideoCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -258,6 +260,10 @@ class LlavaNextVideoPooler(nn.Module):
 
 class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
     pass
+
+
+class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
+    input_modalities = ("image", "video", "text")
 
 
 class LlavaNextVideoModel(LlavaNextModel):
@@ -329,8 +335,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -354,7 +358,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, list[int]]`, *optiona;*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional;*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -388,8 +392,6 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_features = selected_video_features[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_features = selected_video_features
 
         # Same as image features except that video has pooling layer
         video_features = self.vision_resampler(selected_video_features)
@@ -401,11 +403,11 @@ class LlavaNextVideoModel(LlavaNextModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -439,9 +441,9 @@ class LlavaNextVideoModel(LlavaNextModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -544,9 +546,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -691,6 +693,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- extra custom processing
@@ -702,12 +705,15 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
-        if cache_position[0] == 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["image_sizes"] = image_sizes
@@ -719,5 +725,5 @@ __all__ = [
     "LlavaNextVideoConfig",
     "LlavaNextVideoForConditionalGeneration",
     "LlavaNextVideoModel",
-    "LlavaNextVideoPreTrainedModel",  # noqa: F822
+    "LlavaNextVideoPreTrainedModel",
 ]

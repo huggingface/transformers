@@ -27,7 +27,6 @@ rendered properly in your Markdown viewer.
 
 Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
 
-
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
 It supports the following languages: English, French, German, Italian, Portuguese, Spanish.
 
@@ -36,21 +35,18 @@ It supports the following languages: English, French, German, Italian, Portugues
 - **Language(s) (NLP):** English, French, German, Italian, Portuguese, Spanish
 - **License:** CC-BY 4.0
 
-
-
-
 ## Evaluation
 
 <!-- This section describes the evaluation protocols and provides the results. -->
 
-#### Testing Data
+### Testing Data
 
 <!-- This should link to a Dataset Card if possible. -->
 
-The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA, 
+The model was evaluated on MMLU, TriviaQA, NaturalQuestions, ARC Easy & Challenge, Open Book QA, Common Sense QA,
 Physical Interaction QA, Social Interaction QA, HellaSwag, WinoGrande, Multilingual Knowledge QA, FLORES 200.
 
-#### Metrics
+### Metrics
 
 <!-- These are the evaluation metrics being used, ideally with a description of why. -->
 
@@ -92,7 +88,6 @@ We report BLEU on FLORES.
 || HS | 58.6 | 40.8 | 60.5 | 61.1 | 51.4 |
 || MKQA | 16.0 | 7.9 | 18.5 | 20.6 | 10.6 |
 
-
 ## Technical Specifications
 
 ### Model Architecture and Objective
@@ -110,12 +105,11 @@ Tips:
 
 - This model was contributed by [Laurent Mazare](https://huggingface.co/lmz)
 
-  
 ## Usage tips
 
 `Helium` can be found on the [Huggingface Hub](https://huggingface.co/models?other=helium)
 
-In the following, we demonstrate how to use `helium-1-preview` for the inference. 
+In the following, we demonstrate how to use `helium-1-preview` for the inference.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer

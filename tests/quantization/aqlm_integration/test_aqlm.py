@@ -26,22 +26,19 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
     require_aqlm,
-    require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_accelerator,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_aqlm_available, is_torch_available
+from transformers.utils import is_aqlm_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
-
-@require_torch_gpu
+@require_torch_accelerator
 class AqlmConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
@@ -72,7 +69,7 @@ class AqlmConfigTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_aqlm
 @require_accelerate
 class AqlmTest(unittest.TestCase):
@@ -112,7 +109,7 @@ class AqlmTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = AqlmConfig()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -129,7 +126,7 @@ class AqlmTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_aqlm_linear)
 
         # Try with `linear_weights_not_to_quantize`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_aqlm_linear(
@@ -180,7 +177,7 @@ class AqlmTest(unittest.TestCase):
     @skip(
         "inference doesn't work with quantized aqlm models using torch.Any type with recent torch versions. Waiting for the fix from AQLM side"
     )
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_quantized_model_multi_gpu(self):
         """
         Simple test that checks if the quantized model is working properly with multiple GPUs
@@ -225,7 +222,9 @@ class AqlmTest(unittest.TestCase):
 
         # Setup static KV cache for generation
         past_key_values = StaticCache(
-            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
+            config=self.quantized_model.config,
+            batch_size=input_ids.shape[0],
+            max_cache_len=seq_length + self.max_new_tokens + 1,
         )
 
         # Allocate token ids to be generated and copy prefix ids

@@ -17,9 +17,8 @@ import copy
 import unittest
 
 import requests
-from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
@@ -76,7 +75,7 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
-        vq_channel_multiplier=[1, 4],
+        vq_channel_multiplier=[1, 2],
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -205,9 +204,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
@@ -220,43 +216,8 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = ChameleonModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = ChameleonModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
         pass
 
 
@@ -285,18 +246,16 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 
 @require_torch
-class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-text-to-text": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
@@ -321,8 +280,8 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip("Chameleon VQ model cannot be squishes more due to hardcoded layer params in model code")
-    def test_model_is_small(self):
+    @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
     @unittest.skip("Chameleon applies key/query norm which doesn't work with packing")
@@ -342,6 +301,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)  # the below tests modify dict in-place
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
@@ -371,7 +331,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -401,7 +361,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
@@ -448,7 +408,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b", load_in_4bit=True, device_map="auto"
+            "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
         )
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 

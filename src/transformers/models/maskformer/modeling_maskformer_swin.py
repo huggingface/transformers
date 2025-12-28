@@ -19,17 +19,18 @@ states before downsampling, which is different from the default Swin Transformer
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import meshgrid
 from ...utils import auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -107,11 +108,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -335,18 +331,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
         )
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", self.create_relative_position_index())
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -358,7 +343,6 @@ class MaskFormerSwinSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -397,10 +381,6 @@ class MaskFormerSwinSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -409,6 +389,20 @@ class MaskFormerSwinSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_relative_position_index(self):
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+        return relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->MaskFormerSwin
@@ -431,34 +425,14 @@ class MaskFormerSwinAttention(nn.Module):
         super().__init__()
         self.self = MaskFormerSwinSelfAttention(config, dim, num_heads, window_size)
         self.output = MaskFormerSwinSelfOutput(config, dim)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -537,13 +511,13 @@ class MaskFormerSwinLayer(nn.Module):
 
     def maybe_pad(self, hidden_states, height, width):
         pad_left = pad_top = 0
-        pad_rigth = (self.window_size - width % self.window_size) % self.window_size
+        pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = (0, 0, pad_left, pad_rigth, pad_top, pad_bottom)
+        pad_values = (0, 0, pad_left, pad_right, pad_top, pad_bottom)
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
-    def forward(self, hidden_states, input_dimensions, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, input_dimensions, output_attentions=False):
         height, width = input_dimensions
         batch_size, dim, channels = hidden_states.size()
         shortcut = hidden_states
@@ -567,9 +541,7 @@ class MaskFormerSwinLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
-        self_attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
-        )
+        self_attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
         attention_output = self_attention_outputs[0]
 
@@ -631,9 +603,7 @@ class MaskFormerSwinStage(GradientCheckpointingLayer):
 
         self.pointing = False
 
-    def forward(
-        self, hidden_states, input_dimensions, head_mask=None, output_attentions=False, output_hidden_states=False
-    ):
+    def forward(self, hidden_states, input_dimensions, output_attentions=False, output_hidden_states=False):
         all_hidden_states = () if output_hidden_states else None
 
         height, width = input_dimensions
@@ -641,9 +611,7 @@ class MaskFormerSwinStage(GradientCheckpointingLayer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            block_hidden_states = block_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            block_hidden_states = block_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = block_hidden_states[0]
 
@@ -688,11 +656,10 @@ class MaskFormerSwinEncoder(nn.Module):
         self,
         hidden_states,
         input_dimensions,
-        head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-    ):
+    ) -> Union[tuple, MaskFormerSwinBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_input_dimensions = ()
         all_self_attentions = () if output_attentions else None
@@ -701,12 +668,9 @@ class MaskFormerSwinEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         for i, layer_module in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
                 hidden_states,
                 input_dimensions,
-                layer_head_mask,
                 output_attentions,
                 output_hidden_states,
             )
@@ -737,25 +701,20 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     config: MaskFormerSwinConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["MaskFormerSwinStage"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, MaskFormerSwinEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, MaskFormerSwinEmbeddings):
             if module.position_embeddings is not None:
-                module.position_embeddings.data.zero_()
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, MaskFormerSwinSelfAttention):
-            module.relative_position_bias_table.data.zero_()
+            init.zeros_(module.relative_position_bias_table)
+            init.copy_(module.relative_position_index, module.create_relative_position_index())
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
@@ -771,26 +730,20 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
         pixel_values=None,
-        head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         interpolate_pos_encoding=False,
         return_dict=None,
-    ):
+        **kwargs,
+    ) -> Union[tuple, MaskFormerSwinModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -800,13 +753,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
-
         embedding_output, input_dimensions = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
         )
@@ -814,7 +760,6 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -875,6 +820,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> BackboneOutput:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

@@ -14,13 +14,13 @@
 # limitations under the License.
 """RAG model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import add_start_docstrings
 
 
 RAG_CONFIG_DOC = r"""
-    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PretrainedConfig`] and
-    can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    [`RagConfig`] stores the configuration of a *RagModel*. Configuration objects inherit from [`PreTrainedConfig`] and
+    can be used to control the model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         title_sep (`str`, *optional*, defaults to  `" / "`):
@@ -70,14 +70,11 @@ RAG_CONFIG_DOC = r"""
             `context_attention_mask` are returned. See returned tensors for more detail.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (`int`, *optional*):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
 """
 
 
 @add_start_docstrings(RAG_CONFIG_DOC)
-class RagConfig(PretrainedConfig):
+class RagConfig(PreTrainedConfig):
     model_type = "rag"
     has_no_defaults_at_init = True
 
@@ -109,7 +106,6 @@ class RagConfig(PretrainedConfig):
         do_marginalize=False,
         output_retrieved=False,
         use_cache=True,
-        forced_eos_token_id=None,
         dataset_revision=None,
         **kwargs,
     ):
@@ -118,7 +114,6 @@ class RagConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             prefix=prefix,
             vocab_size=vocab_size,
@@ -166,13 +161,10 @@ class RagConfig(PretrainedConfig):
 
         self.use_cache = use_cache
 
-        if self.forced_eos_token_id is None:
-            self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
-
     @classmethod
     def from_question_encoder_generator_configs(
-        cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, question_encoder_config: PreTrainedConfig, generator_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
         decoder model configuration.

@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
@@ -153,7 +153,7 @@ class ZoeDepthReassembleLayer(nn.Module):
 
 # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage with DPT->ZoeDepth
 class ZoeDepthFeatureFusionStage(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__()
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
@@ -250,7 +250,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
             The align_corner setting for bilinear upsample.
     """
 
-    def __init__(self, config, align_corners=True):
+    def __init__(self, config: ZoeDepthConfig, align_corners: bool = True):
         super().__init__()
 
         self.align_corners = align_corners
@@ -260,7 +260,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
         self.residual_layer1 = ZoeDepthPreActResidualLayer(config)
         self.residual_layer2 = ZoeDepthPreActResidualLayer(config)
 
-    def forward(self, hidden_state, residual=None):
+    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -290,12 +290,12 @@ class ZoeDepthNeck(nn.Module):
     """
 
     # Copied from transformers.models.dpt.modeling_dpt.DPTNeck.__init__ with DPT->ZoeDepth
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__()
         self.config = config
 
         # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
-        if config.backbone_config is not None and config.backbone_config.model_type in ["swinv2"]:
+        if config.backbone_config is not None and config.backbone_config.model_type == "swinv2":
             self.reassemble_stage = None
         else:
             self.reassemble_stage = ZoeDepthReassembleStage(config)
@@ -1209,19 +1209,14 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     config: ZoeDepthConfig
     base_model_prefix = "zoedepth"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, LogBinomialSoftmax):
+            init.copy_(module.k_idx, torch.arange(0, module.k).view(1, -1, 1, 1))
+            init.copy_(module.k_minus_1, torch.tensor([module.k - 1]).view(1, -1, 1, 1))
 
 
 @auto_docstring(
@@ -1263,6 +1258,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):

@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from transformers.utils.generic import check_model_inputs
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
@@ -28,6 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils.import_utils import is_torchdynamo_compiling
 from ..auto import AutoModel
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -59,8 +61,7 @@ class CsmOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -68,9 +69,8 @@ class CsmOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction) of the depth decoder model.
     depth_decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the depth decoder (scores for each vocabulary token before SoftMax).
-    depth_decoder_past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+    depth_decoder_past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
     depth_decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -84,19 +84,19 @@ class CsmOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    logits: Optional[torch.FloatTensor] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_decoder_loss: Optional[torch.FloatTensor] = None
-    depth_decoder_logits: torch.FloatTensor = None
-    depth_decoder_past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    depth_decoder_logits: Optional[torch.FloatTensor] = None
+    depth_decoder_past_key_values: Optional[Cache] = None
     depth_decoder_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
     depth_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     backbone_loss: Optional[torch.FloatTensor] = None
 
 
-# manually specify names for correct naming when converting from modualr
+# manually specify names for correct naming when converting from modular
 class CsmRMSNorm(LlamaRMSNorm):
     pass
 
@@ -126,6 +126,7 @@ class CsmDecoderLayer(LlamaDecoderLayer):
 class CsmPreTrainedModel(PreTrainedModel):
     config: CsmConfig
     base_model_prefix = "model"
+    input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["CsmDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -141,12 +142,15 @@ class CsmPreTrainedModel(PreTrainedModel):
         "attentions": CsmAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, CsmCodebooksHead):
             num_codebooks = module.num_codebooks
             for i in range(num_codebooks - 1):
-                module.weight.data[i].normal_(mean=0.0, std=self.config.initializer_range)
+                init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, CsmBackboneModelEmbeddings):
+            init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.vocab_size)
 
 
 @auto_docstring
@@ -162,7 +166,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -177,7 +181,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
             The last hidden state of the backbone model. Such input is required when the first codebook token (the one generated by the backbone model)
             is provided in the `input_ids` argument.
         """
-        if position_ids is not None and not torch.compiler.is_compiling():
+        if position_ids is not None and not is_torchdynamo_compiling():
             logger.warning_once(
                 "Custom `position_ids` were provided but will be ignored. CSM depth decoder automatically determines position_ids "
                 "from `cache_position` and as it requires them to be identical across the batch, the provided position_ids will be ignored."
@@ -187,7 +191,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = DynamicCache(config=self.config)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -204,7 +208,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
             if backbone_last_hidden_state is not None:
                 inputs_embeds[:, 0] = backbone_last_hidden_state
             else:
-                if not torch.compiler.is_compiling() and input_ids_are_first_codebook:
+                if not is_torchdynamo_compiling() and input_ids_are_first_codebook:
                     logger.warning(
                         "When the first codebook token is provided, `backbone_last_hidden_state` should also be provided for correct inference."
                     )
@@ -224,7 +228,7 @@ class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_ids = cache_position.unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
@@ -312,11 +316,11 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         backbone_last_hidden_state: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -421,10 +425,9 @@ class CsmBackboneModel(LlamaModel):
     """
 )
 class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
-    _tied_weights_keys = [
-        "backbone_model.embed_tokens.embed_audio_tokens.weight",
-        "depth_decoder.model.embed_tokens.weight",
-    ]
+    _tied_weights_keys = {
+        "backbone_model.embed_tokens.embed_audio_tokens.weight": "depth_decoder.model.embed_tokens.weight"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -441,13 +444,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
     def set_input_embeddings(self, value):
         self.backbone_model.embed_tokens = value
-
-    def _tie_weights(self):
-        if self.config.tie_codebooks_embeddings:
-            self._tie_or_clone_weights(
-                self.backbone_model.embed_tokens.embed_audio_tokens,
-                self.depth_decoder.model.embed_tokens,
-            )
 
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
@@ -495,7 +491,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     ) -> Optional[torch.Tensor]:
         """
         Merges the input_ids and input_values to produce a single inputs_embeds tensor:
-        1 - Infers the codec model on the input_values to retreive codebook token.
+        1 - Infers the codec model on the input_values to retrieve codebook token.
         2 - Embeds codebook tokens and places them at the correct positions in the inputs_embeds tensor.
         3 - If labels are provided, expands them to match codebook dimensions and position the target codebook tokens in the inputs_embeds tensor.
 
@@ -603,12 +599,12 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         input_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         input_values_cutoffs: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, list[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

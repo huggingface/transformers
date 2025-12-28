@@ -44,7 +44,6 @@ Alternatively, one can decide to further pre-train an already pre-trained (or fi
 !python run_mim.py \
     --model_type vit \
     --output_dir ./outputs/ \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --label_names bool_masked_pos \
     --do_train \
@@ -95,7 +94,6 @@ Next, we can run the script by providing the path to this custom configuration (
     --config_name_or_path path_to_config \
     --model_type swin \
     --output_dir ./outputs/ \
-    --overwrite_output_dir \
     --remove_unused_columns False \
     --label_names bool_masked_pos \
     --do_train \
@@ -167,7 +165,7 @@ python run_mae.py \
     --lr_scheduler_type cosine \
     --weight_decay 0.05 \
     --num_train_epochs 800 \
-    --warmup_ratio 0.05 \
+    --warmup_steps 0.05 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \

@@ -16,7 +16,7 @@
 Processor class for LLaVa-NeXT-Video.
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -49,7 +49,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     Constructs a LLaVa-NeXT-Video processor which wraps a LLaVa-NeXT image processor, LLaVa-NeXT-Video video processor and
     a LLaMa tokenizer into a single processor.
 
-    [`LlavaNextVideoProcessor`] offers all the functionalities of [`LlavaNextImageProcessor`], [`LlavaNextVideoImageProcessor`] and
+    [`LlavaNextVideoProcessor`] offers all the functionalities of [`LlavaNextImageProcessor`], [`LlavaNextVideoVideoProcessor`] and
     [`LlamaTokenizerFast`]. See the [`~LlavaNextVideoProcessor.__call__`] and [`~LlavaNextVideoProcessor.decode`] for more information.
 
     Args:
@@ -77,11 +77,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
-    attributes = ["video_processor", "image_processor", "tokenizer"]
-    image_processor_class = ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-
     def __init__(
         self,
         video_processor=None,
@@ -114,19 +109,18 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
         LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. To prepare the video(s),
-        this method forwards the `videos` and `kwrags` arguments to LlavaNextVideoImageProcessor's
-        [`~LlavaNextVideoImageProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
+        this method forwards the `videos` and `kwargs` arguments to LlavaNextVideoVideoProcessor's
+        [`~LlavaNextVideoVideoProcessor.__call__`] if `videos` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -143,10 +137,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

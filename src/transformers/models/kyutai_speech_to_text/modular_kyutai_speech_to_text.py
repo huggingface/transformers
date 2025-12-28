@@ -20,6 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
@@ -105,7 +106,6 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -183,7 +183,7 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
             if padding:
                 padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
-        # now let's padd left and right
+        # now let's pad left and right
         pad_left = int(self.audio_silence_prefix_seconds * self.sampling_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sampling_rate)
         padded_inputs["input_values"] = np.pad(
@@ -214,7 +214,13 @@ class KyutaiSpeechToTextFeatureExtractor(EncodecFeatureExtractor):
 
 
 class KyutaiSpeechToTextPreTrainedModel(MoshiPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KyutaiSpeechToTextEmbeddings):
+            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
+            audio_tokens_offsets += module.config.vocab_size
+            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
+            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
 
 
 class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
@@ -224,6 +230,7 @@ class KyutaiSpeechToTextConv1dPaddingCache(MimiConv1dPaddingCache):
 class KyutaiSpeechToTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.embed_tokens = nn.Embedding(
             config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
             config.hidden_size,
@@ -251,15 +258,17 @@ class KyutaiSpeechToTextModel(MoshiModel):
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
 
-class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTrainedModel):
+class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
+    output_modalities = ("audio", "text")
 
     def __init__(self, config):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
-        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
 
@@ -299,7 +308,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         super().forward(**super_kwargs)
 
     def _prepare_generation_config(self, *args, **kwargs):
-        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(*args, **kwargs)
+        generation_config, model_kwargs = GenerationMixin._prepare_generation_config(self, *args, **kwargs)
         # this should be passed to the model kwargs for the input preparation
         model_kwargs["audio_window_size"] = (
             generation_config.audio_window_size if hasattr(generation_config, "audio_window_size") else None
@@ -313,6 +322,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         model_kwargs: Optional[dict[str, torch.Tensor]] = None,
     ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
+            self,
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,
@@ -356,7 +366,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         self.codec_model._prepare_cache_for_generation(
             generation_config=self.codec_model.generation_config,
             model_kwargs=temporary_model_kwargs,
-            assistant_model=None,
+            generation_mode=None,
             batch_size=batch_size,
             max_cache_length=self.config.codec_config.sliding_window,
         )
@@ -397,7 +407,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         padding_cache: Optional[KyutaiSpeechToTextConv1dPaddingCache] = None,
         **kwargs,
     ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, **kwargs)
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
         if input_values is not None:
             cache_position = model_inputs["cache_position"]

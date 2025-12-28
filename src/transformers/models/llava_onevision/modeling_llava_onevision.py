@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -35,17 +36,9 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -57,8 +50,7 @@ logger = logging.get_logger(__name__)
 class LlavaOnevisionModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -88,8 +80,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -103,7 +94,7 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
@@ -111,38 +102,33 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
     video_hidden_states: Optional[torch.FloatTensor] = None
 
 
-class LlavaOnevisionPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
+@auto_docstring
+class LlavaOnevisionPreTrainedModel(PreTrainedModel):
+    config: LlavaOnevisionConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "video", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
-        mode = config.spatial_pool_mode
-        stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
+    _supports_flash_attn = True
+    _supports_sdpa = True
 
-        if mode == "average":
-            self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
-        elif mode == "max":
-            self.pool = nn.MaxPool2d(kernel_size=stride, stride=stride)
-        elif mode == "conv":
-            self.pool = nn.Conv2d(
-                in_channels=config.vision_config.hidden_size,
-                out_channels=out_channels,
-                kernel_size=stride,
-                stride=stride,
-            )
-        else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
-    def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
-        ori_height = int(ori_width * self.image_size // self.image_size)
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
-        image_features_spatial_pool = self.pool(image_features_spatial)
-
-        return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, LlavaOnevisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionMultiModalProjector(nn.Module):
@@ -274,40 +260,16 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
-@auto_docstring
-class LlavaOnevisionPreTrainedModel(PreTrainedModel):
-    config: LlavaOnevisionConfig
-    base_model_prefix = ""
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, LlavaOnevisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            module.image_newline.data.normal_(mean=0.0, std=embed_std)
-
-
 @auto_docstring(
     custom_intro="""
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
 class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
+    _checkpoint_conversion_mapping = {
+        r"^language_model.model": "language_model",
+    }
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
@@ -327,12 +289,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
-
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
 
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
         """
@@ -476,8 +432,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -493,11 +447,11 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: Optional[torch.FloatTensor] = None,
+        video_features: Optional[torch.FloatTensor] = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -533,10 +487,10 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -677,8 +631,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
         video_features = self.multi_modal_projector(selected_video_feature)
 
         video_features = self.apply_pooling(video_features)
@@ -708,13 +660,13 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 )
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^image_newline": "model.image_newline",
-        "^language_model.lm_head": "lm_head",
+        r"^language_model.model": "model.language_model",
+        r"^vision_tower": "model.vision_tower",
+        r"^multi_modal_projector": "model.multi_modal_projector",
+        r"^image_newline": "model.image_newline",
+        r"^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
@@ -730,12 +682,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         return self.model.pack_image_features(
@@ -759,27 +705,14 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
 
-    # Make modules available through conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def vision_tower(self):
-        return self.model.vision_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_sizes_videos: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -913,6 +846,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -924,12 +858,15 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
             model_inputs["pixel_values_videos"] = pixel_values_videos

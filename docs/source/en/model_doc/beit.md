@@ -52,7 +52,7 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 - BEiT models are regular Vision Transformers, but pre-trained in a self-supervised way rather than supervised. They
   outperform both the [original model (ViT)](vit) as well as [Data-efficient Image Transformers (DeiT)](deit) when fine-tuned on ImageNet-1K and CIFAR-100. You can check out demo notebooks regarding inference as well as
   fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) (you can just replace
-  [`ViTFeatureExtractor`] by [`BeitImageProcessor`] and
+  [`ViTImageProcessor`] by [`BeitImageProcessor`] and
   [`ViTForImageClassification`] by [`BeitForImageClassification`]).
 - There's also a demo notebook available which showcases how to combine DALL-E's image tokenizer with BEiT for
   performing masked image modeling. You can find it [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/BEiT).
@@ -87,7 +87,7 @@ page for more information.
 SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```
+```py
 from transformers import BeitForImageClassification
 model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", attn_implementation="sdpa", dtype=torch.float16)
 ...
@@ -123,6 +123,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Image classification task guide](../tasks/image_classification)
 
 **Semantic segmentation**
+
 - [Semantic segmentation task guide](../tasks/semantic_segmentation)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -134,12 +135,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## BeitConfig
 
 [[autodoc]] BeitConfig
-
-## BeitFeatureExtractor
-
-[[autodoc]] BeitFeatureExtractor
-    - __call__
-    - post_process_semantic_segmentation
 
 ## BeitImageProcessor
 

@@ -60,17 +60,13 @@ Bi-direction Encoders for Transformers (BERT) のフランス語版である Cam
 ## CamembertTokenizer
 
 [[autodoc]] CamembertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CamembertTokenizerFast
 
 [[autodoc]] CamembertTokenizerFast
 
-<frameworkcontent>
-<pt>
 
 ## CamembertModel
 
@@ -100,36 +96,3 @@ Bi-direction Encoders for Transformers (BERT) のフランス語版である Cam
 
 [[autodoc]] CamembertForQuestionAnswering
 
-</pt>
-<tf>
-
-## TFCamembertModel
-
-[[autodoc]] TFCamembertModel
-
-## TFCamembertForCasualLM
-
-[[autodoc]] TFCamembertForCausalLM
-
-## TFCamembertForMaskedLM
-
-[[autodoc]] TFCamembertForMaskedLM
-
-## TFCamembertForSequenceClassification
-
-[[autodoc]] TFCamembertForSequenceClassification
-
-## TFCamembertForMultipleChoice
-
-[[autodoc]] TFCamembertForMultipleChoice
-
-## TFCamembertForTokenClassification
-
-[[autodoc]] TFCamembertForTokenClassification
-
-## TFCamembertForQuestionAnswering
-
-[[autodoc]] TFCamembertForQuestionAnswering
-
-</tf>
-</frameworkcontent>

@@ -23,8 +23,8 @@ from typing import Optional, Union
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torch.cuda.amp import autocast
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -39,6 +39,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -322,7 +323,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 align_corners=False,
             ).squeeze(1)
 
-            with autocast(enabled=False):
+            with maybe_autocast(device_type="cuda", enabled=False):
                 pred_mask = pred_mask.float()
                 target_mask = target_mask.float()
 
@@ -719,7 +720,7 @@ class OneFormerLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor([num_masks], dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -781,7 +782,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
         or when `config.output_attentions=True`
     """
 
-    multi_scale_features: tuple[torch.FloatTensor] = None
+    multi_scale_features: Optional[tuple[torch.FloatTensor]] = None
     mask_features: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
 
@@ -806,8 +807,8 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
         1/4 scale features from the last Pixel Decoder Layer.
     """
 
-    encoder_features: list[torch.FloatTensor] = None
-    decoder_features: list[torch.FloatTensor] = None
+    encoder_features: Optional[list[torch.FloatTensor]] = None
+    decoder_features: Optional[list[torch.FloatTensor]] = None
     decoder_last_feature: Optional[torch.FloatTensor] = None
 
 
@@ -932,44 +933,6 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     text_queries: Optional[torch.FloatTensor] = None
     task_token: Optional[torch.FloatTensor] = None
     attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-
-
-# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
-class OneFormerPixelDecoderFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
 
 
 # Modified from transformers.models.detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->OneFormerPixelDecoderEncoder
@@ -2303,11 +2266,7 @@ class OneFormerTransformerDecoder(nn.Module):
 
         return outputs_class, outputs_mask, attention_mask
 
-    @torch.jit.unused
     def _get_aux_predictions(self, outputs_class, outputs_seg_masks):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
         aux_list = [
             {"class_queries_logits": a, "masks_queries_logits": b}
             for a, b in zip(outputs_class[:-1], outputs_seg_masks[:-1])
@@ -2573,9 +2532,6 @@ class OneFormerTextMLP(nn.Module):
     ):
         super().__init__()
         self.activation_fn = ACT2FN["quick_gelu"]
-        hidden_size = hidden_size
-        intermediate_size = intermediate_size
-        output_size = output_size
         self.fc1 = nn.Linear(hidden_size, intermediate_size)
         self.fc2 = nn.Linear(intermediate_size, output_size)
 
@@ -2772,7 +2728,9 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     config: OneFormerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
@@ -2780,13 +2738,13 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             if module.input_projections is not None:
                 for input_projection in module.input_projections:
                     if not isinstance(input_projection, nn.Sequential):
-                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
-                        nn.init.constant_(input_projection.bias, 0)
+                        init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        init.constant_(input_projection.bias, 0)
         elif isinstance(module, OneFormerTransformerDecoder):
-            nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
-            nn.init.constant_(module.query_input_projection.bias, 0)
+            init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
+            init.constant_(module.query_input_projection.bias, 0)
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
@@ -2796,56 +2754,64 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
         elif isinstance(module, OneFormerPixelDecoder):
-            nn.init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=0)
         elif isinstance(module, (OneFormerTransformerDecoderLayer, OneFormerTransformerDecoderQueryTransformer)):
             for p in module.parameters():
                 if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
+                    init.xavier_uniform_(p, gain=xavier_std)
         elif isinstance(module, OneFormerTextTransformer):
             proj_std = (module.width**-0.5) * ((2 * module.num_layers) ** -0.5)
             attn_std = module.width**-0.5
             fc_std = (2 * module.width) ** -0.5
             for layer in module.layers:
-                nn.init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
-                nn.init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
-                nn.init.normal_(layer.mlp.fc1.weight, std=fc_std)
-                nn.init.normal_(layer.mlp.fc2.weight, std=proj_std)
+                init.normal_(layer.self_attn.in_proj_weight, std=attn_std)
+                init.normal_(layer.self_attn.out_proj.weight, std=proj_std)
+                init.normal_(layer.mlp.fc1.weight, std=fc_std)
+                init.normal_(layer.mlp.fc2.weight, std=proj_std)
         elif isinstance(module, OneFormerTextEncoder):
-            nn.init.normal_(module.token_embedding.weight, std=0.02)
-            nn.init.normal_(module.positional_embedding, std=0.01)
+            init.normal_(module.token_embedding.weight, std=0.02)
+            init.normal_(module.positional_embedding, std=0.01)
         if hasattr(module, "reference_points"):
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
         elif isinstance(module, OneFormerMLPPredictionHead):
             for submodule in module.modules():
                 if isinstance(submodule, nn.Linear):
-                    nn.init.xavier_uniform_(submodule.weight, gain=xavier_std)
-                    nn.init.constant_(submodule.bias, 0)
+                    init.xavier_uniform_(submodule.weight, gain=xavier_std)
+                    init.constant_(submodule.bias, 0)
         elif isinstance(module, nn.MultiheadAttention):
-            module.in_proj_weight.data.normal_(mean=0.0, std=std)
-            module.in_proj_bias.data.zero_()
+            init.normal_(module.in_proj_weight, mean=0.0, std=std)
+            init.zeros_(module.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, OneFormerLoss):
-            module.logit_scale.data.fill_(np.log(1 / self.config.contrastive_temperature))
+            init.constant_(module.logit_scale, np.log(1 / self.config.contrastive_temperature))
+            empty_weight = torch.ones(module.num_classes + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
 
 
 @auto_docstring
@@ -2876,13 +2842,14 @@ class OneFormerModel(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerModelOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
 
@@ -3062,13 +3029,14 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> OneFormerForUniversalSegmentationOutput:
         r"""
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
         text_inputs (`list[torch.Tensor]`, *optional*):
-            Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
+            Tensor of shape `(num_queries, sequence_length)` to be fed to a model
         mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`list[torch.LongTensor]`, *optional*):

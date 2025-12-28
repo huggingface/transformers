@@ -24,30 +24,24 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
 from ...video_utils import VideoInput
 
 
-class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
-
-
-class Glm4vImagesKwargs(ImagesKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+logger = logging.get_logger(__name__)
 
 
 class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Glm4vImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_token_type_ids": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
-    videos_kwargs: Glm4vVideosProcessorKwargs
 
 
 class Glm4vProcessor(ProcessorMixin):
@@ -65,14 +59,7 @@ class Glm4vProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-
-    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
@@ -85,12 +72,13 @@ class Glm4vProcessor(ProcessorMixin):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
         self,
-        images: ImageInput = None,
+        images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -111,10 +99,8 @@ class Glm4vProcessor(ProcessorMixin):
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -142,11 +128,14 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs.pop("timestamps")
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
-            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -171,14 +160,19 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    if hasattr(timestamps, "tolist"):
-                        timestamps_list = timestamps.tolist()[0]
-                    else:
-                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    metadata = video_metadata[video_index]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+                    timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list)):
-                        unique_timestamps.append(timestamps_list[idx])
+                    for idx in range(0, len(timestamps)):
+                        unique_timestamps.append(timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
@@ -186,7 +180,7 @@ class Glm4vProcessor(ProcessorMixin):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        frame_structure = self.replace_frame_token_id(timestamp_sec)
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
@@ -276,6 +270,9 @@ class Glm4vProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    def replace_frame_token_id(self, timestamp_sec):
+        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
 
 
 __all__ = ["Glm4vProcessor"]

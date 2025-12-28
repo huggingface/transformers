@@ -44,11 +44,9 @@ sequence alignment (MSA) step at inference time, which means that ESMFold checkp
 they do not require a database of known protein sequences and structures with associated external query tools
 to make predictions, and are much faster as a result.
 
-
 The abstract from
 "Biological structure and function emerge from scaling unsupervised learning to 250
 million protein sequences" is
-
 
 *In the field of artificial intelligence, a combination of scale in data and model capacity enabled by unsupervised
 learning has led to major advances in representation learning and statistical generation. In the life sciences, the
@@ -62,7 +60,6 @@ remote homology of proteins. Information about secondary and tertiary structure 
 can be identified by linear projections. Representation learning produces features that generalize across a range of
 applications, enabling state-of-the-art supervised prediction of mutational effect and secondary structure and
 improving state-of-the-art features for long-range contact prediction.*
-
 
 The abstract from
 "Language models of protein sequences at the scale of evolution enable accurate structure prediction" is

@@ -33,7 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -58,8 +58,8 @@ class LevitImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. If size is a dict with keys "width" and "height", the image will
             be resized to `(size["height"], size["width"])`. If size is a dict with key "shortest_edge", the shortest
             edge value `c` is rescaled to `int(c * (256/224))`. The smaller edge of the image will be matched to this
-            value i.e, if height > width, then image will be rescaled to `(size["shortest_egde"] * height / width,
-            size["shortest_egde"])`. Can be overridden by the `size` parameter in the `preprocess` method.
+            value i.e, if height > width, then image will be rescaled to `(size["shortest_edge"] * height / width,
+            size["shortest_edge"])`. Can be overridden by the `size` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
@@ -136,7 +136,7 @@ class LevitImageProcessor(BaseImageProcessor):
 
         If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to `int(c * (256/224))`.
         The smaller edge of the image will be matched to this value i.e, if height > width, then image will be rescaled
-        to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
+        to `(size["shortest_edge"] * height / width, size["shortest_edge"])`.
 
         Args:
             image (`np.ndarray`):
@@ -180,7 +180,7 @@ class LevitImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[PILImageResampling] = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -226,10 +226,8 @@ class LevitImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -255,13 +253,10 @@ class LevitImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,

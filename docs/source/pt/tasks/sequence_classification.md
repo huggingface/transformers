@@ -78,27 +78,14 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 Use o [`DataCollatorWithPadding`] para criar um batch de exemplos. Ele também *preencherá dinamicamente* seu texto até o comprimento do elemento mais longo em seu batch, para que os exemplos do batch tenham um comprimento uniforme. Embora seja possível preencher seu texto com a função `tokenizer` definindo `padding=True`, o preenchimento dinâmico utilizando um data collator é mais eficiente.
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DataCollatorWithPadding
 
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DataCollatorWithPadding
-
->>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Train
 
-<frameworkcontent>
-<pt>
 Carregue o DistilBERT com [`AutoModelForSequenceClassification`] junto com o número de rótulos esperados:
 
 ```py
@@ -146,68 +133,6 @@ Nesse ponto, restam apenas três passos:
 O [`Trainer`] aplicará o preenchimento dinâmico por padrão quando você definir o argumento `tokenizer` dele. Nesse caso, você não precisa especificar um data collator explicitamente.
 
 </Tip>
-</pt>
-<tf>
-Para executar o fine-tuning de um modelo no TensorFlow, comece convertendo seu conjunto de dados para o formato `tf.data.Dataset` com [`to_tf_dataset`](https://huggingface.co/docs/datasets/package_reference/main_classes#datasets.Dataset.to_tf_dataset). Nessa execução você deverá especificar as entradas e rótulos (no parâmetro `columns`), se deseja embaralhar o conjunto de dados, o tamanho do batch e o data collator:
-
-```py
->>> tf_train_set = tokenized_imdb["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "label"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "label"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Se você não estiver familiarizado com o fine-tuning de um modelo com o Keras, dê uma olhada no tutorial básico [aqui](training#finetune-with-keras)!
-
-</Tip>
-
-Configure o otimizador e alguns hiperparâmetros de treinamento:
-
-```py
->>> from transformers import create_optimizer
->>> import tensorflow as tf
-
->>> batch_size = 16
->>> num_epochs = 5
->>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
->>> total_train_steps = int(batches_per_epoch * num_epochs)
->>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Carregue o DistilBERT com [`TFAutoModelForSequenceClassification`] junto com o número de rótulos esperados:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased", num_labels=2)
-```
-
-Configure o modelo para treinamento com o método [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-Chame o método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para executar o fine-tuning do modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 

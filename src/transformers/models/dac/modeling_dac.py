@@ -16,13 +16,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...utils import ModelOutput, auto_docstring
 from .configuration_dac import DacConfig
@@ -115,6 +116,7 @@ class DacVectorQuantize(nn.Module):
     def __init__(self, config: DacConfig):
         super().__init__()
 
+        self.codebook_dim = config.codebook_dim
         self.in_proj = nn.Conv1d(config.hidden_size, config.codebook_dim, kernel_size=1)
         self.out_proj = nn.Conv1d(config.codebook_dim, config.hidden_size, kernel_size=1)
         self.codebook = nn.Embedding(config.codebook_size, config.codebook_dim)
@@ -262,7 +264,7 @@ class DacDecoderBlock(nn.Module):
         return hidden_state
 
 
-class DacResidualVectorQuantize(nn.Module):
+class DacResidualVectorQuantizer(nn.Module):
     """
     ResidualVectorQuantize block - Introduced in SoundStream: An end2end neural audio codec (https://huggingface.co/papers/2107.03312)
     """
@@ -476,16 +478,17 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "dac"
     main_input_name = "input_values"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
-            nn.init.trunc_normal_(module.weight, std=0.02)
-            nn.init.constant_(module.bias, 0)
+            init.trunc_normal_(module.weight, std=0.02)
+            init.constant_(module.bias, 0)
         elif isinstance(module, Snake1d):
-            module.alpha.data.fill_(1.0)
+            init.ones_(module.alpha)
         elif isinstance(module, nn.ConvTranspose1d):
             module.reset_parameters()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            init.normal_(module.weight, mean=0.0, std=0.02)
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm
@@ -556,6 +559,8 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     """
 )
 class DacModel(DacPreTrainedModel):
+    input_modalities = "audio"
+
     def __init__(self, config: DacConfig):
         super().__init__(config)
         self.config = config
@@ -563,7 +568,7 @@ class DacModel(DacPreTrainedModel):
         self.encoder = DacEncoder(config)
         self.decoder = DacDecoder(config)
 
-        self.quantizer = DacResidualVectorQuantize(config)
+        self.quantizer = DacResidualVectorQuantizer(config)
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
@@ -578,7 +583,7 @@ class DacModel(DacPreTrainedModel):
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacEncoderOutput]:
         r"""
         input_values (`torch.Tensor of shape `(batch_size, 1, time_steps)`):
             Input audio data to encode,
@@ -605,7 +610,7 @@ class DacModel(DacPreTrainedModel):
         quantized_representation: Optional[torch.Tensor] = None,
         audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacDecoderOutput]:
         r"""
         quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
@@ -638,7 +643,7 @@ class DacModel(DacPreTrainedModel):
         input_values: torch.Tensor,
         n_quantizers: Optional[int] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, DacOutput]:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, time_steps)`):
             Audio data to encode.

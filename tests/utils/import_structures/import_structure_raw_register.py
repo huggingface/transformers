@@ -28,19 +28,19 @@ def a0():
     pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 class A1:
     def __init__(self):
         pass
 
 
-@requires(backends=("torch", "tf"))
+@requires(backends=("torch",))
 def a1():
     pass
 
 
 @requires(
-    backends=("torch", "tf")
+    backends=("torch",)
 )
 class A2:
     def __init__(self):
@@ -48,7 +48,7 @@ class A2:
 
 
 @requires(
-    backends=("torch", "tf")
+    backends=("torch",)
 )
 def a2():
     pass
@@ -57,7 +57,6 @@ def a2():
 @requires(
     backends=(
         "torch",
-        "tf"
     )
 )
 class A3:
@@ -68,7 +67,6 @@ class A3:
 @requires(
     backends=(
             "torch",
-            "tf"
     )
 )
 def a3():

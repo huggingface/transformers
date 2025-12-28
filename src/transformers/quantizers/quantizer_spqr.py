@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
 
@@ -39,7 +39,6 @@ class SpQRHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not torch.cuda.is_available():
@@ -52,39 +51,29 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.float16
-            logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
-        elif dtype != torch.float16:
+        if dtype != torch.float16:
             raise ValueError(
-                "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
-                "torch.float16 explicitly."
+                "You cannot use any type other than torch.float16 for SpQR. Please set it totorch.float16 explicitly."
             )
         return dtype
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: Optional[list[str]] = None,
         **kwargs,
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-
         replace_with_spqr_linear(
             model,
             quantization_config=self.quantization_config,
             modules_to_not_convert=self.modules_to_not_convert,
         )
-        model.config.quantization_config = self.quantization_config
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
 
     @property
     def is_trainable(self):
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True

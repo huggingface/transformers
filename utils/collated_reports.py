@@ -127,7 +127,7 @@ def upload_collated_report(job: str, report_repo_id: str, filename: str):
         report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 
     api.upload_file(
-        path_or_fileobj=f"ci_results_{job}/{filename}",
+        path_or_fileobj=f"{filename}",
         path_in_repo=f"{report_repo_folder}/ci_results_{job}/{filename}",
         repo_id=report_repo_id,
         repo_type="dataset",
@@ -172,7 +172,7 @@ if __name__ == "__main__":
             continue
 
         # Create a new entry for the model
-        model_name = model_dir.name.removeprefix(machine_type).removesuffix("_test_reports")
+        model_name = model_dir.name.split("models_")[-1].removesuffix("_test_reports")
         report = {"model": model_name, "results": []}
         results = []
 
@@ -197,8 +197,9 @@ if __name__ == "__main__":
 
         collated_report_buffer.append(report)
 
+    filename = f"collated_reports_{machine_type}_{commit_hash}.json"
     # Write collated report
-    with open(f"collated_reports_{commit_hash}.json", "w") as f:
+    with open(filename, "w") as f:
         json.dump(
             {
                 "gpu_name": gpu_name,
@@ -211,5 +212,6 @@ if __name__ == "__main__":
             indent=2,
         )
 
+    # Upload collated report
     if job and report_repo_id:
-        upload_collated_report(job, report_repo_id, f"collated_reports_{commit_hash}.json")
+        upload_collated_report(job, report_repo_id, filename)

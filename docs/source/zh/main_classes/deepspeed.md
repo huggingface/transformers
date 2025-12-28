@@ -179,7 +179,7 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 deepspeed examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero3.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -202,7 +202,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 --deepspeed tests/deepspeed/ds_config_zero2.json \
 --model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --overwrite_output_dir --fp16 \
+--output_dir output_dir --fp16 \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
 --dataset_name wmt16 --dataset_config "ro-en" \
 --source_lang en --target_lang ro
@@ -236,7 +236,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 }
 ```
 
-这会启用`optimizer offload `和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
+这会启用`optimizer offload`和一些其他重要功能。您可以尝试不同的buffer大小，有关详细信息，请参见下面的讨论。
 
 关于这种启用类型的实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685)。
 
@@ -1206,7 +1206,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 - 通过 `--lr_scheduler_type constant_with_warmup` 实现 `WarmupLR`
 - 通过 `--lr_scheduler_type linear` 实现 `WarmupDecayLR`。这也是 `--lr_scheduler_type` 的默认值，因此，如果不配置调度器，这将是默认配置的调度器。
 
-如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 或 `--warmup_ratio` 的值来配置其🤗 Transformers 版本。
+如果在配置文件中不配置 `scheduler` 条目，[`Trainer`] 将使用 `--lr_scheduler_type`、`--learning_rate` 和 `--warmup_steps` 的值来配置其🤗 Transformers 版本。
 
 以下是 `WarmupLR` 的自动配置示例：
 
@@ -1227,7 +1227,7 @@ DeepSpeed支持`LRRangeTest`、`OneCycle`、`WarmupLR`和`WarmupDecayLR`学习�
 
 - `warmup_min_lr` 的值为 `0`。
 - `warmup_max_lr` 的值为 `--learning_rate`。
-- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。否则，将使用 `--warmup_ratio` 乘以训练步骤的数量，并四舍五入。
+- `warmup_num_steps` 的值为 `--warmup_steps`（如果提供）。
 - `total_num_steps` 的值为 `--max_steps` 或者如果没有提供，将在运行时根据环境、数据集的大小和其他命令行参数（对于 `WarmupDecayLR` 来说需要）自动推导。
 
 当然，您可以接管任何或所有的配置值，并自行设置这些值：
@@ -1292,8 +1292,6 @@ DeepSpeed支持完整的fp32和fp16混合精度。
 <a id='deepspeed-amp'></a>
 
 ### 自动混合精度
-
-您可以使用自动混合精度，可以选择使用类似 PyTorch AMP 的方式，也可以选择使用类似 Apex 的方式：
 
 ### fp16
 
@@ -1392,38 +1390,6 @@ bf16具有与fp32相同的动态范围，因此不需要损失缩放。
 根据这个信息，有效的值包括"fp16"、"bfp16"和"fp32"。
 
 注意：在stage zero 3中，bf16通信数据类型存在一个bug，该问题已在`deepspeed==0.8.1`版本中得到修复。
-
-
-### apex
-
-配置apex AMP-like模式：
-
-```json
-"amp": {
-    "enabled": "auto",
-    "opt_level": "auto"
-}
-```
-
-并且，[`Trainer`]将根据`args.fp16_backend`和`args.fp16_opt_level`的值自动配置它。
-
-当传递`--fp16 --fp16_backend apex --fp16_opt_level 01`命令行参数时，此模式将被启用。
-
-您还可以显式配置此模式：
-
-```json
-{
-    "amp": {
-        "enabled": true,
-        "opt_level": "O1"
-    }
-}
-```
-
-但是，您需要自己同步[`Trainer`]命令行参数和DeepSpeed配置。
-
-这里是[文档](https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options)
-
 
 <a id='deepspeed-bs'></a>
 
@@ -1693,7 +1659,7 @@ deepspeed examples/pytorch/translation/run_translation.py \
 --model_name_or_path google-t5/t5-small --output_dir output_dir \
 --do_eval --max_eval_samples 50 --warmup_steps 50  \
 --max_source_length 128 --val_max_target_length 128 \
---overwrite_output_dir --per_device_eval_batch_size 4 \
+--per_device_eval_batch_size 4 \
 --predict_with_generate --dataset_config "ro-en" --fp16 \
 --source_lang en --target_lang ro --dataset_name wmt16 \
 --source_prefix "translate English to Romanian: "

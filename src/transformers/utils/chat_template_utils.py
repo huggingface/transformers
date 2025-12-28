@@ -16,15 +16,15 @@ import inspect
 import json
 import re
 import types
+from collections.abc import Callable
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache
 from inspect import isfunction
 from typing import (
     Any,
-    Callable,
     Literal,
-    Optional,
     Union,
     get_args,
     get_origin,
@@ -53,6 +53,9 @@ if is_torch_available():
     from torch import Tensor
 
 
+ChatType = list[dict[str, Any]]
+
+
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
@@ -75,13 +78,9 @@ returns_re = re.compile(r"\n\s*Returns:\n\s*(.*?)[\n\s]*(Raises:|\Z)", re.DOTALL
 class TypeHintParsingException(Exception):
     """Exception raised for errors in parsing type hints to generate JSON schemas"""
 
-    pass
-
 
 class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
-
-    pass
 
 
 def _get_json_schema_type(param_type: type) -> dict[str, str]:
@@ -200,7 +199,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> tuple[Optional[str], Optional[dict], Optional[str]]:
+def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | None, str | None]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -463,13 +462,13 @@ def _compile_jinja_template(chat_template):
 
 
 def render_jinja_template(
-    conversations: list[list[dict[str, str]]],
-    tools: Optional[list[Union[dict, Callable]]] = None,
-    documents: Optional[list[dict[str, str]]] = None,
-    chat_template: Optional[str] = None,
-    return_assistant_tokens_mask: Optional[bool] = False,
-    continue_final_message: Optional[bool] = False,
-    add_generation_prompt: Optional[bool] = False,
+    conversations: list[ChatType],
+    tools: list[dict | Callable] | None = None,
+    documents: ChatType | None = None,
+    chat_template: str | None = None,
+    return_assistant_tokens_mask: bool = False,
+    continue_final_message: bool = False,
+    add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
@@ -503,10 +502,27 @@ def render_jinja_template(
 
     rendered = []
     all_generation_indices = []
+    continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
     for chat in conversations:
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        if continue_final_message:
+            chat = deepcopy(chat)
+            final_message = chat[-1]["content"]
+            if isinstance(final_message, (list, tuple)):
+                for content_block in reversed(final_message):
+                    if "text" in content_block:
+                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                        final_message = content_block["text"]
+                        content_block["text"] = content_block["text"] + continue_final_message_tag
+                        break
+                else:
+                    raise ValueError(
+                        "continue_final_message is set but we could not find any text to continue in the final message!"
+                    )
+            else:
+                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -526,31 +542,45 @@ def render_jinja_template(
                 **kwargs,
             )
         if continue_final_message:
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
-                for content_block in reversed(final_message):
-                    if "text" in content_block:
-                        # Pick the last text block in the message (the first one we hit while iterating in reverse)
-                        final_message = content_block["text"]
-                        break
-                else:
-                    raise ValueError(
-                        "continue_final_message is set but we could not find any text to continuein the final message!"
-                    )
-            if final_message.strip() not in rendered_chat:
+            if (final_message.strip() not in rendered_chat) or (
+                continue_final_message_tag.strip() not in rendered_chat
+            ):
                 raise ValueError(
                     "continue_final_message is set but the final message does not appear in the chat after "
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
                 )
-            final_msg_loc = rendered_chat.rindex(final_message.strip())
-            if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
-                # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
-                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
+            tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
+            if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
+                # The template preserves spacing, so things are simple
+                rendered_chat = rendered_chat[:tag_loc]
             else:
                 # The message has trailing spacing that was trimmed, so we must be more cautious
-                rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
+                rendered_chat = rendered_chat[:tag_loc].rstrip()
         rendered.append(rendered_chat)
 
     return rendered, all_generation_indices
+
+
+def is_valid_message(message):
+    """
+    Check that input is a valid message in a chat, namely a dict with "role" and "content" keys.
+    """
+    if not isinstance(message, dict):
+        return False
+    if not ("role" in message and "content" in message):
+        return False
+    return True
+
+
+class Chat:
+    """This class is intended to just be used internally for pipelines and not exposed to users. We convert chats
+    to this format because the rest of the pipeline code tends to assume that lists of messages are
+    actually a batch of samples rather than messages in the same conversation."""
+
+    def __init__(self, messages: dict):
+        for message in messages:
+            if not is_valid_message(message):
+                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+        self.messages = messages

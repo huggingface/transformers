@@ -20,8 +20,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -31,6 +32,7 @@ from torch import Tensor, nn
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -282,16 +284,9 @@ class SamHQVisionSdpaAttention(SamHQVisionAttention):
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
         if output_attentions:
             logger.warning_once(
-                "`SamHQVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`output_attentions=True`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
+                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-            return super().forward(
-                hidden_states=hidden_states,
-                output_attentions=output_attentions,
-            )
-
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -418,6 +413,53 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["SamHQVisionAttention"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                init.zeros_(module.pos_embed)
+        elif isinstance(module, SamHQPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+
+
 class SamHQPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -473,26 +515,6 @@ class SamHQVisionNeck(nn.Module):
         return hidden_states
 
 
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config: SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    _no_split_modules = ["SamHQVisionAttention"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
-        if isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                module.rel_pos_h.data.zero_()
-                module.rel_pos_w.data.zero_()
-        elif isinstance(module, SamHQVisionEncoder):
-            if self.config.use_abs_pos:
-                module.pos_embed.data.zero_()
-
-
 class SamHQVisionEncoder(SamHQPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
@@ -528,11 +550,12 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         self.neck = SamHQVisionNeck(config)
 
         self.gradient_checkpointing = False
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: Optional[torch.FloatTensor] = None, **kwargs: Unpack[TransformersKwargs]
     ) -> Union[tuple, SamHQVisionEncoderOutput]:
@@ -560,34 +583,30 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
         )
 
 
-class SamHQLayerNorm(nn.Module):
+class SamHQLayerNorm(nn.LayerNorm):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
-    def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(normalized_shape))
-        self.bias = nn.Parameter(torch.zeros(normalized_shape))
-        self.eps = eps
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
         self.data_format = data_format
-        if self.data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {self.data_format}")
-        self.normalized_shape = (normalized_shape,)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.data_format == "channels_last":
-            x = torch.nn.functional.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        elif self.data_format == "channels_first":
-            input_dtype = x.dtype
-            x = x.float()
-            u = x.mean(1, keepdim=True)
-            s = (x - u).pow(2).mean(1, keepdim=True)
-            x = (x - u) / torch.sqrt(s + self.eps)
-            x = x.to(dtype=input_dtype)
-            x = self.weight[:, None, None] * x + self.bias[:, None, None]
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
 
 
 def eager_attention_forward(
@@ -678,7 +697,7 @@ class SamHQAttention(nn.Module):
             key,
             value,
             attention_mask=attention_similarity,
-            dropout=0.0 if not self.training else self.dropout_p,
+            dropout=0.0,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -1076,29 +1095,6 @@ class SamHQVisionModel(SamHQPreTrainedModel):
         return self.vision_encoder(pixel_values, **kwargs)
 
 
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
-
-
 class SamHQMaskEmbedding(nn.Module):
     def __init__(self, config: SamHQPromptEncoderConfig):
         super().__init__()
@@ -1237,9 +1233,9 @@ class SamHQPromptEncoder(nn.Module):
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1250,13 +1246,7 @@ class SamHQModel(SamHQPreTrainedModel):
         config.mask_decoder_config._attn_implementation = config._attn_implementation
 
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
-
         self.post_init()
-
-    def _tie_weights(self):
-        self.prompt_encoder.shared_embedding.positional_embedding.data = (
-            self.shared_image_embedding.positional_embedding.data
-        )
 
     def get_input_embeddings(self):
         return self.vision_encoder.get_input_embeddings()

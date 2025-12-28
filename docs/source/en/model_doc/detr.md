@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 *This model was released on 2020-05-26 and added to Hugging Face Transformers on 2021-06-09.*
 
 <div style="float: right;">
-	<div class="flex flex-wrap space-x-1">
-		<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-	</div>
+ <div class="flex flex-wrap space-x-1">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+ </div>
 </div>
 
 # DETR
@@ -105,7 +105,7 @@ DETR can be naturally extended to perform panoptic segmentation (which unifies s
 - The decoder of DETR updates the query embeddings in parallel. This is different from language models like GPT-2, which use autoregressive decoding instead of parallel. Hence, no causal attention mask is used.
 - DETR adds position embeddings to the hidden states at each self-attention and cross-attention layer before projecting to queries and keys. For the position embeddings of the image, one can choose between fixed sinusoidal or learned absolute position embeddings. By default, the parameter `position_embedding_type` of [`~transformers.DetrConfig`] is set to `"sine"`.
 - During training, the authors of DETR did find it helpful to use auxiliary losses in the decoder, especially to help the model output the correct number of objects of each class. If you set the parameter `auxiliary_loss` of [`~transformers.DetrConfig`] to `True`, then prediction feedforward neural networks and Hungarian losses are added after each decoder layer (with the FFNs sharing parameters).
-- If you want to train the model in a distributed environment across multiple nodes, then one should update the _num_boxes_ variable in the _DetrLoss_ class of _modeling_detr.py_. When training on multiple nodes, this should be set to the average number of target boxes across all nodes, as can be seen in the original implementation [here](https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232).
+- If you want to train the model in a distributed environment across multiple nodes, then one should update the *num_boxes* variable in the *DetrLoss* class of *modeling_detr.py*. When training on multiple nodes, this should be set to the average number of target boxes across all nodes, as can be seen in the original implementation [here](https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L227-L232).
 - [`~transformers.DetrForObjectDetection`] and [`~transformers.DetrForSegmentation`] can be initialized with any convolutional backbone available in the [timm library](https://github.com/rwightman/pytorch-image-models). Initializing with a MobileNet backbone for example can be done by setting the `backbone` attribute of [`~transformers.DetrConfig`] to `"tf_mobilenetv3_small_075"`, and then initializing the model with that config.
 - DETR resizes the input images such that the shortest side is at least a certain amount of pixels while the longest is at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at least 480 and at most 800 pixels. At inference time, the shortest side is set to 800. One can use [`~transformers.DetrImageProcessor`] to prepare images (and optional annotations in COCO format) for the model. Due to this resizing, images in a batch can have different sizes. DETR solves this by padding images up to the largest size in a batch, and by creating a pixel mask that indicates which pixels are real/which are padding. Alternatively, one can also define a custom `collate_fn` in order to batch images together, using [`~transformers.DetrImageProcessor.pad_and_create_pixel_mask`].
 - The size of the images will determine the amount of memory being used, and will thus determine the `batch_size`. It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
@@ -113,6 +113,7 @@ DETR can be naturally extended to perform panoptic segmentation (which unifies s
 There are three other ways to instantiate a DETR model (depending on what you prefer):
 
 - Option 1: Instantiate DETR with pre-trained weights for entire model
+
 ```python
 from transformers import DetrForObjectDetection
 
@@ -120,6 +121,7 @@ model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 ```
 
 - Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone
+
 ```python
 from transformers import DetrConfig, DetrForObjectDetection
 
@@ -128,6 +130,7 @@ model = DetrForObjectDetection(config)
 ```
 
 - Option 3: Instantiate DETR with randomly initialized weights for backbone + Transformer
+
 ```python
 config = DetrConfig(use_pretrained_backbone=False)
 model = DetrForObjectDetection(config)
@@ -139,12 +142,12 @@ As a summary, consider the following table:
 |------|------------------|-----------------------|-----------------------|
 | **Description** | Predicting bounding boxes and class labels around objects in an image | Predicting masks around objects (i.e. instances) in an image | Predicting masks around both objects (i.e. instances) as well as "stuff" (i.e. background things like trees and roads) in an image |
 | **Model** | [`~transformers.DetrForObjectDetection`] | [`~transformers.DetrForSegmentation`] | [`~transformers.DetrForSegmentation`] |
-| **Example dataset** | COCO detection | COCO detection, COCO panoptic | COCO panoptic  |                                                                        |
+| **Example dataset** | COCO detection | COCO detection, COCO panoptic | COCO panoptic                           |
 | **Format of annotations to provide to**  [`~transformers.DetrImageProcessor`] | {'image_id': `int`, 'annotations': `list[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `list[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `list[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
 | **Postprocessing** (i.e. converting the output of the model to Pascal VOC format) | [`~transformers.DetrImageProcessor.post_process`] | [`~transformers.DetrImageProcessor.post_process_segmentation`] | [`~transformers.DetrImageProcessor.post_process_segmentation`], [`~transformers.DetrImageProcessor.post_process_panoptic`] |
 | **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_tupes="bbox"` or `"segm"`, `PanopticEvaluator` |
 
-- In short, one should prepare the data either in COCO detection or COCO panoptic format, then use [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional `labels`, which can then be used to train (or fine-tune) a model. 
+- In short, one should prepare the data either in COCO detection or COCO panoptic format, then use [`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional `labels`, which can then be used to train (or fine-tune) a model.
 - For evaluation, one should first convert the outputs of the model using one of the postprocessing methods of [`~transformers.DetrImageProcessor`]. These can be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
 ## Resources
@@ -168,15 +171,6 @@ As a summary, consider the following table:
 
 [[autodoc]] DetrImageProcessorFast
     - preprocess
-    - post_process_object_detection
-    - post_process_semantic_segmentation
-    - post_process_instance_segmentation
-    - post_process_panoptic_segmentation
-
-## DetrFeatureExtractor
-
-[[autodoc]] DetrFeatureExtractor
-    - __call__
     - post_process_object_detection
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

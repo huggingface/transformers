@@ -20,7 +20,6 @@ from typing import Optional
 
 import regex as re
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import HFValidationError
 from safetensors.torch import load_file
@@ -210,7 +209,6 @@ def convert_model(
     hf_repo_id: str,
     output_dir: Optional[str] = None,
     output_hub_path: Optional[str] = None,
-    safe_serialization: bool = True,
 ):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
@@ -286,7 +284,7 @@ def convert_model(
     # ------------------------------------------------------------
 
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = DeepseekVLForConditionalGeneration(config)
 
     # Load and convert state dict
@@ -307,10 +305,10 @@ def convert_model(
     # Save the model
     if output_dir:
         print(f"Saving model to {output_dir}...")
-        model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+        model.save_pretrained(output_dir)
     if output_hub_path:
         print(f"Pushing model to hub at {output_hub_path}...")
-        model.push_to_hub(output_hub_path, safe_serialization=safe_serialization)
+        model.push_to_hub(output_hub_path)
 
     del state_dict, model
     gc.collect()
@@ -339,16 +337,12 @@ def main():
         default=None,
         help="Repository ID to push model to hub (e.g. 'username/model-name')",
     )
-    parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
     args = parser.parse_args()
 
     convert_model(
         hf_repo_id=args.hf_repo_id,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
-        safe_serialization=args.safe_serialization,
     )
 
 

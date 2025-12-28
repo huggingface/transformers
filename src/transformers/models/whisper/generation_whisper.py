@@ -16,8 +16,8 @@ import copy
 import math
 import warnings
 import zlib
-from collections.abc import Iterator
-from typing import Callable, Optional, Union
+from collections.abc import Callable, Iterator
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -140,7 +140,7 @@ def _pad_to_max_length(
     timestamp_begin=None,
 ):
     """
-    skip_ending_double_timestamps: when the segement ended with two timestamp tokens, whether to ignore the last timestamp token
+    skip_ending_double_timestamps: when the segment ended with two timestamp tokens, whether to ignore the last timestamp token
     see https://github.com/huggingface/transformers/pull/35750
 
     _pad_to_max_length is used in different contexts:
@@ -372,7 +372,7 @@ class WhisperGenerationMixin(GenerationMixin):
             jump_times = time_indices[jumps] * time_precision
 
             # each predicted token has a corresponding timestamp, expect the eos token (or last predicted token) for which we don't retrieve cross attentions
-            # (indeed contrary to OAI that re-run a full foward to retreive cross attentions for each token and therefore also the last one predicted, we retreive
+            # (indeed contrary to OAI that re-run a full forward to retrieve cross attentions for each token and therefore also the last one predicted, we retrieve
             # cross attentions directly from the auto-regressive generation, so we don't have cross attentiosn for the token at the end of the sequence. Nevertheless,
             # that is not important since we expect this last token to be the eos token)
             # 1. for decoder_input_ids, we set the timestamps to 0.0
@@ -423,7 +423,7 @@ class WhisperGenerationMixin(GenerationMixin):
         parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
+        guide](../generation_strategies).
 
         </Tip>
 
@@ -658,6 +658,7 @@ class WhisperGenerationMixin(GenerationMixin):
             )
 
         # 1. prepare generation config
+        generation_config = self.generation_config if generation_config is None else generation_config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables
@@ -1178,26 +1179,16 @@ class WhisperGenerationMixin(GenerationMixin):
                 if not is_shortform:
                     # we don't save `past_key_values` as this is too costly for longform
                     return None
-                elif isinstance(values, EncoderDecoderCache):
-                    all_past_key_values = []
-                    for layer_idx in range(self.config.decoder_layers):
-                        layer_past_key_values = []
-                        for cache_cls in [values.self_attention_cache, values.cross_attention_cache]:
-                            for v in [cache_cls.layers[layer_idx].keys, cache_cls.layers[layer_idx].values]:
-                                layer_past_key_values.append(v[batch_idx][None].cpu())
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return EncoderDecoderCache.from_legacy_cache(tuple(all_past_key_values))
-                else:
-                    all_past_key_values = []
-                    for v in range(len(values)):
-                        layer_past_key_values = []
-                        for w in values[v]:
-                            if len(w) != 0:
-                                layer_past_key_values.append(w[batch_idx][None].cpu())
-                            else:
-                                layer_past_key_values.append(w)
-                        all_past_key_values.append(tuple(layer_past_key_values))
-                    return tuple(all_past_key_values)
+                all_past_key_values = []
+                for layer_idx in range(self.config.decoder_layers):
+                    layer_cache = (
+                        values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.self_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
+                        values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
+                    )
+                    all_past_key_values.append(layer_cache)
+                return EncoderDecoderCache(all_past_key_values)
 
             return values[batch_idx].cpu()
 
@@ -1234,15 +1225,24 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
             elif key == "past_key_values":
                 if seek_outputs[0][key] is not None:
-                    outputs[key] = tuple(
-                        tuple(
-                            torch.stack([v[key][i][j] for v in seek_outputs]).squeeze(1).to(device)
-                            for j in range(len(seek_outputs[0][key][0]))
+                    all_past_key_values = []
+                    for layer_idx in range(len(seek_outputs[0][key])):
+                        self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
+                            torch.stack(
+                                [
+                                    getattr(getattr(sub_output[key], sub_cache).layers[layer_idx], sub_key)
+                                    for sub_output in seek_outputs
+                                ]
+                            )
+                            .squeeze(1)
+                            .to(device)
+                            for sub_cache in ["self_attention_cache", "cross_attention_cache"]
+                            for sub_key in ["keys", "values"]
                         )
-                        for i in range(len(seek_outputs[0][key]))
-                    )
-                    if isinstance(seek_outputs[0][key], EncoderDecoderCache):
-                        outputs[key] = EncoderDecoderCache.from_legacy_cache(outputs[key])
+                        all_past_key_values.append(
+                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
+                        )
+                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
                 else:
                     outputs[key] = None
 
@@ -1594,7 +1594,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     # if task is defined it'll overwrite task ids that might have already been defined via the generation_config
                     replace_or_add(init_tokens[i], task_id, generation_config.task_to_id.values())
                 else:
-                    raise ValueError(f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`")
+                    raise ValueError(f"The `{task}` task is not supported. The task should be one of `{TASK_IDS}`")
             elif language is not None and hasattr(generation_config, "task_to_id"):
                 # if language is defined, but no task id is in `init_tokens`, default to transcribe
                 if not any(ti in init_tokens[i] for ti in generation_config.task_to_id.values()):

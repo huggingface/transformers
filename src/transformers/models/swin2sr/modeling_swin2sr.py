@@ -20,14 +20,14 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_swin2sr import Swin2SRConfig
 
@@ -76,11 +76,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -255,40 +250,8 @@ class Swin2SRSelfAttention(nn.Module):
             nn.Linear(2, 512, bias=True), nn.ReLU(inplace=True), nn.Linear(512, num_heads, bias=False)
         )
 
-        # get relative_coords_table
-        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
-        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
-        relative_coords_table = (
-            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
-            .permute(1, 2, 0)
-            .contiguous()
-            .unsqueeze(0)
-        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
-        if pretrained_window_size[0] > 0:
-            relative_coords_table[:, :, :, 0] /= pretrained_window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= pretrained_window_size[1] - 1
-        elif window_size > 1:
-            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
-            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
-        relative_coords_table *= 8  # normalize to -8, 8
-        relative_coords_table = (
-            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
-        )
-        # set to same dtype as mlp weight
-        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
+        relative_coords_table, relative_position_index = self.create_coords_table_and_index()
         self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
         self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -300,7 +263,6 @@ class Swin2SRSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -355,8 +317,6 @@ class Swin2SRSelfAttention(nn.Module):
         attention_probs = self.dropout(attention_probs)
 
         # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -366,6 +326,43 @@ class Swin2SRSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
+
+    def create_coords_table_and_index(self):
+        # get relative_coords_table
+        relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
+        relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
+        relative_coords_table = (
+            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            .permute(1, 2, 0)
+            .contiguous()
+            .unsqueeze(0)
+        )  # [1, 2*window_height - 1, 2*window_width - 1, 2]
+        if self.pretrained_window_size[0] > 0:
+            relative_coords_table[:, :, :, 0] /= self.pretrained_window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= self.pretrained_window_size[1] - 1
+        elif self.window_size[0] > 1:
+            relative_coords_table[:, :, :, 0] /= self.window_size[0] - 1
+            relative_coords_table[:, :, :, 1] /= self.window_size[1] - 1
+        relative_coords_table *= 8  # normalize to -8, 8
+        relative_coords_table = (
+            torch.sign(relative_coords_table) * torch.log2(torch.abs(relative_coords_table) + 1.0) / math.log2(8)
+        )
+        # set to same dtype as mlp weight
+        relative_coords_table = relative_coords_table.to(next(self.continuous_position_bias_mlp.parameters()).dtype)
+
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)
+
+        return relative_coords_table, relative_position_index
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swin2SR
@@ -396,34 +393,14 @@ class Swin2SRAttention(nn.Module):
             else (pretrained_window_size, pretrained_window_size),
         )
         self.output = Swin2SRSelfOutput(config, dim)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -486,7 +463,7 @@ class Swin2SRLayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def _compute_window_shift(self, target_window_size, target_shift_size) -> tuple[tuple[int, int], tuple[int, int]]:
-        window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
+        window_size = [min(r, w) for r, w in zip(self.input_resolution, target_window_size)]
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
@@ -529,7 +506,6 @@ class Swin2SRLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         height, width = input_dimensions
@@ -553,9 +529,7 @@ class Swin2SRLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
-        attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
-        )
+        attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
         attention_output = attention_outputs[0]
 
@@ -627,16 +601,13 @@ class Swin2SRStage(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> tuple[torch.Tensor]:
         residual = hidden_states
 
         height, width = input_dimensions
         for i, layer_module in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -682,7 +653,6 @@ class Swin2SREncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -695,9 +665,7 @@ class Swin2SREncoder(nn.Module):
             all_hidden_states += (hidden_states,)
 
         for i, stage_module in enumerate(self.stages):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = stage_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -726,17 +694,30 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     config: Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
+            init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, Swin2SRSelfAttention):
+            init.constant_(module.logit_scale, math.log(10))
+            relative_coords_table, relative_position_index = module.create_coords_table_and_index()
+            init.copy_(module.relative_coords_table, relative_coords_table)
+            init.copy_(module.relative_position_index, relative_position_index)
+        elif isinstance(module, Swin2SRModel):
+            if module.config.num_channels == 3 and module.config.num_channels_out == 3:
+                mean = torch.tensor([0.4488, 0.4371, 0.4040]).view(1, 3, 1, 1)
+            else:
+                mean = torch.zeros(1, 1, 1, 1)
+            init.copy_(module.mean, mean)
 
 
 @auto_docstring
@@ -767,14 +748,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def pad_and_normalize(self, pixel_values):
         _, _, height, width = pixel_values.size()
 
@@ -794,23 +767,16 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         _, _, height, width = pixel_values.shape
 
@@ -823,7 +789,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -863,7 +828,7 @@ class Upsample(nn.Module):
         self.scale = scale
         if (scale & (scale - 1)) == 0:
             # scale = 2^n
-            for i in range(int(math.log(scale, 2))):
+            for i in range(int(math.log2(scale))):
                 self.add_module(f"convolution_{i}", nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
                 self.add_module(f"pixelshuffle_{i}", nn.PixelShuffle(2))
         elif scale == 3:
@@ -874,7 +839,7 @@ class Upsample(nn.Module):
 
     def forward(self, hidden_state):
         if (self.scale & (self.scale - 1)) == 0:
-            for i in range(int(math.log(self.scale, 2))):
+            for i in range(int(math.log2(self.scale))):
                 hidden_state = self.__getattr__(f"convolution_{i}")(hidden_state)
                 hidden_state = self.__getattr__(f"pixelshuffle_{i}")(hidden_state)
 
@@ -1020,11 +985,11 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageSuperResolutionOutput]:
         r"""
         Example:
@@ -1071,7 +1036,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         outputs = self.swin2sr(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

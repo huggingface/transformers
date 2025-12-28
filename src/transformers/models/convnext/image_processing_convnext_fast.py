@@ -16,13 +16,11 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -30,40 +28,19 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    crop_pct (`float`, *optional*):
-        Percentage of the image to crop. Only has an effect if size < 384. Can be
-        overridden by `crop_pct` in the`preprocess` method.
-    """
-
-    crop_pct: Optional[float]
+from .image_processing_convnext import ConvNextImageProcessorKwargs
 
 
 @auto_docstring
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"shortest_edge": 384}
@@ -72,13 +49,13 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_kwargs = ConvNextFastImageProcessorKwargs
+    valid_kwargs = ConvNextImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[ConvNextImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(
@@ -118,23 +95,23 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             resize_size = get_resize_output_image_size(
                 image, size=resize_shortest_edge, default_to_square=False, input_data_format=ChannelDimension.FIRST
             )
-            image = F.resize(
+            image = super().resize(
                 image,
-                resize_size,
+                SizeDict(height=resize_size[0], width=resize_size[1]),
                 interpolation=interpolation,
                 **kwargs,
             )
             # then crop to (shortest_edge, shortest_edge)
-            return F.center_crop(
+            return self.center_crop(
                 image,
-                (shortest_edge, shortest_edge),
+                SizeDict(height=shortest_edge, width=shortest_edge),
                 **kwargs,
             )
         else:
             # warping (no cropping) when evaluated at 384 or larger
-            return F.resize(
+            return super().resize(
                 image,
-                (shortest_edge, shortest_edge),
+                SizeDict(height=shortest_edge, width=shortest_edge),
                 interpolation=interpolation,
                 **kwargs,
             )
@@ -155,6 +132,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, list[float]]],
         disable_grouping: Optional[bool],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -181,7 +159,6 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

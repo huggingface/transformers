@@ -14,28 +14,28 @@
 # limitations under the License.
 """PEGASUS model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PegasusConfig(PretrainedConfig):
+class PegasusConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusModel`]. It is used to instantiate an
     PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PEGASUS
     [google/pegasus-large](https://huggingface.co/google/pegasus-large) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the PEGASUS model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PegasusModel`] or [`TFPegasusModel`].
+            `inputs_ids` passed when calling [`PegasusModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -143,6 +143,7 @@ class PegasusConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
@@ -151,14 +152,6 @@ class PegasusConfig(PretrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
 
 
 __all__ = ["PegasusConfig"]

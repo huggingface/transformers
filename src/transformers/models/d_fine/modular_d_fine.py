@@ -17,15 +17,15 @@ from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
-import torch.nn.init as init
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
 from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrConvNormLayer,
     RTDetrDecoder,
@@ -33,6 +33,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderOutput,
     RTDetrEncoder,
     RTDetrForObjectDetection,
+    RTDetrFrozenBatchNorm2d,
     RTDetrHybridEncoder,
     RTDetrMLPPredictionHead,
     RTDetrModel,
@@ -48,13 +49,13 @@ logger = logging.get_logger(__name__)
 
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
-class DFineConfig(PretrainedConfig):
+class DFineConfig(PreTrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DFineModel`]. It is used to instantiate a D-FINE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of D-FINE-X-COCO "[ustc-community/dfine-xlarge-coco"](https://huggingface.co/ustc-community/dfine-xlarge-coco").
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         initializer_range (`float`, *optional*, defaults to 0.01):
@@ -66,7 +67,7 @@ class DFineConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -213,6 +214,7 @@ class DFineConfig(PretrainedConfig):
     """
 
     model_type = "d_fine"
+    sub_configs = {"backbone_config": AutoConfig}
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -306,8 +308,7 @@ class DFineConfig(PretrainedConfig):
             )
             backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create HGNetV2Config
+            # this will map it to HGNetV2Config
             # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
@@ -413,40 +414,8 @@ class DFineConfig(PretrainedConfig):
             raise ValueError(
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    @classmethod
-    def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`DFineConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
-        configuration.
-
-            Args:
-                backbone_config ([`PretrainedConfig`]):
-                    The backbone configuration.
-
-            Returns:
-                [`DFineConfig`]: An instance of a configuration object
-        """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
 
 
 class DFineMultiscaleDeformableAttention(nn.Module):
@@ -620,23 +589,31 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
 
 
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
+        """Initialize the weights"""
         # initialize linear layer bias value according to a given probability value.
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
                     bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    nn.init.xavier_uniform_(layer.weight)
-                    nn.init.constant_(layer.bias, bias)
+                    init.xavier_uniform_(layer.weight)
+                    init.constant_(layer.bias, bias)
 
             if module.bbox_embed is not None:
                 for layer in module.bbox_embed:
-                    nn.init.constant_(layer.layers[-1].weight, 0)
-                    nn.init.constant_(layer.layers[-1].bias, 0)
+                    init.constant_(layer.layers[-1].weight, 0)
+                    init.constant_(layer.layers[-1].bias, 0)
+
+            if hasattr(module, "reg_scale"):
+                init.constant_(module.reg_scale, self.config.reg_scale)
+
+            if hasattr(module, "up"):
+                init.constant_(module.up, self.config.up)
 
         if isinstance(module, DFineMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -646,22 +623,28 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
             scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
             grid_init *= scaling
-            with torch.no_grad():
-                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+            init.copy_(module.sampling_offsets.bias, grid_init.flatten())
 
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+
+            num_points_scale = [1 / n for n in module.num_points_list for _ in range(n)]
+            init.copy_(module.num_points_scale, torch.tensor(num_points_scale, dtype=torch.float32))
 
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
-            nn.init.xavier_uniform_(module.enc_score_head.weight)
-            nn.init.constant_(module.enc_score_head.bias, bias)
+            init.xavier_uniform_(module.enc_score_head.weight)
+            init.constant_(module.enc_score_head.bias, bias)
 
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
@@ -672,10 +655,14 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
 
+        if isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
-            nn.init.xavier_uniform_(module.weight_embedding.weight)
+            init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
-            nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+            init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
 class DFineIntegral(nn.Module):
@@ -746,6 +733,7 @@ class DFineDecoder(RTDetrDecoder):
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
+        **kwargs,
     ) -> DFineDecoderOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -870,6 +858,10 @@ class DFineDecoder(RTDetrDecoder):
         )
 
 
+class DFineFrozenBatchNorm2d(RTDetrFrozenBatchNorm2d):
+    pass
+
+
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -896,9 +888,19 @@ class DFineModel(RTDetrModel):
         self.decoder = DFineDecoder(config)
 
 
-class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
+class DFineForObjectDetection(RTDetrForObjectDetection):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+    _tied_weights_keys = {
+        r"bbox_embed.(?![0])\d+": "bbox_embed.0",
+        r"class_embed.(?![0])\d+": "class_embed.0",
+        "model.decoder.class_embed": "class_embed",
+        "model.decoder.bbox_embed": "bbox_embed",
+    }
+
     def __init__(self, config: DFineConfig):
-        DFinePreTrainedModel.__init__(config)
+        DFinePreTrainedModel.__init__(self, config)
 
         # D-FINE encoder-decoder model
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
@@ -917,10 +919,8 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
             ]
         )
 
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1100,8 +1100,6 @@ class DFineCSPRepLayer(nn.Module):
         self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
         super().__init__()
-        in_channels = in_channels
-        out_channels = out_channels
         activation = config.activation_function
 
         hidden_channels = int(out_channels * expansion)

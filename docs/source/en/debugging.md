@@ -35,7 +35,7 @@ pip install deepspeed
 
 PyTorch comes with its own CUDA toolkit, but to use DeepSpeed with PyTorch, you need to have an identical version of CUDA installed system-wide. For example, if you installed PyTorch with `cudatoolkit==10.2` in your Python environment, then you'll also need to have CUDA 10.2 installed everywhere.
 
-The exact location can vary from system to system, but `usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly set up and added to your `PATH` environment variable, you can find the installation location with the following command.
+The exact location can vary from system to system, but `/usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly set up and added to your `PATH` environment variable, you can find the installation location with the following command.
 
 ```bash
 which nvcc
@@ -45,7 +45,7 @@ which nvcc
 
 You may also have more than one CUDA toolkit installed on your system.
 
-```bash
+```text
 /usr/local/cuda-10.2
 /usr/local/cuda-11.0
 ```

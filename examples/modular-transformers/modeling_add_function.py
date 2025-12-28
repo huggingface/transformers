@@ -10,7 +10,7 @@ from typing import Optional
 import torch
 from torch import nn
 
-from ...utils.deprecation import deprecate_kwarg
+from ...integrations import use_kernel_func_from_hub
 
 
 def rotate_half(x):
@@ -20,6 +20,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -64,6 +65,5 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(self) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

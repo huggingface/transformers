@@ -19,7 +19,6 @@ specific language governing permissions and limitations under the License.
     </div>
 </div>
 
-
 # DINOv3
 
 [DINOv3](https://huggingface.co/papers/2508.10104) is a family of versatile vision foundation models that outperforms the specialized state of the art across a broad range of settings, without fine-tuning. DINOv3 produces high-quality dense features that achieve outstanding performance on various vision tasks, significantly surpassing previous self- and weakly-supervised foundation models.
@@ -170,6 +169,10 @@ print("Pooled output shape:", pooled_output.shape)
 [[autodoc]] DINOv3ViTModel
     - forward
 
+## DINOv3ViTBackbone
+
+[[autodoc]] DINOv3ViTBackbone
+
 ## DINOv3ConvNextModel
 
 [[autodoc]] DINOv3ConvNextModel
@@ -179,3 +182,8 @@ print("Pooled output shape:", pooled_output.shape)
 
 [[autodoc]] DINOv3ViTImageProcessorFast
     - preprocess
+
+## DINOv3ConvNextBackbone
+
+[[autodoc]] DINOv3ConvNextBackbone
+    - forward

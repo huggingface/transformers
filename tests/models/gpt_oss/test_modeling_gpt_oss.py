@@ -27,7 +27,6 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    GptOssConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -40,16 +39,12 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GptOssForCausalLM,
-        GptOssForSequenceClassification,
-        GptOssForTokenClassification,
         GptOssModel,
     )
 
@@ -58,51 +53,14 @@ if is_torch_available():
 
 class GptOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GptOssConfig
         base_model_class = GptOssModel
-        causal_lm_class = GptOssForCausalLM
-        sequence_class = GptOssForSequenceClassification
-        token_class = GptOssForTokenClassification
-
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GptOssModel, GptOssForCausalLM, GptOssForSequenceClassification, GptOssForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-classification": GptOssForSequenceClassification,
-            "text-generation": GptOssForCausalLM,
-            "token-classification": GptOssForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
-
-    def setUp(self):
-        self.model_tester = GptOssModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -127,9 +85,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skipIf(torch_device == "cpu", "GptOss does not support flex officially")
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
-
-    def test_batching_equivalence(self, **kwargs):
-        return super().test_batching_equivalence(atol=5e-4, rtol=1e-3)
 
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
@@ -247,7 +202,7 @@ class GptOssIntegrationTest(unittest.TestCase):
     # Non-distributed inference
     # ------------------------
     @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
@@ -255,6 +210,13 @@ class GptOssIntegrationTest(unittest.TestCase):
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
@@ -353,6 +315,7 @@ if __name__ == "__main__":
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 

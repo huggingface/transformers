@@ -18,17 +18,18 @@ from torch import nn
 
 from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast
 from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
-    LlamaRotaryEmbedding,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from .configuration_ernie4_5 import Ernie4_5Config
 
 
-class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
+class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -36,7 +37,7 @@ class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -84,7 +85,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 class Ernie4_5MLP(LlamaMLP):
     def __init__(self, config: Ernie4_5Config):
-        super().__init__()
+        super().__init__(config)
 
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)

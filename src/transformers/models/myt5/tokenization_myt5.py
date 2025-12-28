@@ -20,7 +20,7 @@ import warnings
 from collections import defaultdict
 from typing import Optional, Union
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 

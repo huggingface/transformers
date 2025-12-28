@@ -22,8 +22,8 @@
 from collections.abc import Sequence
 from typing import Any, Optional, Union
 
-from ...configuration_utils import PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters
 from ...utils import is_timm_available, logging, requires_backends
 
 
@@ -34,7 +34,7 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma3nTextConfig(PretrainedConfig):
+class Gemma3nTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nTextModel`]. It is used to instantiate an
     Gemma3nTextModel model according to the specified arguments, defining the model architecture. Instantiating a
@@ -56,7 +56,7 @@ class Gemma3nTextConfig(PretrainedConfig):
             Dimension of the hidden representations for per-layer emebeddings.
         intermediate_size (`int` or `Sequence[int]`, *optional*, defaults to 16384):
             Dimension of the MLP representations. MatFormer configurations may wish to provide a sequence of integers
-            to account for vairable intermediate_size values across layers. In such cases,
+            to account for variable intermediate_size values across layers. In such cases,
             `len(intermediate_size) == num_hidden_layers`.
         num_hidden_layers (`int`, *optional*, defaults to 35):
             Number of hidden layers in the Transformer decoder.
@@ -90,47 +90,10 @@ class Gemma3nTextConfig(PretrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention.
-            NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we
-            recommend you to update this value accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        rope_local_base_freq (float, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings for local attention.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -147,7 +110,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_active_idx (`int`, *optional*, defaults to 0):
             The index of the prediction from which AltUp will compute additional predictions or correct
         altup_coef_clip (`float`, *optional*, defaults to 120.0):
-            The maximum amplitude of an AltUp prediction or correction coeficient weight.
+            The maximum amplitude of an AltUp prediction or correction coefficient weight.
         altup_correct_scale (`bool`, *optional*, defaults to `True`):
             If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
         altup_num_inputs (`int`, *optional*, defaults to 4):
@@ -156,12 +119,13 @@ class Gemma3nTextConfig(PretrainedConfig):
             The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
             layers in the model "share" the KV values in that each local and global layer in this range uses the KV
             cache values computed for the last local or global layer, respectively, before entering this range. The
-            value should be `num_kv_shared_layers` should be a scalar of `sliding_window_pattern`.
+            value should be a multiple of the attention pattern size (see `layer_types` parameter).
         laurel_rank (int, *optional*, defaults to 64):
             The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-        activation_sparsity_pattern (Sequence[float], *optional*, defaults to `(0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)`):
+        activation_sparsity_pattern (Sequence[float], *optional*):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
-            explicitly provide a sparsity value for each layer in the model.
+            explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
+            sparse with a sparsity factor of 0.95 and the rest are dense.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -193,6 +157,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     def __init__(
         self,
@@ -213,9 +178,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_theta: float = 1_000_000.0,
-        rope_scaling: Optional[dict[str, Any]] = None,
-        rope_local_base_freq: float = 10_000.0,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
@@ -227,16 +190,9 @@ class Gemma3nTextConfig(PretrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = (0.95,) * 10 + (0.0,) * 25,
+        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
-
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
             raise ValueError(
                 "intermediate_size must have an explicit intermediate size for every layer or one for all layers. "
@@ -257,17 +213,12 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.layer_types = layer_types
-
-        self.rope_local_base_freq = rope_local_base_freq
-        self.rope_scaling = rope_scaling
-        rope_config_validation(self)
 
         if layer_types is None:
             self.layer_types = [
@@ -276,7 +227,7 @@ class Gemma3nTextConfig(PretrainedConfig):
         else:
             self.layer_types = layer_types
 
-        layer_type_validation(self.layer_types)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.hidden_size_per_layer_input = hidden_size_per_layer_input
         self.num_kv_shared_layers = num_kv_shared_layers
@@ -289,7 +240,8 @@ class Gemma3nTextConfig(PretrainedConfig):
         self.laurel_rank = laurel_rank
 
         if activation_sparsity_pattern is None:
-            activation_sparsity_pattern = [0.0] * num_hidden_layers
+            num_sparse_layers = 10 if num_hidden_layers > 10 else 0
+            activation_sparsity_pattern = [0.95] * num_sparse_layers + [0.0] * (num_hidden_layers - num_sparse_layers)
 
         if (len_asp := len(activation_sparsity_pattern)) != num_hidden_layers:
             raise ValueError(
@@ -297,9 +249,40 @@ class Gemma3nTextConfig(PretrainedConfig):
                 f"Expected {num_hidden_layers} values but got {len_asp}."
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
+        self.rope_parameters = rope_parameters
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_theta", self.default_theta["global"])
+        )
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("rope_local_base_freq", self.default_theta["local"])
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
-class Gemma3nAudioConfig(PretrainedConfig):
+class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nAudioEncoder`]. It is used to instantiate
     an `Gemma3nAudioEncoder` model according to the specified arguments, defining the model architecture. Instantiating
@@ -324,7 +307,7 @@ class Gemma3nAudioConfig(PretrainedConfig):
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         gradient_clipping (`float`, *optional*, defaults to 10000000000.0):
-            Clipping value used to stablize extremely large gradient values.
+            Clipping value used to stabilize extremely large gradient values.
         conf_attention_chunk_size (`int`, *optional*, defaults to 12):
             The sub-sequence size for local attention processing inside the Conformer ("conf") section of the
             Universal Speech Model.
@@ -438,7 +421,7 @@ class Gemma3nAudioConfig(PretrainedConfig):
         self.sscp_conv_stride_size = sscp_conv_stride_size
 
 
-class Gemma3nVisionConfig(PretrainedConfig):
+class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration for a timm backbone [`TimmWrapper`]. It is used to
     instantiate an timm model model according to the specified arguments, defining the model architecture.
@@ -497,18 +480,24 @@ class Gemma3nVisionConfig(PretrainedConfig):
         model_args: Optional[dict] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        self.architecture = architecture
         self.initializer_range = initializer_range
         self.do_pooling = do_pooling
-        self.model_args = model_args  # named "model_args" for BC with timm
-        self.architecture = architecture
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.vocab_offset = vocab_offset
         self.rms_norm_eps = rms_norm_eps
+        self.architecture = architecture
+        self.initializer_range = initializer_range
+        self.do_pooling = do_pooling
+        self.model_args = model_args  # named "model_args" for BC with timm
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
+        # Create a copy to avoid mutating the original dict
+        config_dict = config_dict.copy()
+
         label_names = config_dict.get("label_names")
         is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
@@ -549,14 +538,14 @@ class Gemma3nVisionConfig(PretrainedConfig):
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
-        output["num_classes"] = self.num_labels
-        output["label_names"] = list(self.id2label.values())
+        output.setdefault("num_classes", self.num_labels)
+        output.setdefault("label_names", list(self.id2label.values()))
         output.pop("id2label", None)
         output.pop("label2id", None)
         return output
 
 
-class Gemma3nConfig(PretrainedConfig):
+class Gemma3nConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3nForConditionalGeneration`]. It is used to
     instantiate a Gemma3nForConditionalGeneration according to the specified arguments, defining the model
@@ -565,8 +554,8 @@ class Gemma3nConfig(PretrainedConfig):
 
     e.g. [google/gemma-3n-E4B](https://huggingface.co/google/gemma-3n-E4B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`Union[Gemma3nTextConfig, dict]`, *optional*):

@@ -15,8 +15,8 @@
 
 import inspect
 import math
-from collections.abc import Iterable
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -134,7 +134,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, min_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
@@ -197,7 +197,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self,
         prompt_length_to_skip: int,
         min_new_tokens: int,
-        eos_token_id: Union[int, list[int], torch.Tensor],
+        eos_token_id: int | list[int] | torch.Tensor,
         device: str = "cpu",
     ):
         for arg_name, arg_value in [
@@ -344,7 +344,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
+    def __init__(self, penalty: float, prompt_ignore_length: int | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
@@ -369,7 +369,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
         if scores.dim() == 3:
             if self.logits_indices is not None and self.cu_seq_lens_q is not None:
-                batch_size, seq_len, vocab_size = scores.shape
                 last_positions = self.logits_indices
                 last_scores = scores[0, last_positions, :]
 
@@ -582,6 +581,112 @@ class TopKLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+class TopHLogitsWarper(LogitsProcessor):
+    """
+    [`LogitsProcessor`] that implements Top-H sampling, a decoding method which adaptively selects a subset of
+    high-probability tokens based on entropy and cumulative probability constraints.
+
+    This method dynamically determines how many tokens to keep by analyzing the entropy difference of the selected
+    distribution, thereby balancing exploration and exploitation. It ensures that generated text maintains both
+    diversity and coherence.
+
+    Reference:
+    For details, see *Top-H Decoding: Adapting the Creativity and Coherence with Bounded Entropy in Text Generation*
+    (NeurIPS 2025): https://arxiv.org/abs/2509.02510
+
+    Args:
+        top_h (`float`):
+            Scaling coefficient for the entropy-based threshold (`tau`). Must be in the range `(0, 1]`.
+
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B")
+    >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
+
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
+
+    >>> outputs = model.generate(**inputs, do_sample=True, top_h=0.4)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
+    ```
+    """
+
+    def __init__(self, top_h: float, filter_value: float = -float("Inf")):
+        super().__init__()
+
+        # input checks
+        if not (0 < top_h <= 1):
+            raise ValueError("`top_h` must be in the range (0, 1].")
+
+        # Maximum number of top tokens to consider before applying the entropy-based filter.
+        # Acts as a cap for efficiency and numerical stability — increasing this allows more
+        # tokens to be evaluated but may slow down generation. Default is 100.
+        self.top_n = 100
+
+        self.top_h = top_h
+        self.filter_value = filter_value
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Filters logits using Top-H sampling.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input token IDs.
+            scores (`torch.FloatTensor` of shape `(batch_size, vocab_size)`):
+                Raw logits from the model.
+
+        Return:
+            `torch.FloatTensor` of shape `(batch_size, vocab_size)`:
+                Processed logits where invalid tokens are masked with `-inf`.
+        """
+        batch_size, vocab_size = scores.shape
+        device = scores.device
+        keep_mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
+        top_n = min(self.top_n, vocab_size)
+
+        # 1. Get top-k logits and indices for the whole batch
+        top_logits, top_idx = torch.topk(scores, top_n, dim=-1, largest=True, sorted=True)
+
+        # 2. Create a batch of categorical distributions
+        dist = torch.distributions.Categorical(logits=top_logits)
+        probs = dist.probs
+        log_probs = torch.log(probs)  # dist.log_prob(idx)
+
+        # 3. Calculate the entropy-based threshold tau for the whole batch
+        # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
+        tau = (dist.entropy() * self.top_h).unsqueeze(-1)
+
+        # 4. Calculate cumulative entropy using torch.cumsum
+        # The individual entropy terms (-p * log(p)) are calculated for all top_n tokens at once.
+        entropy_terms = -probs * log_probs
+        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
+
+        # 5. Determine which tokens to keep based on the stopping condition
+        # Create a boolean mask for the top_n tokens.
+        # Stopping rule: keep adding tokens in order of probability until the cumulative entropy
+        # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
+        # guaranteeing at least the most probable token is always included.
+        selection_mask = cumulative_entropy <= tau
+        selection_mask[:, 0] = True
+
+        # 6. Update the final keep_mask for the entire batch in one operation
+        # The scatter_ operation efficiently updates the keep_mask at the indices
+        # specified by top_idx with the boolean values from selection_mask.
+        keep_mask.scatter_(dim=1, index=top_idx, src=selection_mask)
+
+        # apply filtering
+        scores_processed = scores.clone()
+        scores_processed[~keep_mask] = self.filter_value
+        return scores_processed
+
+
 class MinPLogitsWarper(LogitsProcessor):
     """
     [`LogitsProcessor`] that performs min-p, i.e. keeps all tokens that are above a minimum probability, scaled by the
@@ -643,19 +748,18 @@ class MinPLogitsWarper(LogitsProcessor):
         # Convert logits to probabilities
         probs = torch.softmax(scores, dim=-1)
         # Get the probability of the top token for each sequence in the batch
-        top_probs, _ = probs.max(dim=-1, keepdim=True)
+        top_probs = probs.amax(dim=-1, keepdim=True)
         # Calculate the actual min_p threshold by scaling min_p with the top token's probability
         scaled_min_p = self.min_p * top_probs
         # Create a mask for tokens that have a probability less than the scaled min_p
         tokens_to_remove = probs < scaled_min_p
 
-        sorted_indices = torch.argsort(scores, descending=True, dim=-1)
-        sorted_indices_to_remove = torch.gather(tokens_to_remove, dim=-1, index=sorted_indices)
-        # Keep at least min_tokens_to_keep
-        sorted_indices_to_remove[..., : self.min_tokens_to_keep] = False
+        # Keep at least min_tokens_to_keep tokens (clip k to vocab size if needed, avoids index out of range)
+        k = min(self.min_tokens_to_keep, probs.shape[-1])
+        sorted_indices = torch.topk(probs, k, dim=-1).indices
+        tokens_to_remove.scatter_(-1, sorted_indices, False)
 
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        scores_processed = scores.masked_fill(indices_to_remove, self.filter_value)
+        scores_processed = scores.masked_fill(tokens_to_remove, self.filter_value)
         return scores_processed
 
 
@@ -1160,7 +1264,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, sequence_bias: list[list[Union[list[int], float]]]):
+    def __init__(self, sequence_bias: list[list[list[int] | float]]):
         self.sequence_bias = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
@@ -1333,9 +1437,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ```
     """
 
-    def __init__(
-        self, bad_words_ids: list[list[int]], eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None
-    ):
+    def __init__(self, bad_words_ids: list[list[int]], eos_token_id: int | list[int] | torch.Tensor | None = None):
         self.bad_word_ids = bad_words_ids
         self._validate_arguments()
 
@@ -1444,15 +1546,12 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
-
     Note that this logits processor is only effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam
     Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) for more
     details.
-
     Traditional beam search often generates very similar sequences across different beams.
     `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other
     beams in the same time step.
-
     Args:
         diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
@@ -1463,17 +1562,13 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         num_beam_groups (`int`):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://huggingface.co/papers/1610.02424) for more details.
-
     Examples:
-
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     >>> import torch
-
     >>> # Initialize the model and tokenizer
     >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-base")
-
     >>> # A long text about the solar system
     >>> text = (
     ...     "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, "
@@ -1483,7 +1578,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     "interstellar molecular cloud."
     ... )
     >>> inputs = tokenizer("summarize: " + text, return_tensors="pt")
-
     >>> # Generate diverse summary
     >>> outputs_diverse = model.generate(
     ...     **inputs,
@@ -1494,7 +1588,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-
     >>> # Generate non-diverse summary
     >>> outputs_non_diverse = model.generate(
     ...     **inputs,
@@ -1503,12 +1596,10 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     ...     num_return_sequences=2,
     ... )
     >>> summary_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
-
     >>> # With `diversity_penalty`, the resulting beams are much more diverse
     >>> print(summary_non_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
-
     >>> print(summaries_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
@@ -1516,6 +1607,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
+        logger.warning_once(
+            "`HammingDiversityLogitsProcessor` is deprecated and will be removed in v4.62.0, as constrained beam search has been moved to the Hub: https://hf.co/transformers-community/constrained-beam-search."
+        )
         if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
             raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
         self._diversity_penalty = diversity_penalty
@@ -1547,7 +1641,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 beam groups in the current generation step.
             beam_group_idx (`int`):
                 The index of the beam group currently being processed.
-
         Return:
             `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`:
                 The processed prediction scores.
@@ -1656,7 +1749,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, max_length: int, eos_token_id: int | list[int] | torch.Tensor, device: str = "cpu"):
         self.max_length = max_length
 
         if not isinstance(eos_token_id, torch.Tensor):
@@ -1770,7 +1863,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     def __init__(
         self,
         exponential_decay_length_penalty: tuple[int, float],
-        eos_token_id: Union[int, list[int], torch.Tensor],
+        eos_token_id: int | list[int] | torch.Tensor,
         input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
@@ -1925,7 +2018,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -1992,7 +2085,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self,
         generate_config: "GenerationConfig",
         begin_index: int,
-        _detect_timestamp_from_logprob: Optional[bool] = None,
+        _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
@@ -2071,7 +2164,10 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
 
 class WhisperNoSpeechDetection(LogitsProcessor):
-    r"""This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits to follow the original implementation"""
+    """
+    This processor can be used to detect silence when using Whisper. It should take as input unprocessed logits
+    to follow the original implementation
+    """
 
     def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
@@ -2092,6 +2188,10 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.model = model
 
     def set_inputs(self, inputs):
+        # build `cache_position` on the fly
+        seq_length = inputs["input_ids"].shape[1]
+        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
+        # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
 
@@ -2296,9 +2396,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         self,
         guidance_scale: float,
         model,
-        unconditional_ids: Optional[torch.LongTensor] = None,
-        unconditional_attention_mask: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = True,
+        unconditional_ids: torch.LongTensor | None = None,
+        unconditional_attention_mask: torch.LongTensor | None = None,
+        use_cache: bool = True,
     ):
         self.guidance_scale = guidance_scale
         self.model = model
@@ -2375,7 +2475,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             Minimum end of speech threshold.
     """
 
-    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor], min_eos_p: float, device: str = "cpu"):
+    def __init__(self, eos_token_id: int | list[int] | torch.Tensor, min_eos_p: float, device: str = "cpu"):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -3044,7 +3144,7 @@ class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             the logits of the combined CFG output, but the conditioned output only.
     """
 
-    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
+    def __init__(self, guidance_scale: float, guidance_top_k: int | None = None):
         if guidance_scale > 1:
             self.guidance_scale = guidance_scale
         else:

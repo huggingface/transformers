@@ -55,6 +55,13 @@ class BarkProcessorTest(unittest.TestCase):
             pretrained_processor_name_or_path=self.checkpoint,
             speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,
         )
+
+        # TODO (ebezzam) not all speaker embedding are properly downloaded.
+        # My hypothesis: there are many files (~700 speaker embeddings) and some fail to download (not the same at different first runs)
+        # https://github.com/huggingface/transformers/blob/967045082faaaaf3d653bfe665080fd746b2bb60/src/transformers/models/bark/processing_bark.py#L89
+        # https://github.com/huggingface/transformers/blob/967045082faaaaf3d653bfe665080fd746b2bb60/src/transformers/models/bark/processing_bark.py#L188
+        # So for testing purposes, we will remove the unavailable speaker embeddings before saving.
+        processor._verify_speaker_embeddings(remove_unavailable=True)
         processor.save_pretrained(
             self.tmpdirname,
             speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,

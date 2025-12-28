@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Tool use
 
-Chat models are commonly trained with support for "function-calling" or "tool-use". Tools are functions supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator tool to perform arithmetic without having to it internally.
+Chat models are commonly trained with support for "function-calling" or "tool-use". Tools are functions supplied by the user, which the model can choose to call as part of its response. For example, models could have access to a calculator tool to perform arithmetic without having to perform the computation internally.
 
 This guide will demonstrate how to define tools, how to pass them to a chat model, and how to handle the model's output when it calls a tool.
 
@@ -29,12 +29,11 @@ the arguments, argument types, and function docstring are parsed in order to gen
 Although passing Python functions is very convenient, the parser can only handle [Google-style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
 docstrings. Refer to the examples below for how to format a tool-ready function.
 
-
 ```py
 def get_current_temperature(location: str, unit: str):
     """
     Get the current temperature at a location.
-    
+
     Args:
         location: The location to get the temperature for, in the format "City, Country"
         unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
@@ -44,7 +43,7 @@ def get_current_temperature(location: str, unit: str):
 def get_current_wind_speed(location: str):
     """
     Get the current wind speed in km/h at a given location.
-    
+
     Args:
         location: The location to get the wind speed for, in the format "City, Country"
     """
@@ -96,13 +95,11 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 
 The chat model called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature.
 
-A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history.
-
-Hold the call in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
+A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history. You'll need to manually translate the output
+string into a tool call dict. The tool call should go in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
 
 > [!WARNING]
 > Although `tool_calls` is similar to the OpenAI API, the OpenAI API uses a JSON string as its `tool_calls` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
-
 
 ```py
 tool_call = {"name": "get_current_temperature", "arguments": {"location": "Paris, France", "unit": "celsius"}}
@@ -131,7 +128,6 @@ The temperature in Paris, France right now is 22°C.<|im_end|>
 > Although the key in the assistant message is called `tool_calls`, in most cases, models only emit a single tool call at a time. Some older models emit multiple tool calls at the same time, but this is a
 > significantly more complex process, as you need to handle multiple tool responses at once and disambiguate them, often using tool call IDs. Please refer to the model card to see exactly what format a model expects for tool calls.
 
-
 ## JSON schemas
 
 Another way to define tools is by passing a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step).
@@ -147,7 +143,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -160,22 +156,22 @@ print(schema)
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -187,7 +183,7 @@ We won't go into the details of JSON schema itself here, since it's already [ver
 ```py
 # A simple function that takes no arguments
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -203,18 +199,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }
