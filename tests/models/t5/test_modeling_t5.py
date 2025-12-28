@@ -445,6 +445,20 @@ class T5ModelTester:
         self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
         self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
 
+    def create_and_check_attention_forward(self, config):
+        torch.manual_seed(0)
+        model = T5Model(config=config).get_decoder().block[0].layer[0]  # T5LayerSelfAttention
+        model.to(torch_device).eval()
+
+        seq_len = self.encoder_seq_length
+        batch_size = self.batch_size
+        embed_size = self.hidden_size
+
+        test_input = torch.randn((batch_size, seq_len, embed_size), device=torch_device)
+        attn_out, _kv_state, _pos_bias = model(test_input)
+
+        self.parent.assertFalse(torch.isnan(attn_out).any().item())
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -674,6 +688,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     @unittest.skip(reason="T5 has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def test_create_and_check_attention_forward(self):
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        self.model_tester.create_and_check_attention_forward(config)
 
 
 class T5EncoderOnlyModelTester:
