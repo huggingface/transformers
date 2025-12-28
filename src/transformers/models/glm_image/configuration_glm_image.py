@@ -281,16 +281,10 @@ class GlmImageConfig(PreTrainedConfig):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 167855):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 167856):
-            The video token index to encode the image prompt.
         image_start_token_id (`int`, *optional*, defaults to 167851):
             The image start token index to encode the start of image.
         image_end_token_id (`int`, *optional*, defaults to 167852):
             The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 167853):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 167854):
-            The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -314,11 +308,8 @@ class GlmImageConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         image_token_id=167855,
-        video_token_id=167856,
         image_start_token_id=167851,
         image_end_token_id=167852,
-        video_start_token_id=167853,
-        video_end_token_id=167854,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -332,9 +323,6 @@ class GlmImageConfig(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
         self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
 
