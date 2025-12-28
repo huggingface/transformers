@@ -88,7 +88,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-06,
         qkv_bias=True,
-        atten_logit_cap=50.0,
+        attn_logit_softcapping=50.0,
         num_auxiliary_layers=2,
         apply_l2_norm=True,
         num_labels=1000,
@@ -111,7 +111,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
         self.num_spatial_layers = num_spatial_layers
         self.num_temporal_layers = num_temporal_layers
-        self.atten_logit_cap = atten_logit_cap
+        self.attn_logit_softcapping = attn_logit_softcapping
         self.num_auxiliary_layers = num_auxiliary_layers
         self.apply_l2_norm = apply_l2_norm
         self.num_labels = num_labels
@@ -197,7 +197,7 @@ class VideoPrismConfig(PreTrainedConfig):
     model_type = "videoprism"
     sub_configs = {"text_config": VideoPrismTextConfig, "vision_config": VideoPrismVisionConfig}
 
-    def __init__(self, **kwargs):
+    def __init__(self, text_config=None, vision_config=None, **kwargs):
         if text_config is None:
             text_config = VideoPrismTextConfig()
             logger.info("`text_config` is `None`. Initializing the `VideoPrismTextConfig` with default values.")
