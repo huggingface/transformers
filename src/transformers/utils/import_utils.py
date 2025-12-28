@@ -880,7 +880,7 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
+    if not is_available or flash_attn_version == "N/A" or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
     import torch
