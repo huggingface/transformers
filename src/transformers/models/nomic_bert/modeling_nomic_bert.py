@@ -130,7 +130,7 @@ class NomicBertEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-    def _round_to_multiple(value: int, multiple: int) -> int:
+    def _round_to_multiple(self, value: int, multiple: int) -> int:
         return ((value + multiple - 1) // multiple) * multiple
 
 
@@ -613,7 +613,7 @@ class NomicBertOutput(nn.Module):
 
 
 class NomicBertLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -631,6 +631,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
             )
         self.intermediate = NomicBertIntermediate(config)
         self.output = NomicBertOutput(config)
+        self.layer_idx = layer_idx
         self.attention.self = NomicBertSelfAttention(config)
 
     def forward(

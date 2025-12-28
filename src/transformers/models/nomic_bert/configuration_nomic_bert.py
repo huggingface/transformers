@@ -36,16 +36,12 @@ class NomicBertConfig(PreTrainedConfig):
     Args:
         rotary_emb_fraction (`float`, *optional*, defaults to 0.0):
             Fraction of the hidden size used for rotary embeddings.
-        use_flash_attn (`bool`, *optional*, defaults to `False`):
-            Whether to use Flash Attention.
         rotary_emb_base (`int`, *optional*, defaults to 10,000):
             Base for the rotary embeddings.
         rotary_emb_scale_base (`float`, *optional*, defaults to `None`):
             Scale base for the rotary embeddings.
         rotary_emb_interleaved (`bool`, *optional*, defaults to `False`):
             Whether to use interleaved rotary embeddings.
-        use_rms_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use RMSNorm instead of LayerNorm.
         type_vocab_size (`int`, *optional*, defaults to 2):
             The size of the token type (segment) vocabulary. Used to distinguish different portions of the input,
             such as sentence A and sentence B in pairwise classification tasks.
@@ -78,17 +74,28 @@ class NomicBertConfig(PreTrainedConfig):
 
     def __init__(
         self,
+        vocab_size=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        use_cache=True,
+        classifier_dropout=None,
         rotary_emb_fraction=0.0,
-        use_flash_attn=False,
         rotary_emb_base=10_000,
         rotary_emb_scale_base=None,
         rotary_emb_interleaved=False,
-        use_rms_norm=False,
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
         tie_word_embeddings=True,
         rotary_scaling_factor=None,
         max_position_embeddings=2048,
+        pad_token_id=0,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -109,11 +116,9 @@ class NomicBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
 
         self.rotary_emb_fraction = rotary_emb_fraction
-        self.use_flash_attn = use_flash_attn
         self.rotary_emb_base = rotary_emb_base
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
-        self.use_rms_norm = use_rms_norm
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self.rotary_scaling_factor = rotary_scaling_factor
 
