@@ -15,10 +15,8 @@
 """Image processor class for Segformer."""
 """
 SegFormer image processor.
-
 This module implements the image processing class for SegFormer models.
 It handles resizing, normalization, and conversion to tensors.
-
 This documentation was improved as a contribution for open source.
 """
 
