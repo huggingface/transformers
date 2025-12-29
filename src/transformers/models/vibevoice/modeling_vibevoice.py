@@ -93,6 +93,66 @@ class VibeVoiceRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class VibeVoiceConv1dCache:
+    """Cache class for maintaining convolution states across layers to support streaming."""
+
+    def __init__(
+        self,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_in_channels: list[int],
+    ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_in_channels)}
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding` and `per_layer_in_channels`"
+            )
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_in_channels = per_layer_in_channels
+        self.per_layer_is_init = [True] * num_layers
+
+        self.padding_cache = [None] * num_layers
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int, is_transpose: bool = False):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to be partially cached.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            is_transpose (`bool`):
+                Whether the layer is a ConvTranspose1d layer.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding = self.per_layer_padding[layer_idx]
+        in_channels = self.per_layer_in_channels[layer_idx]
+
+        current_cache = self.padding_cache[layer_idx]
+        if current_cache is None:
+            if is_transpose:
+                # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L471
+                current_cache = torch.zeros(batch_size, in_channels, 0, device=device, dtype=dtype)
+            else:
+                current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+
+        # Update the cache with padded input, to ensure enough context:
+        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345
+        input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
+        if padding > 0:
+            if input_with_context.shape[-1] >= padding:
+                new_cache = input_with_context[:, :, -padding:]
+            else:
+                new_cache = input_with_context
+            self.padding_cache[layer_idx] = new_cache
+
+        return current_cache
+
+
 class VibeVoiceDiffusionHeadTimestepEmbedder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -225,7 +285,7 @@ class VibeVoiceMultiModelProjector(nn.Module):
         return x
 
 
-class VibeVoiceEncoderFeedForward(nn.Module):
+class VibeVoiceFeedForward(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
         self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size, bias=config.bias)
@@ -234,66 +294,6 @@ class VibeVoiceEncoderFeedForward(nn.Module):
 
     def forward(self, hidden_states):
         return self.linear2(self.activation(self.linear1(hidden_states)))
-
-
-class VibeVoiceConv1dCache:
-    """Cache class for maintaining convolution states across layers to support streaming."""
-
-    def __init__(
-        self,
-        num_layers: int,
-        per_layer_padding: list[int],
-        per_layer_in_channels: list[int],
-    ):
-        # ensure correct number of layers for each arg
-        from_args_num_layers = {len(per_layer_padding), len(per_layer_in_channels)}
-        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
-            raise ValueError(
-                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding` and `per_layer_in_channels`"
-            )
-        self.per_layer_padding = per_layer_padding
-        self.per_layer_in_channels = per_layer_in_channels
-        self.per_layer_is_init = [True] * num_layers
-
-        self.padding_cache = [None] * num_layers
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int, is_transpose: bool = False):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            is_transpose (`bool`):
-                Whether the layer is a ConvTranspose1d layer.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding = self.per_layer_padding[layer_idx]
-        in_channels = self.per_layer_in_channels[layer_idx]
-
-        current_cache = self.padding_cache[layer_idx]
-        if current_cache is None:
-            if is_transpose:
-                # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L471
-                current_cache = torch.zeros(batch_size, in_channels, 0, device=device, dtype=dtype)
-            else:
-                current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-
-        # Update the cache with padded input, to ensure enough context:
-        # https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L345
-        input_with_context = torch.cat([current_cache, hidden_states], dim=-1)
-        if padding > 0:
-            if input_with_context.shape[-1] >= padding:
-                new_cache = input_with_context[:, :, -padding:]
-            else:
-                new_cache = input_with_context
-            self.padding_cache[layer_idx] = new_cache
-
-        return current_cache
 
 
 class VibeVoiceCausalConv1d(nn.Module):
@@ -357,7 +357,7 @@ class VibeVoiceConvNext1dLayer(nn.Module):
 
         self.norm = VibeVoiceRMSNorm(hidden_size, eps=config.rms_norm_eps)
         self.ffn_norm = VibeVoiceRMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.ffn = VibeVoiceEncoderFeedForward(config, hidden_size)
+        self.ffn = VibeVoiceFeedForward(config, hidden_size)
         self.gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.ffn_gamma = nn.Parameter(config.layer_scale_init_value * torch.ones(hidden_size), requires_grad=True)
         self.mixer = VibeVoiceCausalConv1d(

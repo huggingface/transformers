@@ -207,7 +207,10 @@ def convert_checkpoint(
     )
     model_config["acoustic_tokenizer_config"]["hidden_size"] = model_config["acoustic_tokenizer_config"].pop("vae_dim")
     model_config["acoustic_tokenizer_config"]["bias"] = model_config["acoustic_tokenizer_config"].pop("conv_bias")
-    model_config["acoustic_tokenizer_config"]["vae_std"] = model_config["acoustic_tokenizer_config"].pop("fix_std")
+    # -- original hardcodes a scaling factor for vae_std: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
+    model_config["acoustic_tokenizer_config"]["vae_std"] = (
+        model_config["acoustic_tokenizer_config"].pop("fix_std") / 0.8
+    )
     # -- remove decoder parameters as they can be derived from encoder ones
     if "decoder_depths" in model_config["acoustic_tokenizer_config"]:
         del model_config["acoustic_tokenizer_config"]["decoder_depths"]
