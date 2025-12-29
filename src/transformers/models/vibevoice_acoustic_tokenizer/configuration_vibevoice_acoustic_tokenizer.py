@@ -85,8 +85,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         depths=[3, 3, 3, 3, 3, 3, 8],
         hidden_act="gelu",
         ffn_expansion=4,
-        vae_std=0.5,
-        vae_scaling_factor=0.8,
+        vae_std=0.625,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -102,10 +101,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.n_filters = n_filters
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths
-        # NOTE (ebezzam) original hardcodes scaling within sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L963
-        # scaling moved here in case future implementations modify `vae_std` but keep internal scaling
         self.vae_std = vae_std
-        self.vae_scaling_factor = vae_scaling_factor
 
     @property
     def hop_length(self) -> int:

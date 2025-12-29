@@ -465,7 +465,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         super().__init__(config)
         self.encoder = VibeVoiceAcousticTokenizerEncoder(config)
         self.decoder = VibeVoiceAcousticTokenizerDecoder(config)
-        self.vae_std = config.vae_std / config.vae_scaling_factor
+        self.vae_std = config.vae_std
         self.post_init()
 
     @can_return_tuple
