@@ -418,7 +418,7 @@ class VideoPrismSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
         query = self.query(hidden_states).view(*new_shape).transpose(1, 2)
@@ -437,6 +437,7 @@ class VideoPrismSelfAttention(nn.Module):
             attention_mask,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout_prob,
+            softcap=self.config.attn_logit_softcapping,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -665,7 +666,6 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             query_layer,
             key_layer,
             value_layer,
-            attention_mask,
             scaling=1.0,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=self.config.attn_logit_softcapping,
