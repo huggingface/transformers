@@ -534,34 +534,21 @@ class NomicBertSelfOutput(nn.Module):
 
 
 class NomicBertAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None, is_cross_attention=False):
-        super().__init__()
-        self.is_cross_attention = is_cross_attention
-        attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
-        self.self = NomicBertSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = NomicBertSelfOutput(config)
+    """
+    NomicBERT Attention module.
+    This module bundles the NomicBertSelfAttention and the NomicBertSelfOutput.
+    """
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
-        attention_output, attn_weights = self.self(
-            hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+
+        self.self = NomicBertSelfAttention(
+            config,
+            position_embedding_type=position_embedding_type,
         )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
+
+        self.output = NomicBertSelfOutput(config)
+        self.pruned_heads = set()
 
 
 class NomicBertIntermediate(nn.Module):
@@ -618,6 +605,13 @@ class NomicBertOutput(nn.Module):
 
 
 class NomicBertLayer(GradientCheckpointingLayer):
+    """
+    NomicBERT Layer.
+    Overrides standard BERT components to incorporate:
+    Rotary Positional Embeddings (RoPE) in the Attention mechanism.
+    And SwiGLU activation in the Intermediate layer.
+    """
+
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -686,6 +680,12 @@ class NomicBertLayer(GradientCheckpointingLayer):
 
 
 class NomicBertEncoder(nn.Module):
+    """
+    NomicBERT Encoder.
+    Inherits from BertEncoder but allows for custom layer classes (like NomicBertLayer)
+    to be passed during initialization via kwargs.
+    """
+
     def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
@@ -863,6 +863,11 @@ class NomicBertForPreTrainingOutput(ModelOutput):
     """
 )
 class NomicBertModel(NomicBertPreTrainedModel):
+    """
+    NomicBERT Model transformer outputting raw hidden-states without any specific head on top.
+    It overrides the embeddings, encoder, and pooler to use the NomicBERT-specific implementations.
+    """
+
     _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
 
     def __init__(self, config, add_pooling_layer=True):

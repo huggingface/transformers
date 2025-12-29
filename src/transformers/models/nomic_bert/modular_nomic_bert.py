@@ -22,7 +22,6 @@ from einops import rearrange, repeat
 
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
-    BertAttention,
     BertCrossAttention,
     BertEmbeddings,
     BertEncoder,
@@ -62,11 +61,38 @@ class NomicBertConfig(BertConfig):
 
 
     Args:
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BertModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
         rotary_emb_fraction (`float`, *optional*, defaults to 0.0):
             Fraction of the hidden size used for rotary embeddings.
-        rotary_emb_base (`int`, *optional*, defaults to 10,000):
+        rotary_emb_base (`int`, *optional*, defaults to 10000):
             Base for the rotary embeddings.
-        rotary_emb_scale_base (`float`, *optional*, defaults to `None`):
+        rotary_emb_scale_base (`float`, *optional*):
             Scale base for the rotary embeddings.
         rotary_emb_interleaved (`bool`, *optional*, defaults to `False`):
             Whether to use interleaved rotary embeddings.
@@ -81,6 +107,8 @@ class NomicBertConfig(BertConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The token ID used for padding.
 
     ```python
     >>> from transformers import NomicBertModel, NomicBertConfig
@@ -438,12 +466,22 @@ class NomicBertSelfOutput(BertSelfOutput):
     pass
 
 
-class NomicBertAttention(BertAttention):
-    def __init__(self, config, position_embedding_type=None, is_cross_attention=False):
-        super().__init__(
-            config, is_cross_attention=is_cross_attention, position_embedding_type=position_embedding_type
+class NomicBertAttention(nn.Module):
+    """
+    NomicBERT Attention module.
+    This module bundles the NomicBertSelfAttention and the NomicBertSelfOutput.
+    """
+
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+
+        self.self = NomicBertSelfAttention(
+            config,
+            position_embedding_type=position_embedding_type,
         )
-        self.self = NomicBertSelfAttention(config, position_embedding_type=position_embedding_type)
+
+        self.output = NomicBertSelfOutput(config)
+        self.pruned_heads = set()
 
 
 class NomicBertIntermediate(BertIntermediate):
@@ -485,6 +523,13 @@ class NomicBertOutput(BertOutput):
 
 
 class NomicBertLayer(BertLayer):
+    """
+    NomicBERT Layer.
+    Overrides standard BERT components to incorporate:
+    Rotary Positional Embeddings (RoPE) in the Attention mechanism.
+    And SwiGLU activation in the Intermediate layer.
+    """
+
     def __init__(self, config, layer_idx=None):
         super().__init__(config)
         self.layer_idx = layer_idx
@@ -493,6 +538,12 @@ class NomicBertLayer(BertLayer):
 
 
 class NomicBertEncoder(BertEncoder):
+    """
+    NomicBERT Encoder.
+    Inherits from BertEncoder but allows for custom layer classes (like NomicBertLayer)
+    to be passed during initialization via kwargs.
+    """
+
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -530,6 +581,11 @@ class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
 
 
 class NomicBertModel(BertModel):
+    """
+    NomicBERT Model transformer outputting raw hidden-states without any specific head on top.
+    It overrides the embeddings, encoder, and pooler to use the NomicBERT-specific implementations.
+    """
+
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
 

@@ -131,7 +131,6 @@ def get_config(checkpoint):
             type_vocab_size=base_config.type_vocab_size,
             pad_vocab_size_multiple=base_config.pad_vocab_size_multiple,
             tie_word_embeddings=base_config.tie_word_embeddings,
-            rotary_scaling_factor=base_config.rotary_scaling_factor,
             max_position_embeddings=base_config.max_position_embeddings,
         )
 
