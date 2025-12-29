@@ -30,7 +30,7 @@ from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceAcousticTokenizerPreTrainedModel,
-    VibeVoiceConv1dCache,
+    VibeVoiceAcousticTokenizerConv1dCache,
 )
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -76,6 +76,10 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
 
 
 class VibeVoiceRMSNorm(Qwen2RMSNorm):
+    pass
+
+
+class VibeVoiceConv1dCache(VibeVoiceAcousticTokenizerConv1dCache):
     pass
 
 
