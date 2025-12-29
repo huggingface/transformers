@@ -322,7 +322,9 @@ class VibeVoiceAcousticTokenizerEncoder(nn.Module):
             input_channels = int(config.n_filters * (2**stage_idx))
             stage = nn.ModuleList(
                 [
-                    VibeVoiceAcousticTokenizerConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)
+                    VibeVoiceAcousticTokenizerConvNext1dLayer(
+                        config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx
+                    )
                     for depth_idx in range(config.depths[stage_idx])
                 ]
             )
@@ -397,7 +399,9 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             input_channels = config.n_filters * (2 ** (len(config.decoder_depths) - 1 - stage_idx))
             stage = nn.ModuleList(
                 [
-                    VibeVoiceAcousticTokenizerConvNext1dLayer(config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx)
+                    VibeVoiceAcousticTokenizerConvNext1dLayer(
+                        config, hidden_size=input_channels, layer_idx=layer_idx + depth_idx
+                    )
                     for depth_idx in range(config.decoder_depths[stage_idx])
                 ]
             )
