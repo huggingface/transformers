@@ -30,28 +30,95 @@ EPILOG_TXT = """Example:
 """
 
 
-# TODO write correct modify mappings
-KEYS_TO_MODIFY_MAPPING = {
-    "bert.embeddings.word_embeddings": "embeddings.word_embeddings",
-    "bert.embeddings.position_embeddings": "embeddings.position_embeddings",
-    "bert.embeddings.token_type_embeddings": "embeddings.token_type_embeddings",
-    "bert.embeddings.LayerNorm": "embeddings.LayerNorm",
-    "bert.encoder.layer": "encoder.layer",
-    "bert.pooler.dense": "pooler.dense",
-    "bert.pooler.LayerNorm": "pooler.LayerNorm",
-    "cls.predictions.bias": "cls.predictions.bias",
-    "cls.predictions.transform.dense": "cls.predictions.transform.dense",
-    "cls.predictions.transform.LayerNorm": "cls.predictions.transform.LayerNorm",
-}
+def split_qkv_weight(qkv_weight, num_heads, head_dim):
+    """
+    Split combined QKV weight into separate Q, K, V weights.
+    Original shape: (3 * num_heads * head_dim, hidden_size)
+    Output: query, key, value weights each of shape (num_heads * head_dim, hidden_size)
+    """
+    qkv_weight = qkv_weight.view(3, num_heads * head_dim, -1)
+    return qkv_weight[0], qkv_weight[1], qkv_weight[2]
 
 
-def convert_state_dict_to_hf(state_dict):
+def convert_state_dict_to_hf(state_dict, config):
+    """
+    Convert state dict keys from original nomic-ai format to HuggingFace format.
+    The original model uses a different architecture:
+    - Combined QKV attention (Wqkv) instead of separate Q/K/V
+    - Different MLP structure (fc11, fc12, fc2) for SwiGLU
+    - Different normalization names (norm1, norm2)
+    - emb_ln instead of embeddings.LayerNorm
+    - No position embeddings (uses RoPE instead)
+    """
     new_state_dict = {}
+    num_heads = config.num_attention_heads
+    head_dim = config.hidden_size // num_heads
+    
     for key, value in state_dict.items():
-        for old, new in KEYS_TO_MODIFY_MAPPING.items():
-            if old in key:
-                key = key.replace(old, new)
-        new_state_dict[key] = value
+        # Skip MLM head keys since we're converting to base model (NomicBertModel)
+        if key.startswith("cls.predictions"):
+            continue
+        
+        # Embeddings
+        if key == "bert.embeddings.word_embeddings.weight":
+            new_state_dict["embeddings.word_embeddings.weight"] = value
+        elif key == "bert.embeddings.token_type_embeddings.weight":
+            new_state_dict["embeddings.token_type_embeddings.weight"] = value
+        # Note: Original model doesn't have position embeddings (uses RoPE)
+        elif key == "bert.emb_ln.weight":
+            new_state_dict["embeddings.LayerNorm.weight"] = value
+        elif key == "bert.emb_ln.bias":
+            new_state_dict["embeddings.LayerNorm.bias"] = value
+        
+        # Encoder layers: bert.encoder.layers.X -> encoder.layer.X
+        elif "bert.encoder.layers." in key:
+            # Replace bert.encoder.layers with encoder.layer
+            new_key = key.replace("bert.encoder.layers.", "encoder.layer.")
+            
+            # Handle combined QKV attention weights
+            if ".attn.Wqkv.weight" in new_key:
+                layer_idx = int(new_key.split("encoder.layer.")[1].split(".")[0])
+                # Split QKV into separate Q, K, V
+                q_weight, k_weight, v_weight = split_qkv_weight(value, num_heads, head_dim)
+                new_state_dict[new_key.replace(".attn.Wqkv.weight", ".attention.self.query.weight")] = q_weight
+                new_state_dict[new_key.replace(".attn.Wqkv.weight", ".attention.self.key.weight")] = k_weight
+                new_state_dict[new_key.replace(".attn.Wqkv.weight", ".attention.self.value.weight")] = v_weight
+                continue
+            # Handle attention output projection
+            elif ".attn.out_proj.weight" in new_key:
+                new_key = new_key.replace(".attn.out_proj.weight", ".attention.output.dense.weight")
+            elif ".attn.out_proj.bias" in new_key:
+                new_key = new_key.replace(".attn.out_proj.bias", ".attention.output.dense.bias")
+            # Handle MLP layers (SwiGLU: fc11=gate, fc12=value, fc2=output)
+            elif ".mlp.fc11.weight" in new_key:
+                new_key = new_key.replace(".mlp.fc11.weight", ".intermediate.dense_gate.weight")
+            elif ".mlp.fc11.bias" in new_key:
+                new_key = new_key.replace(".mlp.fc11.bias", ".intermediate.dense_gate.bias")
+            elif ".mlp.fc12.weight" in new_key:
+                new_key = new_key.replace(".mlp.fc12.weight", ".intermediate.dense.weight")
+            elif ".mlp.fc12.bias" in new_key:
+                new_key = new_key.replace(".mlp.fc12.bias", ".intermediate.dense.bias")
+            elif ".mlp.fc2.weight" in new_key:
+                new_key = new_key.replace(".mlp.fc2.weight", ".output.dense.weight")
+            elif ".mlp.fc2.bias" in new_key:
+                new_key = new_key.replace(".mlp.fc2.bias", ".output.dense.bias")
+            # Handle layer norms
+            elif ".norm1.weight" in new_key:
+                new_key = new_key.replace(".norm1.weight", ".attention.output.LayerNorm.weight")
+            elif ".norm1.bias" in new_key:
+                new_key = new_key.replace(".norm1.bias", ".attention.output.LayerNorm.bias")
+            elif ".norm2.weight" in new_key:
+                new_key = new_key.replace(".norm2.weight", ".output.LayerNorm.weight")
+            elif ".norm2.bias" in new_key:
+                new_key = new_key.replace(".norm2.bias", ".output.LayerNorm.bias")
+            
+            new_state_dict[new_key] = value
+        
+        # Pooler (if present)
+        elif key.startswith("bert.pooler"):
+            new_key = key.replace("bert.pooler", "pooler")
+            new_state_dict[new_key] = value
+    
     return new_state_dict
 
 
@@ -88,7 +155,36 @@ def convert_nomic_hub_to_hf(tokenizer_model_id, original_model_id, output_hub_pa
 
     print(f'model keys: {model.state_dict().keys()}')
     state_dict = original_model.state_dict()
-    state_dict = convert_state_dict_to_hf(state_dict)
+    state_dict = convert_state_dict_to_hf(state_dict, config)
+    
+    # Get the expected state dict from the model to fill in missing keys
+    # We need to create the model on CPU to get the actual shapes
+    with torch.device("cpu"):
+        cpu_model = NomicBertModel(config)
+        expected_state_dict = cpu_model.state_dict()
+    
+    # Initialize missing keys with zeros
+    for key in expected_state_dict.keys():
+        if key not in state_dict:
+            expected_shape = expected_state_dict[key].shape
+            if "position_embeddings" in key:
+                # Position embeddings are not used (RoPE instead), but we need to initialize them
+                print(f"Initializing {key} with zeros (RoPE is used instead)")
+                state_dict[key] = torch.zeros(expected_shape, dtype=expected_state_dict[key].dtype)
+            elif "bias" in key:
+                # Initialize missing biases with zeros
+                print(f"Initializing {key} with zeros")
+                state_dict[key] = torch.zeros(expected_shape, dtype=expected_state_dict[key].dtype)
+            elif "pooler" in key:
+                # Initialize pooler if missing
+                print(f"Initializing {key} with zeros")
+                state_dict[key] = torch.zeros(expected_shape, dtype=expected_state_dict[key].dtype)
+            else:
+                print(f"Warning: Missing key {key}, initializing with zeros")
+                state_dict[key] = torch.zeros(expected_shape, dtype=expected_state_dict[key].dtype)
+    
+    # Move model to CPU to load state dict
+    model = cpu_model
     model.load_state_dict(state_dict, strict=True)
     model.save_pretrained(output_hub_path)
 

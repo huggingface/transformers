@@ -165,8 +165,8 @@ class NomicBertSelfAttention(BertSelfAttention):
     Key Difference: Replaces standard BERT absolute position embeddings with
     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
     """
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__(config, position_embedding_type=position_embedding_type)
+    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
+        super().__init__(config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx)
 
         # Initialize the RoPE module.
         self.rotary_emb = RotaryEmbedding(
