@@ -684,7 +684,7 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.FloatTensor] = None,
         tts_text_masks: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, VibeVoiceRealTimeCausalLMOutputWithPast]:
@@ -697,7 +697,8 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            # NOTE (ebezzam) only loss for binary classifier
+            loss = nn.BCEWithLogitsLoss()(logits.view(-1), labels.view(-1))
 
         return VibeVoiceRealTimeCausalLMOutputWithPast(
             loss=loss,

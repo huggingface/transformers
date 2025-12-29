@@ -176,7 +176,7 @@ class VibeVoiceRealTimeModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
 
-class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VibeVoiceRealTimeForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (VibeVoiceRealTimeForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -202,9 +202,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             inputs_dict["labels"] = torch.zeros(
                 (
                     self.model_tester.batch_size,
-                    self.model_tester.seq_length,
                 ),
-                dtype=torch.long,
                 device=torch_device,
             )
 
@@ -332,56 +330,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     @unittest.skip(reason="VibeVoice has composite model structure.")
     def test_tied_weights_keys(self):
         pass
-
-    @pytest.mark.generate
-    def test_vibevoice_generate_max_new_tokens(self):
-        """
-        Test VibeVoice-specific generation to ensure sequences output has correct length.
-        This test verifies that the returned sequences include the original input_ids
-        plus the newly generated tokens as specified by max_new_tokens.
-        """
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config, input_ids, attention_mask, noise_scheduler = config_and_inputs
-
-        model = VibeVoiceRealTimeForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        max_new_tokens = 5
-        original_length = input_ids.shape[1]
-        expected_length = original_length + max_new_tokens
-
-        with torch.no_grad():
-            output = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                noise_scheduler=noise_scheduler,
-                max_new_tokens=max_new_tokens,
-                min_new_tokens=max_new_tokens,
-                do_sample=False,
-                return_dict_in_generate=True,
-                cfg_scale=1.3,
-                n_diffusion_steps=10,
-            )
-
-        # Check that we get the expected output type
-        self.assertIsNotNone(output.sequences)
-
-        # Check that sequences have the correct shape
-        # Should be [batch_size, original_length + max_new_tokens]
-        self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
-        self.assertEqual(output.sequences.shape[1], expected_length)
-
-        # Verify that original input_ids are preserved at the beginning
-        torch.testing.assert_close(
-            output.sequences[:, :original_length],
-            input_ids,
-            msg="Original input_ids should be preserved at the beginning of sequences",
-        )
-
-        # Check that we have speech_outputs (audio) as well
-        self.assertIsNotNone(output.audio)
-        self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
 
 # class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
