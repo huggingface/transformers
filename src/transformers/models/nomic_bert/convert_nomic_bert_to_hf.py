@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import AutoModelForMaskedLM
-import torch
 import argparse
 
+import torch
+
 from transformers import (
-    AddedToken,
     AutoConfig,
-    AutoTokenizer,
+    AutoModelForMaskedLM,
     NomicBertConfig,
     NomicBertModel,
 )
 
 
 EPILOG_TXT = """Example:
-    python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py --tokenizer_model_id bert-base-uncased --original_model_id nomic-ai/nomic-bert-2048 --output_hub_path org/nomic_bert
+    python transformers/src/transformers/models/nomic_bert/convert_nomic_bert_to_hf.py --original_model_id nomic-ai/nomic-bert-2048 --output_hub_path org/nomic_bert
 """
 
 
@@ -53,12 +52,12 @@ def convert_state_dict_to_hf(state_dict, config):
     new_state_dict = {}
     num_heads = config.num_attention_heads
     head_dim = config.hidden_size // num_heads
-    
+
     for key, value in state_dict.items():
         # Skip MLM head keys since we're converting to base model (NomicBertModel)
         if key.startswith("cls.predictions"):
             continue
-        
+
         # Embeddings
         if key == "bert.embeddings.word_embeddings.weight":
             new_state_dict["embeddings.word_embeddings.weight"] = value
@@ -69,15 +68,14 @@ def convert_state_dict_to_hf(state_dict, config):
             new_state_dict["embeddings.LayerNorm.weight"] = value
         elif key == "bert.emb_ln.bias":
             new_state_dict["embeddings.LayerNorm.bias"] = value
-        
+
         # Encoder layers: bert.encoder.layers.X -> encoder.layer.X
         elif "bert.encoder.layers." in key:
             # Replace bert.encoder.layers with encoder.layer
             new_key = key.replace("bert.encoder.layers.", "encoder.layer.")
-            
+
             # Handle combined QKV attention weights
             if ".attn.Wqkv.weight" in new_key:
-                layer_idx = int(new_key.split("encoder.layer.")[1].split(".")[0])
                 # Split QKV into separate Q, K, V
                 q_weight, k_weight, v_weight = split_qkv_weight(value, num_heads, head_dim)
                 new_state_dict[new_key.replace(".attn.Wqkv.weight", ".attention.self.query.weight")] = q_weight
@@ -111,14 +109,14 @@ def convert_state_dict_to_hf(state_dict, config):
                 new_key = new_key.replace(".norm2.weight", ".output.LayerNorm.weight")
             elif ".norm2.bias" in new_key:
                 new_key = new_key.replace(".norm2.bias", ".output.LayerNorm.bias")
-            
+
             new_state_dict[new_key] = value
-        
+
         # Pooler (if present)
         elif key.startswith("bert.pooler"):
             new_key = key.replace("bert.pooler", "pooler")
             new_state_dict[new_key] = value
-    
+
     return new_state_dict
 
 
@@ -126,43 +124,38 @@ def get_config(checkpoint):
     base_config = AutoConfig.from_pretrained(checkpoint)
     if checkpoint == "nomic-ai/nomic-bert-2048":
         return NomicBertConfig(
-            rotary_emb_fraction = base_config.rotary_emb_fraction,
-            rotary_emb_base = base_config.rotary_emb_base,
-            rotary_emb_scale_base = base_config.rotary_emb_scale_base,
-            rotary_emb_interleaved = base_config.rotary_emb_interleaved,
-            type_vocab_size = base_config.type_vocab_size,
-            pad_vocab_size_multiple = base_config.pad_vocab_size_multiple,
-            tie_word_embeddings = base_config.tie_word_embeddings,
-            rotary_scaling_factor = base_config.rotary_scaling_factor,
-            max_position_embeddings = base_config.max_position_embeddings,
+            rotary_emb_fraction=base_config.rotary_emb_fraction,
+            rotary_emb_base=base_config.rotary_emb_base,
+            rotary_emb_scale_base=base_config.rotary_emb_scale_base,
+            rotary_emb_interleaved=base_config.rotary_emb_interleaved,
+            type_vocab_size=base_config.type_vocab_size,
+            pad_vocab_size_multiple=base_config.pad_vocab_size_multiple,
+            tie_word_embeddings=base_config.tie_word_embeddings,
+            rotary_scaling_factor=base_config.rotary_scaling_factor,
+            max_position_embeddings=base_config.max_position_embeddings,
         )
 
     return base_config
 
 
-def convert_nomic_hub_to_hf(tokenizer_model_id, original_model_id, output_hub_path, push_to_hub):
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_id)
-
-    config = AutoConfig.from_pretrained(original_model_id, trust_remote_code=True) # the config needs to be passed in
-    original_model = AutoModelForMaskedLM.from_pretrained(original_model_id,config=config, trust_remote_code=True)
-    print(f'original keys: {original_model.state_dict().keys()}')
-
+def convert_nomic_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
+    config = AutoConfig.from_pretrained(original_model_id, trust_remote_code=True)  # the config needs to be passed in
+    original_model = AutoModelForMaskedLM.from_pretrained(original_model_id, config=config, trust_remote_code=True)
 
     config = get_config(original_model_id)
 
     with torch.device("meta"):
         model = NomicBertModel(config)
 
-    print(f'model keys: {model.state_dict().keys()}')
     state_dict = original_model.state_dict()
     state_dict = convert_state_dict_to_hf(state_dict, config)
-    
+
     # Get the expected state dict from the model to fill in missing keys
     # We need to create the model on CPU to get the actual shapes
     with torch.device("cpu"):
         cpu_model = NomicBertModel(config)
         expected_state_dict = cpu_model.state_dict()
-    
+
     # Initialize missing keys with zeros
     for key in expected_state_dict.keys():
         if key not in state_dict:
@@ -182,7 +175,7 @@ def convert_nomic_hub_to_hf(tokenizer_model_id, original_model_id, output_hub_pa
             else:
                 print(f"Warning: Missing key {key}, initializing with zeros")
                 state_dict[key] = torch.zeros(expected_shape, dtype=expected_state_dict[key].dtype)
-    
+
     # Move model to CPU to load state dict
     model = cpu_model
     model.load_state_dict(state_dict, strict=True)
@@ -198,17 +191,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--tokenizer_model_id",
-        default='bert-base-uncased',
-        help="Hub location of the tokenizer model",
-    )
-    parser.add_argument(
         "--original_model_id",
-        default='nomic-ai/nomic-bert-2048',
+        default="nomic-ai/nomic-bert-2048",
         help="Hub location of the model",
     )
     parser.add_argument(
         "--output_hub_path",
+        default="org/nomic_bert",
         help="Location on the hub of the converted model",
     )
     parser.add_argument(
@@ -217,7 +206,7 @@ def main():
         help="If set, the model will be pushed to the hub after conversion.",
     )
     args = parser.parse_args()
-    convert_nomic_hub_to_hf(args.tokenizer_model_id, args.original_model_id, args.output_hub_path, args.push_to_hub)
+    convert_nomic_hub_to_hf(args.original_model_id, args.output_hub_path, args.push_to_hub)
 
 
 if __name__ == "__main__":

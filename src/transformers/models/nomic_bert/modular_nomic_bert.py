@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+import math
+from typing import Optional, Union
+
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat
-import math
 
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -49,6 +50,7 @@ from ..bert.modeling_bert import (
     BertSelfOutput,
 )
 
+
 class NomicBertConfig(BertConfig):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
@@ -76,8 +78,6 @@ class NomicBertConfig(BertConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
-        rotary_scaling_factor (`float`, *optional*, defaults to `None`):
-            Scaling factor for the rotary embeddings (used for linear scaling).
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -95,6 +95,7 @@ class NomicBertConfig(BertConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "nomic_bert"
 
     def __init__(
@@ -118,31 +119,42 @@ class NomicBertConfig(BertConfig):
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
         tie_word_embeddings=True,
-        rotary_scaling_factor=None,
         max_position_embeddings=2048,
         pad_token_id=0,
         **kwargs,
     ):
         super().__init__(
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            classifier_dropout=classifier_dropout,
             type_vocab_size=type_vocab_size,
-            tie_word_embeddings=tie_word_embeddings,
             max_position_embeddings=max_position_embeddings,
-            **kwargs
-            )
+            pad_token_id=pad_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
         self.rotary_emb_fraction = rotary_emb_fraction
         self.rotary_emb_base = rotary_emb_base
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
-        self.rotary_scaling_factor = rotary_scaling_factor
 
 
-class NomicBertEmbeddings(BertEmbeddings): 
+class NomicBertEmbeddings(BertEmbeddings):
     """
     NomicBERT embeddings adapted from BertEmbeddings.
     Overrides embedding layer only if vocab padding is required.
     """
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -153,10 +165,9 @@ class NomicBertEmbeddings(BertEmbeddings):
                 config.hidden_size,
                 padding_idx=config.pad_token_id,
             )
-    
+
     def _round_to_multiple(self, value: int, multiple: int) -> int:
         return ((value + multiple - 1) // multiple) * multiple
-
 
 
 class NomicBertSelfAttention(BertSelfAttention):
@@ -165,16 +176,23 @@ class NomicBertSelfAttention(BertSelfAttention):
     Key Difference: Replaces standard BERT absolute position embeddings with
     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
     """
-    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
-        super().__init__(config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx)
 
-        # Initialize the RoPE module.
-        self.rotary_emb = RotaryEmbedding(
-            dim=int(self.attention_head_size * config.rotary_emb_fraction),
-            base=config.rotary_emb_base,
-            scale_base=config.rotary_emb_scale_base,
-            interleaved=config.rotary_emb_interleaved,
+    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
+        super().__init__(
+            config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
         )
+
+        rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
+        # Initialize the RoPE module.
+        if rotary_dim > 0:
+            self.rotary_emb = RotaryEmbedding(
+                dim=int(self.attention_head_size * config.rotary_emb_fraction),
+                base=config.rotary_emb_base,
+                scale_base=config.rotary_emb_scale_base,
+                interleaved=config.rotary_emb_interleaved,
+            )
+        else:
+            self.rotary_emb = None
 
     def forward(
         self,
@@ -188,11 +206,12 @@ class NomicBertSelfAttention(BertSelfAttention):
     ):
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer   = self.transpose_for_scores(self.key(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         # Rotate Q and K here to encode relative positions.
-        query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
+        if self.rotary_emb is not None:
+            query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -219,11 +238,13 @@ class NomicBertSelfAttention(BertSelfAttention):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
 
+
 class RotaryEmbedding(nn.Module):
     """
     Rotary Position Embedding (RoPE) module for applying rotary embeddings to query and key tensors.
     RoPE encodes relative positional information by rotating the query and key vectors in the complex plane.
     """
+
     def __init__(
         self,
         dim: int,
@@ -263,14 +284,14 @@ class RotaryEmbedding(nn.Module):
     def _rotate_half(self, x, interleaved=False):
         """
         Rotate half of the input tensor for rotary embedding computation.
-        
+
         For non-interleaved (GPT-NeoX style): splits tensor into two halves and rotates them.
         For interleaved (GPT-J style): rotates pairs of even and odd dimensions.
-        
+
         Args:
             x: Input tensor of shape (..., headdim)
             interleaved: Whether to use interleaved rotation pattern
-            
+
         Returns:
             Rotated tensor of the same shape as input
         """
@@ -283,21 +304,20 @@ class RotaryEmbedding(nn.Module):
             x1, x2 = x[..., ::2], x[..., 1::2]
             return rearrange(torch.stack((-x2, x1), dim=-1), "... d two -> ... (d two)", two=2)
 
-
     def apply_rotary_emb(self, x, cos, sin, offset=0, interleaved=False):
         """
         Apply rotary embeddings to input tensor.
-        
+
         The rotary embedding is applied as: x_rot = x * cos + rotate_half(x) * sin
         Only the first `rotary_dim` dimensions are rotated; the rest remain unchanged.
-        
+
         Args:
             x: Input tensor of shape (batch_size, seqlen, nheads, headdim)
             cos: Cosine values of shape (seqlen, rotary_dim / 2) or (batch_size, seqlen, rotary_dim / 2)
             sin: Sine values of shape (seqlen, rotary_dim / 2) or (batch_size, seqlen, rotary_dim / 2)
             offset: Offset for slicing cos/sin tensors. Used for KV cache scenarios.
             interleaved: Whether to use interleaved rotation pattern
-            
+
         Returns:
             Tensor with rotary embeddings applied to the first `rotary_dim` dimensions
         """
@@ -318,13 +338,13 @@ class RotaryEmbedding(nn.Module):
     def _compute_inv_freq(self, device=None):
         """
         Compute inverse frequencies for rotary embeddings.
-        
+
         Computes 1 / (base^(2i/dim)) for i in [0, dim/2), which are the frequencies
         used to generate the rotary embeddings.
-        
+
         Args:
             device: Optional device to create the tensor on
-            
+
         Returns:
             Tensor of shape (dim // 2,) containing inverse frequencies
         """
@@ -333,13 +353,13 @@ class RotaryEmbedding(nn.Module):
     def _update_cos_sin_cache(self, seqlen, device=None, dtype=None):
         """
         Update the cached cosine and sine values for rotary embeddings.
-        
+
         The cache is recomputed when:
         - The sequence length increases beyond the cached length
         - The device changes (e.g., during tracing)
         - The dtype changes
         - Switching from inference to training mode
-        
+
         Args:
             seqlen: Target sequence length for the cache
             device: Device to create tensors on
@@ -378,10 +398,10 @@ class RotaryEmbedding(nn.Module):
         k: torch.Tensor,
         seqlen_offset: Union[int, torch.Tensor] = 0,
         max_seqlen: Optional[int] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary position embeddings to query and key tensors.
-        
+
         Args:
             q: Query tensor of shape (batch_size, seqlen, nheads, headdim)
             k: Key tensor of shape (batch_size, seqlen, nheads, headdim)
@@ -392,7 +412,7 @@ class RotaryEmbedding(nn.Module):
             max_seqlen: Maximum sequence length for cache update. If provided and seqlen_offset
                 is a tensor, updates the cache up to this length. Useful for batched inference
                 with variable-length sequences.
-                
+
         Returns:
             Tuple of (q_rot, k_rot) with rotary embeddings applied. Both tensors have the same
             shape as the input q and k tensors.
@@ -419,23 +439,28 @@ class NomicBertSelfOutput(BertSelfOutput):
 
 
 class NomicBertAttention(BertAttention):
-    pass
+    def __init__(self, config, position_embedding_type=None, is_cross_attention=False):
+        super().__init__(
+            config, is_cross_attention=is_cross_attention, position_embedding_type=position_embedding_type
+        )
+        self.self = NomicBertSelfAttention(config, position_embedding_type=position_embedding_type)
 
 
-class NomicBertIntermediate(BertIntermediate): 
+class NomicBertIntermediate(BertIntermediate):
     """
     NomicBERT Intermediate layer.
     Replaces standard BERT GELU with SwiGLU (Swish-Gated Linear Unit).
-    
+
     Standard BERT: Activation(Linear(x))
     NomicBERT:     SiLU(Gate(x)) * Value(x)
     """
+
     def __init__(self, config):
         super().__init__(config)
         # Add the Gate Layer
         # SwiGLU needs a second parallel layer for the gate.
         self.dense_gate = nn.Linear(config.hidden_size, config.intermediate_size)
-        
+
         # Force Activation to SiLU (Swish)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = nn.SiLU()
@@ -445,14 +470,15 @@ class NomicBertIntermediate(BertIntermediate):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Compute the Gate (Project + Swish Activation)
         gate_output = self.intermediate_act_fn(self.dense_gate(hidden_states))
-        
+
         # Compute the Value (Project Linear)
         value_output = self.dense(hidden_states)
-        
+
         # Element-wise Multiplication (Gating)
         intermediate_output = gate_output * value_output
-        
+
         return intermediate_output
+
 
 class NomicBertOutput(BertOutput):
     pass
@@ -462,12 +488,13 @@ class NomicBertLayer(BertLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__(config)
         self.layer_idx = layer_idx
-        self.attention.self = NomicBertSelfAttention(config)
+        self.attention = NomicBertAttention(config)
         self.intermediate = NomicBertIntermediate(config)
 
 
 class NomicBertEncoder(BertEncoder):
-    pass
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
 
 
 class NomicBertPooler(BertPooler):
@@ -503,11 +530,19 @@ class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
 
 
 class NomicBertModel(BertModel):
-    pass
+    def __init__(self, config, add_pooling_layer=True):
+        super().__init__(config)
+
+        self.embeddings = NomicBertEmbeddings(config)
+        self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
+        self.pooler = NomicBertPooler(config) if add_pooling_layer else None
+
+        self.post_init()
 
 
 class NomicBertForPreTraining(BertForPreTraining):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertLMHeadModel(BertLMHeadModel):
@@ -515,27 +550,33 @@ class NomicBertLMHeadModel(BertLMHeadModel):
 
 
 class NomicBertForMaskedLM(BertForMaskedLM):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertForNextSentencePrediction(BertForNextSentencePrediction):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertForSequenceClassification(BertForSequenceClassification):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertForMultipleChoice(BertForMultipleChoice):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertForTokenClassification(BertForTokenClassification):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 class NomicBertForQuestionAnswering(BertForQuestionAnswering):
-    pass
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
 
 __all__ = [
@@ -552,4 +593,3 @@ __all__ = [
     "NomicBertModel",
     "NomicBertPreTrainedModel",
 ]
-

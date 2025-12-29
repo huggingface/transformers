@@ -141,7 +141,7 @@ class NomicBertSelfAttention(nn.Module):
     Rotary Positional Embeddings (RoPE) applied directly to Q and K.
     """
 
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -165,13 +165,17 @@ class NomicBertSelfAttention(nn.Module):
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
+        rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
         # Initialize the RoPE module.
-        self.rotary_emb = RotaryEmbedding(
-            dim=int(self.attention_head_size * config.rotary_emb_fraction),
-            base=config.rotary_emb_base,
-            scale_base=config.rotary_emb_scale_base,
-            interleaved=config.rotary_emb_interleaved,
-        )
+        if rotary_dim > 0:
+            self.rotary_emb = RotaryEmbedding(
+                dim=int(self.attention_head_size * config.rotary_emb_fraction),
+                base=config.rotary_emb_base,
+                scale_base=config.rotary_emb_scale_base,
+                interleaved=config.rotary_emb_interleaved,
+            )
+        else:
+            self.rotary_emb = None
 
     def forward(
         self,
@@ -189,7 +193,8 @@ class NomicBertSelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         # Rotate Q and K here to encode relative positions.
-        query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
+        if self.rotary_emb is not None:
+            query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -529,11 +534,11 @@ class NomicBertSelfOutput(nn.Module):
 
 
 class NomicBertAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
+    def __init__(self, config, position_embedding_type=None, is_cross_attention=False):
         super().__init__()
         self.is_cross_attention = is_cross_attention
         attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
-        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = NomicBertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = NomicBertSelfOutput(config)
 
     def forward(
@@ -617,7 +622,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = NomicBertAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        self.attention = NomicBertAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -632,7 +637,6 @@ class NomicBertLayer(GradientCheckpointingLayer):
         self.intermediate = NomicBertIntermediate(config)
         self.output = NomicBertOutput(config)
         self.layer_idx = layer_idx
-        self.attention.self = NomicBertSelfAttention(config)
 
     def forward(
         self,
@@ -682,7 +686,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
 
 
 class NomicBertEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, **kwargs):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([NomicBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
@@ -871,8 +875,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.embeddings = NomicBertEmbeddings(config)
-        self.encoder = NomicBertEncoder(config)
-
+        self.encoder = NomicBertEncoder(config, layer_class=NomicBertLayer)
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -1009,6 +1012,8 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1193,6 +1198,8 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
         "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
 
     def __init__(self, config):
         super().__init__(config)
@@ -1294,6 +1301,9 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
     """
 )
 class NomicBertForNextSentencePrediction(NomicBertPreTrainedModel):
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1384,6 +1394,9 @@ class NomicBertForNextSentencePrediction(NomicBertPreTrainedModel):
     """
 )
 class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1465,6 +1478,9 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
 
 @auto_docstring
 class NomicBertForMultipleChoice(NomicBertPreTrainedModel):
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1563,6 +1579,9 @@ class NomicBertForMultipleChoice(NomicBertPreTrainedModel):
 
 @auto_docstring
 class NomicBertForTokenClassification(NomicBertPreTrainedModel):
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1623,6 +1642,9 @@ class NomicBertForTokenClassification(NomicBertPreTrainedModel):
 
 @auto_docstring
 class NomicBertForQuestionAnswering(NomicBertPreTrainedModel):
+    config_class = NomicBertConfig
+    base_model_prefix = "nomic_bert"
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

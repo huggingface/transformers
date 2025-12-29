@@ -22,23 +22,83 @@ limitations under the License.
 
 ## Overview
 
-The NomicBERT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-bert-2048](https://huggingface.co/nomic-ai/nomic-bert-2048) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
 
-The abstract from the paper is the following:
+- Use [Rotary Position Embeddings](https://arxiv.org/pdf/2104.09864.pdf) to allow for context length extrapolation.
+- Use SwiGLU activations, which have [been shown](https://arxiv.org/abs/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
+- Set dropout to 0 during pretraining
 
-<INSERT PAPER ABSTRACT HERE>
+> [!TIP]
+> - NomicBERT can handle very long sequences efficiently (up to 2048 tokens by default).
+> - For masked language modeling, use `NomicBertForMaskedLM`.
+> - Use smaller configs for testing locally to save memory and speed up unit tests.
+> - Supports various heads: classification, QA, token classification, multiple choice, etc.
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by the community.
+The original code for nomic-bert-2048 can be found [here](https://huggingface.co/nomic-ai/nomic-bert-2048).
 
 ## Usage examples
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
-<INSERT SOME NICE EXAMPLES HERE>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="fill-mask",
+    model="nomic-ai/nomic-bert-2048",
+    dtype=torch.float16,
+    device=0
+)
+pipeline("Plants create [MASK] through a process known as photosynthesis.")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "google-bert/bert-base-uncased",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "nomic-ai/nomic-bert-2048",
+    dtype=torch.float16,
+    device_map="auto"
+)
+inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model nomic-ai/nomic-bert-2048 --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- Inputs should be padded on the right because RoPE handles relative positions differently than absolute embeddings.
+- For extremely long sequences, consider batching or gradient checkpointing to save memory.
 
 ## NomicBertConfig
 

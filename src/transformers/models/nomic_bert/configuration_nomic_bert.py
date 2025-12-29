@@ -50,8 +50,6 @@ class NomicBertConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
-        rotary_scaling_factor (`float`, *optional*, defaults to `None`):
-            Scaling factor for the rotary embeddings (used for linear scaling).
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -93,7 +91,6 @@ class NomicBertConfig(PreTrainedConfig):
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
         tie_word_embeddings=True,
-        rotary_scaling_factor=None,
         max_position_embeddings=2048,
         pad_token_id=0,
         **kwargs,
@@ -120,7 +117,6 @@ class NomicBertConfig(PreTrainedConfig):
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
-        self.rotary_scaling_factor = rotary_scaling_factor
 
 
 __all__ = ["NomicBertConfig"]
