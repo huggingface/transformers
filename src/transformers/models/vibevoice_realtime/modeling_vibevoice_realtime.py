@@ -267,6 +267,8 @@ class VibeVoiceRealTimePreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.latent_scaling_factor, 1.0)
         if hasattr(module, "latent_bias_factor"):
             nn.init.constant_(module.latent_bias_factor, 0.0)
+        if isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=self.config.weight_init_value)
 
 
 @dataclass
@@ -620,7 +622,8 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
     ) -> Union[tuple, BaseModelOutputWithPast]:
         if inputs_embeds is None:
             # TODO can input embeds be computed by self.language model if only input_ids is provided?
-            raise ValueError("Input embeds should be computed by with `self.forward_lm`")
+            # raise ValueError("Input embeds should be computed by with `self.forward_lm`")
+            inputs_embeds = self.forward_lm(input_ids=input_ids, **kwargs).last_hidden_state
 
         inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks)
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
@@ -690,19 +693,19 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
             Mask marking current position as text(1)/speech(0)
         """
         outputs = self.model(input_ids=input_ids, inputs_embeds=inputs_embeds, tts_text_masks=tts_text_masks, **kwargs)
-        last_hidden_state = outputs.last_hidden_state
-        logits = self.tts_eos_classifier(last_hidden_state[:, -1, :])
+        logits = self.tts_eos_classifier(outputs.last_hidden_state[:, -1, :])
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("Loss computation is not implemented in this version.")
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return VibeVoiceRealTimeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=outputs.last_hidden_state,
             attentions=outputs.attentions,
+            hidden_states=outputs.hidden_states,
         )
 
 
