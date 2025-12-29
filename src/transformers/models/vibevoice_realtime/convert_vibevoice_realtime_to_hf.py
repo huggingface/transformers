@@ -198,6 +198,10 @@ def convert_checkpoint(
     processor = VibeVoiceRealTimeProcessor(tokenizer=tokenizer)
     processor.save_pretrained(output_dir)
 
+    # Custom pad token for VibeVoice: https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/modular/modular_vibevoice_text_tokenizer.py#L181
+    pad_token_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
+    model_config["pad_token_id"] = pad_token_id
+
     # Ensure tokenizer_config.json has the correct tokenizer_class
     tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
     if os.path.exists(tokenizer_config_path):
@@ -234,12 +238,8 @@ def convert_checkpoint(
         raise ValueError(f"missing keys found: {missing}")
     print("Full model checkpoint loaded successfully.")
 
-    # Custom pad token for VibeVoice: https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/modular/modular_vibevoice_text_tokenizer.py#L181
-    pad_token_id = tokenizer.convert_tokens_to_ids("<|image_pad|>")
-
     # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.pad_token_id = pad_token_id
     # https://github.com/microsoft/VibeVoice/blob/79470ff5768e17cbef6a3e1a93d1fd82ecc9a00d/demo/realtime_model_inference_from_file.py#L129
     vibevoice_model.generation_config.cfg_scale = 1.5
     vibevoice_model.generation_config.do_sample = False

@@ -178,11 +178,7 @@ class VibeVoiceRealTimeConfig(PretrainedConfig):
         text_config=None,
         tts_text_config=None,
         use_cache=True,
-        pad_token_id=151643,
-        eos_token_id=151643,
-        speech_start_id=151652,
-        speech_end_id=151653,
-        speech_diffusion_id=151654,
+        pad_token_id=151655,
         num_head_layers=4,
         head_ffn_ratio=3,
         rms_norm_eps=1e-5,
@@ -237,9 +233,6 @@ class VibeVoiceRealTimeConfig(PretrainedConfig):
 
         self.vocab_size = text_config.vocab_size
         self.use_cache = use_cache
-        self.speech_start_id = speech_start_id
-        self.speech_end_id = speech_end_id
-        self.speech_diffusion_id = speech_diffusion_id
         self.num_head_layers = num_head_layers
         self.head_ffn_ratio = head_ffn_ratio
         self.rms_norm_eps = rms_norm_eps
@@ -249,11 +242,7 @@ class VibeVoiceRealTimeConfig(PretrainedConfig):
         # NOTE (ebezzam) to use LlamaMLP via modular
         self.mlp_bias = False
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
     @property
     def weight_init_value(self) -> float:
