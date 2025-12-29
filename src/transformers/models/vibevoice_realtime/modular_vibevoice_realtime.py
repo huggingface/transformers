@@ -22,7 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
-from ..vibevoice.modeling_vibevoice import VibeVoicePreTrainedModel, VibeVoiceModel, VibeVoiceCausalLMOutputWithPast
+from ..vibevoice.modeling_vibevoice import VibeVoicePreTrainedModel, VibeVoiceModel
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerModel
 from .configuration_vibevoice_realtime import VibeVoiceRealTimeConfig, VibeVoiceRealTimeAcousticDecoderConfig
 from .generation_vibevoice_realtime import VibeVoiceRealTimeGenerationMixin
