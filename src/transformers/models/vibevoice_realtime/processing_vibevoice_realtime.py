@@ -37,7 +37,7 @@ class VibeVoiceRealTimeProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": True,
-            "padding_side": "left",
+            "padding_side": "right",
             "add_special_tokens": False,
             "return_attention_mask": True,
         },
@@ -140,18 +140,35 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
             default_preset = f"voice_presets/{default_preset}_converted.pt"
             voice_preset = hf_hub_download(repo_id="bezzam/VibeVoice-0.5B", filename=default_preset)
 
-        # TODO (ebezzam) should we batch? not done in Bark https://github.com/huggingface/transformers/blob/66623a1fd62d54159ad757b68c0aed8dc229d917/src/transformers/models/bark/processing_bark.py#L330
-        # namely a batch would use the same voice
-        if isinstance(voice_preset, (str, dict)):
-            voice_preset = [voice_preset]
-        elif not isinstance(voice_preset, (list, tuple)):
-            raise ValueError("voice_preset input must be a string, dict, or list of strings/dicts")
-        for i, _preset in enumerate(voice_preset):
-            if isinstance(_preset, str) and _preset.endswith(".pt"):
-                voice_preset[i] = torch.load(_preset, weights_only=False)
-            elif not isinstance(_preset, dict):
-                raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {_preset}")
-            self._validate_voice_preset_dict(voice_preset[i])
+        # NOTE (ebezzam) batch uses same voice preset for all samples
+        batch_size = len(text)
+        if isinstance(voice_preset, str) and voice_preset.endswith(".pt"):
+            voice_preset = torch.load(voice_preset, weights_only=False)
+        elif not isinstance(voice_preset, dict):
+            raise ValueError(f"voice_preset must be a dict containing the voice preset tensors if not a .pt file. Got {voice_preset}")
+        self._validate_voice_preset_dict(voice_preset)
+
+        # Expand voice preset tensors to match batch size
+        for key in voice_preset:
+            last_hidden_state = voice_preset[key]["last_hidden_state"]
+            if last_hidden_state.size(0) == 1 and batch_size > 1:
+                last_hidden_state = last_hidden_state.expand(batch_size, -1, -1)
+            elif last_hidden_state.size(0) != batch_size:
+                raise ValueError(f"voice_preset[{key}]['last_hidden_state'] has incompatible batch size {last_hidden_state.size(0)} for input batch size {batch_size}.")
+            voice_preset[key]["last_hidden_state"] = last_hidden_state
+
+            past_key_values = voice_preset[key]["past_key_values"]
+            for cache_key in ["key_cache", "value_cache"]:
+                expanded_cache = []
+                for tensor in past_key_values[cache_key]:
+                    if tensor.size(0) == 1 and batch_size > 1:
+                        tensor = tensor.expand(batch_size, -1, -1, -1)
+                    elif tensor.size(0) != batch_size:
+                        raise ValueError(f"voice_preset[{key}]['past_key_values'][{cache_key}] has incompatible batch size {tensor.size(0)} for input batch size {batch_size}.")
+                    expanded_cache.append(tensor)
+                past_key_values[cache_key] = expanded_cache
+            voice_preset[key]["past_key_values"] = past_key_values
+        
         encoded_text["voice_preset"] = voice_preset
         return encoded_text
 

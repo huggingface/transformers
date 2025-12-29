@@ -19,7 +19,6 @@ import time
 from dataclasses import dataclass
 from queue import Queue
 from typing import Optional, Union
-from typing import Optional, Union
 from transformers.modeling_outputs import BaseModelOutputWithPast
 import torch
 from transformers.cache_utils import DynamicCache
@@ -347,8 +346,8 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         To ease maintenance, modifications are marked with the comment "VibeVoice specific".
 
         VibeVoiceRealTime differs from standard VibeVoice generation:
-        1. **Windowed text processing**: Text is fed in small windows (TTS_TEXT_WINDOW_SIZE) enabling streaming input
-        2. **Interleaved generation**: After each text window, generate multiple speech tokens (TTS_SPEECH_WINDOW_SIZE)
+        1. **Windowed text processing**: Text is fed in small windows enabling streaming input
+        2. **Interleaved generation**: After each text window, generate multiple speech tokens
         3. **No semantic tokenizer**: Only uses acoustic tokenizer (no semantic feedback loop)
         4. **TTS LM separate from main LM**: TTS LM tracks interleaved text+speech sequence for conditioning
         5. **TTS EOS classifier**: Uses binary classifier instead of standard EOS tokens to detect completion
@@ -356,9 +355,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
         
         The windowed approach enables true streaming: you don't need the full text upfront, and audio is generated
         incrementally as text arrives.
-
-        VibeVoice supports stopping criteria through internal finished_tags logic combined with
-        the standard stopping criteria framework.
         """
 
         # init values
@@ -392,12 +388,13 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
         # previous outputs for a specific voice preset
         voice_preset = generation_config.voice_preset
-        lm_outputs = self._rebuild_history_prompt(voice_preset[0]["lm"], device=input_ids.device)
-        tts_lm_outputs = self._rebuild_history_prompt(voice_preset[0]["tts_lm"], device=input_ids.device)
-        tts_lm_negative_outputs = self._rebuild_history_prompt(voice_preset[0]["neg_tts_lm"], device=input_ids.device)
+        lm_outputs = self._rebuild_history_prompt(voice_preset["lm"], device=input_ids.device)
+        tts_lm_outputs = self._rebuild_history_prompt(voice_preset["tts_lm"], device=input_ids.device)
+        tts_lm_negative_outputs = self._rebuild_history_prompt(voice_preset["neg_tts_lm"], device=input_ids.device)
 
         # State tracking
-        batch_size, cur_len = lm_outputs.last_hidden_state.shape[:2]
+        batch_size = input_ids.shape[0]
+        cur_len = lm_outputs.last_hidden_state.shape[1]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
@@ -443,7 +440,12 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
 
         # Calculate generation limits for progress tracking
         initial_length = tts_lm_input_ids.shape[-1]
+        initial_length_per_sample = model_kwargs["attention_mask"].sum(dim=-1)
         max_steps = generation_config.max_new_tokens
+        max_step_per_sample = torch.min(
+            generation_config.max_new_tokens - (initial_length_per_sample - initial_length),
+            torch.full_like(initial_length_per_sample, max_steps),
+        )
         generation_config.max_length = generation_config.max_new_tokens + initial_length
         completion_steps = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
         step = 0
@@ -460,7 +462,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             if monitor_progress is not None:
                 current_steps = torch.full((batch_size,), step, dtype=torch.long, device=input_ids.device)
                 current_steps[finished_tags] = completion_steps[finished_tags]
-                progress_tensor = torch.stack((current_steps, torch.full_like(current_steps, max_steps), completion_steps), dim=1)
+                progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
                 monitor_progress(progress_tensor)
                 
             if finished_tags.all():
@@ -471,10 +473,6 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
             next_text_window_size = input_ids[:, (text_window_index+1)*text_window_size:(text_window_index+2)*text_window_size].shape[1]
             text_window_index += 1
 
-            # TODO use for batching (not done by original)
-            cur_input_attention_mask = model_kwargs["attention_mask"][:, text_window_index*text_window_size:(text_window_index+1)*text_window_size]
-
-            # Process text window if available
             if cur_input_tts_text_ids.shape[1] > 0:
                 lm_input_ids = torch.cat([lm_input_ids, cur_input_tts_text_ids], dim=-1)
                 tts_lm_input_ids = torch.cat([tts_lm_input_ids, cur_input_tts_text_ids], dim=-1)
@@ -532,7 +530,7 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     ) - self.latent_bias_factor.to(speech_latent.device)
                     
                     if len(diffusion_indices) != batch_size:
-                        padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(scaled_latent.device)
+                        padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(scaled_latent)
                         padded_latent[diffusion_indices] = scaled_latent
                     else:
                         padded_latent = scaled_latent
@@ -545,9 +543,9 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                     acoustic_cache = audio_output.padding_cache
 
                     # Store and stream audio
-                    for i, sample_idx in enumerate(diffusion_indices):
+                    for sample_idx in diffusion_indices:
                         idx = sample_idx.item()
-                        audio_chunks[idx].append(audio_chunk[i])
+                        audio_chunks[idx].append(audio_chunk[idx])
                     if streamer is not None:
                         streamer.put(audio_chunk, diffusion_indices)
                     
@@ -589,13 +587,33 @@ class VibeVoiceRealTimeGenerationMixin(GenerationMixin):
                         completion_steps[eos_indices] = step + 1
                         if streamer is not None:
                             streamer.end(eos_indices)
+                        
+                        # Report completion progress
+                        if monitor_progress is not None:
+                            current_steps = torch.full((batch_size,), step + 1, dtype=torch.long, device=input_ids.device)
+                            current_steps[finished_tags] = max_step_per_sample[finished_tags]
+                            progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
+                            monitor_progress(progress_tensor)
 
             if tts_lm_input_ids.shape[1] >= generation_config.max_length:
                 unfinished_indices = ~finished_tags
                 if unfinished_indices.any():
                     finished_tags[unfinished_indices] = True
                     completion_steps[unfinished_indices] = step + 1
+                    unfinished_idx_list = unfinished_indices.nonzero(as_tuple=False).squeeze(1)
+                    if streamer is not None:
+                        streamer.end(unfinished_idx_list)
                 break
+            
+            # Handle per-sample max length
+            max_length_reached = step >= max_step_per_sample
+            new_max_length_mask = max_length_reached & ~finished_tags
+            if new_max_length_mask.any():
+                finished_tags[new_max_length_mask] = True
+                completion_steps[new_max_length_mask] = step + 1
+                new_max_length_indices = new_max_length_mask.nonzero(as_tuple=False).squeeze(1)
+                if streamer is not None:
+                    streamer.end(new_max_length_indices)
 
             unfinished_sequences = unfinished_sequences & ~finished_tags.long()
             this_peer_finished = unfinished_sequences.max() == 0
