@@ -878,10 +878,11 @@ class NomicBertEncoder(nn.Module):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                # We need to extract the last element which is the cache tuple (k, v)
                 cache_to_add = layer_outputs[-1]
-
-                if not isinstance(next_decoder_cache, Cache):
+                if isinstance(next_decoder_cache, Cache):
+                    # Cache already updated internally
+                    pass
+                else:
                     if next_decoder_cache is None:
                         next_decoder_cache = (cache_to_add,)
                     else:
@@ -1009,6 +1010,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
         "attentions": NomicBertSelfAttention,
         "cross_attentions": NomicBertCrossAttention,
     }
+    _supports_cache_class = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1158,6 +1160,9 @@ class NomicBertModel(NomicBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
+        if self.training:
+            use_cache = False
+
         if not self.config.is_decoder:
             use_cache = False
 
@@ -1281,13 +1286,12 @@ class NomicBertModel(NomicBertPreTrainedModel):
 
         return attention_mask, encoder_attention_mask
 
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
+    def _check_past_key_values_for_generate(self, past_key_values):
+        if isinstance(past_key_values, Cache):
+            return
+        if past_key_values is None:
+            return
+        raise ValueError("NomicBert only supports Cache-based past_key_values during generation.")
 
     def get_head_mask(
         self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
