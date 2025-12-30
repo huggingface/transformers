@@ -36,7 +36,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.checkpoint = "bezzam/VibeVoice-1.5Bv2"
+        cls.checkpoint = "bezzam/VibeVoice-1.5B"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
         cls.speech_start_token = processor.speech_start_token
         cls.speech_start_id = processor.speech_start_id
