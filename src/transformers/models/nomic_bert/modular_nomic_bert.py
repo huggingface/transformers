@@ -222,9 +222,9 @@ class NomicBertEmbeddings(BertEmbeddings):
 
         # cumsum gives [0, 1, 2...] for valid tokens, but we need to handle left padding logic
         # For RoPE, we usually want strictly incremental IDs 0, 1, 2... for the valid tokens.
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length - 1) * mask
 
-        return incremental_indices.long() + padding_idx
+        return incremental_indices.long()
 
 
 class NomicBertSelfAttention(BertSelfAttention):
@@ -761,8 +761,11 @@ class NomicBertEncoder(BertEncoder):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = None
 
-            if past_key_values is not None and not isinstance(past_key_values, Cache):
-                past_key_value = past_key_values[i]
+            if past_key_values is not None:
+                if isinstance(past_key_values, Cache):
+                    past_key_value = past_key_values
+                else:
+                    past_key_value = past_key_values[i]
 
             layer_outputs = layer(
                 hidden_states,
@@ -1004,9 +1007,11 @@ class NomicBertModel(BertModel):
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                if self.embeddings.token_type_ids.shape[1] < seq_length:
+                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+                else:
+                    buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                    token_type_ids = buffered_token_type_ids.expand(batch_size, seq_length)
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
