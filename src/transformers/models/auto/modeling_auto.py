@@ -184,6 +184,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4v_text", "Glm4vTextModel"),
         ("glm4v_vision", "Glm4vVisionModel"),
         ("glm_image", "GlmImageModel"),
+        ("glm_image_text", "GlmImageTextModel"),
+        ("glm_image_vision", "GlmImageVisionModel"),
         ("glmasr", "GlmAsrForConditionalGeneration"),
         ("glmasr_encoder", "GlmAsrEncoder"),
         ("glpn", "GLPNModel"),

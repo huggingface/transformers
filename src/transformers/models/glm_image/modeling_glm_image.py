@@ -1630,4 +1630,10 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
-__all__ = ["GlmImagePreTrainedModel", "GlmImageVisionModel", "GlmImageTextModel", "GlmImageForConditionalGeneration"]
+__all__ = [
+    "GlmImagePreTrainedModel",
+    "GlmImageVisionModel",
+    "GlmImageTextModel",
+    "GlmImageModel",
+    "GlmImageForConditionalGeneration",
+]

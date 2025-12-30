@@ -32,9 +32,9 @@ from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
     Glm4vModel,
     Glm4vModelOutputWithPast,
+    Glm4vPreTrainedModel,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
-    Glm4vPreTrainedModel,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -359,7 +359,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
 
-
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -399,7 +398,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
-
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
@@ -1197,5 +1195,6 @@ __all__ = [
     "GlmImagePreTrainedModel",
     "GlmImageVisionModel",
     "GlmImageTextModel",
+    "GlmImageModel",
     "GlmImageForConditionalGeneration",
 ]
