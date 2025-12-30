@@ -169,7 +169,7 @@ class NomicBertSelfAttention(nn.Module):
         # Initialize the RoPE module.
         if rotary_dim > 0:
             self.rotary_emb = RotaryEmbedding(
-                dim=int(self.attention_head_size * config.rotary_emb_fraction),
+                dim=rotary_dim,
                 base=config.rotary_emb_base,
                 scale_base=config.rotary_emb_scale_base,
                 interleaved=config.rotary_emb_interleaved,
@@ -184,10 +184,7 @@ class NomicBertSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
-        cache_position=None,
         output_attentions=False,
-        **kwargs,
     ) -> tuple[torch.Tensor]:
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -196,7 +193,7 @@ class NomicBertSelfAttention(nn.Module):
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
-            query_layer, key_layer = self.rotary_emb(query_layer, key_layer, seqlen_offset=cache_position or 0)
+            query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -208,7 +205,7 @@ class NomicBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize to Probabilities
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.dropout(attention_probs)
 
         # Calculate Weighted Sum (Context)
