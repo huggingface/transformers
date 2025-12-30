@@ -212,6 +212,20 @@ class NomicBertEmbeddings(BertEmbeddings):
     def _round_to_multiple(self, value: int, multiple: int) -> int:
         return ((value + multiple - 1) // multiple) * multiple
 
+    def create_position_ids_from_input_ids(self, input_ids, padding_idx, past_key_values_length=0):
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1.
+        Padding symbols are ignored. This is modified from wrapped models to support left padding.
+        """
+        # The series of 1s and 0s (1 for valid, 0 for pad)
+        mask = input_ids.ne(padding_idx).int()
+
+        # cumsum gives [0, 1, 2...] for valid tokens, but we need to handle left padding logic
+        # For RoPE, we usually want strictly incremental IDs 0, 1, 2... for the valid tokens.
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+
+        return incremental_indices.long() + padding_idx
+
 
 class NomicBertSelfAttention(BertSelfAttention):
     """
@@ -544,7 +558,9 @@ class NomicBertAttention(BertAttention):
     Transformers library build system.
     """
 
-    def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
+    def __init__(
+        self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False, is_causal=False
+    ):
         super().__init__(config, position_embedding_type=position_embedding_type)
         self.self = NomicBertSelfAttention(
             config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
@@ -848,6 +864,31 @@ class NomicBertModel(BertModel):
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
         self.post_init()
+
+    def get_head_mask(
+        self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+    ) -> torch.Tensor:
+        """
+        Prepare the head mask if needed.
+        """
+        if head_mask is not None:
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
+        else:
+            head_mask = [None] * num_hidden_layers
+        return head_mask
+
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
+        if head_mask.dim() == 1:
+            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+        elif head_mask.dim() == 2:
+            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
+        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
+        return head_mask
 
     def forward(
         self,
