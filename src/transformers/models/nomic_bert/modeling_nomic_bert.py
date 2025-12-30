@@ -185,12 +185,10 @@ class NomicBertSelfAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
+        cache_position=None,
         output_attentions=False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
-        # Optional rotary embedding cache position
-        cache_position = kwargs.pop("cache_position", None)
-
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -198,8 +196,7 @@ class NomicBertSelfAttention(nn.Module):
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
-            query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
-            query_layer, key_layer = self.rotary_emb(query_layer, key_layer, seqlen_offset=cache_position)
+            query_layer, key_layer = self.rotary_emb(query_layer, key_layer, seqlen_offset=cache_position or 0)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -225,6 +222,11 @@ class NomicBertSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
 
 
 def _check_einops_available():
