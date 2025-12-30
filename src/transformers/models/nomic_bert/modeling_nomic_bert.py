@@ -163,6 +163,7 @@ class NomicBertSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
         self.is_causal = is_causal
+
         self.layer_idx = layer_idx
 
         rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
@@ -684,7 +685,7 @@ class NomicBertLayer(GradientCheckpointingLayer):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = NomicBertAttention(config)
+        self.attention = NomicBertAttention(config, layer_idx=layer_idx)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -754,10 +755,15 @@ class NomicBertEncoder(nn.Module):
     to be passed during initialization via kwargs.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, layer_class=None, **kwargs):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([NomicBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+
+        # Re-initialize self.layer with the correct index passed to each layer
+        self.layer = nn.ModuleList([layer_class(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+
+        # Use NomicBertLayer by default if not specified
+        layer_class = layer_class or NomicBertLayer
 
     def forward(
         self,

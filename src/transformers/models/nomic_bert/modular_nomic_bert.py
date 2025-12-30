@@ -221,6 +221,8 @@ class NomicBertSelfAttention(BertSelfAttention):
             config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
         )
 
+        self.layer_idx = layer_idx
+
         rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
         # Initialize the RoPE module.
         if rotary_dim > 0:
@@ -576,7 +578,7 @@ class NomicBertLayer(BertLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__(config)
         self.layer_idx = layer_idx
-        self.attention = NomicBertAttention(config)
+        self.attention = NomicBertAttention(config, layer_idx=layer_idx)
         self.intermediate = NomicBertIntermediate(config)
 
 
@@ -587,8 +589,14 @@ class NomicBertEncoder(BertEncoder):
     to be passed during initialization via kwargs.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, layer_class=None, **kwargs):
         super().__init__(config, **kwargs)
+
+        # Use NomicBertLayer by default if not specified
+        layer_class = layer_class or NomicBertLayer
+
+        # Re-initialize self.layer with the correct index passed to each layer
+        self.layer = nn.ModuleList([layer_class(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
 
 class NomicBertPooler(BertPooler):
