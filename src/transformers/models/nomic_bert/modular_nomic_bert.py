@@ -562,19 +562,15 @@ class NomicBertAttention(BertAttention):
         self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False, is_causal=False
     ):
         super().__init__(config, position_embedding_type=position_embedding_type)
-        self.self = NomicBertSelfAttention(
-            config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
-        )
 
         self.is_cross_attention = is_cross_attention
 
-        # Explicitly define attention_class to satisfy the linter/build system
-        attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
-
         if is_cross_attention:
-            self.self = attention_class(config, position_embedding_type=position_embedding_type)
+            self.self = NomicBertCrossAttention(config)
         else:
-            self.self = attention_class(config, position_embedding_type=position_embedding_type, layer_idx=layer_idx)
+            self.self = NomicBertSelfAttention(
+                config, position_embedding_type=position_embedding_type, layer_idx=layer_idx, is_causal=is_causal
+            )
 
         self.output = NomicBertSelfOutput(config)
 
@@ -788,7 +784,10 @@ class NomicBertEncoder(BertEncoder):
                     if isinstance(cache_to_add, Cache):
                         next_decoder_cache = cache_to_add
                     else:
-                        next_decoder_cache += (cache_to_add,)
+                        if next_decoder_cache is None:
+                            next_decoder_cache = (cache_to_add,)
+                        elif isinstance(next_decoder_cache, tuple):
+                            next_decoder_cache += (cache_to_add,)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -864,6 +863,14 @@ class NomicBertModel(BertModel):
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
 
         self.post_init()
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
 
     def get_head_mask(
         self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
@@ -974,20 +981,26 @@ class NomicBertModel(BertModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # Generate position_ids
+        past_key_values_length = 0
+        if past_key_values is not None:
+            if isinstance(past_key_values, Cache):
+                past_key_values_length = past_key_values.get_seq_length()
+            else:
+                past_key_values_length = past_key_values[0][0].shape[2]
+
         if position_ids is None:
             if inputs_embeds is not None:
-                position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(input_shape)
+                position_ids = torch.arange(
+                    past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                )
+                position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
             else:
                 position_ids = self.embeddings.create_position_ids_from_input_ids(
-                    input_ids, padding_idx=self.config.pad_token_id, past_key_values_length=0
+                    input_ids, padding_idx=self.config.pad_token_id, past_key_values_length=past_key_values_length
                 )
 
         if attention_mask is None:
-            past_length = 0
-            if past_key_values is not None:
-                if not isinstance(past_key_values, Cache):
-                    past_length = past_key_values[0][0].shape[2]
-            attention_mask = torch.ones(((batch_size, seq_length + past_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
