@@ -239,7 +239,7 @@ class NomicBertSelfAttention(BertSelfAttention):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
     ):
         # Let BERT do QKV projection

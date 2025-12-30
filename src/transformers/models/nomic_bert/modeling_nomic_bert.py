@@ -184,7 +184,7 @@ class NomicBertSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         output_attentions=False,
     ) -> tuple[torch.Tensor]:
         # Let BERT do QKV projection
