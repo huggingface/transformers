@@ -19,6 +19,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ...cache_utils import Cache
 from ...utils.import_utils import is_einops_available
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -260,7 +261,12 @@ class NomicBertSelfAttention(BertSelfAttention):
         # Calculate RoPE offset
         seq_len_offset = 0
         if past_key_values is not None:
-            seq_len_offset = past_key_values[0].shape[2]
+            if isinstance(past_key_values, Cache):
+                # New DynamicCache path
+                seq_len_offset = past_key_values.get_seq_length()
+            else:
+                # Legacy tuple path
+                seq_len_offset = past_key_values[0].shape[2]
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
@@ -274,10 +280,14 @@ class NomicBertSelfAttention(BertSelfAttention):
 
         if self.is_decoder:
             if past_key_values is not None:
-                # reuse k,v, self_attention
-                key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
-                value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
-            past_key_values = (key_layer, value_layer)
+                if isinstance(past_key_values, Cache):
+                    # DynamicCache handles concatenation internally and returns the full sequence
+                    key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
+                else:
+                    # Legacy tuple logic (manual concatenation)
+                    key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+                    value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
+                    past_key_values = (key_layer, value_layer)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
