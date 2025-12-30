@@ -217,11 +217,10 @@ class NomicBertSelfAttention(BertSelfAttention):
     """
 
     def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
-        super().__init__(
-            config, position_embedding_type=position_embedding_type, is_causal=is_causal, layer_idx=layer_idx
-        )
+        super().__init__(config, position_embedding_type=position_embedding_type)
 
         self.layer_idx = layer_idx
+        self.is_causal = is_causal
 
         rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
         # Initialize the RoPE module.
@@ -312,7 +311,7 @@ class NomicBertSelfAttention(BertSelfAttention):
         # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
         context_layer = context_layer.view(batch_size, seq_len, hidden_size)
 
-        outputs = (context_layer, attention_probs if output_attentions else (context_layer,))
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
             outputs = outputs + (past_key_values,)

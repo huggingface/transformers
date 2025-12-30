@@ -250,7 +250,7 @@ class NomicBertSelfAttention(nn.Module):
         # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
         context_layer = context_layer.view(batch_size, seq_len, hidden_size)
 
-        outputs = (context_layer, attention_probs if output_attentions else (context_layer,))
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
             outputs = outputs + (past_key_values,)
