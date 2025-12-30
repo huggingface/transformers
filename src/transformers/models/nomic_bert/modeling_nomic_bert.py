@@ -549,21 +549,34 @@ class NomicBertSelfOutput(nn.Module):
 
 
 class NomicBertAttention(nn.Module):
-    """
-    NomicBERT Attention module.
-    This module bundles the NomicBertSelfAttention and the NomicBertSelfOutput.
-    """
-
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
-
-        self.self = NomicBertSelfAttention(
-            config,
-            position_embedding_type=position_embedding_type,
-        )
-
+        self.is_cross_attention = is_cross_attention
+        attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
+        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = NomicBertSelfOutput(config)
-        self.pruned_heads = set()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor]:
+        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
+        attention_output, attn_weights = self.self(
+            hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            cache_position=cache_position,
+            **kwargs,
+        )
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output, attn_weights
 
 
 class NomicBertIntermediate(nn.Module):

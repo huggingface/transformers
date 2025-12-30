@@ -22,6 +22,7 @@ import torch.nn as nn
 from ...utils.import_utils import is_einops_available
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
+    BertAttention,
     BertCrossAttention,
     BertEmbeddings,
     BertEncoder,
@@ -481,22 +482,8 @@ class NomicBertSelfOutput(BertSelfOutput):
     pass
 
 
-class NomicBertAttention(nn.Module):
-    """
-    NomicBERT Attention module.
-    This module bundles the NomicBertSelfAttention and the NomicBertSelfOutput.
-    """
-
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-
-        self.self = NomicBertSelfAttention(
-            config,
-            position_embedding_type=position_embedding_type,
-        )
-
-        self.output = NomicBertSelfOutput(config)
-        self.pruned_heads = set()
+class NomicBertAttention(BertAttention):
+    pass
 
 
 class NomicBertIntermediate(BertIntermediate):
