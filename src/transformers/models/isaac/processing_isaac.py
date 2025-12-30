@@ -31,8 +31,6 @@ from .modeling_isaac import ModalityType
 
 if is_torch_available():
     import torch
-
-
 if is_vision_available():
     from PIL.Image import Image
 else:
@@ -84,23 +82,95 @@ class IsaacProcessor(ProcessorMixin):
         self.image_processor = image_processor
         super().__init__(image_processor, tokenizer)
 
+        text_pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
+        image_pad_token_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+
+        self.text_pad_token_id = int(text_pad_token_id)
+        self.image_pad_token_id = int(image_pad_token_id)
+        self.pad_token_id = self.text_pad_token_id
+
         self.current_processor = self.image_processor
         self.config = config
         self.chat_template = getattr(self.tokenizer, "chat_template", None)
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
-        # Parse by vision_token; interleave text segments and image segments.
-        segments = text.split(self.vision_token)
-        num_images = len(segments) - 1
-        if num_images and (images is None or len(images) != num_images):
-            raise ValueError(
-                f"Expected one image per '{self.vision_token}' token: found {num_images} token(s) but received {0 if images is None else len(images)} image(s)."
-            )
+    def _pack_batch(
+        self, texts: list[str], images_list: Optional[list[Optional[list[Image]]]]
+    ) -> dict[str, Optional[torch.Tensor]]:
+        if images_list is None:
+            pairs = ((t, None) for t in texts)
+        else:
+            pairs = zip(texts, images_list, strict=True)
 
+        per_sample: list[dict[str, Optional[torch.Tensor]]] = []
+        for txt, imgs in pairs:
+            if imgs is not None and isinstance(imgs, Image):
+                imgs = [imgs]
+            per_sample.append(self._pack_single(txt, imgs))
+
+        lengths = [int(p["input_ids"].shape[1]) for p in per_sample]
+        max_len = max(lengths, default=0)
+        batch = len(per_sample)
+
+        # Use first device with data as anchor
+        base_device = torch.device("cpu")
+        for p in per_sample:
+            if p["input_ids"].numel() > 0:
+                base_device = p["input_ids"].device
+                break
+
+        pad_id = self.text_pad_token_id
+        padded_input_ids = torch.full((batch, max_len), pad_id, device=base_device, dtype=torch.long)
+        padded_modality = torch.full((batch, max_len), ModalityType.text.value, device=base_device, dtype=torch.long)
+        padded_position_ids = torch.zeros((batch, max_len, 3), device=base_device, dtype=torch.long)
+
+        for i, (sample, l) in enumerate(zip(per_sample, lengths)):
+            if l:
+                padded_input_ids[i, -l:] = sample["input_ids"][0]
+                padded_modality[i, -l:] = sample["modality_tensor"][0]
+                padded_position_ids[i, -l:] = sample["position_ids"][0]
+
+        # Vision-side aggregation
+        v_samples = [(b, s) for b, s in enumerate(per_sample) if s["vision_patches"] is not None]
+        if v_samples:
+            vision_patches_list = [s["vision_patches"] for _, s in v_samples]
+            vision_grids_list = [s["vision_token_grids"] for _, s in v_samples]
+            vision_offsets_list = [s["vision_token_offsets"] for _, s in v_samples]
+            vision_lengths_list = [s["vision_token_lengths"] for _, s in v_samples]
+            vision_batch_indices = [torch.full_like(s["vision_token_offsets"], b) for b, s in v_samples]
+
+            vision_patches = torch.cat(vision_patches_list, dim=0)
+            vision_token_grids = torch.cat(vision_grids_list, dim=0)
+            vision_token_offsets = torch.cat(vision_offsets_list, dim=0)
+            vision_token_lengths = torch.cat(vision_lengths_list, dim=0)
+            vision_token_batch_indices = torch.cat(vision_batch_indices, dim=0)
+        else:
+            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = (
+                vision_token_batch_indices
+            ) = None
+
+        return {
+            "input_ids": padded_input_ids,
+            "vision_patches": vision_patches,
+            "vision_token_grids": vision_token_grids,
+            "vision_token_offsets": vision_token_offsets,
+            "vision_token_lengths": vision_token_lengths,
+            "vision_token_batch_indices": vision_token_batch_indices,
+            "modality_tensor": padded_modality,
+            "position_ids": padded_position_ids,
+        }
+
+    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
+        segments = text.split(self.vision_token)  # Parse by vision_token; interleave text segments and image segments.
+        num_images = len(segments) - 1
         items: list[dict[str, Any]] = []
         total = 0
+        num_provided_images = len(images) if images is not None else 0
+        if not num_images == num_provided_images:
+            raise ValueError(
+                f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text} "
+            )
 
         for index, segment in enumerate(segments):
             if segment:
@@ -137,7 +207,7 @@ class IsaacProcessor(ProcessorMixin):
         start = max(0, total - self.max_sequence_length)
         end = total
 
-        fill_value = self.pad_token_id
+        image_pad_value = self.image_pad_token_id
         base_device: Optional[torch.device] = None
         position_ids, modality, input_ids = [], [], []
         vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
@@ -187,7 +257,7 @@ class IsaacProcessor(ProcessorMixin):
                         )
                     )
                     input_ids.append(
-                        torch.full((segment_kept_length,), fill_value, device=base_device, dtype=torch.long)
+                        torch.full((segment_kept_length,), image_pad_value, device=base_device, dtype=torch.long)
                     )
 
                     vpatches.append(item["patches"].to(base_device))  # full patches; slice later via offsets/lengths
@@ -203,6 +273,9 @@ class IsaacProcessor(ProcessorMixin):
                 position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
 
             global_offset += segment_length
+
+        if base_device is None:
+            base_device = torch.device("cpu")
 
         modality_tensor = (
             torch.cat(modality, 0).unsqueeze(0)
@@ -246,21 +319,28 @@ class IsaacProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         texts = [text] if isinstance(text, str) else text
-        if len(texts) != 1:
-            raise ValueError(
-                f"IsaacProcessor currently supports batch_size=1; received {len(texts)} text prompts. Split the batch and call the processor per sample."
-            )
-
-        images_list = None
+        images_list: Optional[list[Optional[list[Image]]]] = None
         if images is not None:
-            images_list = [images] if isinstance(images, Image) else images
-            n_tok = texts[0].count(self.vision_token)
-            if n_tok != len(images_list):
-                raise ValueError(
-                    f"Expected {len(images_list)} occurrences of '{self.vision_token}' (one per provided image), but found {n_tok} in the text."
-                )
+            if isinstance(images, list) and len(images) == len(texts):
+                if not images:
+                    images_list = []
+                elif isinstance(images[0], list):
+                    images_list = images  # already per-sample
+                else:
+                    images_list = [[img] for img in images]  # list of images, one per sample
+            else:
+                images_list = []
+                for t in texts:
+                    n_tok = t.count(self.vision_token)
+                    if n_tok == 0:
+                        images_list.append(None)
+                    else:
+                        if isinstance(images, list):
+                            images_list.append(images)
+                        else:
+                            images_list.append([images])
 
-        packed = self._pack_single(texts[0], images_list)
+        packed = self._pack_batch(texts, images_list)
         input_ids = packed.pop("input_ids")
         return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
 

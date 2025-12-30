@@ -28,8 +28,6 @@ from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, gro
 from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-
-# Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.import_utils import is_torch_available
@@ -158,7 +156,6 @@ def get_image_size_for_max_num_patches(
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
-    r"""Fast torch-based image processor for Isaac vision inputs."""
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
@@ -234,21 +231,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         grouped_outputs = {}
 
         for shape, stacked_images in grouped_images.items():
-            if stacked_images.ndim != 4:
-                raise ValueError(
-                    f"Expected images shaped as (batch, channels, height, width); got shape {tuple(stacked_images.shape)}."
-                )
-
             batch_size, channels, original_height, original_width = stacked_images.shape
 
             if bool(self.do_convert_rgb) and channels == 1:
                 stacked_images = stacked_images.repeat(1, 3, 1, 1)
-                channels = 3
-
-            if original_height * original_width > self.MAX_PIXELS:
-                raise ValueError(
-                    f"Image area {original_height * original_width} (h={original_height}, w={original_width}) exceeds MAX_PIXELS={self.MAX_PIXELS}; enable resizing or provide smaller inputs."
-                )
 
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
@@ -258,43 +244,31 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 min_num_patches=min_num_patches,
                 pixel_shuffle_scale=pixel_shuffle_scale,
             )
-
             if do_resize:
-                resize_size = SizeDict(height=target_height, width=target_width)
                 image_batch = self.resize(
-                    image=stacked_images,
-                    size=resize_size,
-                    interpolation=interpolation,
+                    stacked_images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
                 )
             else:
-                if ((original_height % patch_size) != 0) or ((original_width % patch_size) != 0):
+                if (original_height % patch_size) or (original_width % patch_size):
                     raise ValueError(
                         f"Image dimensions (h={original_height}, w={original_width}) must be divisible by patch_size={patch_size} when resize is disabled; enable resizing or adjust the input resolution."
                     )
-                image_batch = stacked_images
-                target_height, target_width = original_height, original_width
+                image_batch, target_height, target_width = stacked_images, original_height, original_width
 
-            if do_rescale:
-                image_batch = self.rescale_and_normalize(
-                    image_batch,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                )
+            image_batch = self.rescale_and_normalize(
+                image_batch,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
 
             patches = torch_extract_patches(image_batch, patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
-                torch.tensor(
-                    [height_tokens, width_tokens],
-                    dtype=torch.long,
-                    device=patches.device,
-                )
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
+                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(batch_size, 2)
             )
 
             real_dim = (
@@ -325,8 +299,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
             grouped_outputs[shape] = (patches, token_grid, virtual_dim, real_dim)
 
-        # Helper to reorder a single item of the tuple payloads using the same grouped_images_index
-        def _reorder_grouped_item(
+        def _reorder_grouped_item(  # reorder an item of tuple payloads using the same grouped_images_index
             grouped: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
             grouped_index: dict[tuple[int, ...], list[int]],
             item_idx: int,

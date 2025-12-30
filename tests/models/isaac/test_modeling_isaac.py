@@ -17,7 +17,9 @@
 import base64
 import io
 import os
+import re
 import unittest
+from collections import namedtuple
 from functools import lru_cache
 from pathlib import Path
 
@@ -50,7 +52,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_vision_available
-from transformers.utils.import_utils import is_perceptron_available
 
 
 if is_vision_available():
@@ -64,15 +65,74 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-if is_perceptron_available():
-    from perceptron.pointing.parser import extract_points
-    from perceptron.tensorstream.tensorstream import TensorStream
-else:
-    TensorStream = None
-    extract_points = None
+SinglePoint = namedtuple("SinglePoint", ["x", "y", "mention", "t"], defaults=(None, None))
+BoundingBox = namedtuple(
+    "BoundingBox",
+    ["top_left", "bottom_right", "mention", "t"],
+    defaults=(None, None),
+)
+
+_POINT_OR_BOX_TAG = re.compile(
+    r"<(?P<tag>point|point_box)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+)
+_ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
+_COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 
 
-require_tensorstream = pytest.mark.skipif(TensorStream is None, reason="TensorStream backend is not available")
+def _maybe_float(val):
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except ValueError:
+        return None
+
+
+def _parse_attrs(attr_text: str) -> dict:
+    attrs = {}
+    for match in _ATTR_RE.finditer(attr_text or ""):
+        key = match.group(1)
+        val = match.group(2) or match.group(3) or ""
+        attrs[key] = val
+    return attrs
+
+
+def _parse_point_body(body: str, mention=None, t=None):
+    match = _COORD_RE.search(body)
+    if not match:
+        raise ValueError(f"Malformed <point> tag: {body!r}")
+    x, y = int(match.group(1)), int(match.group(2))
+    return SinglePoint(x, y, mention, _maybe_float(t))
+
+
+def _parse_box_body(body: str, mention=None, t=None):
+    coords = list(_COORD_RE.finditer(body))
+    if len(coords) < 2:
+        raise ValueError(f"Malformed <point_box> tag: {body!r}")
+    x1, y1 = int(coords[0].group(1)), int(coords[0].group(2))
+    x2, y2 = int(coords[1].group(1)), int(coords[1].group(2))
+    return BoundingBox(SinglePoint(x1, y1, None, None), SinglePoint(x2, y2, None, None), mention, _maybe_float(t))
+
+
+def extract_points(text: str, expected: str | None = None):
+    """Minimal parser for Isaac pointing tags used in tests."""
+
+    results = []
+    for match in _POINT_OR_BOX_TAG.finditer(text or ""):
+        tag = match.group("tag").lower()
+        attrs = _parse_attrs(match.group("attrs"))
+        mention = attrs.get("mention")
+        t = attrs.get("t")
+        if tag == "point":
+            if expected not in (None, "point"):
+                continue
+            results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
+        elif tag == "point_box":
+            if expected not in (None, "box"):
+                continue
+            results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
+    return results
+
 
 BASE_MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
 MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1")
@@ -149,6 +209,28 @@ def compute_logits_statistics(tensor: torch.Tensor) -> dict[str, object]:
         "sum": _rounded(flat.sum()),
         "l2_norm": _rounded(torch.linalg.vector_norm(flat, ord=2)),
     }
+
+
+def infer_pad_from_tail(sequence: torch.Tensor) -> tuple[int | None, int]:
+    """
+    Infer the pad value used in a 1D sequence by scanning the repeated tail.
+
+    Returns (pad_value or None if no padding detected, last_nonpad_index).
+    """
+
+    if sequence.ndim != 1:
+        raise ValueError("sequence must be 1D")
+
+    pad_candidate = sequence[-1].item()
+    idx = sequence.shape[0] - 1
+    while idx >= 0 and sequence[idx].item() == pad_candidate:
+        idx -= 1
+
+    if idx == sequence.shape[0] - 1:
+        return None, idx
+    if idx < 0:
+        return pad_candidate, -1
+    return pad_candidate, idx
 
 
 def create_isaac_processor(
@@ -427,7 +509,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @require_tensorstream
     def test_model_forward(self):
         config, input_ids, attention_mask, _ = self.model_tester.prepare_config_and_inputs()
         model = IsaacModel(config)
@@ -441,7 +522,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             (self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size),
         )
 
-    @require_tensorstream
     def test_for_conditional_generation(self):
         config, input_ids, attention_mask, labels = self.model_tester.prepare_config_and_inputs()
         model = IsaacForConditionalGeneration(config)
@@ -456,7 +536,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
         self.assertIsNotNone(result.loss)
 
-    @require_tensorstream
     def test_isaac_for_conditional_generation_initialization(self):
         config = self.model_tester.get_config()
         model = IsaacForConditionalGeneration(config)
@@ -471,7 +550,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             outputs = model(input_ids=input_ids, return_dict=True)
         self.assertEqual(outputs.logits.shape, (1, 10, config.vocab_size))
 
-    @require_tensorstream
     def test_isaac_for_conditional_generation_loss_and_generate_flag(self):
         config = self.model_tester.get_config()
         model = IsaacForConditionalGeneration(config).to(torch_device)
@@ -598,119 +676,8 @@ class IsaacAttentionDtypeTest(unittest.TestCase):
 
 
 @require_torch
-@require_flash_attn
-class IsaacAttentionDtypeTest(unittest.TestCase):
-    def _make_config(self):
-        return IsaacVisionConfig(
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_channels=3,
-            num_patches=64,
-            patch_size=4,
-            attention_dropout=0.0,
-            pixel_shuffle_scale_factor=1,
-        )
-
-    def _skip_if_no_cuda_bf16(self):
-        if not torch.cuda.is_available():
-            pytest.skip("CUDA required for flash attention dtype/parity tests.")
-        if not torch.cuda.is_bf16_supported():
-            pytest.skip("CUDA bfloat16 support required.")
-
-    def test_flash_attention_matches_weight_dtype_bf16(self):
-        self._skip_if_no_cuda_bf16()
-        torch.manual_seed(0)
-
-        device = torch.device("cuda")
-        config = self._make_config()
-        config._attn_implementation = "flash_attention_2"
-
-        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
-
-        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
-
-        with torch.no_grad():
-            attn_output, _ = attn(hidden_states)
-
-        assert attn_output.dtype == attn.out_proj.weight.dtype
-        assert attn_output.dtype == hidden_states.dtype
-
-    def test_flash_attention_matches_weight_dtype_bf16_with_padding(self):
-        self._skip_if_no_cuda_bf16()
-        torch.manual_seed(0)
-
-        device = torch.device("cuda")
-        config = self._make_config()
-        config._attn_implementation = "flash_attention_2"
-
-        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
-
-        hidden_states = torch.randn(2, 4, config.hidden_size, device=device, dtype=torch.bfloat16)
-        attention_mask = torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]], device=device, dtype=torch.bool)
-
-        with torch.no_grad():
-            attn_output, _ = attn(hidden_states, attention_mask=attention_mask)
-
-        assert attn_output.dtype == attn.out_proj.weight.dtype
-        assert attn_output.dtype == hidden_states.dtype
-
-    def test_flash_attention_matches_weight_dtype_bf16_with_cu_seqlens(self):
-        self._skip_if_no_cuda_bf16()
-        torch.manual_seed(0)
-
-        device = torch.device("cuda")
-        config = self._make_config()
-        config._attn_implementation = "flash_attention_2"
-
-        attn = IsaacVisionAttention(config).to(device=device, dtype=torch.bfloat16).eval()
-
-        hidden_states = torch.randn(1, 5, config.hidden_size, device=device, dtype=torch.bfloat16)
-        cu_seqlens = torch.tensor([0, 3, 5], device=device, dtype=torch.int32)
-
-        with torch.no_grad():
-            attn_output, _ = attn(hidden_states, cu_seqlens=cu_seqlens, max_seqlen=3)
-
-        assert attn_output.dtype == attn.out_proj.weight.dtype
-        assert attn_output.dtype == hidden_states.dtype
-
-    def test_flash_attention_parity_with_sdpa_bf16(self):
-        self._skip_if_no_cuda_bf16()
-        torch.manual_seed(0)
-
-        device = torch.device("cuda")
-        config_sdpa = self._make_config()
-        config_sdpa._attn_implementation = "sdpa"
-
-        config_fa2 = self._make_config()
-        config_fa2._attn_implementation = "flash_attention_2"
-
-        attn_sdpa = IsaacVisionAttention(config_sdpa).to(device=device, dtype=torch.bfloat16).eval()
-        attn_fa2 = IsaacVisionAttention(config_fa2).to(device=device, dtype=torch.bfloat16).eval()
-
-        # Align weights so the only difference is the backend
-        attn_fa2.load_state_dict(attn_sdpa.state_dict())
-
-        hidden_states = torch.randn(2, 4, config_sdpa.hidden_size, device=device, dtype=torch.bfloat16)
-
-        with torch.no_grad():
-            out_sdpa, _ = attn_sdpa(hidden_states)
-            out_fa2, _ = attn_fa2(hidden_states)
-
-        torch.testing.assert_close(
-            out_fa2.float(),
-            out_sdpa.float(),
-            rtol=1e-3,
-            atol=1e-3,
-            msg="FlashAttention2 output deviates from SDPA baseline beyond tolerance",
-        )
-
-
-@require_torch
 @require_vision
 @slow
-@require_tensorstream
 @require_flash_attn
 class IsaacGenerationIntegrationTest(unittest.TestCase):
     max_new_tokens = 25
@@ -737,6 +704,13 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
         packed_inputs = processor_output["packed_inputs"]
         input_ids = processor_output["input_ids"].to(self.device)
+        attention_mask = processor_output.get("attention_mask")
+        if attention_mask is None:
+            pad_id = self.tokenizer.pad_token_id
+            if pad_id is None:
+                pad_id = getattr(self.processor, "pad_token_id", 0)
+            attention_mask = processor_output["input_ids"].ne(pad_id).long()
+        attention_mask = attention_mask.to(self.device)
         prompt_len = input_ids.shape[1]
         packed_inputs = {
             key: (value.to(self.device) if isinstance(value, torch.Tensor) else value)
@@ -746,6 +720,7 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
+                attention_mask=attention_mask,
                 packed_inputs=packed_inputs,
                 max_new_tokens=num_tokens or self.max_new_tokens,
                 do_sample=False,
@@ -804,6 +779,47 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         expected_response = "\nNo, it is not safe to cross the street at this moment. The traffic light for pedestrians is red, indicating that it is not safe to cross."
         assert generated_text == expected_response
 
+    def _generate_batch(self, prompts, images_list, num_tokens=None):
+        processor_output = self.processor(text=prompts, images=images_list, return_tensors="pt")
+        input_ids = processor_output["input_ids"]
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+
+        # Use processor-provided attention_mask if available; otherwise fallback.
+        attention_mask = processor_output.get("attention_mask", None)
+        if attention_mask is None:
+            pad_id = self.tokenizer.pad_token_id
+            if pad_id is None:
+                pad_id = getattr(self.processor, "pad_token_id", 0)
+            attention_mask = input_ids.ne(pad_id).long()
+
+        input_ids = input_ids.to(self.device)
+        attention_mask = attention_mask.to(self.device)
+
+        packed_inputs = {
+            k: (v.to(self.device) if isinstance(v, torch.Tensor) else v)
+            for k, v in processor_output["packed_inputs"].items()
+        }
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                packed_inputs=packed_inputs,
+                max_new_tokens=num_tokens or self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+            )
+        sequences = outputs.sequences
+        generated_texts = []
+        for i in range(sequences.shape[0]):
+            tail_ids = sequences[i, :]  # only newly generated tokens
+            generated_texts.append(self.tokenizer.decode(tail_ids, skip_special_tokens=True))
+
+        return generated_texts
+
     def test_logit_equivalence(self):
         image = _load_red_dot_image()
         if image is None:
@@ -852,11 +868,154 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         }
         assert logit_stats == expected_logit_stats
 
+    def test_batched_generation_matches_individual(self):
+        # Build individual scenarios matching existing integration tests
+        red_image = _load_red_dot_image()
+        if red_image is None:
+            pytest.skip("PIL.Image is required for Isaac generation tests.")
+
+        vqa_document = [
+            {
+                "type": "image",
+                "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+                "role": "user",
+            },
+            {
+                "type": "text",
+                "content": "Is it safe to cross the street at this moment?",
+                "role": "user",
+            },
+        ]
+
+        # Text-only
+        doc_text_only = [{"type": "text", "content": "What is the pythogorean theorem?", "role": "user"}]
+        messages_text_only, images_text_only = document_to_messages(doc_text_only)
+        single_text_only = self._generate_from_messages(
+            messages_text_only, images_text_only, num_tokens=self.max_new_tokens
+        )
+        assert single_text_only, "Text-only single generation is empty"
+
+        # Image + text
+        messages_image_text = [
+            {"role": "user", "content": "Describe this image:"},
+            {"role": "user", "content": "<image>"},
+        ]
+        single_image_text = self._generate_from_messages(messages_image_text, [red_image])
+        assert single_image_text, "Image-text single generation is empty"
+
+        # VQA
+        messages_vqa, images_vqa = document_to_messages(vqa_document)
+        single_vqa = self._generate_from_messages(messages_vqa, images_vqa, num_tokens=self.max_new_tokens)
+        assert single_vqa, "VQA single generation is empty"
+
+        single_texts = [single_text_only, single_image_text, single_vqa]
+
+        # Build batch inputs
+        prompts = [
+            self.processor.apply_chat_template(messages_text_only, tokenize=False, add_generation_prompt=True).strip(),
+            self.processor.apply_chat_template(
+                messages_image_text, tokenize=False, add_generation_prompt=True
+            ).strip(),
+            self.processor.apply_chat_template(messages_vqa, tokenize=False, add_generation_prompt=True).strip(),
+        ]
+        images_list = [images_text_only, [red_image], images_vqa]
+
+        # Input-level sanity
+        assert len(prompts) == len(images_list) == 3
+        for i, (p, imgs) in enumerate(zip(prompts, images_list)):
+            expected_tokens = p.count(self.hf_config.vision_token)
+            num_imgs = len(imgs)
+            assert expected_tokens == num_imgs, (
+                f"sample {i} vision token/image mismatch: {expected_tokens} vs {num_imgs}"
+            )
+
+        pad_id = self.tokenizer.pad_token_id
+        if pad_id is None:
+            pad_id = getattr(self.processor, "pad_token_id", 0)
+
+        per_sample_outputs = [
+            self.processor(text=prompt, images=imgs, return_tensors="pt") for prompt, imgs in zip(prompts, images_list)
+        ]
+        batch_outputs = self.processor(text=prompts, images=images_list, return_tensors="pt")
+        batch_input_ids = batch_outputs["input_ids"]
+        batch_packed = batch_outputs["packed_inputs"]
+
+        sample_lengths = [output["input_ids"].squeeze(0).shape[0] for output in per_sample_outputs]
+        max_length = max(sample_lengths)
+
+        expected_vision_patches = []
+        expected_vision_grids = []
+        expected_vision_offsets = []
+        expected_vision_lengths = []
+        expected_vision_batch_indices = []
+
+        for i, (single_output, batch_ids, single_len) in enumerate(
+            zip(per_sample_outputs, batch_input_ids, sample_lengths)
+        ):
+            single_ids = single_output["input_ids"].squeeze(0)
+            single_packed = single_output["packed_inputs"]
+
+            torch.testing.assert_close(batch_ids[-single_len:], single_ids)
+
+            batch_modality_row = batch_packed["modality_tensor"][i]
+            expected_modality = torch.full(
+                (max_length,),
+                batch_modality_row[-1].item(),
+                dtype=batch_modality_row.dtype,
+                device=batch_modality_row.device,
+            )
+            expected_modality[-single_len:] = single_packed["modality_tensor"].squeeze(0)
+            torch.testing.assert_close(batch_modality_row, expected_modality)
+
+            batch_positions_row = batch_packed["position_ids"][i]
+            expected_positions = torch.zeros(
+                (max_length, 3), dtype=batch_positions_row.dtype, device=batch_positions_row.device
+            )
+            expected_positions[-single_len:] = single_packed["position_ids"].squeeze(0)
+            torch.testing.assert_close(batch_positions_row, expected_positions)
+
+            if single_packed["vision_patches"] is not None:
+                expected_vision_patches.append(single_packed["vision_patches"])
+                expected_vision_grids.append(single_packed["vision_token_grids"])
+                expected_vision_offsets.append(single_packed["vision_token_offsets"])
+                expected_vision_lengths.append(single_packed["vision_token_lengths"])
+                expected_vision_batch_indices.append(torch.full_like(single_packed["vision_token_batch_indices"], i))
+
+            if single_len == max_length:
+                continue
+
+            pad_span = batch_ids[: max_length - single_len]
+            assert torch.all(pad_span == pad_id), f"sample {i} left pad span not padded with pad id"
+
+            attention_mask = batch_ids.ne(pad_id).long()
+            assert not torch.any(attention_mask[: max_length - single_len]), f"sample {i} mask ones inside left pad"
+            assert torch.all(attention_mask[-single_len:]), f"sample {i} mask zeros inside content"
+
+        if expected_vision_patches:
+            torch.testing.assert_close(batch_packed["vision_patches"], torch.cat(expected_vision_patches, dim=0))
+            torch.testing.assert_close(batch_packed["vision_token_grids"], torch.cat(expected_vision_grids, dim=0))
+            torch.testing.assert_close(batch_packed["vision_token_offsets"], torch.cat(expected_vision_offsets, dim=0))
+            torch.testing.assert_close(batch_packed["vision_token_lengths"], torch.cat(expected_vision_lengths, dim=0))
+            torch.testing.assert_close(
+                batch_packed["vision_token_batch_indices"], torch.cat(expected_vision_batch_indices, dim=0)
+            )
+        else:
+            assert batch_packed["vision_patches"] is None
+            assert batch_packed["vision_token_grids"] is None
+            assert batch_packed["vision_token_offsets"] is None
+            assert batch_packed["vision_token_lengths"] is None
+            assert batch_packed["vision_token_batch_indices"] is None
+
+        batch_texts = self._generate_batch(prompts, images_list, num_tokens=100)
+        assert len(batch_texts) == len(single_texts) == 3
+
+        for i, (btxt, stxt) in enumerate(zip(batch_texts, single_texts)):
+            assert stxt in btxt, f"batch[{i}] mismatch: {btxt!r} vs single[{i}] {stxt!r}"
+
 
 @require_torch
 @require_vision
 @slow
-@require_tensorstream
 @require_flash_attn
 class IsaacBoxPointingIntegrationTest(unittest.TestCase):
     max_new_tokens = 256

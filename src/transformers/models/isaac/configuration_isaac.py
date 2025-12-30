@@ -144,6 +144,8 @@ class IsaacConfig(PretrainedConfig):
             if vision_attn is not None:
                 self.vision_config._attn_implementation = vision_attn
 
+        if getattr(self, "_attn_implementation", None) is None:
+            self._attn_implementation = "sdpa"
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
 

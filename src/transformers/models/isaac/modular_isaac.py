@@ -18,31 +18,8 @@ from __future__ import annotations
 import copy
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, Optional, Union
-
-from ...utils.import_utils import (
-    is_torch_available,
-    is_torchdynamo_compiling,
-    is_torchvision_available,
-    is_vision_available,
-)
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-
-
-if is_vision_available():
-    from PIL.Image import Image
-else:
-    Image = None
-
-if is_torchvision_available():
-    from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
-
 from enum import IntEnum
+from typing import Any, Optional, Union
 
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig, layer_type_validation
@@ -65,8 +42,6 @@ from ...models.qwen3.configuration_qwen3 import Qwen3Config
 from ...models.qwen3.modeling_qwen3 import Qwen3ForCausalLM, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring
-
-# Vision preprocessing constants
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
 from ...utils.generic import (
@@ -74,6 +49,12 @@ from ...utils.generic import (
     TransformersKwargs,
     can_return_tuple,
     check_model_inputs,
+)
+from ...utils.import_utils import (
+    is_torch_available,
+    is_torchdynamo_compiling,
+    is_torchvision_available,
+    is_vision_available,
 )
 from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
@@ -83,6 +64,18 @@ from ..siglip2.modeling_siglip2 import (
     Siglip2EncoderLayer,
     Siglip2VisionEmbeddings,
 )
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+if is_vision_available():
+    from PIL.Image import Image
+else:
+    Image = None
+if is_torchvision_available():
+    from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
 
 
 class ModalityType(IntEnum):
@@ -159,7 +152,6 @@ class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class IsaacImageProcessorFast(BaseImageProcessorFast):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
-    r"""Fast torch-based image processor for Isaac vision inputs."""
 
     resample = PILImageResampling.BILINEAR
     model_input_names = ["patches", "token_grids"]
@@ -235,21 +227,10 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
         grouped_outputs = {}
 
         for shape, stacked_images in grouped_images.items():
-            if stacked_images.ndim != 4:
-                raise ValueError(
-                    f"Expected images shaped as (batch, channels, height, width); got shape {tuple(stacked_images.shape)}."
-                )
-
             batch_size, channels, original_height, original_width = stacked_images.shape
 
             if bool(self.do_convert_rgb) and channels == 1:
                 stacked_images = stacked_images.repeat(1, 3, 1, 1)
-                channels = 3
-
-            if original_height * original_width > self.MAX_PIXELS:
-                raise ValueError(
-                    f"Image area {original_height * original_width} (h={original_height}, w={original_width}) exceeds MAX_PIXELS={self.MAX_PIXELS}; enable resizing or provide smaller inputs."
-                )
 
             target_height, target_width = get_image_size_for_max_num_patches(
                 original_height,
@@ -259,43 +240,31 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
                 min_num_patches=min_num_patches,
                 pixel_shuffle_scale=pixel_shuffle_scale,
             )
-
             if do_resize:
-                resize_size = SizeDict(height=target_height, width=target_width)
                 image_batch = self.resize(
-                    image=stacked_images,
-                    size=resize_size,
-                    interpolation=interpolation,
+                    stacked_images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
                 )
             else:
-                if ((original_height % patch_size) != 0) or ((original_width % patch_size) != 0):
+                if (original_height % patch_size) or (original_width % patch_size):
                     raise ValueError(
                         f"Image dimensions (h={original_height}, w={original_width}) must be divisible by patch_size={patch_size} when resize is disabled; enable resizing or adjust the input resolution."
                     )
-                image_batch = stacked_images
-                target_height, target_width = original_height, original_width
+                image_batch, target_height, target_width = stacked_images, original_height, original_width
 
-            if do_rescale:
-                image_batch = self.rescale_and_normalize(
-                    image_batch,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                )
+            image_batch = self.rescale_and_normalize(
+                image_batch,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+            )
 
             patches = torch_extract_patches(image_batch, patch_size, patch_size)
             _, height_tokens, width_tokens, _ = patches.shape
 
             token_grid = (
-                torch.tensor(
-                    [height_tokens, width_tokens],
-                    dtype=torch.long,
-                    device=patches.device,
-                )
-                .unsqueeze(0)
-                .repeat(batch_size, 1)
+                torch.tensor([height_tokens, width_tokens], device=patches.device).long().expand(batch_size, 2)
             )
 
             real_dim = (
@@ -326,8 +295,7 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
             grouped_outputs[shape] = (patches, token_grid, virtual_dim, real_dim)
 
-        # Helper to reorder a single item of the tuple payloads using the same grouped_images_index
-        def _reorder_grouped_item(
+        def _reorder_grouped_item(  # reorder an item of tuple payloads using the same grouped_images_index
             grouped: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
             grouped_index: dict[tuple[int, ...], list[int]],
             item_idx: int,
@@ -448,7 +416,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
             - packed_pixel_values: (batch, max_len, patch_dim) padded with zeros, or None if batch_size == 0
             - seq_lengths: (batch,) lengths for each image
         """
-        # Per-image token counts
         seq_lengths = spatial_shapes.long().prod(dim=-1)  # (B,)
         batch_size = int(seq_lengths.numel())
         if batch_size == 0:
@@ -464,8 +431,6 @@ class IsaacVisionEmbeddings(Siglip2VisionEmbeddings):
         """Flatten a padded batch back to packed sequence order using `seq_lengths`."""
         lengths = seq_lengths.to(device=embeddings.device).tolist()
         chunks = [embeddings[i, :l] for i, l in enumerate(lengths) if l > 0]
-        if not chunks:
-            return embeddings.new_zeros((0, embeddings.size(-1)))
         return torch.cat(chunks, dim=0)
 
 
@@ -790,18 +755,6 @@ class IsaacMultiModalProjector(nn.Module):
 
 
 class IsaacVisionEmbedding(nn.Module):
-    """Wraps the vision tower plus projection into the text hidden size.
-
-    Args:
-        config (IsaacConfig): Composite config containing both vision and text settings.
-
-    Inputs:
-        vision_tokens (Tuple[Tensor, Tensor]): Packed vision patches and token grids.
-
-    Returns:
-        torch.Tensor: Projected vision embeddings aligned to the text hidden size.
-    """
-
     _supports_sdpa = True
 
     def __init__(self, config: IsaacConfig):
@@ -975,6 +928,8 @@ class IsaacConfig(PretrainedConfig):
             if vision_attn is not None:
                 self.vision_config._attn_implementation = vision_attn
 
+        if getattr(self, "_attn_implementation", None) is None:
+            self._attn_implementation = "sdpa"
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
 
@@ -1037,23 +992,95 @@ class IsaacProcessor(ProcessorMixin):
         self.image_processor = image_processor
         super().__init__(image_processor, tokenizer)
 
+        text_pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
+        image_pad_token_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+
+        self.text_pad_token_id = int(text_pad_token_id)
+        self.image_pad_token_id = int(image_pad_token_id)
+        self.pad_token_id = self.text_pad_token_id
+
         self.current_processor = self.image_processor
         self.config = config
         self.chat_template = getattr(self.tokenizer, "chat_template", None)
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
-        # Parse by vision_token; interleave text segments and image segments.
-        segments = text.split(self.vision_token)
-        num_images = len(segments) - 1
-        if num_images and (images is None or len(images) != num_images):
-            raise ValueError(
-                f"Expected one image per '{self.vision_token}' token: found {num_images} token(s) but received {0 if images is None else len(images)} image(s)."
-            )
+    def _pack_batch(
+        self, texts: list[str], images_list: Optional[list[Optional[list[Image]]]]
+    ) -> dict[str, Optional[torch.Tensor]]:
+        if images_list is None:
+            pairs = ((t, None) for t in texts)
+        else:
+            pairs = zip(texts, images_list, strict=True)
 
+        per_sample: list[dict[str, Optional[torch.Tensor]]] = []
+        for txt, imgs in pairs:
+            if imgs is not None and isinstance(imgs, Image):
+                imgs = [imgs]
+            per_sample.append(self._pack_single(txt, imgs))
+
+        lengths = [int(p["input_ids"].shape[1]) for p in per_sample]
+        max_len = max(lengths, default=0)
+        batch = len(per_sample)
+
+        # Use first device with data as anchor
+        base_device = torch.device("cpu")
+        for p in per_sample:
+            if p["input_ids"].numel() > 0:
+                base_device = p["input_ids"].device
+                break
+
+        pad_id = self.text_pad_token_id
+        padded_input_ids = torch.full((batch, max_len), pad_id, device=base_device, dtype=torch.long)
+        padded_modality = torch.full((batch, max_len), ModalityType.text.value, device=base_device, dtype=torch.long)
+        padded_position_ids = torch.zeros((batch, max_len, 3), device=base_device, dtype=torch.long)
+
+        for i, (sample, l) in enumerate(zip(per_sample, lengths)):
+            if l:
+                padded_input_ids[i, -l:] = sample["input_ids"][0]
+                padded_modality[i, -l:] = sample["modality_tensor"][0]
+                padded_position_ids[i, -l:] = sample["position_ids"][0]
+
+        # Vision-side aggregation
+        v_samples = [(b, s) for b, s in enumerate(per_sample) if s["vision_patches"] is not None]
+        if v_samples:
+            vision_patches_list = [s["vision_patches"] for _, s in v_samples]
+            vision_grids_list = [s["vision_token_grids"] for _, s in v_samples]
+            vision_offsets_list = [s["vision_token_offsets"] for _, s in v_samples]
+            vision_lengths_list = [s["vision_token_lengths"] for _, s in v_samples]
+            vision_batch_indices = [torch.full_like(s["vision_token_offsets"], b) for b, s in v_samples]
+
+            vision_patches = torch.cat(vision_patches_list, dim=0)
+            vision_token_grids = torch.cat(vision_grids_list, dim=0)
+            vision_token_offsets = torch.cat(vision_offsets_list, dim=0)
+            vision_token_lengths = torch.cat(vision_lengths_list, dim=0)
+            vision_token_batch_indices = torch.cat(vision_batch_indices, dim=0)
+        else:
+            vision_patches = vision_token_grids = vision_token_offsets = vision_token_lengths = (
+                vision_token_batch_indices
+            ) = None
+
+        return {
+            "input_ids": padded_input_ids,
+            "vision_patches": vision_patches,
+            "vision_token_grids": vision_token_grids,
+            "vision_token_offsets": vision_token_offsets,
+            "vision_token_lengths": vision_token_lengths,
+            "vision_token_batch_indices": vision_token_batch_indices,
+            "modality_tensor": padded_modality,
+            "position_ids": padded_position_ids,
+        }
+
+    def _pack_single(self, text: str, images: Optional[list[Image]]) -> dict[str, Optional[torch.Tensor]]:
+        segments = text.split(self.vision_token)  # Parse by vision_token; interleave text segments and image segments.
+        num_images = len(segments) - 1
         items: list[dict[str, Any]] = []
         total = 0
+        num_provided_images = len(images) if images is not None else 0
+        if not num_images == num_provided_images:
+            raise ValueError(
+                f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text} "
+            )
 
         for index, segment in enumerate(segments):
             if segment:
@@ -1090,7 +1117,7 @@ class IsaacProcessor(ProcessorMixin):
         start = max(0, total - self.max_sequence_length)
         end = total
 
-        fill_value = self.pad_token_id
+        image_pad_value = self.image_pad_token_id
         base_device: Optional[torch.device] = None
         position_ids, modality, input_ids = [], [], []
         vpatches, grids, vision_token_offsets, vision_token_lengths = [], [], [], []
@@ -1140,7 +1167,7 @@ class IsaacProcessor(ProcessorMixin):
                         )
                     )
                     input_ids.append(
-                        torch.full((segment_kept_length,), fill_value, device=base_device, dtype=torch.long)
+                        torch.full((segment_kept_length,), image_pad_value, device=base_device, dtype=torch.long)
                     )
 
                     vpatches.append(item["patches"].to(base_device))  # full patches; slice later via offsets/lengths
@@ -1156,6 +1183,9 @@ class IsaacProcessor(ProcessorMixin):
                 position_offset += segment_length if item["type"] == "text" else int(item["dims"][0])
 
             global_offset += segment_length
+
+        if base_device is None:
+            base_device = torch.device("cpu")
 
         modality_tensor = (
             torch.cat(modality, 0).unsqueeze(0)
@@ -1199,21 +1229,28 @@ class IsaacProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         texts = [text] if isinstance(text, str) else text
-        if len(texts) != 1:
-            raise ValueError(
-                f"IsaacProcessor currently supports batch_size=1; received {len(texts)} text prompts. Split the batch and call the processor per sample."
-            )
-
-        images_list = None
+        images_list: Optional[list[Optional[list[Image]]]] = None
         if images is not None:
-            images_list = [images] if isinstance(images, Image) else images
-            n_tok = texts[0].count(self.vision_token)
-            if n_tok != len(images_list):
-                raise ValueError(
-                    f"Expected {len(images_list)} occurrences of '{self.vision_token}' (one per provided image), but found {n_tok} in the text."
-                )
+            if isinstance(images, list) and len(images) == len(texts):
+                if not images:
+                    images_list = []
+                elif isinstance(images[0], list):
+                    images_list = images  # already per-sample
+                else:
+                    images_list = [[img] for img in images]  # list of images, one per sample
+            else:
+                images_list = []
+                for t in texts:
+                    n_tok = t.count(self.vision_token)
+                    if n_tok == 0:
+                        images_list.append(None)
+                    else:
+                        if isinstance(images, list):
+                            images_list.append(images)
+                        else:
+                            images_list.append([images])
 
-        packed = self._pack_single(texts[0], images_list)
+        packed = self._pack_batch(texts, images_list)
         input_ids = packed.pop("input_ids")
         return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
 
@@ -1267,17 +1304,12 @@ class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
         with torch.no_grad():
             pos = position_ids.clone()
             not_spatial = modality_tensor != ModalityType.image.value
-            if not_spatial.any():
-                # Collapse non-vision modalities to 1D positions so rotary embedding
-                # treats them like text tokens while keeping image tokens 3D.
-                data_1d = pos[not_spatial][..., 0].unsqueeze(-1)
-                pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
-
+            data_1d = pos[not_spatial][..., 0].unsqueeze(-1)  # Collapse non-vision modalities to 1D positions
+            pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
             pos_axes = pos.permute(2, 0, 1).contiguous()
 
         cos_axes, sin_axes = super().forward(hidden_states, pos_axes)
-        cos_axes = cos_axes.to(hidden_states.dtype)
-        sin_axes = sin_axes.to(hidden_states.dtype)
+        cos_axes, sin_axes = cos_axes.to(hidden_states.dtype), sin_axes.to(hidden_states.dtype)
         cos_combined, sin_combined = self._combine_axes(cos_axes), self._combine_axes(sin_axes)
 
         return cos_combined, sin_combined
@@ -1306,6 +1338,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.max_sequence_length = config.max_sequence_length
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
+        self.rope_deltas = None
 
         self.post_init()
 
@@ -1348,6 +1381,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         - vision_token_grids: (num_images, 2) token grid sizes or None
         - vision_token_offsets: (num_images,) offsets into each image's virtual token span (optional)
         - vision_token_lengths: (num_images,) surviving virtual token lengths per image (optional)
+        - vision_token_batch_indices: (num_images,) batch row for each image (optional; defaults to zeros)
         """
         modality = packed_inputs["modality_tensor"].to(device=input_ids.device, dtype=torch.long)
         embeds = self.text_model.embed_tokens(input_ids)
@@ -1360,41 +1394,102 @@ class IsaacModel(Qwen3PreTrainedModel):
         vision = self.vision_embedding((vision_patches, token_grids))  # (total_tokens, hidden)
 
         # per-image token counts AFTER pixel-shuffle
-        s = int(self.config.vision_config.pixel_shuffle_scale_factor)
-        sizes = token_grids.prod(-1).div(s * s, rounding_mode="floor").tolist()
+        vision_reduction_factor = int(self.config.vision_config.pixel_shuffle_scale_factor)
+        sizes = (
+            token_grids.prod(-1).div(vision_reduction_factor * vision_reduction_factor, rounding_mode="floor").tolist()
+        )
         offsets = packed_inputs.get("vision_token_offsets")
         lengths = packed_inputs.get("vision_token_lengths")
+        batch_indices = packed_inputs.get("vision_token_batch_indices")
 
-        if offsets is not None or lengths is not None:
-            off = (
-                offsets.to(device=vision.device, dtype=torch.long)
-                if offsets is not None
-                else torch.zeros(len(sizes), device=vision.device, dtype=torch.long)
-            )
-            ln = (
-                lengths.to(device=vision.device, dtype=torch.long)
-                if lengths is not None
-                else torch.tensor(sizes, device=vision.device, dtype=torch.long)
-            )
+        chunks = vision.split(sizes, dim=0)
+        picked: list[torch.Tensor] = []
+        picked_batch: list[int] = []
+        for chunk, size, offset, length, batch_index in zip(
+            chunks,
+            sizes,
+            offsets.tolist(),
+            lengths.tolist(),
+            (batch_indices.tolist() if batch_indices is not None else [0] * len(sizes)),
+        ):
+            if size <= 0:
+                continue
+            offset = max(0, min(int(offset), size))
+            length = max(0, min(int(length), size - offset))
+            if length:
+                picked.append(chunk[offset : offset + length])
+                picked_batch.append(int(batch_index))
+        if picked:
+            vision_chunks = picked
+            vision_batch_idx = picked_batch
+        else:
+            vision_chunks = vision_batch_idx = []
 
-            # Honor per-image crop windows (after pixel shuffle) so we only splice back
-            # the surviving virtual tokens instead of the full vision span.
-            chunks = vision.split(sizes, dim=0)
-            picked: list[torch.Tensor] = []
-            for c, n, o, l in zip(chunks, sizes, off.tolist(), ln.tolist()):
-                if n <= 0:
-                    continue
-                o = max(0, min(int(o), n))
-                l = max(0, min(int(l), n - o))
-                if l:
-                    picked.append(c[o : o + l])
-            vision = torch.cat(picked, 0) if picked else vision.new_zeros((0, vision.size(-1)))
-
-        m = modality == ModalityType.image.value
+        vision = torch.cat(vision_chunks, 0) if vision_chunks else vision.new_zeros((0, vision.size(-1)))
         embeds = embeds.clone()
-        embeds[m] = vision.to(device=embeds.device, dtype=embeds.dtype)
+        num_batches = modality.shape[0]
+        image_positions = [
+            (modality[b] == ModalityType.image.value).nonzero(as_tuple=False).squeeze(-1) for b in range(num_batches)
+        ]
+        cursors = [0 for _ in range(num_batches)]
+
+        for chunk, batch_index in zip(vision_chunks, vision_batch_idx):
+            if chunk.numel() == 0:
+                continue
+            positions = image_positions[batch_index]
+            start = cursors[batch_index]
+            end = start + chunk.shape[0]
+            embeds[batch_index, positions[start:end]] = chunk.to(device=embeds.device, dtype=embeds.dtype)
+            cursors[batch_index] = end
 
         return embeds, modality
+
+    def get_rope_index(
+        self,
+        *,
+        position_ids: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        cache_position: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build 3D position ids and per-batch RoPE deltas."""
+
+        device = inputs_embeds.device
+        batch_size, seq_len = inputs_embeds.shape[:2]
+
+        if position_ids is None:
+            cp = cache_position.to(device=device, dtype=torch.long)
+            if cp.ndim == 1:
+                cp = cp.view(1, -1).expand(batch_size or 1, -1)
+
+            base_delta = torch.as_tensor(
+                0 if self.rope_deltas is None else self.rope_deltas,
+                device=device,
+                dtype=torch.long,
+            ).reshape(-1, 1)
+            base_delta = torch.broadcast_to(base_delta, (batch_size, 1))
+
+            mask_delta = attention_mask.to(device=device, dtype=torch.long).sum(1, keepdim=True) - attention_mask.size(
+                1
+            )
+            rope_position = cp + base_delta + mask_delta
+            pos_3d = rope_position.unsqueeze(-1).expand(-1, -1, 3)
+            return pos_3d, base_delta
+
+        position_ids = position_ids.to(device=device)
+        if position_ids.ndim == 2:
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        if position_ids.shape[1] != seq_len:
+            start_positions = position_ids[:, :1, 0]
+            position_ids = torch.arange(seq_len, device=position_ids.device).view(1, -1) + start_positions
+            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
+
+        attn = attention_mask.to(device=device, dtype=torch.long)
+        m_per_batch = position_ids.amax(dim=(1, 2))
+        seq_lens = attn.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=device)
+        rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=position_ids.dtype).unsqueeze(1)
+        return position_ids, rope_deltas
 
     @auto_docstring
     @check_model_inputs
@@ -1417,8 +1512,7 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         Args:
             packed_inputs (`dict`, *optional*):
-                Plain tensor payloads extracted from a TensorStream. When provided, it replaces the TensorStream path
-                and requires `input_ids` for text tokens (or `text_token_ids` so `input_ids` can be rebuilt).
+                Plain tensor payloads. When provided, requires `input_ids` for text tokens (or `text_token_ids` so `input_ids` can be rebuilt).
             modality_tensor (`torch.LongTensor`, *optional*):
                 Modality identifiers aligned with the embedded sequence, shaped `(batch_size, seq_len)` and containing
                 values from `ModalityType`. Automatically built from `packed_inputs` or treated as text-only when omitted.
@@ -1426,58 +1520,47 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         output_attentions = kwargs.pop("output_attentions", None)
 
-        # Resolve the input source (prefer packed_inputs > ids > embeds).
         modality_tensor: Optional[torch.Tensor] = None
-        precomputed_position_ids: Optional[torch.Tensor] = None
 
         if packed_inputs is not None:
             inputs_embeds, modality_tensor = self.embed_packed_inputs(input_ids, packed_inputs)
-            precomputed_position_ids = packed_inputs.get("position_ids")
-            if precomputed_position_ids is not None:
-                precomputed_position_ids = precomputed_position_ids.to(inputs_embeds.device)
         elif input_ids is not None:
             inputs_embeds = self.text_model.embed_tokens(input_ids)
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
 
-        # Ensure cache exists when requested
         if use_cache and past_key_values is None:
-            cache_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
-            past_key_values = DynamicCache(config=cache_config)
+            past_key_values = DynamicCache(config=self.config.get_text_config())
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_len, device=device)
 
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.long)
+            attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device, dtype=torch.long)
 
-        position_ids = position_ids if position_ids is not None else precomputed_position_ids
-        if position_ids is None:
-            position_ids = cache_position.view(1, -1).expand(batch_size, -1)
+        if position_ids is None and packed_inputs is not None and packed_inputs.get("position_ids") is not None:
+            position_ids = packed_inputs.get("position_ids").to(device=device)
+
+        position_ids, rope_deltas = self.get_rope_index(
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+        )
+        self.rope_deltas = rope_deltas
 
         if modality_tensor is None:
             modality_tensor = torch.full(
                 (batch_size, seq_len), ModalityType.text.value, device=device, dtype=torch.long
             )
-        else:
-            modality_tensor = modality_tensor.to(device=device, dtype=torch.long)
-
-        position_ids = position_ids.to(device=device)
-
-        if position_ids.ndim == 2:
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
-        if position_ids.shape[1] != seq_len:
-            start_positions = position_ids[:, :1, 0]
-            position_ids = torch.arange(seq_len, device=device).view(1, -1) + start_positions
-            position_ids = position_ids.unsqueeze(-1).expand(-1, -1, 3)
 
         cos, sin = self.rotary_emb(position_ids, modality_tensor, hidden_states=inputs_embeds)
 
         decoder_position_ids = position_ids[..., 0] if position_ids.ndim == 3 else position_ids
 
-        if not isinstance(attention_mask, dict):  # Prepare attention mask
+        if not isinstance(attention_mask, dict):
             attention_mask = create_masks_for_generate(
                 config=self.config,
                 input_embeds=inputs_embeds,
@@ -1522,8 +1605,6 @@ class IsaacModel(Qwen3PreTrainedModel):
 
 @auto_docstring
 class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
-    """Isaac multimodal model for conditional generation."""
-
     config_class = IsaacConfig
     _can_compile_fullgraph = False
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
@@ -1531,10 +1612,9 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
 
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
-        self.model = IsaacModel(config)  # Use our custom model
+        self.model = IsaacModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.rope_deltas = None
 
     @auto_docstring
     @can_return_tuple
@@ -1555,47 +1635,14 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         """Run multimodal CausalLM forward, accepting packed vision/text inputs.
 
         Args:
-            input_ids: Text token ids.
             packed_inputs (`dict`, *optional*):
                 Packed vision/text payload from ``IsaacProcessor`` containing modality ids, MRoPE position ids, and
                 vision patch tensors/grids (with optional offsets/lengths) used to rebuild embeddings.
-            attention_mask: Attention mask or mask dict; created if not provided.
-            position_ids: Optional 3D MRoPE positions; auto-derived when absent.
-            past_key_values: Cache for decoding.
-            inputs_embeds: Precomputed embeddings (bypass embedding layer).
-            labels: Target ids for computing language modeling loss.
-            use_cache: Whether to return caches.
-            cache_position: Positions for cache-aware generation.
 
         Returns:
             CausalLMOutputWithPast: logits, optional loss, caches, hidden states, attentions.
         """
         output_attentions = kwargs.pop("output_attentions", None)
-
-        if position_ids is None and packed_inputs is not None:
-            pos_3d = packed_inputs.get("position_ids")
-            if pos_3d is not None:
-                position_ids, self.rope_deltas = self.get_rope_index(
-                    position_ids=pos_3d,
-                    attention_mask=attention_mask,
-                )
-
-        elif position_ids is None and cache_position is not None and self.rope_deltas is not None:
-            if input_ids is not None:
-                base_position_ids = torch.arange(input_ids.size(1), device=input_ids.device)[None, :, None].expand(
-                    input_ids.size(0), -1, 3
-                )
-            else:
-                batch_size, seq_len = inputs_embeds.shape[:2]
-                dummy_ids = torch.zeros((batch_size, seq_len), device=inputs_embeds.device, dtype=torch.long)
-                base_position_ids = torch.arange(dummy_ids.size(1), device=dummy_ids.device)[None, :, None].expand(
-                    dummy_ids.size(0), -1, 3
-                )
-
-            rope_delta = (cache_position[0] + self.rope_deltas).to(base_position_ids.device)
-            if not isinstance(rope_delta, int):
-                rope_delta = rope_delta.repeat_interleave(base_position_ids.shape[0] // rope_delta.shape[0], dim=0)
-            position_ids = base_position_ids.add(rope_delta)
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1609,10 +1656,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             cache_position=cache_position,
             **kwargs,
         )
-
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
@@ -1624,53 +1669,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions if output_attentions else None,
         )
-
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.model.set_input_embeddings(value)
-        vocab_size = getattr(value, "num_embeddings", None)
-        self.config.vocab_size = vocab_size
-        self.model.config.vocab_size = vocab_size
-        self.model.text_model.config.vocab_size = vocab_size
-        if self.lm_head.weight.shape[0] != vocab_size:
-            self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
-        self.lm_head.weight = self.model.text_model.embed_tokens.weight
-
-    def get_rope_index(
-        self,
-        *,
-        input_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Compute (position_ids_3d, rope_deltas) without TensorStream.
-
-        - If `position_ids` is provided, it must be shape (B, L, 3).
-        - Else, if `input_ids` is provided, position ids are synthesized as (B, L, 3).
-        - `rope_deltas` is (B, 1) used to advance positions during decode.
-        """
-
-        if position_ids is None:
-            pos_3d = torch.arange(input_ids.size(1), device=input_ids.device)[None, :, None].expand(
-                input_ids.size(0), -1, 3
-            )
-        else:
-            pos_3d = position_ids
-            if pos_3d.ndim != 3 or pos_3d.size(-1) != 3:
-                raise ValueError(
-                    f"`position_ids` must have shape (batch, seq_len, 3) for MRoPE; got shape {tuple(pos_3d.shape)}."
-                )
-
-        B, L, _ = pos_3d.shape
-        m_per_batch = pos_3d.amax(dim=(1, 2))
-
-        if attention_mask is None:
-            seq_lens = torch.full((B,), L, device=pos_3d.device, dtype=m_per_batch.dtype)
-        else:
-            seq_lens = attention_mask.eq(1).sum(dim=-1).to(dtype=m_per_batch.dtype, device=m_per_batch.device)
-
-        rope_deltas = (m_per_batch + 1 - seq_lens).to(dtype=pos_3d.dtype).unsqueeze(1)
-        return pos_3d, rope_deltas
 
     def prepare_inputs_for_generation(
         self,
@@ -1695,8 +1693,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         if packed_inputs is None:
             return model_inputs
 
-        cache_position = model_inputs.get("cache_position", cache_position)
-        first_step = cache_position is None or cache_position[0] == 0
+        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
+        first_step = past_len == 0
         model_inputs["packed_inputs"] = packed_inputs if first_step else None
         model_inputs["position_ids"] = None
 
@@ -1705,6 +1703,16 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
     @classmethod
     def can_generate(cls) -> bool:
         return True
+
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.model.set_input_embeddings(value)
+        vocab_size = getattr(value, "num_embeddings", None)
+        self.config.vocab_size = vocab_size
+        self.model.config.vocab_size = vocab_size
+        self.model.text_model.config.vocab_size = vocab_size
+        if self.lm_head.weight.shape[0] != vocab_size:
+            self.lm_head = nn.Linear(self.config.hidden_size, vocab_size, bias=False)
+        self.lm_head.weight = self.model.text_model.embed_tokens.weight
 
 
 __all__ = [

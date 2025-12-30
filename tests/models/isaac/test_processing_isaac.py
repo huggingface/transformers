@@ -14,15 +14,22 @@
 
 """Testing suite for the Isaac processor."""
 
+import os
+import unittest
+from pathlib import Path
+
 import pytest
 import torch
+from huggingface_hub import is_offline_mode
 
 from transformers import IsaacConfig, PythonBackend
+from transformers.image_processing_utils import ImageProcessingMixin
 from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
 from transformers.models.isaac.modeling_isaac import ModalityType
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
+from transformers.utils.generic import TensorType
 
 
 if is_vision_available():
@@ -124,6 +131,7 @@ def _assert_common(outputs):
         "vision_token_grids",
         "vision_token_offsets",
         "vision_token_lengths",
+        "vision_token_batch_indices",
         "modality_tensor",
         "position_ids",
     }
@@ -148,6 +156,7 @@ def _assert_no_vision(packed_inputs):
     assert packed_inputs["vision_token_grids"] is None
     assert packed_inputs["vision_token_offsets"] is None
     assert packed_inputs["vision_token_lengths"] is None
+    assert packed_inputs["vision_token_batch_indices"] is None
 
 
 def _assert_vision_segments(packed_inputs, expected_segments):
@@ -155,15 +164,34 @@ def _assert_vision_segments(packed_inputs, expected_segments):
     assert packed_inputs["vision_token_grids"] is not None
     assert packed_inputs["vision_token_offsets"] is not None
     assert packed_inputs["vision_token_lengths"] is not None
+    assert packed_inputs["vision_token_batch_indices"] is not None
 
     assert packed_inputs["vision_token_grids"].shape[0] == expected_segments
     assert packed_inputs["vision_token_offsets"].shape == (expected_segments,)
     assert packed_inputs["vision_token_lengths"].shape == (expected_segments,)
+    assert packed_inputs["vision_token_batch_indices"].shape == (expected_segments,)
 
 
 def _count_modality(packed_inputs, modality_value):
     modality = packed_inputs["modality_tensor"]
     return int((modality == modality_value).sum().item())
+
+
+def _pad_to_max(tensors: list[torch.Tensor], pad_value: int) -> torch.Tensor:
+    """Pad a list of (L, ...) tensors to (B, L_max, ...)."""
+    max_len = max(t.shape[0] for t in tensors)
+    batch = len(tensors)
+    if tensors[0].ndim == 1:
+        out = torch.full((batch, max_len), pad_value, device=tensors[0].device, dtype=tensors[0].dtype)
+        for i, t in enumerate(tensors):
+            out[i, : t.shape[0]] = t
+        return out
+    # assume (L, K)
+    k = tensors[0].shape[1]
+    out = torch.full((batch, max_len, k), pad_value, device=tensors[0].device, dtype=tensors[0].dtype)
+    for i, t in enumerate(tensors):
+        out[i, : t.shape[0]] = t
+    return out
 
 
 def _get_image_token_length(processor, image, vision_token):
@@ -302,7 +330,7 @@ def test_error_on_image_mismatch(isaac_processor):
     text = f"{vision_token} {vision_token}"
     image = _make_dummy_image()
 
-    with pytest.raises(ValueError, match="occurrences of"):
+    with pytest.raises(ValueError, match="one image per"):
         _run_processor(isaac_processor, text=text, images=[image])
 
 
@@ -461,3 +489,181 @@ def test_crop_removes_all_vision_when_window_excludes_images(isaac_processor, is
     _assert_no_vision(packed)
     assert input_ids.shape[1] == tail_tokens
     assert _count_modality(packed, ModalityType.text.value) == tail_tokens
+
+
+@require_torch
+@require_vision
+def test_batch_outputs_match_individual_calls(isaac_processor):
+    texts = ["hi", "this one is longer"]
+
+    per_sample = [_run_processor(isaac_processor, text=t, images=None) for t in texts]
+    batch_outputs = _run_processor(isaac_processor, text=texts, images=None)
+
+    assert set(batch_outputs.keys()) == {"input_ids", "packed_inputs"}
+    batch_input_ids = batch_outputs["input_ids"]
+    batch_packed = batch_outputs["packed_inputs"]
+
+    assert set(batch_packed.keys()) == {
+        "vision_patches",
+        "vision_token_grids",
+        "vision_token_offsets",
+        "vision_token_lengths",
+        "vision_token_batch_indices",
+        "modality_tensor",
+        "position_ids",
+    }
+
+    assert batch_input_ids.shape[0] == len(texts)
+    assert batch_packed["modality_tensor"].shape[0] == len(texts)
+    assert batch_packed["position_ids"].shape[0] == len(texts)
+
+    sample_lengths = [output["input_ids"].squeeze(0).shape[0] for output in per_sample]
+    max_length = max(sample_lengths)
+    pad_id = isaac_processor.pad_token_id
+
+    for i, (single_output, batch_ids, single_len) in enumerate(zip(per_sample, batch_input_ids, sample_lengths)):
+        single_ids = single_output["input_ids"].squeeze(0)
+        single_packed = single_output["packed_inputs"]
+
+        torch.testing.assert_close(batch_ids[-single_len:], single_ids)
+
+        batch_modality_row = batch_packed["modality_tensor"][i]
+        expected_modality = torch.full(
+            (max_length,),
+            batch_modality_row[-1].item(),
+            dtype=batch_modality_row.dtype,
+            device=batch_modality_row.device,
+        )
+        expected_modality[-single_len:] = single_packed["modality_tensor"].squeeze(0)
+        torch.testing.assert_close(batch_modality_row, expected_modality)
+
+        batch_positions_row = batch_packed["position_ids"][i]
+        expected_positions = torch.zeros(
+            (max_length, 3), dtype=batch_positions_row.dtype, device=batch_positions_row.device
+        )
+        expected_positions[-single_len:] = single_packed["position_ids"].squeeze(0)
+        torch.testing.assert_close(batch_positions_row, expected_positions)
+
+        if single_len == max_length:
+            continue
+
+        pad_span = batch_ids[: max_length - single_len]
+        assert torch.all(pad_span == pad_id)
+
+        attention_mask = batch_ids.ne(pad_id).long()
+        assert not torch.any(attention_mask[: max_length - single_len])
+        assert torch.all(attention_mask[-single_len:])
+
+    _assert_no_vision(batch_packed)
+
+
+class StubTokenizer(SimpleIsaacTokenizer):
+    def __init__(self):
+        super().__init__()
+        self._base = 2000
+
+    def encode(self, text, add_special_tokens=False, return_tensors=None):
+        token_ids = torch.tensor([self._base + b for b in text.encode("utf-8")], dtype=torch.long)
+        if return_tensors in {"pt", TensorType.PYTORCH}:
+            return token_ids.unsqueeze(0)
+        return token_ids
+
+    def convert_tokens_to_ids(self, token):
+        if token == "<|image_pad|>":
+            return 151655
+        if token == self.pad_token:
+            return super().convert_tokens_to_ids(token)
+        return None
+
+
+class StubImageProcessor(ImageProcessingMixin):
+    def __call__(self, images=None, return_tensors=None):
+        patches = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+        sizes = torch.tensor([[1, 2, 2]], dtype=torch.long)
+        return {
+            "patches": patches,
+            "virtual_pixel_size": sizes,
+            "real_pixel_size": sizes,
+        }
+
+
+BASE_MODEL_ID = os.environ.get("ISAAC_TEST_MODEL_ID", "PerceptronAI/Isaac-0.1-Base")
+BASE_MODEL_REVISION = os.environ.get("ISAAC_TEST_MODEL_REVISION", "refs/pr/3") or None
+LOCAL_CHECKPOINT = os.environ.get("ISAAC_TEST_MODEL_PATH")
+
+
+def _checkpoint_or_skip():
+    if LOCAL_CHECKPOINT:
+        resolved = Path(LOCAL_CHECKPOINT).expanduser()
+        if not resolved.exists():
+            pytest.skip(f"Local checkpoint path {resolved} does not exist.")
+        return str(resolved)
+    if is_offline_mode():
+        pytest.skip("Offline mode: set ISAAC_TEST_MODEL_PATH to a local checkpoint to run these tests.")
+    return BASE_MODEL_ID
+
+
+def _create_real_processor():
+    checkpoint = _checkpoint_or_skip()
+    config = IsaacConfig.from_pretrained(checkpoint, revision=BASE_MODEL_REVISION)
+    processor = IsaacProcessor.from_pretrained(checkpoint, revision=BASE_MODEL_REVISION)
+    tokenizer = processor.tokenizer
+    return processor, tokenizer, config
+
+
+@require_torch
+@require_vision
+class TestIsaacProcessorRealPadding(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.processor, cls.tokenizer, cls.config = _create_real_processor()
+        cls.dummy_image = _make_dummy_image()
+        cls.vision_token = cls.config.vision_token
+        cls.pad_id = cls.tokenizer.pad_token_id
+        cls.image_pad_id = cls.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+        if cls.pad_id is None or cls.image_pad_id is None:
+            pytest.skip("pad/image pad ids unavailable for processor")
+
+    def _check_padding_and_masks(self, input_ids: torch.Tensor, pad_id: int):
+        for row in range(input_ids.size(0)):
+            row_ids = input_ids[row]
+            nonpad_positions = (row_ids != pad_id).nonzero(as_tuple=False)
+            last_nonpad = int(nonpad_positions.max()) if nonpad_positions.numel() else -1
+            if last_nonpad + 1 < row_ids.numel():
+                tail = row_ids[last_nonpad + 1 :]
+                assert torch.all(tail == pad_id)
+            attn = (row_ids != pad_id).long()
+            if last_nonpad >= 0:
+                assert torch.all(attn[: last_nonpad + 1] == 1)
+            assert int(attn[last_nonpad + 1 :].sum()) == 0
+
+    def test_single_vs_batched_consistency(self):
+        prompt = f"hello {self.vision_token} world"
+        images_single = [self.dummy_image]
+
+        single = self.processor(text=prompt, images=images_single, return_tensors="pt")
+        single_ids = single["input_ids"].squeeze(0)
+
+        batch_prompts = [prompt, "short"]
+        batch_images = [images_single, None]
+        batch = self.processor(text=batch_prompts, images=batch_images, return_tensors="pt")
+        batch_ids = batch["input_ids"][0]
+        modality = batch["packed_inputs"]["modality_tensor"][0]
+
+        assert torch.equal(batch_ids[: single_ids.size(0)], single_ids)
+
+        image_positions = modality == ModalityType.image.value
+        if image_positions.any():
+            assert torch.all(batch_ids[image_positions] == self.image_pad_id)
+            assert torch.all(batch_ids[image_positions] != self.pad_id)
+
+        nonpad = (batch_ids != self.pad_id).nonzero(as_tuple=False)
+        last_nonpad = int(nonpad.max()) if nonpad.numel() else -1
+        if last_nonpad + 1 < batch_ids.numel():
+            tail = batch_ids[last_nonpad + 1 :]
+            assert torch.all(tail == self.pad_id)
+
+        attn = (batch_ids != self.pad_id).long()
+        if last_nonpad >= 0:
+            assert torch.all(attn[: last_nonpad + 1] == 1)
+        assert int(attn[last_nonpad + 1 :].sum()) == 0
