@@ -18,8 +18,8 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from einops import rearrange, repeat
 
+from ...utils.import_utils import is_einops_available
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertCrossAttention,
@@ -48,6 +48,15 @@ from ..bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
+
+
+def _check_einops_available():
+    if not is_einops_available():
+        raise ImportError(
+            "NomicBERT requires the `einops` library. "
+            "Please install it with `pip install einops` or "
+            "`pip install transformers[torch]`."
+        )
 
 
 class NomicBertConfig(BertConfig):
@@ -330,6 +339,9 @@ class RotaryEmbedding(nn.Module):
         else:
             # GPT-J style
             x1, x2 = x[..., ::2], x[..., 1::2]
+            _check_einops_available()
+            from einops import rearrange
+
             return rearrange(torch.stack((-x2, x1), dim=-1), "... d two -> ... (d two)", two=2)
 
     def apply_rotary_emb(self, x, cos, sin, offset=0, interleaved=False):
@@ -355,6 +367,9 @@ class RotaryEmbedding(nn.Module):
             cos[offset : offset + x.shape[2]],
             sin[offset : offset + x.shape[2]],
         )
+
+        _check_einops_available()
+        from einops import repeat
 
         cos = repeat(cos, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
         sin = repeat(sin, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")

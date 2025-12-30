@@ -75,6 +75,7 @@ _deps = [
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
+    "einops>=0.7.0",
     "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",
@@ -229,7 +230,7 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["torch"] = deps_list("torch", "accelerate")
+extras["torch"] = deps_list("torch", "accelerate", "einops")
 extras["accelerate"] = deps_list("accelerate")
 extras["hf_xet"] = deps_list("hf_xet")
 
