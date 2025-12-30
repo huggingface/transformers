@@ -238,17 +238,16 @@ class NomicBertSelfAttention(nn.Module):
             key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
 
         if self.is_decoder or past_key_values is not None:
-            if past_key_values is not None:
-                if isinstance(past_key_values, Cache):
-                    # DynamicCache handles concatenation internally and returns the full sequence
-                    key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
-                else:
-                    # Legacy tuple logic (manual concatenation)
-                    if past_key_values is not None:
-                        key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
-                        value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
+            if isinstance(past_key_values, Cache):
+                # DynamicCache handles concatenation internally and returns the full sequence
+                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
+            else:
+                # Legacy tuple logic (manual concatenation)
+                if past_key_values is not None:
+                    key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+                    value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
 
-                    past_key_values = (key_layer, value_layer)
+                past_key_values = (key_layer, value_layer)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -856,12 +855,13 @@ class NomicBertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
+
             past_key_value = None
 
             if past_key_values is not None:
                 if isinstance(past_key_values, Cache):
                     past_key_value = past_key_values
-                else:
+                elif isinstance(past_key_values, (tuple, list)) and i < len(past_key_values):
                     past_key_value = past_key_values[i]
 
             layer_outputs = layer(
@@ -878,16 +878,14 @@ class NomicBertEncoder(nn.Module):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                expected_len = 1 + (1 if output_attentions else 0) + 1
-                if len(layer_outputs) == expected_len:
-                    cache_to_add = layer_outputs[-1]
-                    if isinstance(cache_to_add, Cache):
-                        next_decoder_cache = cache_to_add
+                # We need to extract the last element which is the cache tuple (k, v)
+                cache_to_add = layer_outputs[-1]
+
+                if not isinstance(next_decoder_cache, Cache):
+                    if next_decoder_cache is None:
+                        next_decoder_cache = (cache_to_add,)
                     else:
-                        if next_decoder_cache is None:
-                            next_decoder_cache = (cache_to_add,)
-                        elif isinstance(next_decoder_cache, tuple):
-                            next_decoder_cache += (cache_to_add,)
+                        next_decoder_cache += (cache_to_add,)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -1181,7 +1179,8 @@ class NomicBertModel(NomicBertPreTrainedModel):
             if isinstance(past_key_values, Cache):
                 past_key_values_length = past_key_values.get_seq_length()
             else:
-                past_key_values_length = past_key_values[0][0].shape[2]
+                if len(past_key_values) > 0 and past_key_values[0] is not None:
+                    past_key_values_length = past_key_values[0][0].shape[2]
 
         if position_ids is None:
             if inputs_embeds is not None:
