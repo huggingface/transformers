@@ -34,6 +34,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
+    Glm4vPreTrainedModel,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -41,7 +42,6 @@ from ..siglip.modeling_siglip import (
     SiglipEncoderLayer,
     SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
-    SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
     default_flax_embed_init,
     lecun_normal_,
@@ -351,26 +351,14 @@ class GlmImageVisionBlock(SiglipEncoderLayer):
         self.mlp = GlmImageVisionMLP(config)
 
 
-class GlmImagePreTrainedModel(SiglipPreTrainedModel):
+class GlmImageTextDecoderLayer(Glm4vTextDecoderLayer):
+    pass
+
+
+class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
 
-    _no_split_modules = [
-        "GlmImageVisionEmbeddings",
-        "GlmImageVisionBlock",
-        "GlmImageVisionMultiheadAttentionPoolingHead",
-    ]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    _can_record_outputs = {
-        "hidden_states": GlmImageVisionBlock,
-        "attentions": GlmImageVisionAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -398,8 +386,8 @@ class GlmImagePreTrainedModel(SiglipPreTrainedModel):
         elif isinstance(module, GlmImageVisionMLP):
             init.xavier_uniform_(module.fc1.weight)
             init.xavier_uniform_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.normal_(module.fc1.bias, std=1e-5)
+            init.normal_(module.fc2.bias, std=1e-5)
         elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
             init.xavier_uniform_(module.probe)
             init.xavier_uniform_(module.attention.in_proj_weight)
@@ -412,9 +400,6 @@ class GlmImagePreTrainedModel(SiglipPreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
 
-
-class GlmImageTextDecoderLayer(Glm4vTextDecoderLayer):
-    pass
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
@@ -1077,15 +1062,21 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
+
+        # GLM-Image position_ids are prepareed with rope_deltas in forward
+        model_inputs["position_ids"] = None
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
 
         device = input_ids.device
         batch_size = input_ids.shape[0]
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if past_length == 0:
-            model_inputs["position_ids"] = None
             self._prompt_length = input_ids.shape[1]
             self._gen_latent_h = image_grid_thw[-1, 1].item()
             self._gen_latent_w = image_grid_thw[-1, 2].item()
@@ -1105,9 +1096,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             ).expand(-1, batch_size, -1)
 
             model_inputs["position_ids"] = position_ids
-
-        if past_length > 0 and use_cache:
-            model_inputs["pixel_values"] = None
 
         return model_inputs
 

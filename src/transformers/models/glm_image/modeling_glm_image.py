@@ -181,99 +181,6 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
-        denom = fan_in
-    elif mode == "fan_out":
-        denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
-    variance = 1.0 / denom
-
-    if distribution == "truncated_normal":
-        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
-    elif distribution == "normal":
-        init.normal_(tensor, std=math.sqrt(variance))
-    elif distribution == "uniform":
-        bound = math.sqrt(3 * variance)
-        init.uniform_(tensor, -bound, bound)
-    else:
-        raise ValueError(f"invalid distribution {distribution}")
-
-
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
-def default_flax_embed_init(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="normal")
-
-
-@auto_docstring
-class GlmImagePreTrainedModel(PreTrainedModel):
-    config: GlmImageConfig
-    base_model_prefix = "model"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-
-    _no_split_modules = [
-        "GlmImageVisionEmbeddings",
-        "GlmImageVisionBlock",
-        "GlmImageVisionMultiheadAttentionPoolingHead",
-    ]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    _can_record_outputs = {
-        "hidden_states": GlmImageVisionBlock,
-        "attentions": GlmImageVisionAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, GlmImageVisionEmbeddings):
-            width = (
-                self.config.vision_config.hidden_size
-                if isinstance(self.config, GlmImageConfig)
-                else self.config.hidden_size
-            )
-            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-            if hasattr(module, "position_ids"):
-                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
-        elif isinstance(module, GlmImageVisionAttention):
-            init.xavier_uniform_(module.q_proj.weight)
-            init.xavier_uniform_(module.k_proj.weight)
-            init.xavier_uniform_(module.v_proj.weight)
-            init.xavier_uniform_(module.out_proj.weight)
-            init.zeros_(module.q_proj.bias)
-            init.zeros_(module.k_proj.bias)
-            init.zeros_(module.v_proj.bias)
-            init.zeros_(module.out_proj.bias)
-        elif isinstance(module, GlmImageVisionMLP):
-            init.xavier_uniform_(module.fc1.weight)
-            init.xavier_uniform_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
-            init.xavier_uniform_(module.probe)
-            init.xavier_uniform_(module.attention.in_proj_weight)
-            init.zeros_(module.attention.in_proj_bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-
-
 @use_kernel_forward_from_hub("RMSNorm")
 class GlmImageRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -513,6 +420,95 @@ class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         return hidden_states
+
+
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
+def default_flax_embed_init(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+
+
+@auto_docstring
+class GlmImagePreTrainedModel(PreTrainedModel):
+    config: GlmImageConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": GlmImageTextDecoderLayer,
+        "attentions": GlmImageTextAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, GlmImageVisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, GlmImageConfig)
+                else self.config.hidden_size
+            )
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, GlmImageVisionAttention):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, GlmImageVisionMLP):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-5)
+            init.normal_(module.fc2.bias, std=1e-5)
+        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            init.xavier_uniform_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @dataclass
@@ -1506,15 +1502,21 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
+
+        # GLM-Image position_ids are prepareed with rope_deltas in forward
+        model_inputs["position_ids"] = None
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
 
         device = input_ids.device
         batch_size = input_ids.shape[0]
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if past_length == 0:
-            model_inputs["position_ids"] = None
             self._prompt_length = input_ids.shape[1]
             self._gen_latent_h = image_grid_thw[-1, 1].item()
             self._gen_latent_w = image_grid_thw[-1, 2].item()
@@ -1534,9 +1536,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             ).expand(-1, batch_size, -1)
 
             model_inputs["position_ids"] = position_ids
-
-        if past_length > 0 and use_cache:
-            model_inputs["pixel_values"] = None
 
         return model_inputs
 
