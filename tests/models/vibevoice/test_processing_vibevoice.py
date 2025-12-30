@@ -32,7 +32,6 @@ if is_torch_available():
 @require_torch
 class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceProcessor
-    audio_input_name = "input_features"
 
     @classmethod
     def setUpClass(cls):
@@ -49,9 +48,6 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def prepare_processor_dict(self):
         return {
@@ -90,7 +86,6 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
  Speech output:{{ "\n" }}{{ speech_start_token }}"""
         }
 
-    # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
