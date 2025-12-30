@@ -241,7 +241,11 @@ class NomicBertSelfAttention(BertSelfAttention):
         encoder_attention_mask=None,
         past_key_values=None,
         output_attentions=False,
+        **kwargs,
     ):
+        # Optional rotary embedding cache position
+        cache_position = kwargs.pop("cache_position", None)
+
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -250,6 +254,7 @@ class NomicBertSelfAttention(BertSelfAttention):
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
             query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
+            query_layer, key_layer = self.rotary_emb(query_layer, key_layer, seqlen_offset=cache_position)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
