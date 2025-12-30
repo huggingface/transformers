@@ -185,6 +185,7 @@ class NomicBertSelfAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         output_attentions=False,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         # Let BERT do QKV projection
         query_layer = self.transpose_for_scores(self.query(hidden_states))
