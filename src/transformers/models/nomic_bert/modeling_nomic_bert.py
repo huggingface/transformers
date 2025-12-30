@@ -184,6 +184,7 @@ class NomicBertSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_values=None,
         output_attentions=False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -218,7 +219,16 @@ class NomicBertSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (context_layer,)
+
+        if output_attentions:
+            outputs += (attention_probs,)
+        else:
+            outputs += (None,)
+
+        if past_key_values is not None:
+            outputs += ((key_layer, value_layer),)
+
         return outputs
 
     def transpose_for_scores(self, x):
