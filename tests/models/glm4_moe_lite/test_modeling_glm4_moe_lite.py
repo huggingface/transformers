@@ -20,7 +20,7 @@ import pytest
 import torch
 from packaging import version
 
-from transformers import is_torch_available
+from transformers import Cache, is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_read_token,
@@ -45,30 +45,47 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
         self,
         parent,
         n_routed_experts=8,
-        n_shared_experts=1,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=8,
+        kv_lora_rank=32,
+        q_lora_rank=16,
+        qk_nope_head_dim=64,
+        qk_rope_head_dim=64,
     ):
-        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
+        super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
 
 
 @require_torch
-class Glm4MoeLiteModelTest(CausalLMModelTest, unittest.TestCase):
+class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4MoeLiteModelTester
-    # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
-    _torch_compile_train_cls = None
-    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
+    test_all_params_have_gradient = False
+    model_split_percents = [0.5, 0.7, 0.8]
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
 
 @require_torch_accelerator
 @require_read_token
 @slow
-class Glm4MoeLiteIntegrationTest(unittest.TestCase):
+class Glm4MoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
@@ -92,7 +109,7 @@ class Glm4MoeLiteIntegrationTest(unittest.TestCase):
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
         model = Glm4MoeLiteForCausalLM.from_pretrained(
-            "zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16
+            "zai-org/GLM-Lite", device_map=torch_device, dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
