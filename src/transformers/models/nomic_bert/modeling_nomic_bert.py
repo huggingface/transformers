@@ -31,7 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -48,7 +48,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from ...utils.import_utils import is_einops_available
@@ -187,6 +186,7 @@ class NomicBertSelfAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_values=None,
         output_attentions=False,
+        position_ids=None,
         **kwargs,
     ) -> tuple[torch.Tensor]:
         # Let BERT do QKV projection
@@ -213,7 +213,12 @@ class NomicBertSelfAttention(nn.Module):
             q_rot = query_layer[..., : self.rotary_emb.dim]
             k_rot = key_layer[..., : self.rotary_emb.dim]
 
-            q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=seq_len_offset)
+            # Use position_ids if available (fixes left-padding), else fallback to offset
+            rope_offset = seq_len_offset
+            if position_ids is not None:
+                rope_offset = position_ids
+
+            q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=rope_offset)
 
             query_layer = torch.cat([q_rot, query_layer[..., self.rotary_emb.dim :]], dim=-1)
             key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
@@ -225,8 +230,10 @@ class NomicBertSelfAttention(nn.Module):
                     key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
                 else:
                     # Legacy tuple logic (manual concatenation)
-                    key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
-                    value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
+                    if past_key_values is not None:
+                        key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
+                        value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
+
                     past_key_values = (key_layer, value_layer)
 
         # Calculate Attention Scores
@@ -590,34 +597,91 @@ class NomicBertSelfOutput(nn.Module):
 
 
 class NomicBertAttention(nn.Module):
-    def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
+    """
+    This module overrides the standard `BertAttention` to incorporate Rotary Positional Embeddings (RoPE)
+    via `NomicBertSelfAttention` and `position_ids` propagation. It handles the specific
+    initialization requirements of NomicBERT while maintaining compatibility with the
+    Transformers library build system.
+    """
+
+    def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         super().__init__()
+
         self.is_cross_attention = is_cross_attention
+
+        # Explicitly define attention_class to satisfy the linter/build system
         attention_class = NomicBertCrossAttention if is_cross_attention else NomicBertSelfAttention
-        self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
+        self.self = NomicBertSelfAttention(
+            config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
+        )
+
         self.output = NomicBertSelfOutput(config)
+
+        if is_cross_attention:
+            self.self = attention_class(config, position_embedding_type=position_embedding_type)
+        else:
+            self.self = attention_class(config, position_embedding_type=position_embedding_type, layer_idx=layer_idx)
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        output_attentions=False,
+        position_ids=None,
     ) -> tuple[torch.Tensor]:
-        attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
-        attention_output, attn_weights = self.self(
+        """
+        Forward pass for the NomicBERT Attention layer.
+
+        Args:
+            hidden_states (`torch.Tensor`):
+                Input hidden states of shape `(batch_size, seq_len, hidden_size)`.
+            attention_mask (`torch.FloatTensor`, *optional*):
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in `[0, 1]`: 1 for tokens that are **not masked**, 0 for masked tokens.
+            head_mask (`torch.FloatTensor`, *optional*):
+                Mask to nullify selected heads of the self-attention modules.
+                Mask values selected in `[0, 1]`: 1 indicates the head is **not masked**, 0 indicates the head is **masked**.
+            encoder_hidden_states (`torch.FloatTensor`, *optional*):
+                Hidden states of the encoder (for cross-attention).
+            encoder_attention_mask (`torch.FloatTensor`, *optional*):
+                Mask to avoid performing attention on the encoder outputs (for cross-attention).
+            past_key_values (`Tuple[Tuple[torch.FloatTensor]]`, *optional*):
+                Cached key and value states from previous steps for fast decoding.
+            output_attentions (`bool`, *optional*):
+                Whether to return the attention probabilities.
+            position_ids (`torch.LongTensor`, *optional*):
+                Indices of positions of each input sequence token in the position embeddings.
+                Required for accurate Rotary Embedding calculations during generation.
+
+        Returns:
+            `Tuple[torch.Tensor]`:
+                A tuple containing:
+                - **attention_output** (`torch.Tensor`): The output of the attention layer.
+                - **attention_probs** (`torch.Tensor`, *optional*): Returned if `output_attentions=True`.
+                - **past_key_values** (`Tuple`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
+        """
+        # Call SelfAttention
+        self_outputs = self.self(
             hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_values,
+            output_attentions,
+            position_ids=position_ids,
         )
-        attention_output = self.output(attention_output, hidden_states)
-        return attention_output, attn_weights
+
+        # Process context layer (always index 0)
+        attention_output = self.output(self_outputs[0], hidden_states)
+
+        outputs = (attention_output,) + self_outputs[1:]
+
+        return outputs
 
 
 class NomicBertIntermediate(nn.Module):
@@ -703,44 +767,30 @@ class NomicBertLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        output_attentions=False,
+        position_ids=None,
     ) -> tuple[torch.Tensor]:
-        self_attention_output, _ = self.attention(
+        self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
             past_key_values=past_key_values,
-            cache_position=cache_position,
-            **kwargs,
+            position_ids=position_ids,
         )
-        attention_output = self_attention_output
+        attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]
 
-        if self.is_decoder and encoder_hidden_states is not None:
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
-                    " by setting `config.add_cross_attention=True`"
-                )
-
-            cross_attention_output, _ = self.crossattention(
-                self_attention_output,
-                None,  # attention_mask
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
-            attention_output = cross_attention_output
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        return layer_output
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        outputs = (layer_output,) + outputs
+        return outputs
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -767,29 +817,83 @@ class NomicBertEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+        position_ids=None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+
+        next_decoder_cache = () if use_cache else None
+        if use_cache and isinstance(past_key_values, Cache):
+            next_decoder_cache = past_key_values
+
+        for i, layer in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+            past_key_value = None
+
+            if past_key_values is not None and not isinstance(past_key_values, Cache):
+                past_key_value = past_key_values[i]
+
+            layer_outputs = layer(
                 hidden_states,
                 attention_mask,
-                encoder_hidden_states,  # as a positional argument for gradient checkpointing
-                encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
-                cache_position=cache_position,
-                **kwargs,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+                position_ids=position_ids,
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                expected_len = 1 + (1 if output_attentions else 0) + 1
+                if len(layer_outputs) == expected_len:
+                    cache_to_add = layer_outputs[-1]
+                    if isinstance(cache_to_add, Cache):
+                        next_decoder_cache = cache_to_add
+                    else:
+                        next_decoder_cache += (cache_to_add,)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    next_decoder_cache,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -970,79 +1074,150 @@ class NomicBertModel(NomicBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        **kwargs,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`
+            token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence token in the position embeddings. Selected in the range `[0,
+                config.max_position_embeddings - 1]`.
+            head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(num_hidden_layers, num_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+                the model is configured as a decoder.
+            encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`
+            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`):
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+                blocks) that can be used to speed up sequential decoding.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+
+        Returns:
+            [`~modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions`] or `tuple(torch.FloatTensor)`:
+            A [`~modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions`] (if `return_dict=True` is passed or the `config.use_return_dict=True`) or a tuple of `torch.FloatTensor` comprising various elements depending on the configuration (`NomicBertConfig`) and inputs.
+
+            - **last_hidden_state** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) -- Sequence of hidden-states at the output of the last layer of the model.
+            - **pooler_output** (`torch.FloatTensor` of shape `(batch_size, hidden_size)`) -- Last layer hidden-state of the first token of the sequence (classification token) after further processing through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns the classification token after processing through a linear layer and a tanh activation function. The linear layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+            - **hidden_states** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            - **attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            - **cross_attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            - **past_key_values** (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`) -- Tuple of `torch.FloatTensor` of length `config.n_layers`, with each tuple containing the cached key and value states of the self-attention blocks.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if not self.config.is_decoder:
             use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None or self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
-            )
-
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            seq_length = input_ids.shape[1]
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
         else:
-            device = inputs_embeds.device
-            seq_length = inputs_embeds.shape[1]
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
+        batch_size, seq_length = input_shape
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        # Generate position_ids
+        if position_ids is None:
+            if inputs_embeds is not None:
+                position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(input_shape)
+            else:
+                position_ids = self.embeddings.create_position_ids_from_input_ids(
+                    input_ids, padding_idx=self.config.pad_token_id, past_key_values_length=0
+                )
+
+        if attention_mask is None:
+            past_length = 0
+            if past_key_values is not None:
+                if not isinstance(past_key_values, Cache):
+                    past_length = past_key_values[0][0].shape[2]
+            attention_mask = torch.ones(((batch_size, seq_length + past_length)), device=device)
+
+        if token_type_ids is None:
+            if hasattr(self.embeddings, "token_type_ids"):
+                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            past_key_values_length=0,
         )
 
-        attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            embedding_output=embedding_output,
-            encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-        )
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        encoder_extended_attention_mask = None
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=attention_mask,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             position_ids=position_ids,
-            **kwargs,
         )
-        sequence_output = encoder_outputs.last_hidden_state
+
+        sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        if not return_dict:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
     def _create_attention_masks(
