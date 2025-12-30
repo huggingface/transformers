@@ -508,6 +508,19 @@ class AutoTokenizerTest(unittest.TestCase):
         ):
             _ = AutoTokenizer.from_pretrained("bert-base")
 
+    
+    def test_autotokenizer_error_message_for_invalid_name():
+        invalid_name = "this-model-does-not-exist-123"
+
+        with pytest.raises(EnvironmentError) as excinfo:
+            AutoTokenizer.from_pretrained(invalid_name)
+
+        error_msg = str(excinfo.value)
+
+        assert "Failed to load tokenizer" in error_msg
+        assert "huggingface.co/models" in error_msg
+        assert "tokenizer configuration files" in error_msg
+
     def test_revision_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
