@@ -203,7 +203,7 @@ class NomicBertSelfAttention(nn.Module):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 # New DynamicCache path
-                seq_len_offset = past_key_values.get_seq_length()
+                seq_len_offset = past_key_values.get_seq_length(self.layer_idx)
             else:
                 # Legacy tuple path
                 seq_len_offset = past_key_values[0].shape[2]
@@ -218,7 +218,7 @@ class NomicBertSelfAttention(nn.Module):
             query_layer = torch.cat([q_rot, query_layer[..., self.rotary_emb.dim :]], dim=-1)
             key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
 
-        if self.is_decoder:
+        if self.is_decoder or past_key_values is not None:
             if past_key_values is not None:
                 if isinstance(past_key_values, Cache):
                     # DynamicCache handles concatenation internally and returns the full sequence
@@ -252,7 +252,7 @@ class NomicBertSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        if self.is_decoder:
+        if self.is_decoder or past_key_values is not None:
             outputs = outputs + (past_key_values,)
 
         return outputs
