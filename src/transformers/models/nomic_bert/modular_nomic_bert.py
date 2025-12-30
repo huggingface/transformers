@@ -276,19 +276,10 @@ class NomicBertSelfAttention(BertSelfAttention):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
         # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        batch_size, seq_len, num_heads, head_dim = context_layer.shape
+        context_layer = context_layer.view(batch_size, seq_len, num_heads * head_dim)
 
-        outputs = (context_layer,)
-
-        if output_attentions:
-            outputs += (attention_probs,)
-        else:
-            outputs += (None,)
-
-        if past_key_values is not None:
-            outputs += ((key_layer, value_layer),)
-
+        outputs = (context_layer, attention_probs if output_attentions else None)
         return outputs
 
 
