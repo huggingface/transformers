@@ -154,15 +154,14 @@ class VibeVoiceModelTester:
         config = self.get_config()
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
-        noise_scheduler = DummyNoiseScheduler()
-        return config, input_ids, attention_mask, noise_scheduler
+        return config, input_ids, attention_mask
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask, noise_scheduler = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "noise_scheduler": noise_scheduler}
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask, noise_scheduler):
+    def create_and_check_model(self, config, input_ids, attention_mask):
         model = VibeVoiceForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
@@ -340,7 +339,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         plus the newly generated tokens as specified by max_new_tokens.
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config, input_ids, attention_mask, noise_scheduler = config_and_inputs
+        config, input_ids, attention_mask = config_and_inputs
 
         model = VibeVoiceForConditionalGeneration(config=config)
         model.to(torch_device)
@@ -354,7 +353,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             output = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                noise_scheduler=noise_scheduler,
+                noise_scheduler=DummyNoiseScheduler(),
                 max_new_tokens=max_new_tokens,
                 min_new_tokens=max_new_tokens,
                 do_sample=False,
