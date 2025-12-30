@@ -126,10 +126,11 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
-        # TODO mimic their preprocessing but maybe not necessary?
-        # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
-        text_preprocessed = [t.strip() + "\n" for t in text]
-        encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
+        # # TODO mimic their preprocessing?
+        # # https://github.com/microsoft/VibeVoice/blob/d295d1e1d0fff1ad42bc0450d5b593f8e59356b9/vibevoice/processor/vibevoice_streaming_processor.py#L219
+        # text_preprocessed = [t.strip() + "\n" for t in text]
+        # encoded_text = self.tokenizer(text_preprocessed, **text_kwargs)
+        encoded_text = self.tokenizer(text, **text_kwargs)
         
         # Prepare voice preset(s)
         if voice_preset is None:
@@ -175,8 +176,7 @@ class VibeVoiceRealTimeProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        return list(dict.fromkeys(tokenizer_input_names)) + ["voice_preset"]
 
     def save_audio(
         self,
