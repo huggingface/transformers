@@ -152,6 +152,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4_moe_lite", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4v", "TokenizersBackend" if is_tokenizers_available() else None),
         ("glm4v_moe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("got_ocr2", "TokenizersBackend" if is_tokenizers_available() else None),
