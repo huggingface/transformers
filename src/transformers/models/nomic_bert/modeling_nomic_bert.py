@@ -189,13 +189,20 @@ class NomicBertSelfAttention(nn.Module):
         **kwargs,
     ) -> tuple[torch.Tensor]:
         # Let BERT do QKV projection
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        batch_size, seq_len, hidden_size = hidden_states.size()
+        num_heads = self.num_attention_heads
+        head_size = hidden_size // num_heads
+        query_layer = self.query(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
+        key_layer = self.key(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
+        value_layer = self.value(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
-            query_layer, key_layer = self.rotary_emb(query_layer, key_layer)
+            q_rot = query_layer[..., : self.rotary_emb.dim]
+            k_rot = key_layer[..., : self.rotary_emb.dim]
+            q_rot, k_rot = self.rotary_emb(q_rot, k_rot)
+            query_layer = torch.cat([q_rot, query_layer[..., self.rotary_emb.dim :]], dim=-1)
+            key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -216,7 +223,7 @@ class NomicBertSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
         # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
-        context_layer = context_layer.view(hidden_states.size(0), -1, self.all_head_size)
+        context_layer = context_layer.view(batch_size, seq_len, hidden_size)
 
         outputs = (context_layer, attention_probs if output_attentions else None)
         return outputs
