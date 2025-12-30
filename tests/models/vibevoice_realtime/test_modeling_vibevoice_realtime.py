@@ -155,30 +155,28 @@ class VibeVoiceRealTimeModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         tts_text_masks = torch.ones_like(input_ids[:, -1:], dtype=torch.long, device=torch_device)
-        noise_scheduler = DummyNoiseScheduler()
-        return config, input_ids, attention_mask, tts_text_masks, noise_scheduler
+        return config, input_ids, attention_mask, tts_text_masks
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids, attention_mask, tts_text_masks, noise_scheduler = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "tts_text_masks": tts_text_masks, "noise_scheduler": noise_scheduler}
+        config, input_ids, attention_mask, tts_text_masks = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "tts_text_masks": tts_text_masks}
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask, noise_scheduler):
+    def create_and_check_model(self, config, input_ids, attention_mask, tts_text_masks):
         model = VibeVoiceRealTimeForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
 
         with torch.no_grad():
-            result = model(input_ids=input_ids, attention_mask=attention_mask)
+            result = model(input_ids=input_ids, attention_mask=attention_mask, tts_text_masks=tts_text_masks)
 
         # Check that the model returns expected outputs
         self.parent.assertIsNotNone(result.logits)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1))
 
 
 class VibeVoiceRealTimeForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (VibeVoiceRealTimeForConditionalGeneration,) if is_torch_available() else ()
-
     test_resize_embeddings = False
 
     def setUp(self):
@@ -327,8 +325,19 @@ class VibeVoiceRealTimeForConditionalGenerationTest(ModelTesterMixin, Generation
     def test_greedy_generate_dict_outputs(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip(reason="VibeVoice realtime does not have an LM head to compute logits in conventional sense.")
+    def test_left_padding_compatibility(
+        self, unpadded_custom_inputs: dict | None = None, padded_custom_inputs: dict | None = None
+    ):
+        pass
+
     @unittest.skip(reason="VibeVoice has composite model structure.")
     def test_tied_weights_keys(self):
+        pass
+
+    @unittest.skip(reason="VibeVoice computes input embeds differently.")
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
 
