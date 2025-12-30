@@ -625,6 +625,9 @@ class VibeVoiceRealTimeModel(VibeVoiceRealTimePreTrainedModel):
             # raise ValueError("Input embeds should be computed by with `self.forward_lm`")
             inputs_embeds = self.forward_lm(input_ids=input_ids, **kwargs).last_hidden_state
 
+        if tts_text_masks is None:
+            # default to text (1) input for TTS if no mask provided
+            tts_text_masks = torch.ones((inputs_embeds.shape[0], 1), dtype=torch.long, device=inputs_embeds.device)
         inputs_embeds = inputs_embeds + self.tts_input_types(tts_text_masks)
         return self.tts_language_model(inputs_embeds=inputs_embeds, **kwargs)
 
@@ -689,8 +692,8 @@ class VibeVoiceRealTimeForConditionalGeneration(VibeVoiceRealTimePreTrainedModel
         **kwargs,
     ) -> Union[tuple, VibeVoiceRealTimeCausalLMOutputWithPast]:
         """
-        tts_text_masks (`torch.FloatTensor`, *optional*):
-            Mask marking current position as text(1)/speech(0)
+        tts_text_masks (`torch.LongTensor`, *optional*):
+            Mask marking inputs as text(1) or speech(0).
         """
         outputs = self.model(input_ids=input_ids, inputs_embeds=inputs_embeds, tts_text_masks=tts_text_masks, **kwargs)
         logits = self.tts_eos_classifier(outputs.last_hidden_state[:, -1, :])
