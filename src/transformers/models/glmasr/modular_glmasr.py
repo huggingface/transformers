@@ -354,7 +354,10 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
