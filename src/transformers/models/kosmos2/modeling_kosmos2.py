@@ -1521,6 +1521,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 " and access `projection_attentions` from the returned `ModelOutput` instead.",
                 FutureWarning,
             )
+            kwargs.pop("return_attentions", None)
 
         vision_output: BaseModelOutputWithProjectionAttentions = self.vision_model(
             pixel_values=pixel_values,
