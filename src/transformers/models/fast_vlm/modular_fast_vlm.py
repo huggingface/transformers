@@ -201,6 +201,7 @@ class FastVlmModel(LlavaModel):
             else self.config.vision_feature_select_strategy
         )
 
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava

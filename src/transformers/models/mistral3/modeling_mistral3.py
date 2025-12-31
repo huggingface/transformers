@@ -241,6 +241,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
 
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
         kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(pixel_values, image_sizes=image_sizes, **kwargs)
