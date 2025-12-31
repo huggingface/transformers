@@ -324,6 +324,13 @@ class GlmImageTextAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
+        # rope之前
+        from safetensors.torch import save_file
+        save_file({
+            'q': query_states.contiguous(),
+            'k': key_states.contiguous(),
+            'v': value_states.contiguous()
+        }, 'qkv_before_rope.safetensors')
         query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
             query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
         )
@@ -331,8 +338,15 @@ class GlmImageTextAttention(nn.Module):
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
+        # rope之后
+        save_file({
+            'q': query_states.contiguous(),
+            'k': key_states.contiguous(),
+            'v': value_states.contiguous()
+        }, 'qkv_after_rope.safetensors')
         attention_interface: Callable = eager_attention_forward
+        breakpoint()
+
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -349,6 +363,12 @@ class GlmImageTextAttention(nn.Module):
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+
+        # attn结束 
+        save_file({
+            'attn_output': attn_output.contiguous()
+        }, 'qkv_after_rope.safetensors')
+        breakpoint()
         return attn_output, attn_weights
 
 
@@ -397,7 +417,6 @@ class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -1062,7 +1081,7 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
-
+        # 保存embed
         for decoder_layer in self.layers:
             layer_outputs = decoder_layer(
                 hidden_states,
@@ -1074,7 +1093,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
                 **kwargs,
             )
             hidden_states = layer_outputs
-
         hidden_states = self.norm(hidden_states)
 
         return BaseModelOutputWithPast(
