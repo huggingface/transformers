@@ -35,7 +35,7 @@ from transformers.utils.generic import OutputRecorder
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -52,33 +52,15 @@ from .configuration_sam2 import (
 
 
 @dataclass
-class BaseModelOutputWithFeatureMaps(ModelOutput):
+@auto_docstring
+class BaseModelOutputWithFeatureMaps(BaseModelOutputWithPooling):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        feature_maps (`list[torch.Tensor]`):
-            List of feature maps from different layers of the model.
-        feature_maps_position_embeddings (`list[torch.Tensor]`):
-            List of position embeddings corresponding to the feature maps.
+    feature_maps (`list[torch.Tensor]`):
+        List of feature maps from different layers of the model.
+    feature_maps_position_embeddings (`list[torch.Tensor]`):
+        List of position embeddings corresponding to the feature maps.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     feature_maps: Optional[list[torch.Tensor]] = None
     feature_maps_position_embeddings: Optional[list[torch.Tensor]] = None
 
