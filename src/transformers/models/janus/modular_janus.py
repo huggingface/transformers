@@ -44,7 +44,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
