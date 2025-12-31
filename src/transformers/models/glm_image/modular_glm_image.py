@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 from typing import Any, Optional, Union
 
 import numpy as np
@@ -24,7 +25,9 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torchdynamo_compiling
 from ..glm4v.configuration_glm4v import Glm4vTextConfig
@@ -33,9 +36,12 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
+    Glm4vTextAttention,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
 )
+from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
@@ -351,6 +357,64 @@ class GlmImageVisionBlock(SiglipEncoderLayer):
         self.mlp = GlmImageVisionMLP(config)
 
 
+class GlmImageTextAttention(Glm4vTextAttention):
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper.
+    and "Generating Long Sequences with Sparse Transformers".
+    """
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
+            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
+        )
+
+        if past_key_values is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class GlmImageTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    pass
+
+
 class GlmImageTextDecoderLayer(Glm4vTextDecoderLayer):
     pass
 
@@ -362,6 +426,15 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        if isinstance(module, GlmImageTextRotaryEmbedding):
+            config = module.config
+            base = config.rope_parameters["rope_theta"]
+            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 0.5)
+            head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+            dim = int(head_dim * partial_rotary_factor)
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
         if isinstance(module, GlmImageVisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size
