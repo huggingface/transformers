@@ -242,7 +242,8 @@ class Mistral3Model(Mistral3PreTrainedModel):
         )
 
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, image_sizes=image_sizes, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(pixel_values, image_sizes=image_sizes, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):

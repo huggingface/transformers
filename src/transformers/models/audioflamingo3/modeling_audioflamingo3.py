@@ -468,7 +468,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         """
 
         # Encode audio
-        audio_output = self.audio_tower(input_features, input_features_mask=input_features_mask)
+        audio_output = self.audio_tower(input_features, input_features_mask=input_features_mask, **kwargs)
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
         # Mask according to avg pooling (which is after attention blocks)

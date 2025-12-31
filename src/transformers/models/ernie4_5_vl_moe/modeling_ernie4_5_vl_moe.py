@@ -924,6 +924,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -1260,6 +1261,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
     def get_video_features(
         self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
     ):
@@ -1282,6 +1284,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
         video_embeds = torch.split(video_embeds, split_sizes)
         return video_embeds
 
+    @can_return_tuple
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -1595,12 +1598,22 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
         self.model.set_input_embeddings(value)
 
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @auto_docstring
     @can_return_tuple

@@ -383,6 +383,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
     def get_audio_features(
         self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
     ) -> torch.FloatTensor:
@@ -469,7 +470,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask)
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)

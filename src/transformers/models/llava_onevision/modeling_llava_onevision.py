@@ -423,7 +423,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
@@ -628,7 +629,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
