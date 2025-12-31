@@ -16,21 +16,28 @@
 import argparse
 import json
 import os
-
-import fairseq
 import torch
-from fairseq.data import Dictionary
+
+from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
+from fairseq2.models.wav2vec2.asr.config import Wav2Vec2AsrConfig
+from fairseq2.models.wav2vec2.config import Wav2Vec2Config
+from fairseq2.data.tokenizers.hub import load_tokenizer
+from fairseq2.models.hub import load_model
+from fairseq2.runtime.dependency import get_dependency_resolver
+from fairseq2.runtime.config_registry import ConfigRegistrar, get_config
+from fairseq2.runtime.dependency import DependencyContainer, DependencyResolver
+from fairseq2.models.transformer.norm_order import TransformerNormOrder
 
 from transformers import (
-    Wav2Vec2Config,
+    OmniASRCTCConfig,
+    OmniASREncoderConfig,
+    OmniASRForCTC,
+    OmniASRModel,
     Wav2Vec2CTCTokenizer,
     Wav2Vec2FeatureExtractor,
-    Wav2Vec2ForCTC,
-    Wav2Vec2ForPreTraining,
     Wav2Vec2Processor,
     logging,
 )
-from transformers.models.wav2vec2.modeling_wav2vec2 import Wav2Vec2ForSequenceClassification
 
 
 logging.set_verbosity_info()
@@ -271,39 +278,123 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 @torch.no_grad()
 def convert_omniasr_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True, is_seq_class=False
+    model_card, output_dir, repo_id=None
 ):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = Wav2Vec2Config.from_pretrained(config_path)
+
+    # 1) Load original model
+    pipeline = ASRInferencePipeline(model_card=model_card)
+    original_model = pipeline.model
+
+    resolver = get_dependency_resolver()
+    if "CTC" in model_card:
+        # https://github.com/facebookresearch/omnilingual-asr/blob/9b95719b482d755c8dc9ec1aff7b477f4dd89d6c/src/omnilingual_asr/models/wav2vec2_asr/config.py#L13
+        if "v2" in model_card:
+            vocab_size = 10288
+        else:
+            vocab_size = 9812
+        if "300" in model_card:
+            encoder_config_name = "large_lv60k"
+        elif "1b" in model_card:
+            encoder_config_name = "1b"
+        elif "3b" in model_card:
+            encoder_config_name = "3b"
+        elif "7b" in model_card:
+            encoder_config_name = "7b"
+        else:
+            raise ValueError(f"Unsupported size, got {model_card}")
+
+        original_config = get_config(resolver, Wav2Vec2AsrConfig, "base_10h")
+        original_config.encoder_config = get_config(resolver, Wav2Vec2Config, encoder_config_name).encoder_config
+
+        original_config.encoder_config.dropout_p = 0.0
+        original_config.encoder_config.attn_dropout_p = 0.0
+        original_config.encoder_config.ffn_inner_dropout_p = 0.1
+        original_config.encoder_config.layer_drop_p = 0.1
+
+        original_config.use_masking = False
+        original_config.max_temporal_mask_prob = 0.0
+        original_config.max_spatial_mask_prob = 0.0
+        original_config.target_vocab_size = vocab_size
+
     else:
-        config = Wav2Vec2Config()
+        raise ValueError(f"Only CTC models are supported for now, got {model_card}")
+        # Base model: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_ssl/config.py
+        # LLM decoder: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/config.py
 
-    if is_seq_class:
-        id2label = read_txt_into_dict(dict_path)
-        config.id2label = id2label
-        hf_wav2vec = Wav2Vec2ForSequenceClassification(config)
-        feature_extractor = Wav2Vec2FeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0,
-            do_normalize=True,
-            return_attention_mask=True,
-        )
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # 2) Initialize Transformers model
+    conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
+    layer_norm_pre = original_config.encoder_config.norm_order == TransformerNormOrder.PRE
+    feat_extract_norm = "layer" if original_config.encoder_config.feature_extractor_layer_norm_convs else "group"
+    encoder_config = OmniASREncoderConfig(
+        # TODO clean up unused and make Transformers compatible
+        max_seq_len=original_config.encoder_config.max_seq_len, 
+        feature_dim=original_config.encoder_config.feature_dim, 
+        use_fbank=original_config.encoder_config.use_fbank, 
+        first_pass_dropout_p=original_config.encoder_config.first_pass_dropout_p, 
+        layer_norm_features=original_config.encoder_config.layer_norm_features,
+        feature_grad_scale=original_config.encoder_config.feature_grad_scale, 
+        num_fbank_channels=original_config.encoder_config.num_fbank_channels, 
+        fbank_stride=original_config.encoder_config.fbank_stride, 
+        sample_fbank_every_k=original_config.encoder_config.sample_fbank_every_k, 
+        pos_encoder_type=original_config.encoder_config.pos_encoder_type, 
+        pos_encoder_depth=original_config.encoder_config.pos_encoder_depth, 
+        use_conformer=original_config.encoder_config.use_conformer, 
+        dropout_p=original_config.encoder_config.dropout_p, 
+        layer_drop_p=original_config.encoder_config.layer_drop_p,
+        depthwise_conv_kernel_size=original_config.encoder_config.depthwise_conv_kernel_size,
+        # NOTE (ebezzam): below are modified to Transformer convention
+        hidden_size=original_config.encoder_config.model_dim,
+        conv_dim=conv_dim,
+        conv_kernel=conv_kernel,
+        conv_stride=conv_stride,
+        conv_bias=original_config.encoder_config.feature_extractor_bias,
+        feat_extract_norm=feat_extract_norm,
+        layer_norm_pre=layer_norm_pre,
+        attention_dropout=original_config.encoder_config.attn_dropout_p,
+        num_hidden_layers=original_config.encoder_config.num_encoder_layers, 
+        num_attention_heads=original_config.encoder_config.num_encoder_attn_heads, 
+        num_conv_pos_embeddings=original_config.encoder_config.pos_conv_kernel_size,
+        num_conv_pos_embedding_groups=original_config.encoder_config.num_pos_conv_groups,
+        hidden_dropout=original_config.encoder_config.ffn_inner_dropout_p,
+        activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
+        intermediate_size=original_config.encoder_config.ffn_inner_dim,
+    )
+    config = OmniASRCTCConfig(
+        vocab_size=original_config.target_vocab_size,
+        final_dropout=original_config.final_dropout_p,
+        apply_spec_augment=original_config.use_masking,
+        mask_time_length=original_config.temporal_mask_span_len,
+        mask_time_prob=original_config.max_temporal_mask_prob,
+        mask_time_min_masks=original_config.min_num_temporal_mask_spans,
+        mask_feature_length=original_config.spatial_mask_span_len,
+        mask_feature_prob=original_config.max_spatial_mask_prob,
+        mask_feature_min_masks=original_config.min_num_spatial_mask_spans,
+        encoder_config=encoder_config,
+    )
+    model = OmniASRForCTC(config)
 
-    elif is_finetuned:
+    # count number of parameters
+    total_params = sum(p.numel() for p in original_model.parameters())
+    print(f"Total parameters (original): {total_params}")
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total parameters (HF): {total_params}")
+    
+
+    
+    raise ValueError
+
+
+
+    if is_finetuned:
         if dict_path:
             target_dict = Dictionary.load(dict_path)
 
             # important change bos & pad token id since CTC symbol is <pad> and
             # not <s> as in fairseq
-            config.bos_token_id = target_dict.pad_index
-            config.pad_token_id = target_dict.bos_index
-            config.eos_token_id = target_dict.eos_index
-            config.vocab_size = len(target_dict.symbols)
+            original_config.bos_token_id = target_dict.pad_index
+            original_config.pad_token_id = target_dict.bos_index
+            original_config.eos_token_id = target_dict.eos_index
+            original_config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
                 logger.error(f"--pytorch_dump_folder_path ({pytorch_dump_folder_path}) should be a directory")
@@ -325,7 +416,7 @@ def convert_omniasr_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = config.feat_extract_norm == "layer"
+            return_attention_mask = original_config.feat_extract_norm == "layer"
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,
@@ -336,11 +427,9 @@ def convert_omniasr_checkpoint(
             processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
             processor.save_pretrained(pytorch_dump_folder_path)
 
-        hf_wav2vec = Wav2Vec2ForCTC(config)
-    else:
-        hf_wav2vec = Wav2Vec2ForPreTraining(config)
+        hf_wav2vec = OmniASRForCTC(original_config)
 
-    if is_finetuned or is_seq_class:
+    if is_finetuned:
         model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
             [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
         )
@@ -356,29 +445,52 @@ def convert_omniasr_checkpoint(
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 
+    # upload to hub
+    if repo_id:
+        logger.info("Pushing model to the Hub ...")
+        hf_wav2vec.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
 
+"""
+Reproducible usage
+------------------
+
+Setup
+```
+pip install -e .
+pip install omnilingual-asr
+
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install \
+  torch==2.8.0+cu128 \
+  torchvision==0.23.0+cu128 \
+  torchaudio==2.8.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install fairseq2 \
+  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
+
+python -m pip install --upgrade huggingface_hub
+```
+
+See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
+
+Example conversion:
+```python
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M_v2 \
+    --output_dir omniasr_ctc_300m_v2 \
+    --repo_id bezzam/omniasr-ctc-300m-v2
+```
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument(
-        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
-    )
-    parser.add_argument(
-        "--is_seq_class",
-        action="store_true",
-        help="Whether the model to convert is a fine-tuned sequence classification model or not",
-    )
+    parser.add_argument("--model_card", default=None, type=str, help="Name of original model in omnilingual-asr")
+    parser.add_argument("--output_dir", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--repo_id", default=None, type=str, help="The repository ID for pushing the model to the Hub")
     args = parser.parse_args()
 
-    is_finetuned = not args.not_finetuned and not args.is_seq_class
     convert_omniasr_checkpoint(
-        args.checkpoint_path,
-        args.pytorch_dump_folder_path,
-        args.config_path,
-        args.dict_path,
-        is_finetuned,
-        args.is_seq_class,
+        args.model_card,
+        args.output_dir,
+        args.repo_id,
     )

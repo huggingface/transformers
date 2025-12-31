@@ -113,6 +113,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mm-grounding-dino", "GroundingDinoProcessor"),
         ("moonshine", "Wav2Vec2Processor"),
         ("omdet-turbo", "OmDetTurboProcessor"),
+        ("omniasr", "Wav2Vec2Processor"),
         ("oneformer", "OneFormerProcessor"),
         ("ovis2", "Ovis2Processor"),
         ("owlv2", "Owlv2Processor"),

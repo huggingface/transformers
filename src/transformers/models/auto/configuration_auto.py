@@ -296,6 +296,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("olmo3", "Olmo3Config"),
         ("olmoe", "OlmoeConfig"),
         ("omdet-turbo", "OmDetTurboConfig"),
+        ("omniasr_ctc", "OmniASRCTCConfig"),
+        ("omniasr_encoder", "OmniASREncoderConfig"),
         ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("opt", "OPTConfig"),
@@ -760,6 +762,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("olmo3", "Olmo3"),
         ("olmoe", "OLMoE"),
         ("omdet-turbo", "OmDet-Turbo"),
+        ("omniasr", "OmniASR"),
+        ("omniasr_ctc", "OmniASR"),
+        ("omniasr_encoder", "OmniASREncoder"),
         ("oneformer", "OneFormer"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
@@ -1009,6 +1014,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
+        ("omniasr_encoder", "omniasr"),
+        ("omniasr_ctc", "omniasr"),
     ]
 )
 

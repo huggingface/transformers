@@ -274,6 +274,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("olmo3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+        ("omniasr", "Wav2Vec2CTCTokenizer"),
         ("oneformer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ("openai-gpt", "OpenAIGPTTokenizer" if is_tokenizers_available() else None),
         ("opt", "GPT2Tokenizer" if is_tokenizers_available() else None),

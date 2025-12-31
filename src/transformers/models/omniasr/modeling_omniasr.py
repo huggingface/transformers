@@ -310,6 +310,7 @@ class OmniASRFeatureEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        # TODO remove group?
         if config.feat_extract_norm == "group":
             conv_layers = [OmniASRGroupNormConvLayer(config, layer_id=0)] + [
                 OmniASRNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
@@ -1098,13 +1099,14 @@ class OmniASRModel(OmniASRPreTrainedModel):
             self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
+            # TODO (ebezzam) remove?
             self.encoder = OmniASREncoderStableLayerNorm(config)
         else:
             self.encoder = OmniASREncoder(config)
 
+        # TODO (ebezzam) remove?
         self.adapter = OmniASRAdapter(config) if config.add_adapter else None
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     def _mask_hidden_states(
@@ -1173,6 +1175,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        # TODO use @can_return_tuple
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         extract_features = self.feature_extractor(input_values)
@@ -1230,7 +1233,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         """
         super().__init__(config)
 
-        self.model = OmniASRModel(config)
+        self.model = OmniASRModel(config.encoder_config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         # TODO (ebezzam) setting target lang here?
