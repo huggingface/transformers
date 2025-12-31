@@ -55,7 +55,6 @@ def convert_segmentation_map_to_binary_masks_fast(
     instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
 ):
-
     if ignore_index is not None:
         segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
 
