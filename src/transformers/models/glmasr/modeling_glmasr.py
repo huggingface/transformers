@@ -385,7 +385,10 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     def get_audio_features(
-        self, input_features: torch.FloatTensor, input_features_mask: torch.Tensor
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
@@ -403,7 +406,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
             `torch.FloatTensor`:
                 The audio embeddings.
         """
-        audio_outputs = self.audio_tower(input_features)
+        audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
             input_features.shape[0], -1, self.config.audio_config.intermediate_size
@@ -417,8 +420,9 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         post_lengths = (audio_lengths - merge_factor) // merge_factor + 1
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        return audio_embeds
+        audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+
+        return audio_outputs
 
     @can_return_tuple
     @auto_docstring
