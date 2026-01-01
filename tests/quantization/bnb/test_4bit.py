@@ -860,7 +860,7 @@ class Bnb4bitCompile(unittest.TestCase):
         )
         with self.assertRaises(Exception):
             # overwrite property
-            object.__setattr__(self.model_4bit.hf_quantizer, "is_compileable", True)
+            object.__setattr__(self.model_4bit.hf_quantizer, "is_compilable", True)
             self.model_4bit.generate(
                 input_ids=encoded_input["input_ids"].to(self.model_4bit.device),
                 max_new_tokens=10,

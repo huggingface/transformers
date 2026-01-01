@@ -79,7 +79,7 @@ class FalconHybridMambaAttentionDynamicCache:
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    is_compileable = False
+    is_compilable = False
 
     def __init__(
         self,

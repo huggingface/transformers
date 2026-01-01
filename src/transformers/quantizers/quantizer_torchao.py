@@ -246,7 +246,7 @@ class TorchAoHfQuantizer(HfQuantizer):
         return self.quantization_config.quant_type in supported_quant_types_for_training
 
     @property
-    def is_compileable(self) -> bool:
+    def is_compilable(self) -> bool:
         return True
 
     def set_metadata(self, checkpoint_files: list[str]):

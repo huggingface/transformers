@@ -106,7 +106,7 @@ class Qwen3NextDynamicCache:
     and `recurrent_states` represents the recurrent state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    is_compileable = False
+    is_compilable = False
 
     def __init__(self, config: Qwen3NextConfig):
         super().__init__()

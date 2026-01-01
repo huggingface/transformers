@@ -244,7 +244,7 @@ class HfQuantizer(ABC):
         return False
 
     @property
-    def is_compileable(self) -> bool:
+    def is_compilable(self) -> bool:
         """Flag indicating whether the quantized model can be compiled"""
         return False
 
