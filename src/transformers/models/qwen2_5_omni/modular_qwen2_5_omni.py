@@ -3838,23 +3838,32 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         if batch_size != 1:
             raise ValueError("Only batch size = 1 is currently supported")
 
-        if max_mel_frames < maximum_duration:
+        max_target_duration = min(max_mel_frames, self.config.max_position_embeddings)
+        target_duration = min(maximum_duration, max_target_duration)
+        align_to = math.lcm(self.repeats, self.block_size)
+        target_duration = target_duration // align_to * align_to
+        if target_duration == 0:
+            target_duration = min(maximum_duration, max_target_duration) // self.repeats * self.repeats
+        if target_duration == 0:
             raise ValueError(
-                f"Requested mel length ({maximum_duration}) exceeds `max_mel_frames` ({max_mel_frames}). "
-                "Increase `max_mel_frames` or provide shorter `quantized_code`."
-            )
-        if maximum_duration > self.config.max_position_embeddings:
-            raise ValueError(
-                f"Requested mel length ({maximum_duration}) exceeds `dit_config.max_position_embeddings` "
-                f"({self.config.max_position_embeddings}). Increase `dit_config.max_position_embeddings` or provide shorter `quantized_code`."
+                f"Aligned mel length is 0 (got `max_mel_frames`={max_mel_frames}, "
+                f"`dit_config.max_position_embeddings`={self.config.max_position_embeddings})."
             )
 
-        noise_initialization = torch.randn(
-            [batch_size, max_mel_frames, self.mel_dim],
+        if target_duration != maximum_duration:
+            logger.warning_once(
+                f"Requested mel length ({maximum_duration}) exceeds the supported length "
+                f"(`max_mel_frames`={max_mel_frames}, `dit_config.max_position_embeddings`={self.config.max_position_embeddings}); "
+                f"capping to {target_duration}."
+            )
+            quantized_code = quantized_code[:, : target_duration // self.repeats]
+            maximum_duration = target_duration
+
+        initial_state = torch.randn(
+            [batch_size, maximum_duration, self.mel_dim],
             dtype=reference_mel_spectrogram.dtype,
             device=quantized_code.device,
         )
-        initial_state = noise_initialization[:, :maximum_duration]
         conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
 
         def ode_function(time_step, hidden_states):
