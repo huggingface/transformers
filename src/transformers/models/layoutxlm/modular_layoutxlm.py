@@ -104,5 +104,4 @@ class LayoutXLMConfig(LayoutLMv2Config):
     ```"""
 
 
-
 __all__ = ["LayoutXLMConfig"]

@@ -26,5 +26,4 @@ class ConvBertTokenizer(BertTokenizer):
     """
 
 
-
 __all__ = ["ConvBertTokenizer"]
