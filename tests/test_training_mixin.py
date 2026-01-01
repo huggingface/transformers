@@ -100,7 +100,6 @@ class TrainingTesterMixin(ABC):
         width: int,
     ) -> dict[str, torch.Tensor]:
         """Create fixed batch for image models using a deterministic pattern."""
-        pass
 
     def _create_audio_training_batch(
         self,
@@ -109,7 +108,6 @@ class TrainingTesterMixin(ABC):
         feature_size: Optional[int] = None,
     ) -> dict[str, torch.Tensor]:
         """Create fixed batch for audio models using a deterministic waveform."""
-        pass
 
     def _decode_text_tokens(self, tokens: list[int], max_display: int = 40) -> str:
         """Decode tokens to readable string (maps token IDs to letters: 1->a, 2->b, etc.)."""
