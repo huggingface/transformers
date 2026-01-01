@@ -515,6 +515,10 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "s3tokenizer"
     main_input_name = "input_features"
 
+    def _init_weights(self, module):
+        """Initialize weights - S3Tokenizer uses pretrained weights, no random initialization needed."""
+        pass
+
 
 class S3TokenizerModel(S3TokenizerPreTrainedModel):
     """
@@ -539,6 +543,9 @@ class S3TokenizerModel(S3TokenizerPreTrainedModel):
         # Register buffers for STFT to match checkpoint keys
         self.register_buffer("window", torch.zeros(config.n_fft))
         self.register_buffer("_mel_filters", torch.zeros(config.n_mels, config.n_fft // 2 + 1))
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
