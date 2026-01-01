@@ -411,7 +411,6 @@ def convert_videoprism_checkpoint(
             text_logits = outputs.text_embeds[:, :3]
             # print(text_logits)
             assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), "The converted model text logits do not match the expected logits."
-            print(video_logits)
             assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-3), "The converted model video logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
 
