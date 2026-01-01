@@ -90,7 +90,6 @@ Notes:
 
 - The `grouped_mm` experts backend currently only supports `bfloat16` when compiled with `torch.compile`. Additionally, it is not compatible with CUDA graphs, so you must use `mode=None` or `mode="max-autotune-no-cudagraphs"` when compiling.
 - The `eager` experts backend uses a data-dependent operation to find which experts are used in a forward pass. This operation is not compatible with full graph compilation (`fullgraph=True`).
-- When using `float16` or `float32` with `grouped_mm`, the model will automatically fall back to `batched_mm` when compiled.
 
 ```py
 import torch
@@ -137,7 +136,6 @@ This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) co
 | False                      | grouped_mm     | 78.50                                        | 78.53                                        | 80.00                                        | **27429.82**  |
 | True                       | grouped_mm     | 72.95                                        | 72.99                                        | 74.60                                        | **27429.82**  |
 | max-autotune-no-cudagraphs | grouped_mm     | **<span style="color: green;">72.71</span>** | **<span style="color: green;">72.89</span>** | **<span style="color: green;">73.55</span>** | **27429.82**  |
-
 
 ### Batch Size 4, Sequence Length 16
 

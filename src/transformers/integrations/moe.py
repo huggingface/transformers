@@ -15,7 +15,7 @@
 from functools import wraps
 
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torchdynamo_compiling
+from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
