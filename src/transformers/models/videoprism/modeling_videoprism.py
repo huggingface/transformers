@@ -406,8 +406,9 @@ class VideoPrismLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
+        print(f"after layernorm_before {hidden_states_norm[0, :3, :3]}")
         attention_output = self.attention(hidden_states_norm, attention_mask)
-
+        print(f"after attention {attention_output[0, :3, :3]}")
         # first residual connection
         hidden_states = attention_output + hidden_states
 
@@ -417,6 +418,7 @@ class VideoPrismLayer(GradientCheckpointingLayer):
 
         # second residual connection is done here
         layer_output = self.output(layer_output, hidden_states)
+        print(f"after ffn {layer_output[0, :3, :3]}")
 
         return layer_output
 
@@ -431,7 +433,7 @@ class VideoPrismSpatialEncoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attention_mask)
-
+        print(f"Final hidden_state of spatial encoder {hidden_states[0, :3, :3]}")
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -467,11 +469,12 @@ class VideoPrismTextEncoder(nn.Module):
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_unimodal_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
+            print("Text encoder layer ", i)
             hidden_states = layer_module(hidden_states, attention_mask)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
@@ -534,13 +537,16 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
 
         input_shape = pixel_values_videos.shape
         spatial_embeds = self.spatial_embeddings(pixel_values_videos, interpolate_pos_encoding)
+        print(f"{spatial_embeds[0, :3, :3]=}")
         spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds)
         spatial_sequence_output = spatial_encoder_outputs.last_hidden_state
+        print(f"before spatial encoder ln {spatial_sequence_output[0,:3,:3]}")
         features = self.layernorm1(spatial_sequence_output)  # ? shape (B * T, 256, 768)
-
+        print(f"after spatial encoder ln {features[0,:3,:3]}")
         temporal_embeds = self.temporal_embeddings(features, input_shape, interpolate_pos_encoding)
         temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds)
         temporal_sequence_output = temporal_encoder_outputs.last_hidden_state
+        
         features = self.layernorm2(temporal_sequence_output)
         _, num_frames, dim = features.shape
         features = features.view(input_shape[0], -1, num_frames, dim).permute(0, 2, 1, 3).contiguous()
@@ -611,6 +617,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             query_layer,
             key_layer,
             value_layer,
+            attention_mask,
             scaling=1.0,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=self.config.attn_logit_softcapping,
@@ -663,7 +670,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 config=self.config,
                 input_embeds=hidden_states,
                 attention_mask=attention_mask,
-                cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
+                cache_position=torch.arange(hidden_states.shape[1] + 1, device=hidden_states.device),
                 past_key_values=None,
             )
 
@@ -702,12 +709,16 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     ) -> BaseModelOutput:
         backbone_outputs = self.backbone(pixel_values_videos=pixel_values_videos)
         video_features = backbone_outputs.last_hidden_state
+        print(f"backbone features {video_features[0,:3,:3]}")
         auxiliary_output = self.auxiliary_encoder(video_features)
         auxiliary_output_features = auxiliary_output.last_hidden_state
+        print(f"after auxiliary {auxiliary_output_features[0,:3,:3]}")
         contrastive_vision_pooler_output = self.contrastive_vision_pooler(auxiliary_output_features)
         video_embeddings = contrastive_vision_pooler_output[0]
+        print(f"video embeddings after pooling {video_embeddings[0,:3, :3]}")
         if self.normalize:
             video_embeddings = l2norm(video_embeddings, dim=-1)
+            print(f"video embeddings after l2norm {video_embeddings[0,:3, :3]}")
 
         return VideoPrismVideoOutput(
             video_last_hidden_state=video_embeddings,

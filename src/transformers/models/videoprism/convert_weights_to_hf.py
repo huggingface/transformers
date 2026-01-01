@@ -549,8 +549,3 @@ if __name__ == "__main__":
         load_video=True,
         inference=True,
     )
-
-
-# fix the tokenizer
-# fix pos embed for text
-# fix the attn mask so that  
