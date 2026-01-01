@@ -79,7 +79,6 @@ class TensorProcessor:
         This is particularly useful to resolve one-to-many
         HF-GGUF mappings sometimes appear in some MoE models.
         """
-        pass
 
     def process(self, weights, name, **kwargs):
         return GGUFTensor(weights, name, {})

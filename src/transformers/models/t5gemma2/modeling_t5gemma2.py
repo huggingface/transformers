@@ -1370,10 +1370,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
             # Initialize new cache.
             model_kwargs["past_key_values"] = EncoderDecoderCache(
                 DynamicCache(
-                    **{
-                        "config": self.config.get_text_config(decoder=True),
-                        "offloading": offload_cache,
-                    }
+                    config=self.config.get_text_config(decoder=True), offloading=offload_cache
                 ),  # self-attention cache
                 DynamicCache(),  # cross-attention cache
             )

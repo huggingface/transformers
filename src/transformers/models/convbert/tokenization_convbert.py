@@ -25,7 +25,6 @@ class ConvBertTokenizer(BertTokenizer):
     refer to this superclass for more information regarding those methods.
     """
 
-    pass
 
 
 __all__ = ["ConvBertTokenizer"]

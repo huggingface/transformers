@@ -200,7 +200,7 @@ def _w8a8_block_fp8_matmul_per_tensor(
     scale_a = tl.load(As)
     scale_b = tl.load(Bs)
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
+    for k in range(tl.cdiv(K, BLOCK_SIZE_K)):
         a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
         b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
 

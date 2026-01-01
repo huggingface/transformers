@@ -103,7 +103,6 @@ class LayoutXLMConfig(LayoutLMv2Config):
     >>> configuration = model.config
     ```"""
 
-    pass
 
 
 __all__ = ["LayoutXLMConfig"]
