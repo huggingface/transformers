@@ -409,12 +409,14 @@ def convert_videoprism_checkpoint(
             outputs = model(input_vid, input_ids, mask)
             video_logits = outputs.video_embeds[0, :9]
             text_logits = outputs.text_embeds[:, :3]
-            # print(text_logits)
             assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), "The converted model text logits do not match the expected logits."
-            assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-3), "The converted model video logits do not match the expected logits."
+            assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), "The converted model video logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
 
-
+    if upload:
+        repo_id = f"MHRDYN7/{checkpoint_name}"
+        model.push_to_hub(repo_id)
+        print(f"Uploaded the model to the Hugging Face hub at {repo_id}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -614,7 +614,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             attention_mask,
             scaling=1.0,
             dropout=0.0 if not self.training else self.dropout_prob,
-            softcap=self.config.attn_logit_softcapping,
+            softcap=None,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
