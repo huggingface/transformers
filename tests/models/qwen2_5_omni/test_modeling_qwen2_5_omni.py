@@ -946,7 +946,9 @@ class Qwen2_5OmniToken2WavShapeMismatchTest(unittest.TestCase):
 
         conditioning_vector = torch.randn(batch_size, small_config.enc_emb_dim, device=torch_device)
         reference_mel = torch.randn(batch_size, 30000, small_config.mel_dim, device=torch_device)
-        quantized_code = torch.randint(0, small_config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+        quantized_code = torch.randint(
+            0, small_config.num_embeds, (batch_size, num_speech_tokens), device=torch_device
+        )
 
         with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING") as log:
             output = small_model.sample(
