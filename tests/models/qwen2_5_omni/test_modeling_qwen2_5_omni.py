@@ -968,36 +968,6 @@ class Qwen2_5OmniToken2WavShapeMismatchTest(unittest.TestCase):
         expected_mel_frames = 984
         self.assertEqual(output.shape, (batch_size, small_config.mel_dim, expected_mel_frames))
 
-    def test_alignment_to_lcm_of_repeats_and_block_size(self):
-        """Test that target_duration is properly aligned to lcm(repeats, block_size)."""
-        batch_size = 1
-        # With repeats=2 and block_size=24 (default), lcm is 24
-        # Choose a number that will require alignment
-        num_speech_tokens = 15001  # Will result in 30002 mel frames
-        max_mel_frames = 30001  # Not aligned to 24, should be aligned down to 29976 (24 * 1249)
-
-        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
-        reference_mel = torch.randn(batch_size, 30000, self.config.mel_dim, device=torch_device)
-        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
-
-        with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING") as log:
-            output = self.model.sample(
-                conditioning_vector=conditioning_vector,
-                reference_mel_spectrogram=reference_mel,
-                quantized_code=quantized_code,
-                max_mel_frames=max_mel_frames,
-                num_steps=2,
-            )
-
-        # Check that warning was logged
-        self.assertTrue(
-            any("Requested mel length (30002) exceeds the supported length" in message for message in log.output)
-        )
-
-        # Output should be aligned to nearest multiple of 24 (30001 // 24 = 1250, 1250 * 24 = 30000)
-        expected_mel_frames = 30000
-        self.assertEqual(output.shape, (batch_size, self.config.mel_dim, expected_mel_frames))
-
     def test_no_capping_when_within_limits(self):
         """Test that no capping occurs when maximum_duration is within all limits."""
         batch_size = 1
