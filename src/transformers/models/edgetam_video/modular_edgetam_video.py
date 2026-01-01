@@ -20,7 +20,6 @@ from typing import Any, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import Tensor
 
 from transformers.models.sam2.modeling_sam2 import (

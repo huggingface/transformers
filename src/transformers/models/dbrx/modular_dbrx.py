@@ -18,7 +18,6 @@ from collections.abc import Callable
 from typing import Any, Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ... import initialization as init

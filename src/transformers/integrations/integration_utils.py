@@ -302,7 +302,6 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             other options are also available. See the Ray documentation (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
             for more options
     """
-    import ray
     import ray.tune
 
     def _objective(trial: dict, local_trainer):

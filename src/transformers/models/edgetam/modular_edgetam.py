@@ -17,7 +17,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
