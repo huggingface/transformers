@@ -860,3 +860,214 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_texts[0], EXPECTED_DECODED_TEXT)
         self.assertEqual(decoded_texts[1], EXPECTED_DECODED_TEXT)
+
+
+@require_torch
+class Qwen2_5OmniToken2WavShapeMismatchTest(unittest.TestCase):
+    """
+    Tests to validate the fix for the shape mismatch bug in Qwen2_5OmniToken2WavDiTModel.sample().
+
+    The bug occurred when:
+    - maximum_duration = quantized_code.shape[1] * repeats
+    - noise_initialization was created with shape [batch_size, max_mel_frames, mel_dim]
+    - initial_state = noise_initialization[:, :maximum_duration] would fail if maximum_duration > max_mel_frames
+
+    The fix implements a cap-and-align strategy:
+    1. Cap target_duration to min(maximum_duration, max_mel_frames, max_position_embeddings)
+    2. Align to lcm(repeats, block_size) for compatibility
+    3. Trim quantized_code to match target_duration
+    4. Create noise_initialization with exact target_duration
+    """
+
+    def setUp(self):
+        """Create minimal DiT model for testing."""
+        from transformers.models.qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
+        from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniToken2WavDiTModel
+
+        # Create config with default dimensions but reduced layers for faster testing
+        self.config = Qwen2_5OmniDiTConfig(
+            num_hidden_layers=2,  # Reduced for faster testing
+            look_ahead_layers=[1],  # Reduced for faster testing
+            look_backward_layers=[0],  # Reduced for faster testing
+        )
+        self.model = Qwen2_5OmniToken2WavDiTModel(self.config).to(torch_device)
+        self.model.eval()
+
+    def test_capping_when_maximum_duration_exceeds_max_mel_frames(self):
+        """Test that the model caps target_duration when maximum_duration > max_mel_frames."""
+        batch_size = 1
+        num_speech_tokens = 16000  # Will result in 32000 mel frames with repeats=2
+        max_mel_frames = 30000  # Less than expected 32000
+
+        # conditioning_vector should be enc_emb_dim, not hidden_size
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        # reference_mel can be any length, it gets resampled to match target duration
+        reference_mel = torch.randn(batch_size, max_mel_frames, self.config.mel_dim, device=torch_device)
+        # quantized_code should be integer indices for embedding lookup
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        # This should not raise an error, but should cap to 30000
+        with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING") as log:
+            output = self.model.sample(
+                conditioning_vector=conditioning_vector,
+                reference_mel_spectrogram=reference_mel,
+                quantized_code=quantized_code,
+                max_mel_frames=max_mel_frames,
+                num_steps=2,  # Use fewer steps for faster testing
+            )
+
+        # Check that warning was logged
+        self.assertTrue(
+            any("Requested mel length (32000) exceeds the supported length" in message for message in log.output)
+        )
+
+        # Output should be capped to 30000 (aligned to lcm(2, 10) = 10)
+        expected_mel_frames = 30000
+        self.assertEqual(output.shape, (batch_size, self.config.mel_dim, expected_mel_frames))
+
+    def test_capping_when_maximum_duration_exceeds_max_position_embeddings(self):
+        """Test that the model caps target_duration when maximum_duration > max_position_embeddings."""
+        batch_size = 1
+        # Create a config with smaller max_position_embeddings for testing
+        from transformers.models.qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
+        from transformers.models.qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniToken2WavDiTModel
+
+        small_config = Qwen2_5OmniDiTConfig(
+            num_hidden_layers=2,
+            look_ahead_layers=[1],
+            look_backward_layers=[0],
+            max_position_embeddings=1000,  # Very small for testing
+        )
+        small_model = Qwen2_5OmniToken2WavDiTModel(small_config).to(torch_device)
+        small_model.eval()
+
+        num_speech_tokens = 600  # Will result in 1200 mel frames, exceeds max_position_embeddings
+        max_mel_frames = 30000  # Large enough, but max_position_embeddings is the constraint
+
+        conditioning_vector = torch.randn(batch_size, small_config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 30000, small_config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, small_config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING") as log:
+            output = small_model.sample(
+                conditioning_vector=conditioning_vector,
+                reference_mel_spectrogram=reference_mel,
+                quantized_code=quantized_code,
+                max_mel_frames=max_mel_frames,
+                num_steps=2,
+            )
+
+        # Check that warning was logged
+        self.assertTrue(
+            any("Requested mel length (1200) exceeds the supported length" in message for message in log.output)
+        )
+
+        # Output should be capped to 1000, but aligned to lcm(2, 24) = 24, so 1000 // 24 * 24 = 984
+        expected_mel_frames = 984
+        self.assertEqual(output.shape, (batch_size, small_config.mel_dim, expected_mel_frames))
+
+    def test_alignment_to_lcm_of_repeats_and_block_size(self):
+        """Test that target_duration is properly aligned to lcm(repeats, block_size)."""
+        batch_size = 1
+        # With repeats=2 and block_size=24 (default), lcm is 24
+        # Choose a number that will require alignment
+        num_speech_tokens = 15001  # Will result in 30002 mel frames
+        max_mel_frames = 30001  # Not aligned to 24, should be aligned down to 29976 (24 * 1249)
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 30000, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING") as log:
+            output = self.model.sample(
+                conditioning_vector=conditioning_vector,
+                reference_mel_spectrogram=reference_mel,
+                quantized_code=quantized_code,
+                max_mel_frames=max_mel_frames,
+                num_steps=2,
+            )
+
+        # Check that warning was logged
+        self.assertTrue(
+            any("Requested mel length (30002) exceeds the supported length" in message for message in log.output)
+        )
+
+        # Output should be aligned to nearest multiple of 24 (30001 // 24 = 1250, 1250 * 24 = 30000)
+        expected_mel_frames = 30000
+        self.assertEqual(output.shape, (batch_size, self.config.mel_dim, expected_mel_frames))
+
+    def test_no_capping_when_within_limits(self):
+        """Test that no capping occurs when maximum_duration is within all limits."""
+        batch_size = 1
+        num_speech_tokens = 1000  # Will result in 2000 mel frames
+        max_mel_frames = 30000  # Well above 2000
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 30000, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        # This should not log any warning
+        output = self.model.sample(
+            conditioning_vector=conditioning_vector,
+            reference_mel_spectrogram=reference_mel,
+            quantized_code=quantized_code,
+            max_mel_frames=max_mel_frames,
+            num_steps=2,
+        )
+
+        # Output should match expected duration (aligned to 24: 2000 // 24 = 83, 83 * 24 = 1992)
+        expected_mel_frames = 1992
+        self.assertEqual(output.shape, (batch_size, self.config.mel_dim, expected_mel_frames))
+
+    def test_minimum_duration_guarantee(self):
+        """Test that the model guarantees at least one codec token's worth of mel frames."""
+        batch_size = 1
+        num_speech_tokens = 1  # Will result in 2 mel frames with repeats=2
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 30000, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        output = self.model.sample(
+            conditioning_vector=conditioning_vector,
+            reference_mel_spectrogram=reference_mel,
+            quantized_code=quantized_code,
+            max_mel_frames=30000,
+            num_steps=2,
+        )
+
+        # Should produce at least one codec token's worth (repeats frames)
+        # But alignment to lcm(2, 24) = 24 might affect this
+        # The actual output will be aligned down, but should still be > 0
+        self.assertGreater(output.shape[2], 0)
+        # With block_size=24, repeats=2, the minimum aligned value would be 24
+        # But fallback alignment uses just repeats, so minimum is 2
+        self.assertGreaterEqual(output.shape[2], self.config.repeats)
+
+    def test_output_shape_consistency(self):
+        """Test that output shapes are consistent with capped duration."""
+        batch_size = 1
+        num_speech_tokens = 10000
+        max_mel_frames = 15000
+
+        conditioning_vector = torch.randn(batch_size, self.config.enc_emb_dim, device=torch_device)
+        reference_mel = torch.randn(batch_size, 30000, self.config.mel_dim, device=torch_device)
+        quantized_code = torch.randint(0, self.config.num_embeds, (batch_size, num_speech_tokens), device=torch_device)
+
+        with self.assertLogs("transformers.models.qwen2_5_omni.modeling_qwen2_5_omni", level="WARNING"):
+            output = self.model.sample(
+                conditioning_vector=conditioning_vector,
+                reference_mel_spectrogram=reference_mel,
+                quantized_code=quantized_code,
+                max_mel_frames=max_mel_frames,
+                num_steps=2,
+            )
+
+        # Check output is 3D: [batch_size, mel_dim, time]
+        self.assertEqual(len(output.shape), 3)
+        self.assertEqual(output.shape[0], batch_size)
+        self.assertEqual(output.shape[1], self.config.mel_dim)
+        # Time dimension should be <= max_mel_frames and aligned
+        self.assertLessEqual(output.shape[2], max_mel_frames)
+        # Should be a multiple of lcm(repeats, block_size) = lcm(2, 24) = 24
+        self.assertEqual(output.shape[2] % 24, 0)
