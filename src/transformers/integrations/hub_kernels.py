@@ -333,7 +333,7 @@ def load_and_register_attn_kernel(
         attn_implementation: A string, usually a kernel repo like "kernels-community/flash-mla".
         attn_wrapper: a callable for the wrapper around the attention implementation. In `transformers` we
             have a wrapper around the `flash_attn_var_len` call, and the same goes for `sdpa` and `eager`.
-            They just prepare the arguments properly. This is mostly used for continious batching, where we
+            They just prepare the arguments properly. This is mostly used for continuous batching, where we
             want the `paged` wrapper, which calls the paged cache.
         allow_all_kernels (`bool`, optional):
             Whether to load kernels from unverified hub repos, if it is a custom kernel outside of the `kernels-community`

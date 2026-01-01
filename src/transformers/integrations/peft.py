@@ -191,7 +191,7 @@ class FlattenDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported.")
+        raise NotImplementedError("Reversing flattening operation is not supported.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
@@ -220,7 +220,7 @@ class PermuteDims(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        raise NotImplementedError("Reversing flatteing operatio is not supported yet.")
+        raise NotImplementedError("Reversing flattening operation is not supported yet.")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
@@ -284,12 +284,12 @@ def build_peft_weight_mapping(
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion._original_source_patterns):
-                    # we replace the weight pattern to colllect loras
+                    # we replace the weight pattern to collect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")
 
-                # the gate_up_proj is the innner PEFT ParamWrapper, so we need to use base_layer
+                # the gate_up_proj is the inner PEFT ParamWrapper, so we need to use base_layer
                 pat = orig_conversion._original_target_patterns[0]
                 pat = pat.replace("gate_up_proj", "base_layer")
                 # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
@@ -323,7 +323,7 @@ def build_peft_weight_mapping(
                 # For source, we capture the original weights + the lora weights
                 new_source_patterns = []
                 for pat in list(orig_conversion._original_source_patterns):
-                    # we replace the weight pattern to colllect loras
+                    # we replace the weight pattern to collect loras
                     pat = pat.rsplit(".", 1)[0]
                     # note: the source state_dict does *not* contain the adapter name
                     new_source_patterns.append(f"{pat}.{lora}.*")

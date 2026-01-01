@@ -156,7 +156,7 @@ class DiffusionGemmaRMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

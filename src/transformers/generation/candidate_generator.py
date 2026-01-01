@@ -1354,7 +1354,7 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
             or not hasattr(model_outputs, "shared_kv_states")
         ):
             raise ValueError(
-                "`model_outputs` cannot be None, and they need to contain `hiden_states` and `shared_kv_states`"
+                "`model_outputs` cannot be None, and they need to contain `hidden_states` and `shared_kv_states`"
             )
 
         last_hidden_state: torch.Tensor = model_outputs.hidden_states[-1]

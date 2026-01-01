@@ -281,7 +281,7 @@ class SubWordJapaneseTokenizer:
         if clean:
             text = self.clean_text(text)
 
-        def check_simbol(x):
+        def check_symbol(x):
             e = x.encode()
             if len(x) == 1 and len(e) == 2:
                 c = (int(e[0]) << 8) + int(e[1])
@@ -323,7 +323,7 @@ class SubWordJapaneseTokenizer:
             else:
                 end = pos + 1
                 wd = text[pos:end]
-                if check_simbol(wd):
+                if check_symbol(wd):
                     result.append("<KIGOU>")
                 elif checku2e(wd):
                     result.append("<U2000U2BFF>")

@@ -57,7 +57,7 @@ def get_aspect_ratio_preserving_size(
     # Handle edge cases where one or both dimensions round to 0
     if target_height == 0 and target_width == 0:
         raise ValueError(
-            "Attempting to resize to a 0 x 0 image. Resized height should be divisble by "
+            "Attempting to resize to a 0 x 0 image. Resized height should be divisible by "
             f"`pooling_kernel_size * patch_size`={pooling_kernel_size * patch_size}."
         )
 
@@ -257,7 +257,7 @@ class Gemma4ImageProcessor(TorchvisionBackend):
             stacked_grid = torch.stack(patch_grid, dim=-1)
             real_positions = stacked_grid.reshape(patches.shape[0], 2)
 
-            # Step 6. Pad pacthes and positions to `max_patches`
+            # Step 6. Pad patches and positions to `max_patches`
             patches, positions = pad_along_first_dim(patches, real_positions, max_patches)
             pixel_values.append(patches)
             position_ids.append(positions)

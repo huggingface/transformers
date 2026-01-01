@@ -35,7 +35,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
     n_window (`int`, *optional*, defaults to 100):
-        Number of windwos
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
     n_window_infer (`int`, *optional*, defaults to `400`):

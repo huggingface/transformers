@@ -106,7 +106,7 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_ordering)
 
 
-@auto_docstring(custom_intro="A model for mutli-token prediction-based assisted decoding with Gemma 4.")
+@auto_docstring(custom_intro="A model for multi-token prediction-based assisted decoding with Gemma 4.")
 class Gemma4AssistantForCausalLM(Gemma4AssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

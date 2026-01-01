@@ -353,7 +353,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -994,7 +994,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
                 "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
-                "make use of the proportional RoPE funcitonality."
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod

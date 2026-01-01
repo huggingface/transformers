@@ -338,7 +338,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
         "classifier.weight"
-    ]  # TODO let's make sure orignal code base has this, for now it fixes quantization
+    ]  # TODO let's make sure original code base has this, for now it fixes quantization
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -139,7 +139,7 @@ class Gemma3nRMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor):
         mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
-        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -2143,7 +2143,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             # text to account for this. However, the audio preprocessing and encoder do not gurarantee they will
             # produce 188 soft tokens; they will produce at most that many tokens, but they may produce fewer tokens
             # depending on the length of the longest audio input in the batch. When we encounter this situation, we pad
-            # the audio feature out to 188 soft tokens with the emebedding of the last token in the embed_audio vocab.
+            # the audio feature out to 188 soft tokens with the embedding of the last token in the embed_audio vocab.
             audio_padding_toks = torch.tensor([[self.vocab_size - 1]], dtype=torch.long, device=audio_features.device)
             audio_padding_embs = self.embed_audio(input_ids=audio_padding_toks)
             audio_features = torch.where(audio_mask.unsqueeze(-1), audio_padding_embs, audio_features)

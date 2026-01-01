@@ -254,7 +254,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
             self.dtype = getattr(torch, self.dtype)
 
-        # Keep the default value of `num_labels=2` in case users have saved a classfier with 2 labels
+        # Keep the default value of `num_labels=2` in case users have saved a classifier with 2 labels
         # Our configs prev wouldn't save `id2label` for 2 labels because it is the default. In all other
         # cases we expect the config dict to have an `id2label` field if it's a clf model, or not otherwise
         if self.id2label is None:
@@ -1268,7 +1268,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
                 # NOTE: We can't discard keys because:
-                # 1) we can't truly delete a cls attribte on a dataclass; 2) we can't set the value to `None` due to
+                # 1) we can't truly delete a cls attribute on a dataclass; 2) we can't set the value to `None` due to
                 # strict validation. So we just keep it as is, since there are only a couple old models falling in this condition
                 if key.startswith(prefix_to_keep):
                     # [encoder/decoder]_layers -> num_hidden_layers

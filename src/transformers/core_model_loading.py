@@ -804,7 +804,7 @@ class WeightTransform:
         """
         Return whether the current Transform matched any weights during loading/saving. This is needed as some
         weight renaming transforms are not bijective, i.e. if we drop/add full parts of a name with PrefixChange, we
-        lose some informations that we cannot get back if we don't know if the Transform was used before already (say we
+        lose some information that we cannot get back if we don't know if the Transform was used before already (say we
         have a prefix to drop, we need to know whether the checkpoints we loaded before contained the said prefix or not
         before adding it back, or not, during saving).
         """

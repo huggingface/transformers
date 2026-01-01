@@ -16,7 +16,7 @@
 Handles two offloading strategies when the GPU KV cache is full:
   1. CPU offloading: copy the KV cache to a pre-allocated pinned CPU buffer, preserving exact request state.
   2. Soft reset: discard the KV cache and re-prefill from scratch when the request is re-scheduled. This incurs no data
-    transfer overhead, but we need to re-run prefill over all intial + generated tokens (so more compute overhead).
+    transfer overhead, but we need to re-run prefill over all initial + generated tokens (so more compute overhead).
 
 The CPU swap pool is a static set of pinned tensors allocated once at init (like vLLM/SGLang). Blocks are tracked
 with a simple free set — no dynamic allocation or deallocation of tensors ever happens at runtime.
@@ -177,7 +177,7 @@ class OffloadingManager:
             if state._status == RequestStatus.DECODING:
                 state.remaining_prefill_tokens = state.tokens_to_process[:]
             # Here, the new state is the same as the old one, but with the status set to PENDING. We bypass the setter
-            # to avoid the lifespan bookeeping and the associated warning
+            # to avoid the lifespan bookkeeping and the associated warning
             state._status = RequestStatus.PENDING
             new_state = state
             logger.debug(f"Offloaded request {request_id} to CPU: {len(self._free_cpu_blocks)} free blocks remaining.")

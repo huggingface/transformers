@@ -571,7 +571,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)

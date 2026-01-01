@@ -976,7 +976,7 @@ class Trainer:
         else:
             data_collator = self._get_collator_with_removed_columns(self.data_collator, description=description)
 
-        # MPS requrires forking if multiple workers are specified
+        # MPS requires forking if multiple workers are specified
         should_fork = torch.backends.mps.is_available() and self.args.dataloader_num_workers > 1
 
         dataloader_params = {
@@ -2102,7 +2102,7 @@ class Trainer:
             self._save_checkpoint(model, trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
-    # ---- Training Utilites ----
+    # ---- Training Utilities ----
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
     ) -> tuple[list, torch.Tensor | int | None]:
