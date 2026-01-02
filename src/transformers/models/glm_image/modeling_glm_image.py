@@ -27,6 +27,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
@@ -750,15 +751,20 @@ class GlmImageVectorQuantizer(nn.Module):
         hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
         hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
 
+        # L2 normalize
+        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
+        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
+        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
+
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         distances = (
             torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
+            + torch.sum(embedding**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.transpose(0, 1))
         )
 
         min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
+        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
 
         # compute loss for embedding
         loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
@@ -808,12 +814,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         if self.use_head:
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
 
-        self.vq_projector = GlmImageVisionVQProjector(
-            in_channels=config.hidden_size,
-            codebook_size=config.vq_codebook_size,
-            codebook_dim=config.vq_codebook_dim,
-            num_conv_layers=config.vq_num_conv_layers,
-        )
+        self.vq_projector = GlmImageVisionVQProjector(config)
 
         self.post_init()
 

@@ -30,6 +30,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, is_torchdynamo_compiling
+from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -41,7 +42,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
 )
-from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -476,22 +476,17 @@ class GlmImageVisionEmbeddings(SiglipVisionEmbeddings):
 
 class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
     def __init__(self, config: GlmImageVisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        super().__init__(config)
         self.mlp = GlmImageVisionMLP(config)
 
 
 class GlmImageVisionResidualBlock(nn.Module):
-
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
         self.norm1 = nn.GroupNorm(num_groups=32, num_channels=channels)
         self.activate = nn.GELU()
-        self.conv2 =  nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
         self.norm2 = nn.GroupNorm(num_groups=32, num_channels=channels)
 
     def forward(self, hidden_states):
@@ -506,11 +501,40 @@ class GlmImageVisionResidualBlock(nn.Module):
 
 
 class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
-    pass
+    def forward(self, hidden_state: torch.Tensor):
+        hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
+        hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
+
+        # L2 normalize
+        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
+        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
+        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
+
+        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
+        distances = (
+            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
+            + torch.sum(embedding**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.transpose(0, 1))
+        )
+
+        min_encoding_indices = torch.argmin(distances, dim=1)
+        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
+
+        # compute loss for embedding
+        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
+            (hidden_state_quant - hidden_state.detach()) ** 2
+        )
+
+        # preserve gradients
+        hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
+
+        # reshape back to match original input shape
+        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
+
+        return hidden_state_quant, loss, min_encoding_indices
 
 
 class GlmImageVisionVQProjector(nn.Module):
-
     def __init__(
         self,
         config: GlmImageVisionConfig,
@@ -525,7 +549,6 @@ class GlmImageVisionVQProjector(nn.Module):
             GlmImageVisionResidualBlock(config.hidden_size),
             GlmImageVisionResidualBlock(config.hidden_size),
         )
-
 
 
 class GlmImageVisionModel(GlmImagePreTrainedModel):
@@ -545,12 +568,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         if self.use_head:
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
 
-        self.vq_projector = GlmImageVisionVQProjector(
-            in_channels=config.hidden_size,
-            codebook_size=config.vq_codebook_size,
-            codebook_dim=config.vq_codebook_dim,
-            num_conv_layers=config.vq_num_conv_layers,
-        )
+        self.vq_projector = GlmImageVisionVQProjector(config)
 
         self.post_init()
 
