@@ -356,7 +356,7 @@ class GlmImageConfig(PreTrainedConfig):
         if isinstance(vq_config, dict):
             self.vq_config = self.sub_configs["vq_config"](**vq_config)
         elif vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"]()
+            self.vq_config = self.sub_configs["vq_config"](**kwargs)
 
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)

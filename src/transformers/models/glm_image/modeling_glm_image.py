@@ -780,7 +780,7 @@ class GlmImageVectorQuantizer(nn.Module):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-class GlmImageVQVAE(nn.Module):
+class GlmImageVQVAE(GlmImagePreTrainedModel):
     config: GlmImageVQVAEConfig
     _no_split_modules = [
         "GlmImageVectorQuantizer",
@@ -1515,6 +1515,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
 __all__ = [
     "GlmImagePreTrainedModel",
+    "GlmImageVQVAE",
     "GlmImageVisionModel",
     "GlmImageTextModel",
     "GlmImageModel",

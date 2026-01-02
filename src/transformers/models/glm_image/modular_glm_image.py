@@ -369,7 +369,7 @@ class GlmImageConfig(PreTrainedConfig):
         if isinstance(vq_config, dict):
             self.vq_config = self.sub_configs["vq_config"](**vq_config)
         elif vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"]()
+            self.vq_config = self.sub_configs["vq_config"](**kwargs)
 
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
@@ -589,7 +589,7 @@ class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-class GlmImageVQVAE(nn.Module):
+class GlmImageVQVAE(GlmImagePreTrainedModel):
     config: GlmImageVQVAEConfig
     _no_split_modules = [
         "GlmImageVectorQuantizer",
@@ -1184,6 +1184,7 @@ __all__ = [
     "GlmImageTextConfig",
     "GlmImageConfig",
     "GlmImagePreTrainedModel",
+    "GlmImageVQVAE",
     "GlmImageVisionModel",
     "GlmImageTextModel",
     "GlmImageModel",
