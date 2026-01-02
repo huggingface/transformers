@@ -60,7 +60,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
         self,
         embed_dim: int = 2048,
         num_embeddings: int = 16384,
-        double_latent: bool = False,
         latent_channels: int = 1536,
         in_channels: int = 3,
         num_res_blocks: int = 2,
@@ -71,7 +70,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
         self.num_embeddings = num_embeddings
-        self.double_latent = double_latent
         self.latent_channels = latent_channels
         self.in_channels = in_channels
         self.num_res_blocks = num_res_blocks
@@ -349,11 +347,17 @@ class GlmImageConfig(PreTrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        vq_config=None,
         image_token_id=167855,
         image_start_token_id=167851,
         image_end_token_id=167852,
         **kwargs,
     ):
+        if isinstance(vq_config, dict):
+            self.vq_config = self.sub_configs["vq_config"](**vq_config)
+        elif vq_config is None:
+            self.vq_config = self.sub_configs["vq_config"]()
+
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
