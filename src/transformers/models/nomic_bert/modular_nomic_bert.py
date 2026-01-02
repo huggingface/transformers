@@ -19,7 +19,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -294,7 +294,7 @@ class NomicBertSelfAttention(BertSelfAttention):
             # Use position_ids if available (fixes left-padding), else fallback to offset
             rope_offset = seq_len_offset
             if position_ids is not None:
-                rope_offset = position_ids
+                rope_offset = position_ids[:, 0]
 
             q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=rope_offset)
 
@@ -741,6 +741,7 @@ class NomicBertEncoder(BertEncoder):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        # DynamicCache is updated in place by attention layers
         next_decoder_cache = past_key_values if use_cache else None
 
         for i, layer in enumerate(self.layer):
@@ -966,7 +967,8 @@ class NomicBertModel(BertModel):
         past_key_values_length = 0
         if past_key_values is not None:
             if not isinstance(past_key_values, Cache):
-                raise ValueError("NomicBert only supports Cache-based past_key_values")
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
             past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
@@ -1001,7 +1003,7 @@ class NomicBertModel(BertModel):
             past_key_values_length=0,
         )
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask[:, -seq_length:], input_shape)
         encoder_extended_attention_mask = None
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
