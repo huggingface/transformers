@@ -57,14 +57,10 @@ class GlmImageVisionConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        vq_codebook_size (`int`, *optional*, defaults to 16384):
-            The size of the VQ codebook.
-        vq_codebook_dim (`int`, *optional*, defaults to 2048):
+        num_embeddings (`int`, *optional*, defaults to 16384):
+            Number of codebook embeddings.
+        embed_dim (`int`, *optional*, defaults to 2048):
             The dimension of the VQ codebook embeddings.
-        vq_num_conv_layers (`int`, *optional*, defaults to 2):
-            The number of convolutional layers in the VQ projector.
-         spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
     Example:
 
     ```python
@@ -95,10 +91,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        vq_codebook_size=16384,
-        vq_codebook_dim=2048,
-        vq_num_conv_layers=2,
-        spatial_merge_size=2,
+        num_embeddings=16384,
+        embed_dim=2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -113,10 +107,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.vq_codebook_size = vq_codebook_size
-        self.vq_codebook_dim = vq_codebook_dim
-        self.vq_num_conv_layers = vq_num_conv_layers
-        self.spatial_merge_size = spatial_merge_size
+        self.num_embeddings = num_embeddings
+        self.embed_dim = embed_dim
 
 
 class GlmImageTextConfig(PreTrainedConfig):

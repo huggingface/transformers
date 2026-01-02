@@ -41,6 +41,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
 )
+from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
@@ -86,14 +87,10 @@ class GlmImageVisionConfig(SiglipVisionConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        vq_codebook_size (`int`, *optional*, defaults to 16384):
-            The size of the VQ codebook.
-        vq_codebook_dim (`int`, *optional*, defaults to 2048):
+        num_embeddings (`int`, *optional*, defaults to 16384):
+            Number of codebook embeddings.
+        embed_dim (`int`, *optional*, defaults to 2048):
             The dimension of the VQ codebook embeddings.
-        vq_num_conv_layers (`int`, *optional*, defaults to 2):
-            The number of convolutional layers in the VQ projector.
-         spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
     Example:
 
     ```python
@@ -124,10 +121,8 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        vq_codebook_size=16384,
-        vq_codebook_dim=2048,
-        vq_num_conv_layers=2,
-        spatial_merge_size=2,
+        num_embeddings=16384,
+        embed_dim=2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -142,10 +137,8 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.vq_codebook_size = vq_codebook_size
-        self.vq_codebook_dim = vq_codebook_dim
-        self.vq_num_conv_layers = vq_num_conv_layers
-        self.spatial_merge_size = spatial_merge_size
+        self.num_embeddings = num_embeddings
+        self.embed_dim = embed_dim
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -492,204 +485,47 @@ class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolin
 
 
 class GlmImageVisionResidualBlock(nn.Module):
-    """
-    Implementation of the GLM-Image residual block.
-    """
 
-    def __init__(self, channels: int, num_groups: int = 32):
+    def __init__(self, channels):
         super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, 3, padding="same")
-        self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
+        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=channels)
         self.activate = nn.GELU()
-        self.conv2 = nn.Conv2d(channels, channels, 3, padding="same")
-        self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=channels)
+        self.conv2 =  nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
+        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=channels)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        res = x
-        x = self.norm1(x)
-        x = self.activate(x)
-        x = self.conv1(x)
-        x = self.norm2(x)
-        x = self.activate(x)
-        x = self.conv2(x)
-        return x + res
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.activate(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.activate(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        return hidden_states + residual
 
 
-class GlmImageVisionIBQ(nn.Module):
-    """
-    Index-Based Quantization Module of GLM-Image
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, l2_norm: bool = True):
-        super().__init__()
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.l2_norm = l2_norm
-
-        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
-
-    @torch.no_grad()
-    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        前向传播（推理模式）
-
-        Args:
-            z: 输入特征，shape: [B, C, H, W]
-
-        Returns:
-            z_q: 量化后的特征，shape: [B, C, H, W]
-            indices: codebook 索引，shape: [B, H, W]
-        """
-        batch_size, channels, height, width = z.shape
-
-        # [B, C, H, W] -> [B, H, W, C] -> [B*H*W, C]
-        z_permuted = z.permute(0, 2, 3, 1).contiguous()
-        z_flattened = z_permuted.view(-1, self.embedding_dim)
-
-        # L2 normalization
-        if self.l2_norm:
-            z_flattened = F.normalize(z_flattened, p=2, dim=-1)
-            embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
-        else:
-            embedding = self.embedding.weight
-
-        # Calculate distance: (z - e)^2 = z^2 + e^2 - 2 * z @ e^T
-        # z_flattened: [B*H*W, C], embedding: [N, C]
-        d = (
-            torch.sum(z_flattened**2, dim=1, keepdim=True)
-            + torch.sum(embedding**2, dim=1)
-            - 2 * torch.matmul(z_flattened, embedding.t())
-        )
-
-        # find the nearest codebook entry
-        indices = torch.argmin(d, dim=1)
-
-        # Get IBQ: [B*H*W, C] -> [B, H, W, C]
-        z_q = embedding[indices].view(batch_size, height, width, self.embedding_dim)
-
-        # [B, H, W, C] -> [B, C, H, W]
-        z_q = z_q.permute(0, 3, 1, 2).contiguous()
-
-        # indices: [B*H*W] -> [B, H, W]
-        indices = indices.view(batch_size, height, width)
-
-        return z_q, indices
-
-    def get_codebook_entry(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
-        """
-        Get codebook entries by indices
-
-        Args:
-            indices: Codebook indices
-            bhwc: Target shape [batch, height, width, channel]
-
-        Returns:
-            z_q: Quantized features, shape: [B, C, H, W]
-        """
-        z_q = self.embedding(indices)
-
-        if bhwc is not None:
-            batch_size, height, width, channels = bhwc
-            # [B, H, W, C] -> [B, C, H, W]
-            z_q = z_q.view(batch_size, height, width, channels)
-            z_q = z_q.permute(0, 3, 1, 2).contiguous()
-
-        return z_q
+class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
+    pass
 
 
 class GlmImageVisionVQProjector(nn.Module):
-    """
-    VQ Conv Projector of GLM-Image
-    """
 
     def __init__(
         self,
-        in_channels: int = 1536,
-        codebook_size: int = 16384,
-        codebook_dim: int = 2048,
-        num_conv_layers: int = 2,
-        num_groups: int = 32,
+        config: GlmImageVisionConfig,
     ):
         super().__init__()
 
-        self.in_channels = in_channels
-        self.codebook_dim = codebook_dim
-        self.quant_conv = nn.Conv2d(in_channels, codebook_dim, kernel_size=1)
-        self.quantize = GlmImageVisionIBQ(codebook_size, codebook_dim, l2_norm=True)
-        self.post_quant_conv = nn.Conv2d(codebook_dim, in_channels, kernel_size=1)
+        self.codebook_dim = config
+        self.quantize = GlmImageVectorQuantizer(config)
+        self.quant_conv = nn.Conv2d(config.hidden_size, config.embed_dim, 1)
+        self.post_quant_conv = nn.Conv2d(config.embed_dim, config.hidden_size, 1)
         self.post_conv = nn.Sequential(
-            *[GlmImageVisionResidualBlock(in_channels, num_groups) for _ in range(num_conv_layers)]
+            GlmImageVisionResidualBlock(config.hidden_size),
+            GlmImageVisionResidualBlock(config.hidden_size),
         )
 
-    def forward(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
-        """
-        Forward pass
-
-        Args:
-            x: Visual features, shape: [B, N, C] where N = H * W
-            h: Feature map height
-            w: Feature map width
-
-        Returns:
-            z: Quantized features, shape: [B, N, C]
-        """
-        batch_size, seq_len, channels = x.shape
-
-        # [B, N, C] -> [B, H, W, C] -> [B, C, H, W]
-        x = x.view(batch_size, h, w, channels)
-        x = x.permute(0, 3, 1, 2).contiguous()
-
-        # 量化
-        z = self.quant_conv(x)
-        z_q, _ = self.quantize(z)
-
-        # 后处理
-        z = self.post_quant_conv(z_q)
-        z = self.post_conv(z)
-
-        # [B, C, H, W] -> [B, H, W, C] -> [B, N, C]
-        z = z.permute(0, 2, 3, 1).contiguous()
-        z = z.view(batch_size, seq_len, channels)
-
-        return z
-
-    def encode(self, x: torch.Tensor, h: int, w: int) -> torch.Tensor:
-        """
-        Encode to discrete token indices
-
-        Args:
-            x: Visual features, shape: [B, N, C]
-            h: Feature map height
-            w: Feature map width
-
-        Returns:
-            indices: Codebook indices, shape: [B, H, W]
-        """
-        batch_size, seq_len, channels = x.shape
-
-        # [B, N, C] -> [B, H, W, C] -> [B, C, H, W]
-        x = x.view(batch_size, h, w, channels)
-        x = x.permute(0, 3, 1, 2).contiguous()
-
-        z = self.quant_conv(x)
-        _, indices = self.quantize(z)
-        return indices
-
-    def decode(self, indices: torch.Tensor, bhwc: list) -> torch.Tensor:
-        """
-        Decode from discrete token indices
-
-        Args:
-            indices: Codebook indices
-            bhwc: Target shape [batch, height, width, channel]
-
-        Returns:
-            z: Decoded features, shape: [B, C, H, W]
-        """
-        z_q = self.quantize.get_codebook_entry(indices, bhwc)
-        z = self.post_quant_conv(z_q)
-        z = self.post_conv(z)
-        return z
 
 
 class GlmImageVisionModel(GlmImagePreTrainedModel):
@@ -719,52 +555,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.post_init()
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
-
-        Returns:
-            `torch.Tensor`: hidden_states.
-        """
-        hidden_states = self.patch_embed(hidden_states)
-        hidden_states = self.post_conv_layernorm(hidden_states)
-
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
-
-        for blk in self.blocks:
-            hidden_states = blk(
-                hidden_states,
-                cu_seqlens=cu_seqlens,
-                position_embeddings=position_embeddings,
-            )
-
-        hidden_states = self.post_layernorm(hidden_states)
-
-        hidden_states = hidden_states.view(
-            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
-        )
-        hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
-
-        hidden_states = self.merger(hidden_states)
-        return hidden_states
+        pass
 
 
 class GlmImageTextModel(Glm4vTextModel):
