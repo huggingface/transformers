@@ -26,6 +26,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -350,7 +351,11 @@ class GlmImageConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_image"
-    sub_configs = {"vision_config": GlmImageVisionConfig, "text_config": GlmImageTextConfig}
+    sub_configs = {
+        "vision_config": GlmImageVisionConfig,
+        "text_config": GlmImageTextConfig,
+        "vq_config": GlmImageVQVAEConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -622,8 +627,27 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        pass
+    def forward(
+        self,
+        pixel_values,
+        interpolate_pos_encoding: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        for blk in self.blocks:
+            hidden_states = blk(
+                hidden_states,
+            )
+
+        last_hidden_state = hidden_states.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        pooler_output = self.head(last_hidden_state) if self.use_head else None
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
+        )
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -747,11 +771,10 @@ class GlmImageModel(Glm4vModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
         """
-        batch_size = pixel_values.shape[0]
-        _, _, image_toks = self.vqmodel.encode(pixel_values)
-        bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
-        bpe_toks = bpe_toks.view(batch_size, -1)
-        return bpe_toks
+        image_tokens = self.get_image_tokens(pixel_values)
+        vision_embeddings = self.get_input_embeddings()(image_tokens)
+        _, _, image_toks = self.vqmodel.encode(vision_embeddings)
+        return image_toks
 
     def get_image_features(self, pixel_values: torch.FloatTensor):
         """

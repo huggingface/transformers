@@ -338,7 +338,11 @@ class GlmImageConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_image"
-    sub_configs = {"vision_config": GlmImageVisionConfig, "text_config": GlmImageTextConfig}
+    sub_configs = {
+        "vision_config": GlmImageVisionConfig,
+        "text_config": GlmImageTextConfig,
+        "vq_config": GlmImageVQVAEConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
