@@ -796,7 +796,7 @@ class GlmImageModel(Glm4vModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         """
@@ -867,7 +867,7 @@ class GlmImageModel(Glm4vModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, interpolate_pos_encoding=False)
+            image_embeds = self.get_image_features(pixel_values)
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
