@@ -301,7 +301,7 @@ class NomicBertSelfAttention(BertSelfAttention):
             query_layer = torch.cat([q_rot, query_layer[..., self.rotary_emb.dim :]], dim=-1)
             key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
 
-        if self.is_decoder or past_key_values is not None:
+        if past_key_values is not None:
             if not isinstance(past_key_values, Cache):
                 raise ValueError("NomicBert only supports Cache-based past_key_values")
 
@@ -876,6 +876,19 @@ class NomicBertModel(BertModel):
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
         head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
         return head_mask
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        # HF may pass legacy tuple caches here
+        if past_key_values is None:
+            return None
+
+        # Convert legacy tuple -> Cache if needed
+        if not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        # Reorder in-place and return Cache
+        past_key_values.reorder_cache(beam_idx)
+        return past_key_values
 
     def forward(
         self,
