@@ -307,6 +307,9 @@ class NomicBertSelfAttention(BertSelfAttention):
 
             key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
 
+        elif past_key_values is None and self.is_decoder and kwargs.get("use_cache", True):
+            past_key_values = DynamicCache()
+
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         # Scale scores by sqrt(d_model) to stabilize gradients
@@ -421,11 +424,12 @@ class RotaryEmbedding(nn.Module):
         Returns:
             Tensor with rotary embeddings applied to the first `rotary_dim` dimensions
         """
-        ro_dim = cos.shape[-1] * 2
-        assert ro_dim <= x.shape[-1]
+        ro_dim = self.dim
+        seq_len = x.shape[2]
+
         cos, sin = (
-            cos[offset : offset + x.shape[2]],
-            sin[offset : offset + x.shape[2]],
+            cos[offset : offset + seq_len, : ro_dim // 2],
+            sin[offset : offset + seq_len, : ro_dim // 2],
         )
 
         _check_einops_available()
@@ -966,6 +970,9 @@ class NomicBertModel(BertModel):
 
         if not self.config.is_decoder:
             use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
