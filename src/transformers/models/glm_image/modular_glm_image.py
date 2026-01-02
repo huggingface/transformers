@@ -600,10 +600,10 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         super().__init__(config)
 
         self.quantize = GlmImageVectorQuantizer(config)
-        self.quant_conv = nn.Conv2d(config.hidden_size, config.embed_dim, 1)
-        self.post_quant_conv = nn.Conv2d(config.embed_dim, config.hidden_size, 1)
+        self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, 1)
+        self.post_quant_conv = nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.post_conv = nn.Sequential(
-            *[GlmImageVisionResnetBlock(config.hidden_size) for _ in range(config.num_res_blocks)]
+            *[GlmImageVisionResnetBlock(config.latent_channels) for _ in range(config.num_res_blocks)]
         )
 
     def encode(self, hidden_states):
