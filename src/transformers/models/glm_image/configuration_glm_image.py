@@ -25,6 +25,60 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
+class GlmImageVQVAEConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmImageVQModel`]. It is used to instantiate a
+    `GlmImageVQModel` according to the specified arguments, defining the model architecture.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a
+    configuration with the defaults will yield a similar configuration to the VQModel of the
+    [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
+
+    Args:
+        embed_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of each embedding vector.
+        num_embeddings (`int`, *optional*, defaults to 16384):
+            Number of codebook embeddings.
+        latent_channels (`int`, *optional*, defaults to 1536):
+            Number of channels for the latent space.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        base_channels (`int`, *optional*, defaults to 128):
+            Base channel count.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            Number of residual blocks.
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """
+
+    model_type = "glm_image_vqmodel"
+    base_config_key = "vq_config"
+
+    def __init__(
+        self,
+        embed_dim: int = 2048,
+        num_embeddings: int = 16384,
+        double_latent: bool = False,
+        latent_channels: int = 1536,
+        in_channels: int = 3,
+        num_res_blocks: int = 2,
+        dropout: float = 0.0,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.num_embeddings = num_embeddings
+        self.double_latent = double_latent
+        self.latent_channels = latent_channels
+        self.in_channels = in_channels
+        self.num_res_blocks = num_res_blocks
+        self.dropout = dropout
+        self.initializer_range = initializer_range
+
+
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
@@ -57,10 +111,6 @@ class GlmImageVisionConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        num_embeddings (`int`, *optional*, defaults to 16384):
-            Number of codebook embeddings.
-        embed_dim (`int`, *optional*, defaults to 2048):
-            The dimension of the VQ codebook embeddings.
     Example:
 
     ```python
@@ -91,8 +141,6 @@ class GlmImageVisionConfig(PreTrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        num_embeddings=16384,
-        embed_dim=2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -107,8 +155,6 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.num_embeddings = num_embeddings
-        self.embed_dim = embed_dim
 
 
 class GlmImageTextConfig(PreTrainedConfig):
@@ -321,4 +367,4 @@ class GlmImageConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["GlmImageVisionConfig", "GlmImageTextConfig", "GlmImageConfig"]
+__all__ = ["GlmImageVQVAEConfig", "GlmImageVisionConfig", "GlmImageTextConfig", "GlmImageConfig"]

@@ -55,6 +55,60 @@ from ..siglip.modeling_siglip import (
 )
 
 
+class GlmImageVQVAEConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmImageVQModel`]. It is used to instantiate a
+    `GlmImageVQModel` according to the specified arguments, defining the model architecture.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information. Instantiating a
+    configuration with the defaults will yield a similar configuration to the VQModel of the
+    [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
+
+    Args:
+        embed_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of each embedding vector.
+        num_embeddings (`int`, *optional*, defaults to 16384):
+            Number of codebook embeddings.
+        latent_channels (`int`, *optional*, defaults to 1536):
+            Number of channels for the latent space.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        base_channels (`int`, *optional*, defaults to 128):
+            Base channel count.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            Number of residual blocks.
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """
+
+    model_type = "glm_image_vqmodel"
+    base_config_key = "vq_config"
+
+    def __init__(
+        self,
+        embed_dim: int = 2048,
+        num_embeddings: int = 16384,
+        double_latent: bool = False,
+        latent_channels: int = 1536,
+        in_channels: int = 3,
+        num_res_blocks: int = 2,
+        dropout: float = 0.0,
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.num_embeddings = num_embeddings
+        self.double_latent = double_latent
+        self.latent_channels = latent_channels
+        self.in_channels = in_channels
+        self.num_res_blocks = num_res_blocks
+        self.dropout = dropout
+        self.initializer_range = initializer_range
+
+
 class GlmImageVisionConfig(SiglipVisionConfig):
     r"""
     This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
@@ -87,10 +141,6 @@ class GlmImageVisionConfig(SiglipVisionConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        num_embeddings (`int`, *optional*, defaults to 16384):
-            Number of codebook embeddings.
-        embed_dim (`int`, *optional*, defaults to 2048):
-            The dimension of the VQ codebook embeddings.
     Example:
 
     ```python
@@ -121,8 +171,6 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
-        num_embeddings=16384,
-        embed_dim=2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -137,8 +185,6 @@ class GlmImageVisionConfig(SiglipVisionConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.num_embeddings = num_embeddings
-        self.embed_dim = embed_dim
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -480,7 +526,7 @@ class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolin
         self.mlp = GlmImageVisionMLP(config)
 
 
-class GlmImageVisionResidualBlock(nn.Module):
+class GlmImageVisionResnetBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
@@ -534,27 +580,34 @@ class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-class GlmImageVisionVQProjector(nn.Module):
-    def __init__(
-        self,
-        config: GlmImageVisionConfig,
-    ):
-        super().__init__()
+class GlmImageVQVAE(nn.Module):
+    config: GlmImageVQVAEConfig
+    _no_split_modules = [
+        "GlmImageVectorQuantizer",
+        "GlmImageVisionResnetBlock",
+    ]
 
-        self.codebook_dim = config
+    def __init__(self, config: GlmImageVQVAEConfig):
+        super().__init__(config)
+
         self.quantize = GlmImageVectorQuantizer(config)
         self.quant_conv = nn.Conv2d(config.hidden_size, config.embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(config.embed_dim, config.hidden_size, 1)
         self.post_conv = nn.Sequential(
-            GlmImageVisionResidualBlock(config.hidden_size),
-            GlmImageVisionResidualBlock(config.hidden_size),
+            *[GlmImageVisionResnetBlock(config.hidden_size) for _ in range(config.num_res_blocks)]
         )
+
+    def encode(self, hidden_states):
+        hidden_states = self.quant_conv(hidden_states)
+        quant, emb_loss, indices = self.quantize(hidden_states)
+        return quant, emb_loss, indices
 
 
 class GlmImageVisionModel(GlmImagePreTrainedModel):
     config: GlmImageVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _no_split_modules = ["GlmImageVisionBlock"]
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
@@ -567,9 +620,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
-
-        self.vq_projector = GlmImageVisionVQProjector(config)
-
         self.post_init()
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -585,6 +635,8 @@ class GlmImageModel(Glm4vModel):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
+        self.vqmodel = GlmImageVQVAE._from_config(config.vq_config)
+
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -684,6 +736,35 @@ class GlmImageModel(Glm4vModel):
         Not Using now
         """
         return None
+
+    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module. Converts
+        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
+        special tokens.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        batch_size = pixel_values.shape[0]
+        _, _, image_toks = self.vqmodel.encode(pixel_values)
+        bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
+        bpe_toks = bpe_toks.view(batch_size, -1)
+        return bpe_toks
+
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens = self.get_image_tokens(pixel_values)
+        vision_embeddings = self.get_input_embeddings()(image_tokens)
+        return vision_embeddings
 
     def get_placeholder_mask(
         self,
@@ -1071,6 +1152,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
 
 __all__ = [
+    "GlmImageVQVAEConfig",
     "GlmImageVisionConfig",
     "GlmImageTextConfig",
     "GlmImageConfig",

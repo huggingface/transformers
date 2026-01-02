@@ -44,7 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, torch_int
 from ...utils.generic import check_model_inputs, maybe_autocast
-from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig
+from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
 
 
 class GlmImageVisionMLP(nn.Module):
@@ -708,7 +708,7 @@ class GlmImageVisionMultiheadAttentionPoolingHead(nn.Module):
         return hidden_state[:, 0]
 
 
-class GlmImageVisionResidualBlock(nn.Module):
+class GlmImageVisionResnetBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
@@ -780,27 +780,34 @@ class GlmImageVectorQuantizer(nn.Module):
         return hidden_state_quant, loss, min_encoding_indices
 
 
-class GlmImageVisionVQProjector(nn.Module):
-    def __init__(
-        self,
-        config: GlmImageVisionConfig,
-    ):
-        super().__init__()
+class GlmImageVQVAE(nn.Module):
+    config: GlmImageVQVAEConfig
+    _no_split_modules = [
+        "GlmImageVectorQuantizer",
+        "GlmImageVisionResnetBlock",
+    ]
 
-        self.codebook_dim = config
+    def __init__(self, config: GlmImageVQVAEConfig):
+        super().__init__(config)
+
         self.quantize = GlmImageVectorQuantizer(config)
         self.quant_conv = nn.Conv2d(config.hidden_size, config.embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(config.embed_dim, config.hidden_size, 1)
         self.post_conv = nn.Sequential(
-            GlmImageVisionResidualBlock(config.hidden_size),
-            GlmImageVisionResidualBlock(config.hidden_size),
+            *[GlmImageVisionResnetBlock(config.hidden_size) for _ in range(config.num_res_blocks)]
         )
+
+    def encode(self, hidden_states):
+        hidden_states = self.quant_conv(hidden_states)
+        quant, emb_loss, indices = self.quantize(hidden_states)
+        return quant, emb_loss, indices
 
 
 class GlmImageVisionModel(GlmImagePreTrainedModel):
     config: GlmImageVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _no_split_modules = ["GlmImageVisionBlock"]
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
@@ -813,9 +820,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
-
-        self.vq_projector = GlmImageVisionVQProjector(config)
-
         self.post_init()
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -942,7 +946,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
+
         self.rope_deltas = None  # cache rope_deltas here
+        self.vqmodel = GlmImageVQVAE._from_config(config.vq_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1048,21 +1054,18 @@ class GlmImageModel(GlmImagePreTrainedModel):
         """
         return None
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+    def get_image_features(self, pixel_values: torch.FloatTensor):
         """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
         """
-        pixel_values = pixel_values.type(self.visual.dtype)
-        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds
+        image_tokens = self.get_image_tokens(pixel_values)
+        vision_embeddings = self.get_input_embeddings()(image_tokens)
+        return vision_embeddings
 
     def get_placeholder_mask(
         self,
@@ -1186,6 +1189,22 @@ class GlmImageModel(GlmImagePreTrainedModel):
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
+
+    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module. Converts
+        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
+        special tokens.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        batch_size = pixel_values.shape[0]
+        _, _, image_toks = self.vqmodel.encode(pixel_values)
+        bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
+        bpe_toks = bpe_toks.view(batch_size, -1)
+        return bpe_toks
 
 
 @dataclass
