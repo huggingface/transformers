@@ -215,12 +215,10 @@ class NomicBertSelfAttention(nn.Module):
         # Calculate RoPE offset
         seq_len_offset = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                # New DynamicCache path
-                seq_len_offset = past_key_values.get_seq_length(self.layer_idx)
-            else:
-                # Legacy tuple path
-                seq_len_offset = past_key_values[0].shape[2]
+            if not isinstance(past_key_values, Cache):
+                raise ValueError("NomicBert only supports Cache-based past_key_values")
+            # New DynamicCache path
+            seq_len_offset = past_key_values.get_seq_length(self.layer_idx)
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
@@ -238,16 +236,10 @@ class NomicBertSelfAttention(nn.Module):
             key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
 
         if self.is_decoder or past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                # DynamicCache handles concatenation internally and returns the full sequence
-                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
-            else:
-                # Legacy tuple logic (manual concatenation)
-                if past_key_values is not None:
-                    key_layer = torch.cat([past_key_values[0], key_layer], dim=2)
-                    value_layer = torch.cat([past_key_values[1], value_layer], dim=2)
+            if not isinstance(past_key_values, Cache):
+                raise ValueError("NomicBert only supports Cache-based past_key_values")
 
-                past_key_values = (key_layer, value_layer)
+            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -662,7 +654,7 @@ class NomicBertAttention(nn.Module):
                 Hidden states of the encoder (for cross-attention).
             encoder_attention_mask (`torch.FloatTensor`, *optional*):
                 Mask to avoid performing attention on the encoder outputs (for cross-attention).
-            past_key_values (`Tuple[Tuple[torch.FloatTensor]]`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached key and value states from previous steps for fast decoding.
             output_attentions (`bool`, *optional*):
                 Whether to return the attention probabilities.
@@ -675,7 +667,7 @@ class NomicBertAttention(nn.Module):
                 A tuple containing:
                 - **attention_output** (`torch.Tensor`): The output of the attention layer.
                 - **attention_probs** (`torch.Tensor`, *optional*): Returned if `output_attentions=True`.
-                - **past_key_values** (`Tuple`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
+                - **past_key_values** (`Cache`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
         """
         # Call SelfAttention
         self_outputs = self.self(
@@ -846,9 +838,7 @@ class NomicBertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
-        next_decoder_cache = () if use_cache else None
-        if use_cache and isinstance(past_key_values, Cache):
-            next_decoder_cache = past_key_values
+        next_decoder_cache = past_key_values if use_cache else None
 
         for i, layer in enumerate(self.layer):
             if output_hidden_states:
@@ -859,10 +849,9 @@ class NomicBertEncoder(nn.Module):
             past_key_value = None
 
             if past_key_values is not None:
-                if isinstance(past_key_values, Cache):
-                    past_key_value = past_key_values
-                elif isinstance(past_key_values, (tuple, list)) and i < len(past_key_values):
-                    past_key_value = past_key_values[i]
+                if not isinstance(past_key_values, Cache):
+                    raise ValueError("NomicBert only supports Cache-based past_key_values")
+                past_key_value = past_key_values
 
             layer_outputs = layer(
                 hidden_states,
@@ -876,17 +865,6 @@ class NomicBertEncoder(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                cache_to_add = layer_outputs[-1]
-                if isinstance(next_decoder_cache, Cache):
-                    # Cache already updated internally
-                    pass
-                else:
-                    if next_decoder_cache is None:
-                        next_decoder_cache = (cache_to_add,)
-                    else:
-                        next_decoder_cache += (cache_to_add,)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -1132,7 +1110,7 @@ class NomicBertModel(NomicBertPreTrainedModel):
             encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 2 tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`):
+            past_key_values (`Cache` , *optional*):
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
                 blocks) that can be used to speed up sequential decoding.
             use_cache (`bool`, *optional*):
@@ -1181,11 +1159,9 @@ class NomicBertModel(NomicBertPreTrainedModel):
         # Generate position_ids
         past_key_values_length = 0
         if past_key_values is not None:
-            if isinstance(past_key_values, Cache):
-                past_key_values_length = past_key_values.get_seq_length()
-            else:
-                if len(past_key_values) > 0 and past_key_values[0] is not None:
-                    past_key_values_length = past_key_values[0][0].shape[2]
+            if not isinstance(past_key_values, Cache):
+                raise ValueError("NomicBert only supports Cache-based past_key_values")
+            past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
             if inputs_embeds is not None:
