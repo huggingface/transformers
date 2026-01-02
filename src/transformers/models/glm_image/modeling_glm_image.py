@@ -38,7 +38,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -834,7 +834,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = False,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> torch.Tensor:
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         for blk in self.blocks:
             hidden_states = blk(
@@ -843,14 +843,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.post_layernorm(hidden_states)
-
-        pooler_output = self.head(hidden_states) if self.use_head else None
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-            pooler_output=pooler_output,
-        )
+        return hidden_states
 
 
 @auto_docstring
@@ -1093,14 +1086,13 @@ class GlmImageModel(GlmImagePreTrainedModel):
             applying the projection layer to the pooled output of [`GlmImageVisionModel`].
 
         """
-        vision_outputs: BaseModelOutputWithPooling = self.visual(
+        vision_outputs = self.visual(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
 
-        return pooled_output
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
