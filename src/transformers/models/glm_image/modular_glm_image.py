@@ -25,12 +25,34 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import (
+    convert_to_rgb,
+    resize,
+    to_channel_dimension_format,
+)
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_flat_list_of_images,
+    to_numpy_array,
+    valid_images,
+    validate_preprocess_arguments,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, is_torchdynamo_compiling
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig
 from ..glm4v.modeling_glm4v import (
@@ -45,6 +67,7 @@ from ..glm4v.modeling_glm4v import (
 )
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.image_processing_siglip import SiglipImageProcessor
 from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoderLayer,
@@ -54,6 +77,9 @@ from ..siglip.modeling_siglip import (
     default_flax_embed_init,
     lecun_normal_,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 class GlmImageVQVAEConfig(PreTrainedConfig):
@@ -635,21 +661,23 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self,
         pixel_values,
         interpolate_pos_encoding: Optional[bool] = False,
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
+                attention_mask,
+                **kwargs,
             )
 
-        last_hidden_state = hidden_states.last_hidden_state
-        last_hidden_state = self.post_layernorm(last_hidden_state)
+        hidden_states = self.post_layernorm(hidden_states)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        pooler_output = self.head(hidden_states) if self.use_head else None
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=hidden_states,
             pooler_output=pooler_output,
         )
 
@@ -1171,6 +1199,149 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
+class GlmImageImageProcessor(SiglipImageProcessor):
+    def __init__(
+        self,
+        do_resize: bool = True,
+        size: Optional[dict[str, int]] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        do_convert_rgb: Optional[bool] = None,
+        short_size: int = 384,
+        long_size: int = 1152,
+        patch_size: int = 16,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            **kwargs,
+        )
+        self.short_size = short_size
+        self.long_size = long_size
+        self.patch_size = patch_size
+
+    def _get_anyres_size(self, height: int, width: int) -> tuple[int, int]:
+        target_w, target_h = float(width), float(height)
+
+        ss = min(target_w, target_h)
+        if ss < self.short_size:
+            scale = self.short_size / ss
+            target_w *= scale
+            target_h *= scale
+
+        ls = max(target_w, target_h)
+        if ls > self.long_size:
+            scale = self.long_size / ls
+            target_w *= scale
+            target_h *= scale
+
+        target_w = int(round(target_w / self.patch_size)) * self.patch_size
+        target_h = int(round(target_h / self.patch_size)) * self.patch_size
+
+        return target_h, target_w
+
+    def preprocess(
+        self,
+        images: ImageInput,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: Optional[bool] = None,
+    ):
+        do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        size = get_size_dict(size, param_name="size", default_to_square=False)
+        resample = resample if resample is not None else self.resample
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+
+        images = self.fetch_images(images)
+        images = make_flat_list_of_images(images)
+
+        if not valid_images(images):
+            raise ValueError("Invalid image type")
+
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
+
+        images = [to_numpy_array(image) for image in images]
+
+        if do_rescale and is_scaled_image(images[0]):
+            logger.warning_once("It looks like you are trying to rescale already rescaled images.")
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        if do_resize:
+            resized_images = []
+            for image in images:
+                if input_data_format == ChannelDimension.FIRST:
+                    _, h, w = image.shape
+                else:
+                    h, w, _ = image.shape
+                target_h, target_w = self._get_anyres_size(h, w)
+                resized_images.append(
+                    resize(
+                        image=image, size=(target_h, target_w), resample=resample, input_data_format=input_data_format
+                    )
+                )
+            images = resized_images
+
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        if do_normalize:
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
+
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
+
+        data = {"pixel_values": images}
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+
 __all__ = [
     "GlmImageVQVAEConfig",
     "GlmImageVisionConfig",
@@ -1182,4 +1353,5 @@ __all__ = [
     "GlmImageTextModel",
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
+    "GlmImageImageProcessor",
 ]

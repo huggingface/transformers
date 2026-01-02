@@ -42,7 +42,13 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, torch_int
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    torch_int,
+)
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
 
@@ -826,21 +832,23 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self,
         pixel_values,
         interpolate_pos_encoding: Optional[bool] = False,
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
+                attention_mask,
+                **kwargs,
             )
 
-        last_hidden_state = hidden_states.last_hidden_state
-        last_hidden_state = self.post_layernorm(last_hidden_state)
+        hidden_states = self.post_layernorm(hidden_states)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        pooler_output = self.head(hidden_states) if self.use_head else None
 
         return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=hidden_states,
             pooler_output=pooler_output,
         )
 
