@@ -765,33 +765,26 @@ class GlmImageModel(Glm4vModel):
         """
         return None
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
         """
-        Tokenizes images into discrete tokens with VQGAN module. Converts
-        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
-        special tokens.
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`GlmImageVisionModel`].
 
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
         """
-        image_tokens = self.get_image_tokens(pixel_values)
-        vision_embeddings = self.get_input_embeddings()(image_tokens)
-        _, _, image_toks = self.vqmodel.encode(vision_embeddings)
-        return image_toks
+        vision_outputs: BaseModelOutputWithPooling = self.visual(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
+        )
+        pooled_output = vision_outputs.pooler_output
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
-        """
-        Tokenizes images into discrete tokens with VQGAN module and embeds
-        them with text embeddings layer
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        """
-        image_tokens = self.get_image_tokens(pixel_values)
-        vision_embeddings = self.get_input_embeddings()(image_tokens)
-        return vision_embeddings
+        return pooled_output
 
     def get_placeholder_mask(
         self,
@@ -846,7 +839,7 @@ class GlmImageModel(Glm4vModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, interpolate_pos_encoding=False)
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
