@@ -294,7 +294,7 @@ class NomicBertSelfAttention(BertSelfAttention):
             # Use position_ids if available (fixes left-padding), else fallback to offset
             rope_offset = seq_len_offset
             if position_ids is not None:
-                rope_offset = position_ids[:, 0]
+                rope_offset = position_ids[:, 0] if position_ids.numel() > 0 else 0
 
             q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=rope_offset)
 
@@ -527,6 +527,9 @@ class RotaryEmbedding(nn.Module):
             self._update_cos_sin_cache(max_seqlen, device=q.device, dtype=q.dtype)
         elif isinstance(seqlen_offset, int):
             self._update_cos_sin_cache(seqlen + seqlen_offset, device=q.device, dtype=q.dtype)
+        elif isinstance(seqlen_offset, torch.Tensor):
+            max_offset = seqlen_offset.max().item()
+            self._update_cos_sin_cache(seqlen + max_offset, device=q.device, dtype=q.dtype)
 
         q_rot = self.apply_rotary_emb(q, self._cos_cached, self._sin_cached, seqlen_offset, self.interleaved)
         k_rot = self.apply_rotary_emb(k, self._cos_cached, self._sin_cached, seqlen_offset, self.interleaved)
