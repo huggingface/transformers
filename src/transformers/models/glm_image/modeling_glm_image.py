@@ -1154,14 +1154,14 @@ class GlmImageModel(GlmImagePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
-            breakpoint()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
         if position_ids is None:
             attention_mask_tensor = (
                 attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
