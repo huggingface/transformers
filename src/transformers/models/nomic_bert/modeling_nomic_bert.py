@@ -258,6 +258,23 @@ class NomicBertSelfAttention(nn.Module):
 
         # Apply mask if present
         if attention_mask is not None:
+            score_len = attention_scores.size(-1)
+            mask_len = attention_mask.size(-1)
+
+            if mask_len != score_len:
+                if mask_len < score_len:
+                    # Pad the mask on the left with zeros (0.0 means visible/keep in additive mask)
+                    pad_len = score_len - mask_len
+                    padding = torch.zeros(
+                        attention_mask.size()[:-1] + (pad_len,),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+                    attention_mask = torch.cat([padding, attention_mask], dim=-1)
+                elif mask_len > score_len:
+                    # Rare edge case: slice mask if it's too long
+                    attention_mask = attention_mask[..., -score_len:]
+
             attention_scores = attention_scores + attention_mask
 
         # Normalize to Probabilities
