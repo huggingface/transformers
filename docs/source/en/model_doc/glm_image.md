@@ -71,9 +71,10 @@ messages = [
 ]
 inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True).to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=True)
-output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=False)
 print(output_text)
 ```
+
 ## GlmImageConfig
 
 [[autodoc]] GlmImageConfig
