@@ -543,8 +543,12 @@ class AsyncStoppingCriteriaList:
         if self._check_stream is None and device.type == "cuda":
             self._check_stream = torch.cuda.Stream(device=device)
             self._check_event = torch.cuda.Event()
+            # Event for syncing the async stream with current stream operations
+            self._sync_event = torch.cuda.Event()
             # Pinned memory tensor - GPU can write to it, CPU can read without sync
             self._should_stop_pinned = torch.zeros(1, dtype=torch.int32, pin_memory=True)
+            # GPU tensor for async communication - created once to avoid stream issues
+            self._should_stop_gpu = torch.zeros(1, dtype=torch.int32, device=device)
             # Numpy view for reading without PyTorch sync overhead
             self._should_stop_np = self._should_stop_pinned.numpy()
 
@@ -654,16 +658,18 @@ class AsyncStoppingCriteriaList:
         **kwargs,
     ):
         """Start an async stopping criteria check on a separate CUDA stream."""
-        device = input_ids.device
+        # Clone to isolate async check from main generation - prevents race conditions
+        # where main stream modifies input_ids while async stream is reading
+        input_ids_for_check = input_ids.clone()
+        scores_for_check = scores.clone() if scores is not None else None
 
-        # Detach to avoid autograd issues
-        input_ids_for_check = input_ids.detach()
-        scores_for_check = scores.detach() if scores is not None else None
-
-        # Get pinned memory on GPU for writing
-        should_stop_gpu = self._should_stop_pinned.to(device, non_blocking=True)
+        # Record current stream state so async stream can wait for clone to complete
+        self._sync_event.record(torch.cuda.current_stream(input_ids.device))
 
         with torch.cuda.stream(self._check_stream):
+            # Wait for current stream operations (including clone) to complete
+            self._check_stream.wait_event(self._sync_event)
+
             is_done = self.stopping_criteria(input_ids_for_check, scores_for_check, **kwargs)
 
             # Check if any sequence should stop
@@ -671,8 +677,8 @@ class AsyncStoppingCriteriaList:
 
             # Write result to pinned memory (GPU -> pinned CPU, async)
             # We use a simple copy: 1 if should stop, 0 otherwise
-            should_stop_gpu.copy_(any_should_stop.int().unsqueeze(0))
-            self._should_stop_pinned.copy_(should_stop_gpu, non_blocking=True)
+            self._should_stop_gpu.copy_(any_should_stop.int().unsqueeze(0))
+            self._should_stop_pinned.copy_(self._should_stop_gpu, non_blocking=True)
 
             # Store is_done for later if we need to sync
             self._pending_is_done = is_done

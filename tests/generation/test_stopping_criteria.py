@@ -325,6 +325,9 @@ class AsyncStoppingCriteriaTestCase(unittest.TestCase):
         sync_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
         sync_result = sync_criteria(input_ids, scores)
 
+        # At length 5 with max_length 10, should not be finished
+        self.assertFalse(all(sync_result))
+
         # Async behavior (should fall back to sync on CPU)
         async_criteria = AsyncStoppingCriteriaList(
             StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
@@ -338,6 +341,9 @@ class AsyncStoppingCriteriaTestCase(unittest.TestCase):
 
         # At length 10, should be finished
         input_ids_long, scores_long = self._get_tensors(10)
+        sync_result_long = sync_criteria(input_ids_long, scores_long)
+        self.assertTrue(all(sync_result_long))
+
         unfinished = torch.ones(input_ids_long.shape[0], device=input_ids_long.device, dtype=torch.long)
         updated_unfinished, this_peer_finished = async_criteria.check(input_ids_long, scores_long, unfinished)
         self.assertTrue(this_peer_finished)
@@ -357,7 +363,8 @@ class AsyncStoppingCriteriaTestCase(unittest.TestCase):
         ])
         sync_result = sync_criteria(input_ids, scores)
 
-        # Async behavior
+        # Async behavior - the async criteria checks results from PREVIOUS async operations
+        # so we need to call check() multiple times to allow async results to be retrieved
         async_criteria = AsyncStoppingCriteriaList(
             StoppingCriteriaList([
                 MaxLengthCriteria(max_length=20),
@@ -366,8 +373,18 @@ class AsyncStoppingCriteriaTestCase(unittest.TestCase):
         )
         unfinished = torch.ones(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
 
+        # First call starts async check
+        updated_unfinished, _ = async_criteria.check(input_ids, scores, unfinished)
+
+        # Wait for async check to complete and call again to retrieve result
+        if input_ids.device.type == "cuda":
+            torch.cuda.synchronize()
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, updated_unfinished)
+
         # Both should indicate all sequences have EOS
         self.assertTrue(all(sync_result))
+        self.assertTrue(this_peer_finished)
+        self.assertTrue(all(updated_unfinished == 0))
 
     def test_async_sync_equivalence_partial_eos(self):
         """Test async/sync equivalence when only some sequences have EOS."""
