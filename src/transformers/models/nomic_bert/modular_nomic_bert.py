@@ -292,12 +292,13 @@ class NomicBertSelfAttention(BertSelfAttention):
             k_rot, k_pass = key_layer[..., : self.rotary_emb.dim], key_layer[..., self.rotary_emb.dim :]
 
             # Use position_ids if available (fixes left-padding), else fallback to offset
-            if past_key_values is not None:
-                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=seq_len_offset)
-
-            elif position_ids is not None:
+            if position_ids is not None:
                 # Assisted decoding with position_ids
                 q_rot, k_rot = self.rotary_emb(q_rot, k_rot, position_ids=position_ids)
+
+            elif past_key_values is not None:
+                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=seq_len_offset)
+
             else:
                 # Standard decoding with scalar offset
                 q_rot, k_rot = self.rotary_emb(q_rot, k_rot)
