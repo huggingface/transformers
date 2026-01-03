@@ -3561,6 +3561,52 @@ class RungeKutta4ODESolver:
         return solution
 
 
+def _prepare_initial_state(
+    reference_mel_spectrogram: torch.Tensor,
+    quantized_code: torch.Tensor,
+    repeats: int,
+    mel_dim: int,
+    noise_initialization: Optional[torch.Tensor] = None,
+) -> tuple[torch.Tensor, int]:
+    """
+    Utility function that prepares the initial state used by the diffusion sampler.
+    """
+
+    batch_size = reference_mel_spectrogram.shape[0]
+    maximum_duration = quantized_code.shape[1] * repeats
+
+    if noise_initialization is None:
+        noise_length = max(maximum_duration, reference_mel_spectrogram.shape[1])
+        noise_initialization = torch.randn(
+            (batch_size, noise_length, mel_dim),
+            dtype=reference_mel_spectrogram.dtype,
+            device=quantized_code.device,
+        )
+    else:
+        if noise_initialization.ndim != 3:
+            raise ValueError(
+                f"`noise_initialization` has to be a 3D tensor of shape (batch, time, mel_dim), "
+                f"but received a tensor with shape {noise_initialization.shape}."
+            )
+        if noise_initialization.shape[0] != batch_size or noise_initialization.shape[2] != mel_dim:
+            raise ValueError(
+                "The provided `noise_initialization` must match the batch size and mel dimension of the model. "
+                f"Expected ({batch_size}, *, {mel_dim}) but got {tuple(noise_initialization.shape)}."
+            )
+        if noise_initialization.shape[1] < maximum_duration:
+            raise ValueError(
+                "`noise_initialization` must have a time dimension that is at least as long as "
+                f"`quantized_code.shape[1] * repeats` (got {noise_initialization.shape[1]} "
+                f"while the minimum required length is {maximum_duration})."
+            )
+        noise_initialization = noise_initialization.to(
+            device=quantized_code.device, dtype=reference_mel_spectrogram.dtype
+        )
+
+    initial_state = noise_initialization[:, :maximum_duration]
+    return initial_state, maximum_duration
+
+
 @auto_docstring(
     custom_intro="""
     The full Qwen2.5Omni Token2WavDiT model. Which take speech tokens as input and predict mel spectrogram.
@@ -3672,10 +3718,11 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         num_steps=10,
         guidance_scale=0.5,
         sway_coefficient=-1.0,
+        noise_initialization: Optional[torch.Tensor] = None,
     ):
-        noise_initialization = torch.randn([1, 30000, self.mel_dim], dtype=reference_mel_spectrogram.dtype)
-        maximum_duration = quantized_code.shape[1] * self.repeats
-        initial_state = noise_initialization[:, :maximum_duration].to(quantized_code.device)
+        initial_state, maximum_duration = _prepare_initial_state(
+            reference_mel_spectrogram, quantized_code, self.repeats, self.mel_dim, noise_initialization
+        )
         batch_size = reference_mel_spectrogram.shape[0]
         conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
 
@@ -3764,6 +3811,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         num_steps=10,
         guidance_scale=0.5,
         sway_coefficient=-1.0,
+        noise_initialization: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         """Generates a waveform from input code and conditioning parameters."""
@@ -3775,6 +3823,7 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
             num_steps=num_steps,
             guidance_scale=guidance_scale,
             sway_coefficient=sway_coefficient,
+            noise_initialization=noise_initialization,
         )
 
         waveform = self.code2wav_bigvgan_model(mel_spectrogram)

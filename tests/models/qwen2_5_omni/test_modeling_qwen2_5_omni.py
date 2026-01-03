@@ -26,9 +26,11 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    Qwen2_5OmniDiTConfig,
     Qwen2_5OmniForConditionalGeneration,
     Qwen2_5OmniThinkerConfig,
     Qwen2_5OmniThinkerForConditionalGeneration,
+    Qwen2_5OmniToken2WavDiTModel,
     is_torch_available,
     is_vision_available,
 )
@@ -860,3 +862,48 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_texts[0], EXPECTED_DECODED_TEXT)
         self.assertEqual(decoded_texts[1], EXPECTED_DECODED_TEXT)
+
+
+@require_torch
+class Qwen2_5OmniToken2WavSamplingTest(unittest.TestCase):
+    def setUp(self):
+        self.config = Qwen2_5OmniDiTConfig(
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            head_dim=4,
+            ff_mult=1,
+            block_size=1,
+            look_ahead_layers=[],
+            look_backward_layers=[],
+            repeats=3,
+            num_embeds=16,
+            mel_dim=4,
+            enc_emb_dim=2,
+            enc_dim=2,
+            enc_channels=[4, 4],
+            enc_kernel_sizes=[3, 3],
+            enc_dilations=[1, 1],
+            enc_attention_channels=2,
+            enc_res2net_scale=2,
+            enc_se_channels=2,
+        )
+        self.model = Qwen2_5OmniToken2WavDiTModel(self.config)
+
+    def test_prepare_initial_state_matches_duration(self):
+        reference = torch.randn(1, 5, self.config.mel_dim)
+        quantized_code = torch.randint(0, self.config.num_embeds, (1, 20))
+
+        initial_state, maximum_duration = self.model._prepare_initial_state(reference, quantized_code)
+
+        self.assertEqual(maximum_duration, quantized_code.shape[1] * self.config.repeats)
+        self.assertEqual(initial_state.shape, (1, maximum_duration, self.config.mel_dim))
+        self.assertEqual(initial_state.dtype, reference.dtype)
+
+    def test_prepare_initial_state_validates_custom_noise(self):
+        reference = torch.randn(1, 4, self.config.mel_dim)
+        quantized_code = torch.randint(0, self.config.num_embeds, (1, 10))
+        too_short_noise = torch.randn(1, quantized_code.shape[1] * self.config.repeats - 1, self.config.mel_dim)
+
+        with self.assertRaises(ValueError):
+            self.model._prepare_initial_state(reference, quantized_code, too_short_noise)
