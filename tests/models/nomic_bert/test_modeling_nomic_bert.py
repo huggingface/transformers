@@ -470,7 +470,9 @@ class NomicBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+            if model_class.__name__ == "NomicBertForPreTraining" or model_class in get_values(
+                MODEL_FOR_PRETRAINING_MAPPING
+            ):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
@@ -709,12 +711,13 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        bert_model = "google-bert/bert-base-uncased"
+        bert_tokenizer = "google-bert/bert-base-uncased"
+        bert_model = "nomic-ai/nomic-bert-2048"
         device = "cpu"
         attn_implementation = "sdpa"
         max_length = 512
 
-        tokenizer = AutoTokenizer.from_pretrained(bert_model)
+        tokenizer = AutoTokenizer.from_pretrained(bert_tokenizer)
         inputs = tokenizer(
             "the man worked as a [MASK].",
             return_tensors="pt",
