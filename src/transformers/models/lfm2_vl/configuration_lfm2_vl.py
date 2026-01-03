@@ -44,10 +44,10 @@ class Lfm2VlConfig(PreTrainedConfig):
             The activation function used by the multimodal projector.
         projector_hidden_size (`int`, *optional*, defaults to 2560):
             The hidden size of the multimodal projector.
-        projector_use_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to use layer norm in the multimodal projector.
         projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        projector_use_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to use layernorm in the multimodal projector.
         downsample_factor (`int`, *optional*, defaults to 2):
             The downsample_factor factor of the vision backbone.
     """
