@@ -288,21 +288,25 @@ class NomicBertSelfAttention(BertSelfAttention):
 
         # Rotate Q and K here to encode relative positions.
         if self.rotary_emb is not None:
-            q_rot = query_layer[..., : self.rotary_emb.dim]
-            k_rot = key_layer[..., : self.rotary_emb.dim]
+            q_rot, q_pass = query_layer[..., : self.rotary_emb.dim], query_layer[..., self.rotary_emb.dim :]
+            k_rot, k_pass = key_layer[..., : self.rotary_emb.dim], key_layer[..., self.rotary_emb.dim :]
 
             # Use position_ids if available (fixes left-padding), else fallback to offset
-            if position_ids is not None and position_ids.ndim == 2:
-                # Assisted decoding with position_ids
-                key_len = k_rot.shape[-2]
-                pos_ids = position_ids[:, -key_len:]
-                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, position_ids=pos_ids)
-            else:
-                # Standard decoding with scalar offset
+            if past_key_values is not None:
                 q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=seq_len_offset)
 
-            query_layer = torch.cat([q_rot, query_layer[..., self.rotary_emb.dim :]], dim=-1)
-            key_layer = torch.cat([k_rot, key_layer[..., self.rotary_emb.dim :]], dim=-1)
+            elif position_ids is not None:
+                # Assisted decoding with position_ids
+                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, position_ids=position_ids)
+            else:
+                # Standard decoding with scalar offset
+                q_rot, k_rot = self.rotary_emb(q_rot, k_rot)
+
+            query_layer = torch.cat([q_rot, q_pass], dim=-1)
+            key_layer = torch.cat([k_rot, k_pass], dim=-1)
+
+        if past_key_values is None and self.is_decoder and kwargs.get("use_cache", True):
+            past_key_values = DynamicCache()
 
         # Update the KV cache if present
         if past_key_values is not None:
@@ -312,9 +316,6 @@ class NomicBertSelfAttention(BertSelfAttention):
             # Update cache with ONLY new KV
             # update() returns full cached KV (past + new)
             key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
-
-        elif past_key_values is None and self.is_decoder and kwargs.get("use_cache", True):
-            past_key_values = DynamicCache()
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
