@@ -7,7 +7,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -81,7 +81,7 @@ class VideoPrismTubeletEmbeddings(nn.Module):
     (width // tubelet_size[2]).
     """
 
-    def __init__(self, config):
+    def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
         self.num_frames = config.num_frames
@@ -125,7 +125,7 @@ class VideoPrismSpatialEmbeddings(nn.Module):
     Creates embeddings from a video using VideoPrismSpatialTubeletEmbeddings and adds positional embeddings.
     """
 
-    def __init__(self, config: VideoPrismConfig):
+    def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
         self.patch_embeddings = VideoPrismTubeletEmbeddings(config)
@@ -195,7 +195,7 @@ class VideoPrismTemporalEmbeddings(nn.Module):
     (batch_size * num_patches, num_frames, hidden_size) and adds positional embeddings.
     """
 
-    def __init__(self, config: VideoPrismConfig):
+    def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
 
@@ -279,7 +279,7 @@ def eager_attention_forward(
 
 
 class VideoPrismSelfAttention(nn.Module):
-    def __init__(self, config: VideoPrismConfig):
+    def __init__(self, config: Union[VideoPrismVisionConfig, VideoPrismTextConfig]):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -395,14 +395,14 @@ class VideoPrismOutput(nn.Module):
 class VideoPrismLayer(GradientCheckpointingLayer):
     """This corresponds to the EncoderBlock class in the scenic/videoprism implementation."""
 
-    def __init__(self, config: VideoPrismVisionConfig):
+    def __init__(self, config: Union[VideoPrismVisionConfig, VideoPrismTextConfig]):
         super().__init__()
         self.config = config
         self.attention = VideoPrismAttention(config)
         self.intermediate = VideoPrismIntermediate(config)
         self.output = VideoPrismOutput(config)
-        self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_before = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.layernorm_after = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
@@ -453,7 +453,7 @@ class VideoPrismAuxiliaryEncoder(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_auxiliary_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(self.config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
@@ -482,9 +482,17 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     config: VideoPrismConfig
     base_model_prefix = "videoprism"
     main_input_name = "pixel_values_videos"
-    input_modalities = "video"
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = [
+        "VideoPrismSpatialEmbeddings",
+        "VideoPrismTemporalEmbeddings",
+        "VideoPrismSpatialEncoder",
+        "VideoPrismTemporalEncoder",
+        "VideoPrismAuxiliaryEncoder",
+        "VideoPrismTextEncoder",
+        "VideoPrismMultiheadAttentionPoolingHead",
+    ]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -495,32 +503,46 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(
-        self, module
-    ):  # todo this needs the exact initialization as in the original VideoPrism implementation
+    def _init_weights(self, module):
         """Initialize the weights"""
+
+        if getattr(module, "_is_hf_initialized", False):
+            return
+
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
+            # Check if the specific weight tensor was already loaded from a checkpoint
+            if not getattr(module.weight, "_is_hf_initialized", False):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
                 module.bias.data.zero_()
+
+        elif isinstance(module, nn.Embedding):
+            if not getattr(module.weight, "_is_hf_initialized", False):
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
+                module.bias.data.zero_()
+            if not getattr(module.weight, "_is_hf_initialized", False):
+                module.weight.data.fill_(1.0)
 
 
 @auto_docstring
-class VideoPrismModel(VideoPrismPreTrainedModel):
+class VideoPrismVisionModel(VideoPrismPreTrainedModel):
+    config: VideoPrismVisionConfig
+
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         self.config = config
-        self.layernorm1 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm2 = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.spatial_embeddings = VideoPrismSpatialEmbeddings(config)
-        self.temporal_embeddings = VideoPrismTemporalEmbeddings(config)
-        self.spatial_encoder = VideoPrismSpatialEncoder(config)
-        self.temporal_encoder = VideoPrismTemporalEncoder(config)
+        self.layernorm1 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.layernorm2 = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.spatial_embeddings = VideoPrismSpatialEmbeddings(self.config)
+        self.temporal_embeddings = VideoPrismTemporalEmbeddings(self.config)
+        self.spatial_encoder = VideoPrismSpatialEncoder(self.config)
+        self.temporal_encoder = VideoPrismTemporalEncoder(self.config)
         self.post_init()
 
     @auto_docstring
@@ -555,15 +577,15 @@ class VideoPrismModel(VideoPrismPreTrainedModel):
 
 
 class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
-    def __init__(self, config: VideoPrismConfig):
+    def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.intermediate_size / config.num_attention_heads)
+        self.num_attention_heads = self.config.num_attention_heads
+        self.attention_head_size = int(self.config.intermediate_size / self.config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
+        self.dropout_prob = self.config.attention_probs_dropout_prob
         # PerDimScale
-        self.dim = int(config.intermediate_size / config.num_attention_heads)
+        self.dim = int(self.config.intermediate_size / self.config.num_attention_heads)
         self.per_dim_scale = nn.Parameter(torch.zeros(self.dim))
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
@@ -571,13 +593,13 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         scale = scale * softplus
         self.register_buffer("scale", scale)
 
-        self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.query = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.qkv_bias)
-        self.projection = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.qkv_bias)
-        self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dim = int(config.intermediate_size / config.num_attention_heads)
+        self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, self.config.hidden_size))
+        self.query = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
+        self.key = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
+        self.value = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
+        self.projection = nn.Linear(self.config.intermediate_size, self.config.hidden_size, bias=self.config.qkv_bias)
+        self.layernorm = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
+        self.dim = int(self.config.intermediate_size / self.config.num_attention_heads)
 
     def forward(
         self,
@@ -631,6 +653,8 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 
 
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
+    config: VideoPrismTextConfig
+
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__(config)
         self.config = config
@@ -686,13 +710,15 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 
 
 class VideoPrismVideoModel(VideoPrismPreTrainedModel):
+    config: VideoPrismVisionConfig
+
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         self.config = config
-        self.backbone = VideoPrismModel(config)
-        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(config)
-        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
-        self.normalize = config.apply_l2_norm
+        self.backbone = VideoPrismVisionModel(self.config)
+        self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(self.config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
+        self.normalize = self.config.apply_l2_norm
         self.post_init()
 
     def forward(
@@ -721,8 +747,10 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
         self.config = config
-        self.video_model = VideoPrismVideoModel(config.vision_config)
-        self.text_model = VideoPrismTextModel(config.text_config)
+        self.vision_config = config.vision_config
+        self.text_config = config.text_config
+        self.video_model = VideoPrismVideoModel(self.vision_config)
+        self.text_model = VideoPrismTextModel(self.text_config)
         self.post_init()
 
     def forward(
@@ -761,11 +789,14 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
 
 class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
-    def __init__(self, config: VideoPrismConfig):
+    config: VideoPrismVisionConfig
+
+    def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
-        self.encoder = VideoPrismModel(config)
-        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.config = config
+        self.encoder = VideoPrismVisionModel(self.config)
+        self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
+        self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
 
     def forward(
@@ -789,4 +820,11 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         )
 
 
-__all__ = ["VideoPrismModel", "VideoPrismPreTrainedModel", "VideoPrismClipModel", "VideoPrismForVideoClassification"]
+__all__ = [
+    "VideoPrismVisionModel",
+    "VideoPrismPreTrainedModel",
+    "VideoPrismVideoModel",
+    "VideoPrismTextModel",
+    "VideoPrismClipModel",
+    "VideoPrismForVideoClassification",
+]

@@ -5,8 +5,8 @@ import numpy as np
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file, save_file
-from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismVisionConfig, VideoPrismTextConfig
-from transformers.models.videoprism.modeling_videoprism import VideoPrismModel, VideoPrismClipModel
+from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismVisionConfig, VideoPrismTextConfig, AutoModel, AutoConfig
+from transformers.models.videoprism.modeling_videoprism import VideoPrismVisionModel, VideoPrismClipModel
 import re
 import os
 torch.set_printoptions(precision=10)
@@ -264,7 +264,7 @@ def convert_params(flax_state_dict, model_name):
                 new_key = re.sub(r"vision_encoder", "backbone", new_key)
 
                 if "lvt" not in model_name:
-                    new_key = new_key.replace("video_model.vision_encoder.", "")
+                    new_key = new_key.replace("video_model.backbone.", "")
 
                 param = flax_state_dict[key]
                 if "layer." in new_key and param.ndim > 1:
@@ -348,6 +348,7 @@ def convert_videoprism_checkpoint(
     pytorch_dump_folder_path="checkpoints/",
     convert=False,
     load_model=True,
+    from_pretrained=False,
     load_video=True,
     inference=True,
     upload=False,
@@ -358,7 +359,7 @@ def convert_videoprism_checkpoint(
         vision_config = VideoPrismVisionConfig(**COOMMON_CONFIG_PARAMS[model_name]["vision_config"])
         text_config = VideoPrismTextConfig(**COOMMON_CONFIG_PARAMS[model_name]["text_config"])
     else:
-        config = VideoPrismVisionConfig(**COOMMON_CONFIG_PARAMS[model_name])
+        vision_config = VideoPrismVisionConfig(**COOMMON_CONFIG_PARAMS[model_name])
 
     checkpoint_name = checkpoint["new_checkpoint_name"]
     checkpoint_path = os.path.join(pytorch_dump_folder_path, f"{checkpoint_name}.safetensors")
@@ -369,12 +370,17 @@ def convert_videoprism_checkpoint(
         save_file(hf_checkpoint, checkpoint_path, metadata={"format": "safetensors"})
     
     if load_model:
-        model_config = config if "lvt" not in model_name else VideoPrismConfig(text_config, vision_config)
-        model = VideoPrismModel(model_config) if "lvt" not in model_name else VideoPrismClipModel(model_config)
-        
-        model.config._attn_implementation = "eager"
-        state_dict = load_file(checkpoint_path)
-        model.load_state_dict(state_dict)
+        if not from_pretrained:
+            model_config = vision_config if "lvt" not in model_name else VideoPrismConfig(text_config, vision_config)
+            model = VideoPrismVisionModel(model_config) if "lvt" not in model_name else VideoPrismClipModel(model_config)
+            
+            model.config._attn_implementation = "eager"
+            state_dict = load_file(checkpoint_path)
+            model.load_state_dict(state_dict)
+        else:
+            model = AutoModel.from_pretrained("MHRDYN7/" + checkpoint_name) # Hard-coded username of the contributer
+            model.config._attn_implementation = "eager"
+            model_config = model.config
 
     if load_video:
         VIDEO_FILE_PATH = "./src/transformers/models/videoprism/water_bottle_drumming.mp4"
@@ -391,8 +397,9 @@ def convert_videoprism_checkpoint(
     if inference:
         model.eval()
         if "lvt" not in model_name:
-            outputs = model(pixel_values=input_vid)
+            outputs = model(input_vid)
             logits = outputs.last_hidden_state[0, :3, :3]
+            print(logits)
             assert torch.allclose(logits, EXPECTED_OUTPUTS[model_name], atol=1e-5), "The converted model logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
 
@@ -409,6 +416,8 @@ def convert_videoprism_checkpoint(
             outputs = model(input_vid, input_ids, mask)
             video_logits = outputs.video_embeds[0, :9]
             text_logits = outputs.text_embeds[:, :3]
+            print("Text logits:", text_logits)
+            print("Video logits:", video_logits)
             assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), "The converted model text logits do not match the expected logits."
             assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), "The converted model video logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
@@ -447,10 +456,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     convert_videoprism_checkpoint(
-        model_name="lvt_base",
+        model_name="lvt_large",
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         convert=False,
         load_model=True,
+        from_pretrained=True, # if True, pulls the model weights from hub
         load_video=True,
         inference=True,
         upload=False,

@@ -17,7 +17,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`VideoPrismVisionModel`]. It is used to instantiate a VideoPrismVision
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VideoPrismVision
-    [google/video_prism_vision-b-16x2-kinetics400](https://huggingface.co/google/video_prism_vision-b-16x2-kinetics400) architecture.
+    [google/videoprism_vision_model-b-16x2-kinetics400](https://huggingface.co/google/videoprism_vision_model-b-16x2-kinetics400) architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -58,10 +58,10 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     ```python
     >>> from transformers import VideoPrismVisionConfig, VideoPrismVisionModel
 
-    >>> # Initializing a VideoPrismVision google/video_prism_vision-b-16x2-kinetics400 style configuration
+    >>> # Initializing a VideoPrismVision google/videoprism_vision_model-b-16x2-kinetics400 style configuration
     >>> configuration = VideoPrismVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the google/video_prism_vision-b-16x2-kinetics400 style configuration
+    >>> # Initializing a model (with random weights) from the google/videoprism_vision_model-b-16x2-kinetics400 style configuration
     >>> model = VideoPrismVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -91,7 +91,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         attn_logit_softcapping=50.0,
         num_auxiliary_layers=2,
         apply_l2_norm=True,
-        num_labels=1000,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -114,7 +113,6 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_auxiliary_layers = num_auxiliary_layers
         self.apply_l2_norm = apply_l2_norm
-        self.num_labels = num_labels
 
 
 class VideoPrismTextConfig(PreTrainedConfig):
