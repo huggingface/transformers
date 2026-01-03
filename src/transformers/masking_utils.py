@@ -20,13 +20,6 @@ from typing import Optional, Union
 import torch
 import torch.nn.functional as F
 
-
-# Context variable to track if attention_mask is known to be all-True during generation.
-# When set to True, _ignore_causal_mask_sdpa skips the expensive .all() GPU-CPU sync.
-_attention_mask_all_true: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
-    "_attention_mask_all_true", default=None
-)
-
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
@@ -50,6 +43,12 @@ if _is_torch_greater_or_equal_than_2_6:
 
 
 logger = logging.get_logger(__name__)
+
+# Context variable to track if attention_mask is known to be all-True during generation.
+# When set to True, _ignore_causal_mask_sdpa skips the expensive .all() GPU-CPU sync.
+_attention_mask_all_true: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
+    "_attention_mask_all_true", default=None
+)
 
 
 def and_masks(*mask_functions: Callable) -> Callable:
