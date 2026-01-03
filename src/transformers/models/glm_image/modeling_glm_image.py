@@ -666,7 +666,7 @@ class GlmImageVisionEmbeddings(nn.Module):
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
             size=(new_height, new_width),
-            mode="bicubic",
+            mode="bilinear",
             align_corners=False,
         )
 
