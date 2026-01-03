@@ -581,10 +581,6 @@ class GlmImagePreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.fc2.weight)
             init.normal_(module.fc1.bias, std=1e-5)
             init.normal_(module.fc2.bias, std=1e-5)
-        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
-            init.xavier_uniform_(module.probe)
-            init.xavier_uniform_(module.attention.in_proj_weight)
-            init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -688,30 +684,6 @@ class GlmImageVisionEmbeddings(nn.Module):
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
-
-
-class GlmImageVisionMultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    def __init__(self, config: GlmImageVisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = GlmImageVisionMLP(config)
-
-    def forward(self, hidden_state):
-        batch_size = hidden_state.shape[0]
-        probe = self.probe.repeat(batch_size, 1, 1)
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
-
-        residual = hidden_state
-        hidden_state = self.layernorm(hidden_state)
-        hidden_state = residual + self.mlp(hidden_state)
-
-        return hidden_state[:, 0]
 
 
 class GlmImageVisionResnetBlock(nn.Module):
@@ -818,20 +790,14 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
         self.config = config
-        embed_dim = config.hidden_size
-
         self.embeddings = GlmImageVisionEmbeddings(config)
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.num_hidden_layers)])
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
         self.post_init()
 
     def forward(
         self,
         pixel_values,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: Optional[bool] = True,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:

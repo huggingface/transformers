@@ -73,7 +73,6 @@ from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoderLayer,
     SiglipMLP,
-    SiglipMultiheadAttentionPoolingHead,
     SiglipVisionEmbeddings,
     default_flax_embed_init,
     lecun_normal_,
@@ -535,10 +534,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
             init.xavier_uniform_(module.fc2.weight)
             init.normal_(module.fc1.bias, std=1e-5)
             init.normal_(module.fc2.bias, std=1e-5)
-        elif isinstance(module, GlmImageVisionMultiheadAttentionPoolingHead):
-            init.xavier_uniform_(module.probe)
-            init.xavier_uniform_(module.attention.in_proj_weight)
-            init.zeros_(module.attention.in_proj_bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -554,12 +549,6 @@ class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
 
 class GlmImageVisionEmbeddings(SiglipVisionEmbeddings):
     pass
-
-
-class GlmImageVisionMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
-    def __init__(self, config: GlmImageVisionConfig):
-        super().__init__(config)
-        self.mlp = GlmImageVisionMLP(config)
 
 
 class GlmImageVisionResnetBlock(nn.Module):
@@ -648,20 +637,14 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
         self.config = config
-        embed_dim = config.hidden_size
-
         self.embeddings = GlmImageVisionEmbeddings(config)
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.num_hidden_layers)])
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = GlmImageVisionMultiheadAttentionPoolingHead(config)
         self.post_init()
 
     def forward(
         self,
         pixel_values,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: Optional[bool] = True,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -893,7 +876,6 @@ class GlmImageModel(Glm4vModel):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)

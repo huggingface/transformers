@@ -101,6 +101,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
+    "GlmImageVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -126,6 +127,7 @@ IGNORE_NON_TESTED = (
         "ErnieMForInformationExtraction",
         "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
+        "GlmImageVQVAE",  # Building part of bigger (tested) model.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -193,6 +195,7 @@ IGNORE_NON_TESTED = (
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
+        "GlmImageTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model

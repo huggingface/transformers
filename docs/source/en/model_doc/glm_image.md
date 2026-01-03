@@ -38,15 +38,80 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## Usage examples
 
-<INSERT SOME NICE EXAMPLES HERE>
+Using GLM-Image with image input to generate vision token for DIT using.
 
+```python
+from transformers import AutoProcessor, GlmImageForConditionalGeneration
+from accelerate import Accelerator
+import torch
+
+device = Accelerator().device
+
+processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
+model = GlmImageForConditionalGeneration.from_pretrained(
+    pretrained_model_name_or_path="zai-org/GLM-Image",
+    dtype=torch.bfloat16,
+    device_map=device
+)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "test.jpg",
+            },
+            {
+                "type": "text",
+                "text": "一幅充满可爱漫画风格的文字设计作品，主体为“Taro”字样，采用洁净明亮的纯白色圆润字体，字形饱满柔和，略带手写漫画感，背景以温柔细腻的芋泥紫作为底色，呈现出柔雾般的渐变效果，周围点缀着小星星、心形与气泡等轻盈卡通元素，整体氛围轻快甜美，光线柔和如午后阳光，从左上方洒下微暖的光晕，为画面增添立体感与温馨感，适合呈现梦幻、治愈的视觉体验。<sop>36 24<eop>",
+            },
+        ],
+    }
+]
+inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt", padding=True).to(model.device)
+generated_ids = model.generate(**inputs, max_new_tokens=1024, do_sample=True)
+output_text = processor.decode(generated_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+print(output_text)
+```
 ## GlmImageConfig
 
 [[autodoc]] GlmImageConfig
 
-## GlmImagePreTrainedModel
+## GlmImageVisionConfig
 
-[[autodoc]] GlmImagePreTrainedModel
+[[autodoc]] GlmImageVisionConfig
+
+## GlmImageTextConfig
+
+[[autodoc]] GlmImageTextConfig
+
+## GlmImageVQVAEConfig
+
+[[autodoc]] GlmImageVQVAEConfig
+
+## GlmImageImageProcessor
+
+[[autodoc]] GlmImageImageProcessor
+    - preprocess
+
+## GlmImageProcessor
+
+[[autodoc]] GlmImageProcessor
+
+## GlmImageVisionModel
+
+[[autodoc]] GlmImageVisionModel
+    - forward
+
+## GlmImageTextModel
+
+[[autodoc]] GlmImageTextModel
+    - forward
+
+## GlmImageVQVAE
+
+[[autodoc]] GlmImageVQVAE
     - forward
 
 ## GlmImageModel
