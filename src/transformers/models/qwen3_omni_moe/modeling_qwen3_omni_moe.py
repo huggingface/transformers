@@ -26,10 +26,11 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
-import torch
-from torch import nn
 from torch.nn import Parameter
 from torch.nn import functional as F
+
+import torch
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -3042,7 +3043,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
 
 @auto_docstring
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig

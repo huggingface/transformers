@@ -638,6 +638,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         position_id_per_seconds=25,
         audio_start_token_id=151669,
         speaker_id=None,
+        initializer_range=0.02,
         **kwargs,
     ):
         if code_predictor_config is None:
@@ -673,6 +674,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
 
@@ -763,6 +765,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         upsampling_ratios=(2, 2),
         decoder_dim=1536,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.codebook_size = codebook_size
@@ -783,6 +786,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.initializer_range = initializer_range
 
         super().__init__(**kwargs)
 
@@ -853,6 +857,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         system_token_id=8948,
         user_token_id=872,
         assistant_token_id=77091,
+        initializer_range=0.02,
         **kwargs,
     ):
         if thinker_config is None:
@@ -879,6 +884,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         self.system_token_id = system_token_id
         self.user_token_id = user_token_id
         self.assistant_token_id = assistant_token_id
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
@@ -1869,6 +1875,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 
 
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
+    _tied_weights_keys = {}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
