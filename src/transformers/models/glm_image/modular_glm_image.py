@@ -24,8 +24,9 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import get_size_dict
 from ...image_transforms import (
     convert_to_rgb,
     resize,
@@ -45,7 +46,8 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -76,6 +78,7 @@ from ..siglip.modeling_siglip import (
     default_flax_embed_init,
     lecun_normal_,
 )
+from ..siglip.processing_siglip import SiglipProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -805,32 +808,70 @@ class GlmImageModel(Glm4vModel):
 
         return vision_outputs
 
+    def get_image_tokens(
+            self,
+            hidden_states: torch.FloatTensor,
+            image_grid_thw: torch.LongTensor,
+    ) -> torch.LongTensor:
+        """
+        Tokenizes image features into discrete tokens with VQVAE module.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The image features from vision encoder. seq_len = H * W (number of patches).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width of feature shape of each image.
+                For single images, temporal is typically 1.
+
+        Returns:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
+                Discrete token indices from the VQVAE codebook.
+        """
+        batch_size = hidden_states.shape[0]
+        _, grid_h, grid_w = image_grid_thw[0].tolist()
+
+        hidden_states = hidden_states.transpose(1, 2).contiguous()
+        hidden_states = hidden_states.view(batch_size, -1, grid_h, grid_w)
+
+        _, _, image_toks = self.vqmodel.encode(hidden_states)
+
+        return image_toks
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: Optional[torch.FloatTensor] = None,
-    ):
+        image_ids: torch.LongTensor,
+    ) -> torch.LongTensor:
         """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
+        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
 
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders.
+            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
+                Discrete token indices from the VQVAE codebook.
+
+        Returns:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders replaced by actual image tokens.
+        """
+
+        special_image_mask = input_ids == self.config.image_token_id
+        n_placeholder_tokens = special_image_mask.sum().item()
+
+        image_ids_flat = image_ids.view(-1)
+        n_image_tokens = image_ids_flat.shape[0]
+
+        if n_placeholder_tokens != n_image_tokens:
             raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+                f"Number of image placeholder tokens ({n_placeholder_tokens}) does not match "
+                f"number of image tokens from VQVAE ({n_image_tokens})"
             )
 
-        return special_image_mask
+        input_ids = input_ids.clone()
+        input_ids[special_image_mask] = image_ids_flat.to(input_ids.device)
+
+        return input_ids
 
     def forward(
         self,
@@ -859,10 +900,9 @@ class GlmImageModel(Glm4vModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
+            image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
+            input_ids = self.get_placeholder_mask(input_ids, image_ids)
+        breakpoint()
         if position_ids is None:
             attention_mask_tensor = (
                 attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
@@ -1191,6 +1231,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
 
 class GlmImageImageProcessor(SiglipImageProcessor):
+    model_input_names = ["pixel_values", "image_grid_thw"]
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -1298,6 +1340,9 @@ class GlmImageImageProcessor(SiglipImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(images[0])
 
+        # Track image grid sizes for each image
+        image_grid_thw = []
+
         if do_resize:
             resized_images = []
             for image in images:
@@ -1311,7 +1356,24 @@ class GlmImageImageProcessor(SiglipImageProcessor):
                         image=image, size=(target_h, target_w), resample=resample, input_data_format=input_data_format
                     )
                 )
+                grid_h = target_h // self.patch_size
+                grid_w = target_w // self.patch_size
+
+                # grid_t should be 1 for image
+                image_grid_thw.append([1, grid_h, grid_w])
             images = resized_images
+        else:
+            # If no resize, calculate grid from original image sizes
+            for image in images:
+                if input_data_format == ChannelDimension.FIRST:
+                    _, h, w = image.shape
+                else:
+                    h, w, _ = image.shape
+                grid_h = h // self.patch_size
+                grid_w = w // self.patch_size
+
+                # grid_t should be 1 for image
+                image_grid_thw.append([1, grid_h, grid_w])
 
         if do_rescale:
             images = [
@@ -1329,8 +1391,109 @@ class GlmImageImageProcessor(SiglipImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        data = {"pixel_values": images}
+        data = {
+            "pixel_values": images,
+            "image_grid_thw": image_grid_thw,
+        }
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+    }
+
+
+class GlmImageProcessor(SiglipProcessor):
+    r"""
+    Constructs a GLM-4V processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
+    [`~GlmImageProcessor.__call__`] and [`~GlmImageProcessor.decode`] for more information.
+    Args:
+        image_processor ([`GlmImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`PreTrainedTokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+
+    def __call__(
+        self,
+        images: Optional[ImageInput] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        **kwargs: Unpack[GlmImageProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+        """
+        output_kwargs = self._merge_kwargs(
+            GlmImageProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if images is not None:
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
+        else:
+            image_inputs = {}
+            image_grid_thw = None
+
+        if not isinstance(text, list):
+            text = [text]
+
+        text = text.copy()  # below lines change text in-place
+        if image_grid_thw is not None:
+            index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    grid = image_grid_thw[index]
+                    num_image_tokens = int(grid[1] * grid[2])
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 __all__ = [
@@ -1345,4 +1508,5 @@ __all__ = [
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
     "GlmImageImageProcessor",
+    "GlmImageProcessor",
 ]

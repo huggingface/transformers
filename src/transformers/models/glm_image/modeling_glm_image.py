@@ -1097,29 +1097,38 @@ class GlmImageModel(GlmImagePreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: Optional[torch.FloatTensor] = None,
-    ):
+        image_ids: torch.LongTensor,
+    ) -> torch.LongTensor:
         """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
+        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
 
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders.
+            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
+                Discrete token indices from the VQVAE codebook.
+
+        Returns:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders replaced by actual image tokens.
+        """
+
+        special_image_mask = input_ids == self.config.image_token_id
+        n_placeholder_tokens = special_image_mask.sum().item()
+
+        image_ids_flat = image_ids.view(-1)
+        n_image_tokens = image_ids_flat.shape[0]
+
+        if n_placeholder_tokens != n_image_tokens:
             raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+                f"Number of image placeholder tokens ({n_placeholder_tokens}) does not match "
+                f"number of image tokens from VQVAE ({n_image_tokens})"
             )
 
-        return special_image_mask
+        input_ids = input_ids.clone()
+        input_ids[special_image_mask] = image_ids_flat.to(input_ids.device)
+
+        return input_ids
 
     @auto_docstring
     @can_return_tuple
@@ -1150,10 +1159,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values)
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
+            image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
+            input_ids = self.get_placeholder_mask(input_ids, image_ids)
+        breakpoint()
         if position_ids is None:
             attention_mask_tensor = (
                 attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
@@ -1216,6 +1224,35 @@ class GlmImageModel(GlmImagePreTrainedModel):
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
         )
+
+    def get_image_tokens(
+        self,
+        hidden_states: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
+    ) -> torch.LongTensor:
+        """
+        Tokenizes image features into discrete tokens with VQVAE module.
+
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The image features from vision encoder. seq_len = H * W (number of patches).
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width of feature shape of each image.
+                For single images, temporal is typically 1.
+
+        Returns:
+            image_tokens (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
+                Discrete token indices from the VQVAE codebook.
+        """
+        batch_size = hidden_states.shape[0]
+        _, grid_h, grid_w = image_grid_thw[0].tolist()
+
+        hidden_states = hidden_states.transpose(1, 2).contiguous()
+        hidden_states = hidden_states.view(batch_size, -1, grid_h, grid_w)
+
+        _, _, image_toks = self.vqmodel.encode(hidden_states)
+
+        return image_toks
 
 
 @dataclass

@@ -21,7 +21,8 @@
 
 from typing import Optional, Union
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -78,7 +79,7 @@ class GlmImageImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(
         self,
@@ -214,6 +215,9 @@ class GlmImageImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(images[0])
 
+        # Track image grid sizes for each image
+        image_grid_thw = []
+
         if do_resize:
             resized_images = []
             for image in images:
@@ -227,7 +231,24 @@ class GlmImageImageProcessor(BaseImageProcessor):
                         image=image, size=(target_h, target_w), resample=resample, input_data_format=input_data_format
                     )
                 )
+                grid_h = target_h // self.patch_size
+                grid_w = target_w // self.patch_size
+
+                # grid_t should be 1 for image
+                image_grid_thw.append([1, grid_h, grid_w])
             images = resized_images
+        else:
+            # If no resize, calculate grid from original image sizes
+            for image in images:
+                if input_data_format == ChannelDimension.FIRST:
+                    _, h, w = image.shape
+                else:
+                    h, w, _ = image.shape
+                grid_h = h // self.patch_size
+                grid_w = w // self.patch_size
+
+                # grid_t should be 1 for image
+                image_grid_thw.append([1, grid_h, grid_w])
 
         if do_rescale:
             images = [
@@ -245,7 +266,10 @@ class GlmImageImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        data = {"pixel_values": images}
+        data = {
+            "pixel_values": images,
+            "image_grid_thw": image_grid_thw,
+        }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def _get_anyres_size(self, height: int, width: int) -> tuple[int, int]:
