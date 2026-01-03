@@ -40,7 +40,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
 
 class GlmImageProcessor(ProcessorMixin):
     r"""
-    Constructs a GLM-4V processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
+    Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
     [`~GlmImageProcessor.__call__`] and [`~GlmImageProcessor.decode`] for more information.
     Args:
         image_processor ([`GlmImageProcessor`], *optional*):
@@ -52,8 +52,13 @@ class GlmImageProcessor(ProcessorMixin):
     """
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,

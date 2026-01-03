@@ -1161,7 +1161,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             image_embeds = self.get_image_features(pixel_values)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
-        breakpoint()
+            breakpoint()
         if position_ids is None:
             attention_mask_tensor = (
                 attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]

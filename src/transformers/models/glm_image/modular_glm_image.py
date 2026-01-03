@@ -46,7 +46,7 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
@@ -78,7 +78,6 @@ from ..siglip.modeling_siglip import (
     default_flax_embed_init,
     lecun_normal_,
 )
-from ..siglip.processing_siglip import SiglipProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -809,9 +808,9 @@ class GlmImageModel(Glm4vModel):
         return vision_outputs
 
     def get_image_tokens(
-            self,
-            hidden_states: torch.FloatTensor,
-            image_grid_thw: torch.LongTensor,
+        self,
+        hidden_states: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
     ) -> torch.LongTensor:
         """
         Tokenizes image features into discrete tokens with VQVAE module.
@@ -902,7 +901,6 @@ class GlmImageModel(Glm4vModel):
             image_embeds = self.get_image_features(pixel_values)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
-        breakpoint()
         if position_ids is None:
             attention_mask_tensor = (
                 attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
@@ -1397,6 +1395,7 @@ class GlmImageImageProcessor(SiglipImageProcessor):
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+
 class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -1406,9 +1405,9 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class GlmImageProcessor(SiglipProcessor):
+class GlmImageProcessor(ProcessorMixin):
     r"""
-    Constructs a GLM-4V processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
+    Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
     [`~GlmImageProcessor.__call__`] and [`~GlmImageProcessor.decode`] for more information.
     Args:
         image_processor ([`GlmImageProcessor`], *optional*):
@@ -1420,8 +1419,13 @@ class GlmImageProcessor(SiglipProcessor):
     """
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
