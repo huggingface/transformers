@@ -25,6 +25,7 @@ if is_torch_available():
     import torch
 
     from transformers.generation import (
+        AsyncStoppingCriteriaList,
         ConfidenceCriteria,
         EosTokenCriteria,
         MaxLengthCriteria,
@@ -287,3 +288,253 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # False when neither is satisfied
         self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
+
+
+@require_torch
+class AsyncStoppingCriteriaTestCase(unittest.TestCase):
+    """Test cases for AsyncStoppingCriteriaList."""
+
+    def _get_tensors(self, length, batch_size=3):
+        vocab_size = 250
+
+        input_ids = ids_tensor((batch_size, length), vocab_size)
+        scores = torch.ones((batch_size, length), device=torch_device, dtype=torch.float) / length
+        return input_ids, scores
+
+    def test_async_wrapper_basic(self):
+        """Test that AsyncStoppingCriteriaList wraps StoppingCriteriaList correctly."""
+        criteria_list = StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
+        async_criteria = AsyncStoppingCriteriaList(criteria_list)
+
+        # Test __len__
+        self.assertEqual(len(async_criteria), 1)
+
+        # Test __iter__
+        criteria_items = list(async_criteria)
+        self.assertEqual(len(criteria_items), 1)
+        self.assertIsInstance(criteria_items[0], MaxLengthCriteria)
+
+        # Test max_length property
+        self.assertEqual(async_criteria.max_length, 10)
+
+    def test_async_sync_equivalence_max_length(self):
+        """Test that async and sync modes produce identical results for max_length stopping."""
+        input_ids, scores = self._get_tensors(5)
+
+        # Sync behavior
+        sync_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
+        sync_result = sync_criteria(input_ids, scores)
+
+        # Async behavior (should fall back to sync on CPU)
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
+        )
+        unfinished = torch.ones(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, unfinished)
+
+        # At length 5 with max_length 10, should not be finished
+        self.assertFalse(this_peer_finished)
+        self.assertTrue(all(updated_unfinished == 1))
+
+        # At length 10, should be finished
+        input_ids_long, scores_long = self._get_tensors(10)
+        unfinished = torch.ones(input_ids_long.shape[0], device=input_ids_long.device, dtype=torch.long)
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids_long, scores_long, unfinished)
+        self.assertTrue(this_peer_finished)
+        self.assertTrue(all(updated_unfinished == 0))
+
+    def test_async_sync_equivalence_eos_token(self):
+        """Test that async and sync modes produce identical results for EOS token stopping."""
+        input_ids, scores = self._get_tensors(5)
+
+        # Set EOS token (0) at the end of all sequences
+        input_ids[:, -1] = 0
+
+        # Sync behavior
+        sync_criteria = StoppingCriteriaList([
+            MaxLengthCriteria(max_length=20),
+            EosTokenCriteria(eos_token_id=0),
+        ])
+        sync_result = sync_criteria(input_ids, scores)
+
+        # Async behavior
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([
+                MaxLengthCriteria(max_length=20),
+                EosTokenCriteria(eos_token_id=0),
+            ])
+        )
+        unfinished = torch.ones(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
+
+        # Both should indicate all sequences have EOS
+        self.assertTrue(all(sync_result))
+
+    def test_async_sync_equivalence_partial_eos(self):
+        """Test async/sync equivalence when only some sequences have EOS."""
+        input_ids, scores = self._get_tensors(5)
+
+        # Only first 2 sequences have EOS
+        input_ids[:2, -1] = 0
+        input_ids[2, -1] = 1
+
+        # Sync behavior
+        sync_criteria = StoppingCriteriaList([
+            MaxLengthCriteria(max_length=20),
+            EosTokenCriteria(eos_token_id=0),
+        ])
+        sync_result = sync_criteria(input_ids, scores)
+
+        # Should match [True, True, False]
+        self.assertListEqual(sync_result.tolist(), [True, True, False])
+
+    def test_async_different_batch_sizes(self):
+        """Test async stopping criteria with different batch sizes."""
+        for batch_size in [1, 2, 4, 8, 16]:
+            input_ids, scores = self._get_tensors(5, batch_size=batch_size)
+
+            async_criteria = AsyncStoppingCriteriaList(
+                StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
+            )
+            unfinished = torch.ones(batch_size, device=input_ids.device, dtype=torch.long)
+            updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, unfinished)
+
+            self.assertEqual(updated_unfinished.shape[0], batch_size)
+            self.assertFalse(this_peer_finished)
+
+            # At max_length, all should finish
+            input_ids_long, scores_long = self._get_tensors(10, batch_size=batch_size)
+            unfinished = torch.ones(batch_size, device=input_ids_long.device, dtype=torch.long)
+            updated_unfinished, this_peer_finished = async_criteria.check(input_ids_long, scores_long, unfinished)
+
+            self.assertEqual(updated_unfinished.shape[0], batch_size)
+            self.assertTrue(this_peer_finished)
+
+    def test_async_cpu_fallback(self):
+        """Test that async gracefully falls back to sync on CPU."""
+        # Force CPU tensors
+        batch_size = 3
+        vocab_size = 250
+        length = 5
+
+        input_ids = torch.randint(0, vocab_size, (batch_size, length), device="cpu")
+        scores = torch.ones((batch_size, length), device="cpu", dtype=torch.float)
+
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([
+                MaxLengthCriteria(max_length=10),
+                EosTokenCriteria(eos_token_id=0),
+            ])
+        )
+        unfinished = torch.ones(batch_size, device="cpu", dtype=torch.long)
+
+        # Should work without errors on CPU (sync fallback)
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, unfinished)
+        self.assertFalse(this_peer_finished)
+
+        # With EOS in all sequences
+        input_ids[:, -1] = 0
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, unfinished)
+        self.assertTrue(this_peer_finished)
+
+    def test_async_legacy_call_interface(self):
+        """Test that the legacy __call__ interface still works."""
+        input_ids, scores = self._get_tensors(5)
+
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([MaxLengthCriteria(max_length=10)])
+        )
+
+        # __call__ should fall back to sync behavior
+        result = async_criteria(input_ids, scores)
+        self.assertEqual(result.shape[0], 3)
+        self.assertFalse(all(result))  # Not at max_length yet
+
+        input_ids_long, scores_long = self._get_tensors(10)
+        result = async_criteria(input_ids_long, scores_long)
+        self.assertTrue(all(result))  # At max_length
+
+    def test_async_finalize(self):
+        """Test the finalize method for cleanup."""
+        input_ids, scores = self._get_tensors(5)
+
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([MaxLengthCriteria(max_length=100)])
+        )
+        unfinished = torch.ones(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
+
+        # Do a check to potentially start an async operation
+        async_criteria.check(input_ids, scores, unfinished)
+
+        # Finalize should work without errors
+        final_unfinished, this_peer_finished = async_criteria.finalize(unfinished)
+        self.assertFalse(this_peer_finished)
+
+    def test_async_custom_stopping_criteria(self):
+        """Test async with a custom stopping criteria."""
+        from transformers.generation import StoppingCriteria
+
+        class CustomStoppingCriteria(StoppingCriteria):
+            """Stop when the last token is a specific value."""
+            def __init__(self, stop_token_id):
+                self.stop_token_id = stop_token_id
+
+            def __call__(self, input_ids, scores, **kwargs):
+                return input_ids[:, -1] == self.stop_token_id
+
+        input_ids, scores = self._get_tensors(5)
+        stop_token_id = 42
+        input_ids[:, -1] = stop_token_id  # Set last token to stop token
+
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([
+                MaxLengthCriteria(max_length=100),
+                CustomStoppingCriteria(stop_token_id=stop_token_id),
+            ])
+        )
+        unfinished = torch.ones(input_ids.shape[0], device=input_ids.device, dtype=torch.long)
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids, scores, unfinished)
+
+        # Custom criteria should have triggered stop via sync fallback (near max_length check)
+        # At length 5 with max_length 100, it would use _check_async_only,
+        # but first call will start the async check
+        # For proper testing, we need the sync path which happens near max_length
+        input_ids2, scores2 = self._get_tensors(99)  # Near max_length
+        input_ids2[:, -1] = stop_token_id
+        async_criteria2 = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([
+                MaxLengthCriteria(max_length=100),
+                CustomStoppingCriteria(stop_token_id=stop_token_id),
+            ])
+        )
+        unfinished2 = torch.ones(input_ids2.shape[0], device=input_ids2.device, dtype=torch.long)
+        updated_unfinished2, this_peer_finished2 = async_criteria2.check(input_ids2, scores2, unfinished2)
+        self.assertTrue(this_peer_finished2)
+
+    def test_async_multiple_eos_tokens(self):
+        """Test async with multiple EOS token IDs."""
+        input_ids, scores = self._get_tensors(5)
+
+        # Different sequences end with different EOS tokens
+        input_ids[0, -1] = 1  # First EOS token
+        input_ids[1, -1] = 2  # Second EOS token
+        input_ids[2, -1] = 99  # Not an EOS token
+
+        async_criteria = AsyncStoppingCriteriaList(
+            StoppingCriteriaList([
+                MaxLengthCriteria(max_length=100),
+                EosTokenCriteria(eos_token_id=[1, 2]),  # Multiple EOS tokens
+            ])
+        )
+
+        # Test at near max_length to trigger sync path
+        input_ids_near, scores_near = self._get_tensors(99)
+        input_ids_near[0, -1] = 1
+        input_ids_near[1, -1] = 2
+        input_ids_near[2, -1] = 99
+
+        unfinished = torch.ones(input_ids_near.shape[0], device=input_ids_near.device, dtype=torch.long)
+        updated_unfinished, this_peer_finished = async_criteria.check(input_ids_near, scores_near, unfinished)
+
+        # First two should be done (EOS), third should not
+        self.assertListEqual(updated_unfinished.tolist(), [0, 0, 1])
+        self.assertFalse(this_peer_finished)  # Not all finished

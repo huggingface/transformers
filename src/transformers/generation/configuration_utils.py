@@ -331,6 +331,11 @@ class GenerationConfig(PushToHubMixin):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
+        async_stopping_criteria (`bool`, defaults to `False`):
+            If set to `True`, stopping criteria checks will be performed asynchronously on a separate CUDA stream,
+            allowing generation to continue while the check runs. This can reduce GPU-CPU synchronization overhead
+            and improve throughput, especially for longer generations. The stopping check result is polled
+            periodically rather than blocking on every token. Only effective on CUDA devices.
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
@@ -414,6 +419,7 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
+        self.async_stopping_criteria = kwargs.pop("async_stopping_criteria", False)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
