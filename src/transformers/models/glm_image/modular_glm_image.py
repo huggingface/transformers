@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from typing import Any, Optional, Union
 
@@ -26,30 +27,16 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_processing_utils import get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
 from ...image_utils import (
-    ChannelDimension,
     ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
+
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     is_torchdynamo_compiling,
     logging,
@@ -57,6 +44,7 @@ from ...utils import (
 )
 from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
     Glm4vModel,
@@ -69,7 +57,6 @@ from ..glm4v.modeling_glm4v import (
 )
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.image_processing_siglip import SiglipImageProcessor
 from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoderLayer,
@@ -1249,172 +1236,51 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         return input_ids, model_kwargs
 
 
-class GlmImageImageProcessor(SiglipImageProcessor):
-    model_input_names = ["pixel_values", "image_grid_thw"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        short_size: int = 384,
-        long_size: int = 1152,
-        patch_size: int = 16,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            **kwargs,
-        )
-        self.short_size = short_size
-        self.long_size = long_size
-        self.patch_size = patch_size
-
-    def _get_anyres_size(self, height: int, width: int) -> tuple[int, int]:
-        target_w, target_h = float(width), float(height)
-
-        ss = min(target_w, target_h)
-        if ss < self.short_size:
-            scale = self.short_size / ss
-            target_w *= scale
-            target_h *= scale
-
-        ls = max(target_w, target_h)
-        if ls > self.long_size:
-            scale = self.long_size / ls
-            target_w *= scale
-            target_h *= scale
-
-        target_w = int(round(target_w / self.patch_size)) * self.patch_size
-        target_h = int(round(target_h / self.patch_size)) * self.patch_size
-
-        return target_h, target_w
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: Optional[bool] = None,
-    ):
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size, param_name="size", default_to_square=False)
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+def smart_resize(
+    height: int,
+    width: int,
+    factor: int = 16,
+    min_pixels: int = 384 * 384,
+    max_pixels: int = 1152 * 1152,
+) -> tuple[int, int]:
+    if height < factor or width < factor:
+        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+    elif max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+    shortest_edge = int(round(math.sqrt(min_pixels)))
+    longest_edge = int(round(math.sqrt(max_pixels)))
 
-        images = [to_numpy_array(image) for image in images]
+    h, w = height, width
+    min_side = min(h, w)
+    max_side = max(h, w)
 
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once("It looks like you are trying to rescale already rescaled images.")
+    scale = 1.0
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
+    if min_side < shortest_edge:
+        scale = shortest_edge / min_side
 
-        # Track image grid sizes for each image
-        image_grid_thw = []
+    if max_side * scale > longest_edge:
+        scale = longest_edge / max_side
 
-        if do_resize:
-            resized_images = []
-            for image in images:
-                if input_data_format == ChannelDimension.FIRST:
-                    _, h, w = image.shape
-                else:
-                    h, w, _ = image.shape
-                target_h, target_w = self._get_anyres_size(h, w)
-                resized_images.append(
-                    resize(
-                        image=image, size=(target_h, target_w), resample=resample, input_data_format=input_data_format
-                    )
-                )
-                grid_h = target_h // self.patch_size
-                grid_w = target_w // self.patch_size
+    new_h = h * scale
+    new_w = w * scale
 
-                # grid_t should be 1 for image
-                image_grid_thw.append([1, grid_h, grid_w])
-            images = resized_images
-        else:
-            # If no resize, calculate grid from original image sizes
-            for image in images:
-                if input_data_format == ChannelDimension.FIRST:
-                    _, h, w = image.shape
-                else:
-                    h, w, _ = image.shape
-                grid_h = h // self.patch_size
-                grid_w = w // self.patch_size
+    h_bar = max(factor, int(round(new_h / factor)) * factor)
+    w_bar = max(factor, int(round(new_w / factor)) * factor)
 
-                # grid_t should be 1 for image
-                image_grid_thw.append([1, grid_h, grid_w])
+    if max(h_bar, w_bar) > longest_edge:
+        beta = max(h_bar, w_bar) / longest_edge
+        h_bar = max(factor, int(math.floor((h_bar / beta) / factor)) * factor)
+        w_bar = max(factor, int(math.floor((w_bar / beta) / factor)) * factor)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+    return h_bar, w_bar
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {
-            "pixel_values": images,
-            "image_grid_thw": image_grid_thw,
-        }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+class GlmImageImageProcessor(Qwen2VLImageProcessor):
+    pass
 
 
 class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
