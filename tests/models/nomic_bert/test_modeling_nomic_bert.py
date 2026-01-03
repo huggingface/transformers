@@ -569,7 +569,7 @@ class NomicBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google-bert/bert-base-uncased"
+        model_name = "nomic-ai/nomic-bert-2048"
         model = NomicBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -692,7 +692,7 @@ class NomicBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = NomicBertModel.from_pretrained("google-bert/bert-base-uncased")
+        model = NomicBertModel.from_pretrained("nomic-ai/nomic-bert-2048")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
