@@ -33,7 +33,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             return
 
         if not torch.cuda.is_available() and not is_torch_xpu_available():
-            if self.pre_quantized and not self.quantization_config.dequantize:
+            if self.pre_quantized:
                 logger.warning_once(
                     "Using FP8 quantized models requires a GPU or XPU, we will default to dequantizing the model to bf16 since no GPU or XPU is available"
                 )
@@ -46,10 +46,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             compute_capability = torch.cuda.get_device_capability()
             major, minor = compute_capability
             if (major < 8) or (major == 8 and minor < 9):
-                raise ValueError(
+                logger.warning_once(
                     "FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100)"
-                    f", actual = `{major}.{minor}`"
+                    f", actual = `{major}.{minor}`. We will default to dequantizing the model to bf16. Feel free "
+                    f"to use a different quantization method like bitsandbytes or torchao"
                 )
+                self.quantization_config.dequantize = True
+                return
 
         device_map = kwargs.get("device_map")
         if device_map is None:
@@ -81,6 +84,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             else:
                 return True
         return False
+
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name):
+            # 8 bit, this is neeed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
+            return 1
+        return super().param_element_size(model, param_name, param)
 
     def _process_model_before_weight_loading(
         self,
@@ -135,10 +145,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return False
-
-    def get_accelerator_warm_up_factor(self):
-        # Pre-processing is done cleanly, so we can allocate everything here
-        return 2
 
     def get_quantize_ops(self):
         from ..integrations.finegrained_fp8 import Fp8Quantize

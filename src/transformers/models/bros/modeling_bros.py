@@ -522,6 +522,14 @@ class BrosPreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, BrosRelationExtractor):
             init.normal_(module.dummy_node, std=std)
+        elif isinstance(module, BrosTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
+        elif isinstance(module, BrosPositionalEmbedding1D):
+            inv_freq = 1 / (
+                10000 ** (torch.arange(0.0, module.dim_bbox_sinusoid_emb_1d, 2.0) / module.dim_bbox_sinusoid_emb_1d)
+            )
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring

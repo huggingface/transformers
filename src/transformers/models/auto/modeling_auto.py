@@ -145,6 +145,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieModel"),
         ("ernie4_5", "Ernie4_5Model"),
         ("ernie4_5_moe", "Ernie4_5_MoeModel"),
+        ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeModel"),
         ("esm", "EsmModel"),
         ("evolla", "EvollaModel"),
         ("exaone4", "Exaone4Model"),
@@ -182,6 +183,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm4v_moe_vision", "Glm4vMoeVisionModel"),
         ("glm4v_text", "Glm4vTextModel"),
         ("glm4v_vision", "Glm4vVisionModel"),
+        ("glmasr", "GlmAsrForConditionalGeneration"),
+        ("glmasr_encoder", "GlmAsrEncoder"),
         ("glpn", "GLPNModel"),
         ("got_ocr2", "GotOcr2Model"),
         ("gpt-sw3", "GPT2Model"),
@@ -480,6 +483,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForPreTraining"),
         ("gemma3", "Gemma3ForConditionalGeneration"),
+        ("glmasr", "GlmAsrForConditionalGeneration"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
@@ -1012,6 +1016,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
         ("emu3", "Emu3ForConditionalGeneration"),
+        ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeForConditionalGeneration"),
         ("evolla", "EvollaForProteinText2Text"),
         ("fast_vlm", "FastVlmForConditionalGeneration"),
         ("florence2", "Florence2ForConditionalGeneration"),
@@ -1064,6 +1069,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
     [
         *list(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.items()),
+        ("glmasr", "GlmAsrForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
         ("phi4_multimodal", "Phi4MultimodalForCausalLM"),
@@ -1071,6 +1077,13 @@ MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioForConditionalGeneration"),
         ("qwen3_omni_moe", "Qwen3OmniMoeForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+    ]
+)
+
+MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Masked LM mapping
+        ("albert", "AlbertForMaskedLM"),
     ]
 )
 
@@ -1170,6 +1183,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForConditionalGeneration"),
         ("encoder-decoder", "EncoderDecoderModel"),
         ("fsmt", "FSMTForConditionalGeneration"),
+        ("glmasr", "GlmAsrForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("led", "LEDForConditionalGeneration"),
         ("longt5", "LongT5ForConditionalGeneration"),
@@ -1192,6 +1206,12 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("t5gemma2", "T5Gemma2ForConditionalGeneration"),
         ("umt5", "UMT5ForConditionalGeneration"),
         ("voxtral", "VoxtralForConditionalGeneration"),
+    ]
+)
+
+MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("dia", "DiaForConditionalGeneration"),
     ]
 )
 

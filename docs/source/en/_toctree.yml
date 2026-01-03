@@ -1039,6 +1039,8 @@
         title: EdgeTamVideo
       - local: model_doc/emu3
         title: Emu3
+      - local: model_doc/ernie4_5_vl_moe
+        title: ernie4_5_vl_moe
       - local: model_doc/evolla
         title: Evolla
       - local: model_doc/fast_vlm
@@ -1053,6 +1055,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
