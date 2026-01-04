@@ -1387,5 +1387,6 @@ __all__ = [
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
     "GlmImageImageProcessor",
+    "GlmImageImageProcessorFast",
     "GlmImageProcessor",
 ]
