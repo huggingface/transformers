@@ -54,13 +54,14 @@ class GlmImageVisionText2TextModelTester:
         seq_length=7,
         num_channels=3,
         ignore_index=-100,
-        image_size=112,
+        image_size=128,
         image_start_token_id=5,
         image_end_token_id=6,
         image_token_id=7,
         is_training=True,
         text_config={
             "vocab_size": 99,
+            "vision_vocab_size": 99,
             "hidden_size": 16,
             "intermediate_size": 22,
             "num_hidden_layers": 2,
@@ -119,6 +120,7 @@ class GlmImageVisionText2TextModelTester:
         self.hidden_size = text_config["hidden_size"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
+        self.vision_vocab_size = text_config["vision_vocab_size"]
         self.vocab_size = text_config["vocab_size"]
         self.num_image_tokens = 64
         self.seq_length = seq_length + self.num_image_tokens
