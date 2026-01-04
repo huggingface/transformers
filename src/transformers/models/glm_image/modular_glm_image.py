@@ -639,14 +639,37 @@ class GlmImageVisionModel(Glm4vVisionModel):
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = head_dim // 2
-        del head_dim
         del self.merger
         del self.rotary_pos_emb
         del self.post_conv_layernorm
         del self.downsample
         del self.post_layernorm
+
+    def rot_pos_emb(self, grid_thw):
+        pos_ids = []
+        for t, h, w in grid_thw:
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        pos_ids = torch.cat(pos_ids, dim=0)
+        return pos_ids
 
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -661,7 +684,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         """
 
         hidden_states = self.patch_embed(pixel_values)
-        _, image_type_ids = self.rot_pos_emb(grid_thw)
+        image_type_ids = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,

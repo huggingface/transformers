@@ -769,11 +769,11 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.embeddings = GlmImageVisionEmbeddings(config)
         self.patch_embed = GlmImageVisionPatchEmbed(config)
 
+        head_dim = config.hidden_size // config.num_heads
+
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
         self.gradient_checkpointing = False
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = head_dim // 2
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
@@ -800,10 +800,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             wpos_ids = wpos_ids.flatten()
             pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
         pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
+        return pos_ids
 
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -818,7 +815,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         """
 
         hidden_states = self.patch_embed(pixel_values)
-        _, image_type_ids = self.rot_pos_emb(grid_thw)
+        image_type_ids = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,
