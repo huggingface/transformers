@@ -30,7 +30,6 @@ from ...generation import GenerationMixin
 from ...image_utils import (
     ImageInput,
 )
-
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -40,11 +39,9 @@ from ...utils import (
     TransformersKwargs,
     is_torchdynamo_compiling,
     logging,
-    torch_int,
 )
 from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
-from ..glm4v.configuration_glm4v import Glm4vTextConfig
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
     Glm4vModel,
@@ -54,17 +51,15 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
+    Glm4vVisionAttention,
+    Glm4vVisionBlock,
+    Glm4vVisionEmbeddings,
+    Glm4vVisionModel,
+    Glm4vVisionPatchEmbed,
 )
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
-from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipAttention,
-    SiglipEncoderLayer,
-    SiglipMLP,
-    SiglipVisionEmbeddings,
-    default_flax_embed_init,
-    lecun_normal_,
-)
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..siglip.modeling_siglip import SiglipMLP
 
 
 logger = logging.get_logger(__name__)
@@ -122,82 +117,32 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
-class GlmImageVisionConfig(SiglipVisionConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate a
-    GlmImage vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the GLM-Image
-    [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 40):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 2048):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-    Example:
-
-    ```python
-    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
-
-    >>> # Initializing a GlmImageVisionConfig with google/glm_image-base-patch16-224 style configuration
-    >>> configuration = GlmImageVisionConfig()
-
-    >>> # Initializing a GlmImageVisionModel (with random weights) from the google/glm_image-base-patch16-224 style configuration
-    >>> model = GlmImageVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
+class GlmImageVisionConfig(Glm4vVisionConfig):
     model_type = "glm_image_vision_model"
     base_config_key = "vision_config"
 
     def __init__(
         self,
+        depth=40,
         hidden_size=1536,
-        intermediate_size=6144,
-        num_hidden_layers=40,
-        num_attention_heads=24,
-        num_channels=3,
+        hidden_act="gelu",
+        attention_bias=True,
+        attention_dropout=0.0,
+        num_heads=16,
+        in_channels=3,
         image_size=2048,
         patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
+        layer_norm_eps=1e-06,
+        spatial_merge_size=1,
+        temporal_patch_size=1,
+        intermediate_size=6144,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
+        del self.out_hidden_size
+        del self.rms_norm_eps
         self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
 
 
 class GlmImageTextConfig(Glm4vTextConfig):
@@ -406,17 +351,115 @@ class GlmImageVisionMLP(SiglipMLP):
     pass
 
 
-class GlmImageVisionAttention(SiglipAttention):
+class GlmImageVisionAttention(Glm4vVisionAttention):
+    def __init__(self, config: GlmImageVisionConfig) -> None:
+        super().__init__(config)
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        )
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if "flash" in self.config._attn_implementation:
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
+
+
+class GlmImageVisionPatchEmbed(Glm4vVisionPatchEmbed):
+    def __init__(self, config: GlmImageVisionConfig) -> None:
+        super().__init__()
+
+        del self.temporal_patch_size
+        kernel_size = [self.patch_size, self.patch_size]
+        self.proj = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
+
+    def forward(self, hidden_states):
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(-1, self.in_channels, self.patch_size, self.patch_size)
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+class GlmImageVisionEmbeddings(Glm4vVisionEmbeddings):
     pass
 
 
-class GlmImageVisionBlock(SiglipEncoderLayer):
+class GlmImageVisionBlock(Glm4vVisionBlock):
     def __init__(self, config: GlmImageVisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = GlmImageVisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        super().__init__(config)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = GlmImageVisionAttention(config)
         self.mlp = GlmImageVisionMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            **kwargs,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
 
 
 class GlmImageTextAttention(Glm4vTextAttention):
@@ -506,73 +549,10 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
             if hasattr(module, "position_ids"):
                 init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-        elif isinstance(module, nn.Embedding):
-            default_flax_embed_init(module.weight)
-        elif isinstance(module, GlmImageVisionAttention):
-            init.xavier_uniform_(module.q_proj.weight)
-            init.xavier_uniform_(module.k_proj.weight)
-            init.xavier_uniform_(module.v_proj.weight)
-            init.xavier_uniform_(module.out_proj.weight)
-            init.zeros_(module.q_proj.bias)
-            init.zeros_(module.k_proj.bias)
-            init.zeros_(module.v_proj.bias)
-            init.zeros_(module.out_proj.bias)
-        elif isinstance(module, GlmImageVisionMLP):
-            init.xavier_uniform_(module.fc1.weight)
-            init.xavier_uniform_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-5)
-            init.normal_(module.fc2.bias, std=1e-5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
-
-
-class GlmImageVisionEmbeddings(SiglipVisionEmbeddings):
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and no class embeddings.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-
-        num_patches = embeddings.shape[1]
-        num_positions = self.position_embedding.weight.shape[0]
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
-
-        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bilinear",
-            align_corners=False,
-        )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
 
 
 class GlmImageVisionResnetBlock(nn.Module):
@@ -652,34 +632,51 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         return quant, emb_loss, indices
 
 
-class GlmImageVisionModel(GlmImagePreTrainedModel):
+class GlmImageVisionModel(Glm4vVisionModel):
     config: GlmImageVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["GlmImageVisionBlock"]
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.embeddings = GlmImageVisionEmbeddings(config)
-        self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.num_hidden_layers)])
-        self.post_init()
+        head_dim = config.hidden_size // config.num_heads
+        self.rotary_pos_emb = head_dim // 2
+        del head_dim
+        del self.merger
+        del self.rotary_pos_emb
+        del self.post_conv_layernorm
+        del self.downsample
+        del self.post_layernorm
 
-    def forward(
-        self,
-        pixel_values,
-        interpolate_pos_encoding: Optional[bool] = True,
-        attention_mask: Optional[torch.Tensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
+                Packed pixel values.
+            grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
+                The temporal, height and width of feature shape of each image.
+
+        Returns:
+            `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
+        """
+
+        hidden_states = self.patch_embed(pixel_values)
+        _, image_type_ids = self.rot_pos_emb(grid_thw)
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+
+        # Transformer blocks (no position_embeddings needed, already added above)
         for blk in self.blocks:
             hidden_states = blk(
                 hidden_states,
-                attention_mask,
-                **kwargs,
+                cu_seqlens=cu_seqlens,
             )
-
         return hidden_states
 
 
@@ -794,26 +791,6 @@ class GlmImageModel(Glm4vModel):
         """
         return None
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        interpolate_pos_encoding: bool = True,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        """
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`GlmImageVisionModel`].
-
-        """
-        vision_outputs = self.visual(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
-        )
-
-        return vision_outputs
-
     def get_image_tokens(
         self,
         hidden_states: torch.FloatTensor,
@@ -823,25 +800,27 @@ class GlmImageModel(Glm4vModel):
         Tokenizes image features into discrete tokens with VQVAE module.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
-                The image features from vision encoder. seq_len = H * W (number of patches).
+            hidden_states (`torch.FloatTensor` of shape `(total_patches, hidden_size)`):
+                The packed image features from vision encoder.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
                 The temporal, height and width of feature shape of each image.
-                For single images, temporal is typically 1.
 
         Returns:
-            image_tokens (`torch.LongTensor` of shape `(batch_size, num_tokens)`):
+            image_tokens (`torch.LongTensor` of shape `(total_patches,)`):
                 Discrete token indices from the VQVAE codebook.
         """
-        batch_size = hidden_states.shape[0]
-        _, grid_h, grid_w = image_grid_thw[0].tolist()
+        hidden_size = hidden_states.shape[-1]
+        split_sizes = (image_grid_thw.prod(dim=-1)).tolist()
+        hidden_states_list = torch.split(hidden_states, split_sizes, dim=0)
 
-        hidden_states = hidden_states.transpose(1, 2).contiguous()
-        hidden_states = hidden_states.view(batch_size, -1, grid_h, grid_w)
-
-        _, _, image_toks = self.vqmodel.encode(hidden_states)
-
-        return image_toks
+        all_image_toks = []
+        for i, hs in enumerate(hidden_states_list):
+            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
+            hs = hs.view(grid_t, grid_h, grid_w, hidden_size)
+            hs = hs.permute(0, 3, 1, 2).contiguous()
+            _, _, image_toks = self.vqmodel.encode(hs)
+            all_image_toks.append(image_toks)
+        return torch.cat(all_image_toks, dim=0)
 
     def get_placeholder_mask(
         self,
@@ -902,7 +881,7 @@ class GlmImageModel(Glm4vModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
 
