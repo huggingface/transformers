@@ -2,9 +2,9 @@
 
 
 from transformers.models.qwen3_omni_moe.configuration_qwen3_omni_moe import (
-    Qwen3OmniMoeTalkerConfig,
     Qwen3OmniMoeCode2WavConfig,
     Qwen3OmniMoeConfig,
+    Qwen3OmniMoeTalkerConfig,
 )
 from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeTalkerForConditionalGeneration,

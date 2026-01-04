@@ -26,11 +26,10 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
-from torch.nn import Parameter
-from torch.nn import functional as F
-
 import torch
 from torch import nn
+from torch.nn import Parameter
+from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
