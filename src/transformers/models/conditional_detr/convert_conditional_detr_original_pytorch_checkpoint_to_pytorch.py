@@ -292,7 +292,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
     model = ConditionalDetrForSegmentation(config) if is_panoptic else ConditionalDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")
+    model.push_to_hub(repo_id=f"DepuMeng/{model_name}", commit_message="Add model")
     # verify our conversion
     original_outputs = conditional_detr(pixel_values)
     outputs = model(pixel_values)

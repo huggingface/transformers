@@ -993,6 +993,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
         Example:
@@ -1113,6 +1114,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetDecoderModelOutput]:
         r"""
         Example:
@@ -1400,9 +1402,6 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         self.encoder.word_embeddings = self.word_embeddings
         self.decoder.word_embeddings = self.word_embeddings
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
@@ -1419,6 +1418,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1671,11 +1671,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    def get_encoder(self):
-        return self.prophetnet.encoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.prophetnet.encoder
+        else:
+            return super().get_encoder(modality=modality)
 
 
 @auto_docstring(
@@ -1710,12 +1710,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.prophetnet.decoder.word_embeddings = value
-
-    def set_decoder(self, decoder):
-        self.prophetnet.decoder = decoder
-
-    def get_decoder(self):
-        return self.prophetnet.decoder
 
     @auto_docstring
     def forward(
@@ -1854,6 +1848,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
@@ -1862,7 +1857,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+        if past_key_values is not None and not is_first_iteration:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         model_inputs = {

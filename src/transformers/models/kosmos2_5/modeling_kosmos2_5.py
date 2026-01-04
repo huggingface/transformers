@@ -619,6 +619,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
@@ -1220,7 +1221,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = Kosmos2_5Config
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
     _supports_flash_attn_2 = True
@@ -1253,11 +1254,16 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.bias)
         elif isinstance(module, Kosmos2_5ImageToTextProjection):
             init.normal_(module.latent_query, mean=0.0, std=1.0)
+        elif isinstance(module, Kosmos2_5TextSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5VisionConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.__init__ with Pix2Struct->Kosmos2_5
     def __init__(self, config: Kosmos2_5VisionConfig):
@@ -1319,7 +1325,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__(config)
@@ -1505,7 +1511,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 )
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: Kosmos2_5TextConfig):
@@ -1602,6 +1608,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         use_cache=None,
         cache_position=None,
         position_ids=None,
+        is_first_iteration=False,
         **model_kwargs,
     ):
         input_shape = input_ids.shape
@@ -1806,6 +1813,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         use_cache=None,
         cache_position=None,
         position_ids=None,
+        is_first_iteration=False,
         **model_kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1819,10 +1827,11 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             use_cache=use_cache,
             cache_position=cache_position,
             position_ids=position_ids,
+            is_first_iteration=is_first_iteration,
             **model_kwargs,
         )
 
-        if cache_position[0] == 0:
+        if is_first_iteration or not use_cache:
             # If we're in cached decoding stage, `flattened_patches` should be `None` because `input_ids` do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
             model_inputs["flattened_patches"] = flattened_patches

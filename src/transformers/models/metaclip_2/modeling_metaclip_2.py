@@ -288,7 +288,7 @@ class MetaClip2EncoderLayer(GradientCheckpointingLayer):
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
     base_model_prefix = "metaclip_2"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -306,11 +306,13 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
         if isinstance(module, MetaClip2TextEmbeddings):
             init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, MetaClip2VisionEmbeddings):
             factor = self.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, MetaClip2Attention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -500,7 +502,7 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
@@ -600,7 +602,7 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
-    input_modalities = "text"
+    input_modalities = ("text",)
 
     _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
@@ -1032,7 +1034,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2VisionConfig):
@@ -1137,7 +1139,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
@@ -1203,7 +1205,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 )
 class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: MetaClip2Config) -> None:
         super().__init__(config)

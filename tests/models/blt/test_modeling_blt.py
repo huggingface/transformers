@@ -221,6 +221,11 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest("BLT always has an attention_mask input")
+
 
 @require_torch_accelerator
 class BltIntegrationTest(unittest.TestCase):

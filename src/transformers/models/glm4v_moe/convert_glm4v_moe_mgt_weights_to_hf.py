@@ -707,7 +707,12 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "n_shared_experts": text_config.get("n_shared_experts", 1),
         "norm_topk_prob": text_config.get("norm_topk_prob", True),
         "num_experts_per_tok": text_config.get("num_experts_per_tok", 8),
-        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [8, 12, 12]},
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000.0,
+            "mrope_section": [8, 12, 12],
+            "partial_rotary_factor": 0.5,
+        },
     }
     hf_config["text_config"] = txt_config
 

@@ -244,7 +244,8 @@ def write_model(
     config.architectures = ["InternVLForConditionalGeneration"]
     config.save_pretrained(model_path)
     if push_to_hub:
-        config.push_to_hub(hub_dir, use_temp_dir=True)
+        model_name = (hub_dir or model_path).split(os.path.sep)[-1]
+        config.push_to_hub(model_name)
     print("Model config saved successfully...")
 
     # ------------------------------------------------------------
@@ -303,9 +304,10 @@ def write_model(
     print("Unexpected keys:", unexpected_keys)
 
     print("Saving the model.")
+    model_name = model_path.split(os.path.sep)[-1]
     model.save_pretrained(model_path)
     if push_to_hub:
-        model.push_to_hub(hub_dir, use_temp_dir=True)
+        model.push_to_hub(model_name)
 
     image_processor = GotOcr2ImageProcessorFast.from_pretrained(model_path)
     video_processor = InternVLVideoProcessor.from_pretrained(model_path)
@@ -318,7 +320,7 @@ def write_model(
     )
     processor.save_pretrained(model_path)
     if push_to_hub:
-        processor.push_to_hub(hub_dir, use_temp_dir=True)
+        processor.push_to_hub(model_name)
 
     # generation config
     if get_lm_type(input_base_path) == "llama":
@@ -330,7 +332,7 @@ def write_model(
         )
         generation_config.save_pretrained(model_path)
         if push_to_hub:
-            generation_config.push_to_hub(hub_dir, use_temp_dir=True)
+            generation_config.push_to_hub(model_name)
 
     # del state_dict, model
 
@@ -393,8 +395,9 @@ def write_tokenizer(
 
     tokenizer.chat_template = chat_template
     tokenizer.save_pretrained(save_dir)
+    model_name = (hub_dir or save_dir).split(os.path.sep)[-1]
     if push_to_hub:
-        tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
+        tokenizer.push_to_hub(model_name)
 
 
 def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None):
@@ -410,8 +413,9 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Opt
     )
 
     image_processor.save_pretrained(save_dir)
+    model_name = (hub_dir or save_dir).split(os.path.sep)[-1]
     if push_to_hub:
-        image_processor.push_to_hub(hub_dir, use_temp_dir=True)
+        image_processor.push_to_hub(model_name)
 
 
 def main():

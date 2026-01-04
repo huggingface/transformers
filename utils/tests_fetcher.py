@@ -1026,10 +1026,10 @@ def infer_tests_to_run(
     if len(test_files_to_run) < 20:
         doctest_list = get_doctest_files()
     else:
-        doctest_file = []
+        doctest_list = []
 
     print(f"\n### DOCTEST TO RUN ###\n{_print_list(doctest_list)}")
-    if len(doctest_list):
+    if doctest_list:
         doctest_file = Path(output_file).parent / "doctest_list.txt"
         with open(doctest_file, "w", encoding="utf-8") as f:
             f.write(" ".join(doctest_list))
@@ -1100,6 +1100,7 @@ JOB_TO_TEST_FILE = {
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    "tests_training_ci": r"tests/models/.*/test_modeling_.*",
 }
 
 

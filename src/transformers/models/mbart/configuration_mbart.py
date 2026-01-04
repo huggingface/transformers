@@ -35,7 +35,7 @@ class MBartConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the MBART model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MBartModel`] or [`TFMBartModel`].
+            `inputs_ids` passed when calling [`MBartModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -147,6 +147,7 @@ class MBartConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

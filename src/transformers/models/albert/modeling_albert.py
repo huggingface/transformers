@@ -320,6 +320,9 @@ class AlbertPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         elif isinstance(module, AlbertMLMHead):
             init.zeros_(module.bias)
+        elif isinstance(module, AlbertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @dataclass
@@ -380,7 +383,7 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value: nn.Embedding) -> None:
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

@@ -114,7 +114,7 @@ class Cohere2VisionModel(AyaVisionModel):
         image_features = self.multi_modal_projector(selected_image_feature)
         return image_features
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -167,7 +167,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     def get_image_features(self, pixel_values: torch.FloatTensor):
         return self.model.get_image_features(pixel_values=pixel_values)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -295,8 +295,9 @@ def get_optimal_tiled_canvas(
     patch_size_height, patch_size_width = target_tile_size  # (height == width)
 
     candidate_resolutions = np.array(possible_resolutions) * patch_size_height
-    original_size = np.stack([image_height, image_width])
-    required_scales = candidate_resolutions / original_size
+    # tiles following (width, height) order to align with aspect ratio convention
+    tile_size = np.stack([image_width, image_height])
+    required_scales = candidate_resolutions / tile_size
     required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
         # We are forced to downscale, so try to minimize the amount of downscaling
@@ -305,7 +306,7 @@ def get_optimal_tiled_canvas(
         # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
         best_grid = possible_resolutions[np.argmin(required_scale)]
-    return best_grid
+    return best_grid  # (width, height)
 
 
 class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):

@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     torch_device,
 )
 
@@ -1273,7 +1272,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             _ = model(**dummy_inputs)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_generate_beyond_sliding_window_with_flash_attn(self):
         config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()

@@ -72,8 +72,6 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         video_token_index (`int`, *optional*, defaults to 32000):
             The video token index to encode the image prompt.
         spatial_pool_mode (`str`, *optional*, defaults to `"average"`):
@@ -121,7 +119,6 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         video_token_index=32000,
         spatial_pool_mode="average",
         spatial_pool_stride=2,
@@ -178,7 +175,13 @@ class LlavaNextVideoConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
+
+        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
+        # though it concerns the main model, while it was set to False by default in the main model... So we hardcode a fix here
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = True
+            self.text_config.tie_word_embeddings = False
 
 
 class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -260,7 +263,7 @@ class LlavaNextVideoMultiModalProjector(LlavaNextMultiModalProjector):
 
 
 class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
-    input_modalities = ["image", "video", "text"]
+    input_modalities = ("image", "video", "text")
 
 
 class LlavaNextVideoModel(LlavaNextModel):
@@ -690,6 +693,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- extra custom processing
@@ -701,12 +705,15 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
-        if cache_position[0] == 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["image_sizes"] = image_sizes

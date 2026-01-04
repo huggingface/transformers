@@ -34,10 +34,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.import_utils import (
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from .configuration_mamba import MambaConfig
 
 
@@ -47,12 +44,6 @@ if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
     pscan = None
-
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import mamba_inner_fn, selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
 
 
 class MambaCache:
@@ -207,15 +198,24 @@ class MambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.use_bias = config.use_bias
 
-        self.warn_slow_implementation()
-
-    def warn_slow_implementation(self):
+        global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
         causal_conv1d_update, causal_conv1d_fn = (
             (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
             if causal_conv1d is not None
             else (None, None)
         )
+        global mamba_ssm, selective_state_update, selective_scan_fn, mamba_inner_fn
+        mamba_ssm = lazy_load_kernel("mamba-ssm")
+        selective_state_update, selective_scan_fn, mamba_inner_fn = (
+            (mamba_ssm.selective_state_update, mamba_ssm.selective_scan_fn, mamba_ssm.mamba_inner_fn)
+            if mamba_ssm is not None
+            else (None, None, None)
+        )
+
+        self.warn_slow_implementation()
+
+    def warn_slow_implementation(self):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
@@ -266,12 +266,6 @@ class MambaMixer(nn.Module):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d")
-            causal_conv1d_update, causal_conv1d_fn = (
-                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-                if causal_conv1d is not None
-                else (None, None)
-            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -435,16 +429,10 @@ class MambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
@@ -643,6 +631,7 @@ class MambaModel(MambaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[tuple, MambaOutput]:
         r"""
         cache_params (`MambaCache`, *optional*):
@@ -761,6 +750,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[MambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`

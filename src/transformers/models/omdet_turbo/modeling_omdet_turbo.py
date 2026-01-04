@@ -986,7 +986,7 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     config: OmDetTurboConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1022,6 +1022,10 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             init.ones_(module.weight)
             init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):
@@ -1316,6 +1320,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         """
         Args:
@@ -1505,6 +1510,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
         r"""
         classes_input_ids (`torch.LongTensor` of shape `(total_classes (>= batch_size), sequence_length)`):

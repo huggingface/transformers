@@ -404,7 +404,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     config: Dinov2Config
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dinov2Layer"]
     _supports_sdpa = True
@@ -563,7 +563,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
     def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs

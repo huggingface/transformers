@@ -44,7 +44,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -71,11 +71,11 @@ class DecoratedItem:
         int  # 1-based line number where body starts (for functions) or __init__ body start (for classes with __init__)
     )
     args: list[str]  # List of argument names (excluding self, *args, **kwargs) - for classes, these are __init__ args
-    custom_args_text: Optional[str] = None  # custom_args string if provided in decorator
+    custom_args_text: str | None = None  # custom_args string if provided in decorator
 
     # Class-specific fields (only populated when kind == 'class')
     has_init: bool = False  # Whether the class has an __init__ method
-    init_def_line: Optional[int] = None  # 1-based line number of __init__ def (if has_init)
+    init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
 
 
@@ -99,6 +99,8 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmAsrProcessor",
+    "AudioFlamingo3Processor",
     "ApertusConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",
@@ -109,10 +111,6 @@ OBJECTS_TO_IGNORE = {
     # Deprecated
     "InputExample",
     "InputFeatures",
-    # Signature is *args/**kwargs
-    "TFSequenceSummary",
-    "TFBertTokenizer",
-    "TFGPT2Tokenizer",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
@@ -132,6 +130,39 @@ OBJECTS_TO_IGNORE = {
     "BeitModel",
     "BertConfig",
     "BertJapaneseTokenizer",
+    "CohereTokenizer",
+    "DebertaTokenizer",
+    "FNetTokenizer",
+    "FunnelTokenizer",
+    "GPT2Tokenizer",
+    "GPTNeoXTokenizer",
+    "GemmaTokenizer",
+    "HerbertTokenizer",
+    "LayoutLMv2Tokenizer",
+    "LayoutLMv3Tokenizer",
+    "LayoutXLMTokenizer",
+    "LlamaTokenizer",
+    "LlamaTokenizerFast",
+    "MBart50Tokenizer",
+    "NougatTokenizer",
+    "OpenAIGPTTokenizer",
+    "PythonBackend",
+    "ReformerTokenizer",
+    "SeamlessM4TTokenizer",
+    "SentencePieceBackend",
+    "SplinterTokenizer",
+    "TokenizersBackend",
+    "UdopTokenizer",
+    "WhisperTokenizer",
+    "XGLMTokenizer",
+    "XLMRobertaTokenizer",
+    "AlbertTokenizer",
+    "BarthezTokenizer",
+    "BigBirdTokenizer",
+    "BlenderbotTokenizer",
+    "CamembertTokenizer",
+    "CodeLlamaTokenizer",
+    "CodeLlamaTokenizerFast",
     "BertModel",
     "BertTokenizerFast",
     "BigBirdConfig",
@@ -148,7 +179,6 @@ OBJECTS_TO_IGNORE = {
     "BlipTextConfig",
     "BlipVisionConfig",
     "BloomConfig",
-    "BloomTokenizerFast",
     "BLTConfig",
     "BLTPatcherConfig",
     "BridgeTowerTextConfig",
@@ -253,6 +283,7 @@ OBJECTS_TO_IGNORE = {
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
+    "AnyToAnyPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",
@@ -260,6 +291,9 @@ OBJECTS_TO_IGNORE = {
     "JukeboxTokenizer",
     "LEDConfig",
     "LEDTokenizerFast",
+    "LasrEncoderConfig",
+    "LasrFeatureExtractor",
+    "LasrTokenizer",
     "LayoutLMForQuestionAnswering",
     "LayoutLMTokenizerFast",
     "LayoutLMv2Config",
@@ -338,6 +372,7 @@ OBJECTS_TO_IGNORE = {
     "OpenLlamaConfig",
     "PLBartConfig",
     "ParakeetCTCConfig",
+    "LasrCTCConfig",
     "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",
@@ -364,10 +399,6 @@ OBJECTS_TO_IGNORE = {
     "RagRetriever",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
-    "RealmConfig",
-    "RealmForOpenQA",
-    "RealmScorer",
-    "RealmTokenizerFast",
     "ReformerConfig",
     "ReformerTokenizerFast",
     "RegNetConfig",
@@ -397,7 +428,6 @@ OBJECTS_TO_IGNORE = {
     "SeamlessM4TConfig",  # use of unconventional markdown
     "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
-    "SpecialTokensMixin",
     "Speech2Text2Config",
     "Speech2Text2Tokenizer",
     "Speech2TextTokenizer",
@@ -921,7 +951,7 @@ def _is_auto_docstring_decorator(dec):
     return isinstance(target, ast.Name) and target.id == "auto_docstring"
 
 
-def _extract_function_args(func_node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[str]:
+def _extract_function_args(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     """Extract argument names from a function node, excluding 'self', *args, **kwargs."""
     all_args = (func_node.args.posonlyargs or []) + func_node.args.args + func_node.args.kwonlyargs
     return [a.arg for a in all_args if a.arg != "self"]

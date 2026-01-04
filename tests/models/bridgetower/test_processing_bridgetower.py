@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
@@ -23,10 +21,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from transformers import (
-        AutoProcessor,
-        BridgeTowerImageProcessor,
         BridgeTowerProcessor,
-        RobertaTokenizerFast,
     )
 
 
@@ -35,28 +30,9 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = BridgeTowerProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = BridgeTowerImageProcessor()
-        tokenizer = RobertaTokenizerFast.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
-
-        processor = BridgeTowerProcessor(image_processor, tokenizer)
-
-        processor.save_pretrained(cls.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # Some kwargs tests are overridden from common tests to handle shortest_edge
-    # and size_divisor behaviour
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
     @require_torch
     @require_vision

@@ -107,6 +107,9 @@ class ErnieEmbeddings(BertEmbeddings):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        # .to is better than using _no_split_modules on ErnieEmbeddings as it's the first module and >1/2 the model size
+        inputs_embeds = inputs_embeds.to(token_type_embeddings.device)
         embeddings = inputs_embeds + token_type_embeddings
 
         position_embeddings = self.position_embeddings(position_ids)
@@ -169,6 +172,9 @@ class ErniePreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, ErnieLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, ErnieEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class ErnieModel(BertModel):
@@ -187,7 +193,7 @@ class ErnieModel(BertModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

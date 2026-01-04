@@ -20,6 +20,9 @@
 
 __version__ = "5.0.0.dev0"
 
+import importlib
+import sys
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,6 +36,7 @@ from .utils import (
     is_librosa_available,
     is_mistral_common_available,
     is_mlx_available,
+    is_numba_available,
     is_pretty_midi_available,
 )
 
@@ -58,6 +62,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Base objects, independent of any specific backend
 _import_structure = {
     "audio_utils": [],
+    "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
     "data": [
@@ -130,6 +135,7 @@ _import_structure = {
     "loss": [],
     "modelcard": ["ModelCard"],
     "pipelines": [
+        "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
@@ -171,13 +177,15 @@ _import_structure = {
     "processing_utils": ["ProcessorMixin"],
     "quantizers": [],
     "testing_utils": [],
-    "tokenization_utils": ["PreTrainedTokenizer"],
+    "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
+    "tokenization_utils": [],
+    "tokenization_utils_fast": [],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
         "CharSpan",
         "PreTrainedTokenizerBase",
-        "SpecialTokensMixin",
         "TokenSpan",
     ],
     "trainer_callback": [
@@ -201,10 +209,7 @@ _import_structure = {
     "utils": [
         "CONFIG_NAME",
         "MODEL_CARD_NAME",
-        "PYTORCH_PRETRAINED_BERT_CACHE",
-        "PYTORCH_TRANSFORMERS_CACHE",
         "SPIECE_UNDERLINE",
-        "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
         "TensorType",
         "add_end_docstrings",
@@ -262,6 +267,7 @@ _import_structure = {
     ],
     "video_utils": [],
     "utils.kernel_config": ["KernelConfig"],
+    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -276,7 +282,10 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+    _import_structure["tokenization_utils_tokenizers"] = [
+        "TokenizersBackend",
+        "PreTrainedTokenizerFast",
+    ]
 
 
 try:
@@ -304,7 +313,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_mistral_common_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["tokenization_mistral_common"] = ["MistralCommonTokenizer"]
+    _import_structure["tokenization_mistral_common"] = ["MistralCommonBackend"]
 
 # Vision-specific objects
 try:
@@ -381,6 +390,8 @@ else:
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
             "ClassifierFreeGuidanceLogitsProcessor",
+            "ContinuousBatchingManager",
+            "ContinuousMixin",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -430,6 +441,15 @@ else:
         "convert_and_export_with_cache",
     ]
 
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "WeightConverter",
+    ]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
@@ -483,6 +503,13 @@ if TYPE_CHECKING:
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
+    from .core_model_loading import Chunk as Chunk
+    from .core_model_loading import Concatenate as Concatenate
+    from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import MergeModulelist as MergeModulelist
+    from .core_model_loading import PermuteForRope as PermuteForRope
+    from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
     from .data import DataProcessor as DataProcessor
@@ -534,6 +561,8 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingManager as ContinuousBatchingManager
+    from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
@@ -636,6 +665,7 @@ if TYPE_CHECKING:
     from .optimization import get_wsd_schedule as get_wsd_schedule
 
     # Pipelines
+    from .pipelines import AnyToAnyPipeline as AnyToAnyPipeline
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
@@ -678,14 +708,20 @@ if TYPE_CHECKING:
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
     # Tokenization
-    from .tokenization_utils import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PreTrainedTokenizer as PreTrainedTokenizer
+    from .tokenization_python import PythonBackend as PythonBackend
     from .tokenization_utils_base import AddedToken as AddedToken
     from .tokenization_utils_base import BatchEncoding as BatchEncoding
     from .tokenization_utils_base import CharSpan as CharSpan
     from .tokenization_utils_base import PreTrainedTokenizerBase as PreTrainedTokenizerBase
-    from .tokenization_utils_base import SpecialTokensMixin as SpecialTokensMixin
     from .tokenization_utils_base import TokenSpan as TokenSpan
-    from .tokenization_utils_fast import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+
+    # Tokenization
+    from .tokenization_utils_sentencepiece import SentencePieceBackend as SentencePieceBackend
+    from .tokenization_utils_tokenizers import PreTrainedTokenizerFast as PreTrainedTokenizerFast
+    from .tokenization_utils_tokenizers import (
+        TokenizersBackend as TokenizersBackend,
+    )
 
     # Trainer
     from .trainer import Trainer as Trainer
@@ -709,10 +745,7 @@ if TYPE_CHECKING:
     # Files and general utilities
     from .utils import CONFIG_NAME as CONFIG_NAME
     from .utils import MODEL_CARD_NAME as MODEL_CARD_NAME
-    from .utils import PYTORCH_PRETRAINED_BERT_CACHE as PYTORCH_PRETRAINED_BERT_CACHE
-    from .utils import PYTORCH_TRANSFORMERS_CACHE as PYTORCH_TRANSFORMERS_CACHE
     from .utils import SPIECE_UNDERLINE as SPIECE_UNDERLINE
-    from .utils import TRANSFORMERS_CACHE as TRANSFORMERS_CACHE
     from .utils import WEIGHTS_NAME as WEIGHTS_NAME
     from .utils import TensorType as TensorType
     from .utils import add_end_docstrings as add_end_docstrings
@@ -735,6 +768,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_npu_available as is_torch_npu_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
+    from .utils.import_utils import requires_backends
     from .utils.kernel_config import KernelConfig as KernelConfig
 
     # Quantization config
@@ -758,8 +792,6 @@ if TYPE_CHECKING:
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
 else:
-    import sys
-
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
@@ -772,6 +804,26 @@ else:
         module_spec=__spec__,
         extra_objects={"__version__": __version__},
     )
+
+    def _create_tokenization_alias(alias: str, target: str) -> None:
+        """
+        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
+        """
+
+        module = types.ModuleType(alias)
+        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+
+        def _get_target():
+            return importlib.import_module(target, __name__)
+
+        module.__getattr__ = lambda name: getattr(_get_target(), name)
+        module.__dir__ = lambda: dir(_get_target())
+
+        sys.modules[alias] = module
+        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
+
+    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
+    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
 
 
 if not is_torch_available():

@@ -672,8 +672,7 @@ class LxmertPreTrainingHeads(nn.Module):
 class LxmertPreTrainedModel(PreTrainedModel):
     config: LxmertConfig
     base_model_prefix = "lxmert"
-    input_modalities = ["image", "text"]
-    _supports_param_buffer_assignment = False
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -712,6 +711,7 @@ class LxmertModel(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[LxmertModelOutput, tuple[torch.FloatTensor]]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
@@ -1245,6 +1245,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[LxmertForQuestionAnsweringOutput, tuple[torch.FloatTensor]]:
         r"""
         visual_feats (`torch.FloatTensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):

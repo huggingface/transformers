@@ -243,7 +243,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config: PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["PoolFormerLayer"]
 
     @torch.no_grad()
@@ -268,7 +268,11 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        # Input embeddings correspond to the very first patch-embedding stage.
+        return self.encoder.patch_embeddings[0]
+
+    def set_input_embeddings(self, value):
+        self.encoder.patch_embeddings[0] = value
 
     @auto_docstring
     def forward(
@@ -276,6 +280,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -332,6 +337,12 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.poolformer.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.poolformer.set_input_embeddings(value)
+
     @auto_docstring
     def forward(
         self,
@@ -339,6 +350,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
