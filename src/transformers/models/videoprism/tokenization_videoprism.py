@@ -60,24 +60,14 @@ class VideoPrismTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
         vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        model_max_length=64,
         **kwargs,
     ):
-        if vocab_file is not None and vocab is None:
-            import sentencepiece as spm
-
-            sp = spm.SentencePieceProcessor()
-            sp.Load(vocab_file)
-            vocab = [(sp.IdToPiece(i), sp.GetScore(i)) for i in range(sp.GetPieceSize())]
-
-        kwargs["model_max_length"] = model_max_length
         self._extra_ids = extra_ids
 
         # Handle extra_ids and additional_special_tokens

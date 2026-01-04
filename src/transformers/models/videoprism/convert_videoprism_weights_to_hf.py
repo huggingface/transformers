@@ -323,22 +323,14 @@ def read_and_preprocess_video(  # This function from the original code
             return frames
 
 
-def get_tokenizer(from_pretrained=False, checkpoint_name=None):
+def get_tokenizer(checkpoint_name=None):
     TEXT_QUERY_CSV = 'playing drums,sitting,playing flute,playing at playground,concert'  # @param {type: "string"}
     PROMPT_TEMPLATE = 'a video of {}.'
 
     text_queries = TEXT_QUERY_CSV.split(',')
     text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]    
 
-    if not from_pretrained:
-        tokenizer = VideoPrismTokenizer(
-        vocab_file="./sentencepiece.model", # path to vocab file
-        unk_token="<unk>",
-        pad_token="<pad>",
-        eos_token="</s>",
-        )
-    else:
-        tokenizer = AutoTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
+    tokenizer = AutoTokenizer.from_pretrained("MHRDYN7/" + checkpoint_name)
 
     return tokenizer, text_queries
 
@@ -429,13 +421,12 @@ def convert_videoprism_checkpoint(
         if "lvt" not in model_name:
             outputs = model(input_vid)
             logits = outputs.last_hidden_state[0, :3, :3]
-            print(logits)
             assert torch.allclose(logits, EXPECTED_OUTPUTS[model_name], atol=1e-5), "The converted model logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
 
         else:
             if from_tokenizer:
-                tokenizer, text_queries = get_tokenizer(from_pretrained, checkpoint_name=checkpoint_name)
+                tokenizer, text_queries = get_tokenizer(checkpoint_name=checkpoint_name)
                 outputs = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt")
                 input_ids, mask = outputs["input_ids"], outputs["attention_mask"]
             else:
@@ -444,12 +435,7 @@ def convert_videoprism_checkpoint(
             outputs = model(input_vid, input_ids, mask)
             video_logits = outputs.video_embeds[0, :9]
             text_logits = outputs.text_embeds[:, :3]
-            print("Text logits:", text_logits)
-            print("Video logits:", video_logits)
             assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), "The converted model text logits do not match the expected logits."
-            if not from_pretrained and upload:
-                tokenizer.push_to_hub(f"MHRDYN7/{checkpoint_name}")
-                print("Uploaded tokenizer")
             assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), "The converted model video logits do not match the expected logits."
             print("Inference successful and logits match expected outputs.")
 
@@ -491,8 +477,8 @@ if __name__ == "__main__":
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         convert=False,
         load_model=True,
-        from_pretrained=True, # if True, pulls the model weights and also tokenizer from hub (if from_tokenizer==True)
-        from_tokenizer = True,
+        from_pretrained=True, # if True, pulls the model weights from hub
+        from_tokenizer=True, # if True uses AutoTokenizer, otherwise loads custom ids
         load_video=True,
         inference=True,
         upload=False,
