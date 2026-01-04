@@ -23,7 +23,6 @@ from ..test_modeling_common import ids_tensor
 
 if is_torch_available():
     import torch
-    from torch.nn.utils.rnn import pad_sequence
 
     from transformers.generation import (
         ConfidenceCriteria,
