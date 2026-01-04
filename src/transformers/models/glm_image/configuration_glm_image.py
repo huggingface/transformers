@@ -362,8 +362,8 @@ class GlmImageConfig(PreTrainedConfig):
         vision_config=None,
         vq_config=None,
         image_token_id=167855,
-        image_start_token_id=167851,
-        image_end_token_id=167852,
+        image_start_token_id=16384,
+        image_end_token_id=16385,
         **kwargs,
     ):
         if isinstance(vq_config, dict):

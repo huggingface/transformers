@@ -323,8 +323,8 @@ class GlmImageConfig(PreTrainedConfig):
         vision_config=None,
         vq_config=None,
         image_token_id=167855,
-        image_start_token_id=167851,
-        image_end_token_id=167852,
+        image_start_token_id=16384,
+        image_end_token_id=16385,
         **kwargs,
     ):
         if isinstance(vq_config, dict):
@@ -608,7 +608,7 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
         if isinstance(module, GlmImageTextRotaryEmbedding):
             config = module.config
             base = config.rope_parameters["rope_theta"]
-            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 0.5)
+            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
             head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
             dim = int(head_dim * partial_rotary_factor)
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
