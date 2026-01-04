@@ -650,7 +650,7 @@ class GlmImageModelOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
-class GlmImageVisionResnetBlock(nn.Module):
+class GlmImageVQVAEResnetBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
@@ -726,7 +726,7 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
     config: GlmImageVQVAEConfig
     _no_split_modules = [
         "GlmImageVectorQuantizer",
-        "GlmImageVisionResnetBlock",
+        "GlmImageVQVAEResnetBlock",
     ]
 
     def __init__(self, config: GlmImageVQVAEConfig):
@@ -736,7 +736,7 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.post_conv = nn.Sequential(
-            *[GlmImageVisionResnetBlock(config.latent_channels) for _ in range(config.num_res_blocks)]
+            *[GlmImageVQVAEResnetBlock(config.latent_channels) for _ in range(config.num_res_blocks)]
         )
 
     def encode(self, hidden_states):

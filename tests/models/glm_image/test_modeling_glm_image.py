@@ -97,7 +97,7 @@ class GlmImageVisionText2TextModelTester:
             "in_channels": 3,
             "initializer_range": 0.02,
             "latent_channels": 48,
-            "num_embeddings": 32,
+            "num_embeddings": 16,
             "num_res_blocks": 2,
         },
     ):
