@@ -749,6 +749,7 @@ class NomicBertEncoder(BertEncoder):
     def __init__(self, config, layer_class=None, **kwargs):
         super().__init__(config, **kwargs)
 
+        self.gradient_checkpointing = False
         # Use NomicBertLayer by default if not specified
         layer_class = layer_class or NomicBertLayer
 
@@ -774,6 +775,9 @@ class NomicBertEncoder(BertEncoder):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         # DynamicCache is updated in place by attention layers
+        if self.gradient_checkpointing and self.training:
+            use_cache = False
+
         next_decoder_cache = past_key_values if use_cache else None
 
         for i, layer in enumerate(self.layer):
@@ -789,16 +793,33 @@ class NomicBertEncoder(BertEncoder):
                     raise ValueError("NomicBert only supports Cache-based past_key_values")
                 past_key_value = past_key_values
 
-            layer_outputs = layer(
-                hidden_states,
-                attention_mask,
-                layer_head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
-                position_ids=position_ids,
-            )
+            if self.gradient_checkpointing and self.training:
+
+                def custom_forward(*inputs):
+                    return layer(*inputs)
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    custom_forward,
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    None,
+                    output_attentions,
+                    position_ids,
+                )
+            else:
+                layer_outputs = layer(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
+                    position_ids=position_ids,
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -856,6 +877,7 @@ class NomicBertPreTrainingHeads(BertPreTrainingHeads):
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
     _supports_cache_class = True
+    supports_gradient_checkpointing = True
 
 
 class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
