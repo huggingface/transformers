@@ -33,7 +33,7 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
@@ -59,6 +59,8 @@ from ..glm4v.modeling_glm4v import (
 )
 from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eager_attention_forward
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
 
@@ -1348,15 +1350,11 @@ def smart_resize(
 class GlmImageImageProcessor(Qwen2VLImageProcessor):
     pass
 
+class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
+    pass
 
-class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
-
+class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
+    pass
 
 class GlmImageProcessor(ProcessorMixin):
     r"""
