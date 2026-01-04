@@ -21,7 +21,6 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
-import pytest
 import requests
 
 from transformers import (
