@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, BitsAndBytesConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     cleanup,
