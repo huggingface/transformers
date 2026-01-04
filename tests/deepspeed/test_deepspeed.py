@@ -834,13 +834,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
 
-            # 1. fail to find any checkpoint - due a fresh output_dir
-            with self.assertRaises(Exception) as context:
+            # 1.  warning when find no checkpoint - due a fresh output_dir
+            with self.assertLogs("transformers.trainer", level="WARNING") as context:
                 trainer.train(resume_from_checkpoint=True)
-            self.assertTrue(
-                "No valid checkpoint found in output directory" in str(context.exception),
-                f"got exception: {context.exception}",
-            )
+            self.assertIn("No valid checkpoint found in output directory", str(context.output))
 
             # 2. fail to find a bogus checkpoint
             with self.assertRaises(Exception) as context:
