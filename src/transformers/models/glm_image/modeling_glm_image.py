@@ -265,7 +265,7 @@ class GlmImageVisionEmbeddings(nn.Module):
 
             # Perform bicubic interpolation
             interpolated_embed_fp32 = F.grid_sample(
-                pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
+                pos_embed_2d, grid, mode="bilinear", align_corners=False, padding_mode="border"
             )
 
             # Reshape and convert back to original dtype
@@ -758,8 +758,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
 
         self.embeddings = GlmImageVisionEmbeddings(config)
         self.patch_embed = GlmImageVisionPatchEmbed(config)
-
-        head_dim = config.hidden_size // config.num_heads
 
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
