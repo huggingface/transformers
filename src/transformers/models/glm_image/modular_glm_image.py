@@ -905,6 +905,7 @@ class GlmImageModel(Glm4vModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = torch.cat(image_embeds, dim=0).to(image_embeds[0].device, image_embeds[0].dtype)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
 
