@@ -1050,15 +1050,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         >>> import requests
         >>> from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
-        >>> model = GlmImageForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> model = GlmImageForConditionalGeneration.from_pretrained("zai-org/GLM-Image")
+        >>> processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
 
         >>> messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
+                    {"type": "text", "text": "Add a truck of this photo.<sop>28 40<eop>"},
                 ],
             },
         ]
