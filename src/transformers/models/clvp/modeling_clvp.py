@@ -814,7 +814,16 @@ class ClvpPreTrainedModel(PreTrainedModel):
                     )
         elif isinstance(module, ClvpModelForConditionalGeneration):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
-
+        elif isinstance(module, ClvpSelfAttention):
+            if hasattr(module.config, "max_position_embeddings"):
+                max_positions = module.config.max_position_embeddings
+                bias = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool))
+                bias = bias.view(1, 1, max_positions, max_positions)
+                init.copy_(module.bias, bias)
+        elif isinstance(module, ClvpRotaryPositionalEmbedding):
+            dim = max(self.config.projection_dim // (self.config.num_attention_heads * 2), 32)
+            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
         if isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
@@ -1309,6 +1318,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         conditioning_embeds=None,
         cache_position=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten: has `conditioning_embeds`-related logic
@@ -1320,9 +1330,10 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        if conditioning_embeds is not None and cache_position[0] != 0:
+        if conditioning_embeds is not None and not is_first_iteration:
             model_inputs["position_ids"] = torch.tensor([input_ids_length], dtype=torch.long, device=input_ids.device)
 
         return model_inputs

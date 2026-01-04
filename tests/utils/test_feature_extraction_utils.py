@@ -135,11 +135,28 @@ class BatchFeatureTester(unittest.TestCase):
         self.assertIn("inhomogeneous", error_msg.lower())
         self.assertIn("return_tensors=None", error_msg)
 
-        # Unconvertible type (dict)
-        data_dict = {"values": [[1, 2]], "metadata": {"key": "val"}}
-        with self.assertRaises(ValueError) as context:
-            BatchFeature(data_dict, tensor_type="pt")
-        self.assertIn("metadata", str(context.exception))
+    @require_torch
+    def test_batch_feature_auto_skip_non_array_like(self):
+        """Test that non-array-like values are automatically skipped during tensor conversion."""
+        data = {
+            "values": [[1, 2]],
+            "metadata": {"key": "val"},
+            "image_path": "/path/to/image.jpg",
+            "tags": ["tag1", "tag2"],
+            "extra": None,
+        }
+        batch = BatchFeature(data, tensor_type="pt")
+
+        # values should be converted
+        self.assertIsInstance(batch["values"], torch.Tensor)
+
+        # Non-array-like values should remain unchanged
+        self.assertIsInstance(batch["metadata"], dict)
+        self.assertEqual(batch["metadata"], {"key": "val"})
+        self.assertIsInstance(batch["image_path"], str)
+        self.assertIsInstance(batch["tags"], list)
+        self.assertEqual(batch["tags"], ["tag1", "tag2"])
+        self.assertIsNone(batch["extra"])
 
     @require_torch
     def test_batch_feature_skip_tensor_conversion(self):
@@ -168,6 +185,32 @@ class BatchFeatureTester(unittest.TestCase):
         batch.convert_to_tensors(tensor_type="pt", skip_tensor_conversion=["metadata"])
         self.assertIsInstance(batch["input_values"], torch.Tensor)
         self.assertIsInstance(batch["metadata"], list)
+
+    @require_torch
+    def test_batch_feature_to_with_nested_tensors(self):
+        """Test .to() method works recursively with nested lists and tuples of tensors."""
+        batch = BatchFeature(
+            {
+                "list_tensors": [torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])],
+                "nested_list": [[torch.tensor([1.0]), torch.tensor([2.0])]],
+                "tuple_tensors": (torch.tensor([5.0]), torch.tensor([6.0])),
+            }
+        )
+
+        batch_fp16 = batch.to(torch.float16)
+
+        # Check lists of tensors are converted
+        self.assertIsInstance(batch_fp16["list_tensors"], list)
+        self.assertEqual(batch_fp16["list_tensors"][0].dtype, torch.float16)
+        self.assertEqual(batch_fp16["list_tensors"][1].dtype, torch.float16)
+
+        # Check nested lists are converted
+        self.assertIsInstance(batch_fp16["nested_list"][0], list)
+        self.assertEqual(batch_fp16["nested_list"][0][0].dtype, torch.float16)
+
+        # Check tuples are preserved and converted
+        self.assertIsInstance(batch_fp16["tuple_tensors"], tuple)
+        self.assertEqual(batch_fp16["tuple_tensors"][0].dtype, torch.float16)
 
 
 class FeatureExtractorUtilTester(unittest.TestCase):
