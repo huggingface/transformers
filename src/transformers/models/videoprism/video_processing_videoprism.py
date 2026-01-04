@@ -4,12 +4,10 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
+
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...processing_utils import Unpack, VideosKwargs
 from ...video_processing_utils import BaseVideoProcessor
-
-
-class VideoPrismFastVideoProcessorInitKwargs(VideosKwargs): ...
 
 
 class VideoPrismVideoProcessor(BaseVideoProcessor):
@@ -26,11 +24,6 @@ class VideoPrismVideoProcessor(BaseVideoProcessor):
     do_normalize = False
     do_convert_rgb = True
     do_sample_frames = False  # Set to False for BC, recommended to set `True` in new models
-    valid_kwargs = VideoPrismFastVideoProcessorInitKwargs
-    model_input_names = ["pixel_values_videos"]
-
-    def __init__(self, **kwargs: Unpack[VideoPrismFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
 
 
 __all__ = ["VideoPrismVideoProcessor"]

@@ -510,7 +510,6 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
             return
 
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Check if the specific weight tensor was already loaded from a checkpoint
             if not getattr(module.weight, "_is_hf_initialized", False):
                 module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 

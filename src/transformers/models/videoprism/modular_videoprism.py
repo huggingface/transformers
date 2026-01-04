@@ -108,55 +108,37 @@ class VideoPrismConfig(SiglipConfig):
     
 
 class VideoPrismTokenizer(T5Tokenizer):
+    def __init__(
+        self,
+        vocab_file: Optional[str] = None,
+        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        extra_ids=100,
+        additional_special_tokens=None,
+        model_max_length=64,
+        **kwargs,
+    ):
+        if vocab_file is not None and vocab is None:
+            import sentencepiece as spm
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A sequence has the following format:
+            sp = spm.SentencePieceProcessor()
+            sp.Load(vocab_file)
+            vocab = [(sp.IdToPiece(i), sp.GetScore(i)) for i in range(sp.GetPieceSize())]
 
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        # token_ids_0 = self._add_eos_if_not_present(token_ids_0)
-        if token_ids_1 is None:
-            return token_ids_0
-        else:
-            # token_ids_1 = self._add_eos_if_not_present(token_ids_1)
-            return token_ids_0 + token_ids_1
-
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. VIDEOPRISM does not make
-        use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of zeros.
-        """
-
-        if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return len(token_ids_0 + token_ids_1) * [0]
-
+        kwargs["model_max_length"] = model_max_length
+        super().__init__(
+            vocab=vocab,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            extra_ids=extra_ids,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+        # VideoPrism does not append an EOS token by default
+        self._tokenizer.post_processor = None
 
 
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
