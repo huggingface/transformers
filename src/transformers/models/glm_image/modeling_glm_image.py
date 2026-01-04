@@ -1072,7 +1072,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         image_ids: torch.LongTensor,
-    ) -> torch.LongTensor:
+    ):
         """
         Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
 
