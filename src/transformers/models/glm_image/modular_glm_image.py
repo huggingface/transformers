@@ -540,15 +540,6 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
-        if isinstance(module, GlmImageVisionEmbeddings):
-            width = (
-                self.config.vision_config.hidden_size
-                if isinstance(self.config, GlmImageConfig)
-                else self.config.hidden_size
-            )
-            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-            if hasattr(module, "position_ids"):
-                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
