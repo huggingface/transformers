@@ -915,7 +915,7 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)  # type: ignore
 
         return model_kwargs
-    
+
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
@@ -979,9 +979,7 @@ class GenerationMixin(ContinuousMixin):
                         dim=-1,
                     )
                     model_kwargs["decoder_attention_mask"] = decoder_attention_mask
-
         return decoder_input_ids, model_kwargs
-	
 
     @staticmethod
     def _expand_inputs_for_generation(
