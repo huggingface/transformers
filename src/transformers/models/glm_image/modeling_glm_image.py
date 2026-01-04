@@ -967,45 +967,41 @@ class GlmImageModel(GlmImagePreTrainedModel):
         Calculate the 3D rope index for image generation task.
         Also pre-compute all decode-stage position_ids for efficiency.
         """
-        device = input_ids.device
-        batch_size = input_ids.shape[0]
-        seq_length = input_ids.shape[1]
 
-        position_ids = torch.ones(
-            3,
-            input_ids.shape[0],
-            input_ids.shape[1],
-            dtype=input_ids.dtype,
-            device=input_ids.device,
+        position_ids = (
+            torch.arange(input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device)
+            .view(1, 1, -1)
+            .expand(3, input_ids.shape[0], -1)
+            .clone()
         )
 
         if attention_mask is not None:
             valid_lengths = attention_mask.sum(dim=1)
             gen_st_idx = valid_lengths[0].item()
         else:
-            gen_st_idx = seq_length
+            gen_st_idx = input_ids.shape[1]
         self._gen_st_idx = gen_st_idx
 
         if image_grid_thw is not None and len(image_grid_thw) > 0:
-            # Use the last image grid for decode stage
             h = image_grid_thw[-1, 1].item()
             w = image_grid_thw[-1, 2].item()
             total_vision_tokens = h * w
 
-            h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
-            w_indices = torch.arange(w, device=device).unsqueeze(0).expand(h, w).flatten()
+            h_indices = torch.arange(h, device=input_ids.device).unsqueeze(1).expand(h, w).flatten()
+            w_indices = torch.arange(w, device=input_ids.device).unsqueeze(0).expand(h, w).flatten()
 
             self._cached_decode_position_ids = torch.stack(
                 [
-                    torch.full((total_vision_tokens,), gen_st_idx, device=device, dtype=torch.long),
+                    torch.full((total_vision_tokens,), gen_st_idx, device=input_ids.device, dtype=torch.long),
                     gen_st_idx + h_indices,
                     gen_st_idx + w_indices,
                 ],
                 dim=0,
             )
+        else:
+            self._cached_decode_position_ids = None
 
-        # mrope_position_deltas for pure text input
-        mrope_position_deltas = torch.zeros(batch_size, 1, dtype=torch.long, device=device)
+        mrope_position_deltas = torch.zeros([input_ids.shape[0], 1], dtype=input_ids.dtype, device=input_ids.device)
 
         return position_ids, mrope_position_deltas
 
