@@ -792,21 +792,138 @@ class GlmImageModel(Glm4vModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index for image generation task.
-        Also pre-compute all decode-stage position_ids for efficiency.
+        
+        Explanation:
+            Each embedding sequence may contain image tokens (for generation) and text tokens,
+            or just text tokens.
+        
+            For pure text embedding sequence, the rotary position embedding is the same across all 3 dimensions.
+            Examples:
+                input_ids: [T T T T T], here T is for text.
+                temporal position_ids: [0, 1, 2, 3, 4]
+                height position_ids: [0, 1, 2, 3, 4]
+                width position_ids: [0, 1, 2, 3, 4]
+        
+            For sequences with image tokens, we use special markers to denote image regions:
+                - <|dit_token_16384|>: image start marker
+                - <|dit_token_16385|>: image end marker
+                - Image tokens between these markers use 2D spatial position encoding.
+        
+            For image tokens:
+                - temporal: stays constant at (image_start_pos + 1)
+                - height: increments every w tokens, representing row position
+                - width: cycles from 0 to w-1, representing column position
+            
+            After each image region, the next position jumps to: image_start_pos + 1 + max(h, w)
+            This ensures sufficient positional separation between images and subsequent tokens.
+        
+            Examples:
+                Two images with grid [1, 3, 2] and [1, 2, 3], followed by text.
+                input_ids: [<|dit_token_16384|> V V V V V V <|dit_token_16385|> <|dit_token_16384|> V V V V V V <|dit_token_16385|> T T T T]
+                
+                For image 1 (h=3, w=2, 6 tokens):
+                    Start marker at position 0
+                    Image tokens at temporal=1, height=[1,1,2,2,3,3], width=[1,2,1,2,1,2]
+                    End marker at position 4 (= 0 + 1 + max(3,2))
+                
+                For image 2 (h=2, w=3, 6 tokens):
+                    Start marker at position 5
+                    Image tokens at temporal=6, height=[6,6,6,7,7,7], width=[6,7,8,6,7,8]
+                    End marker at position 9 (= 5 + 1 + max(2,3))
+                
+                Text tokens continue from position 10.
+                
+                Full position_ids:
+                temporal: [0, 1,1,1,1,1,1, 4, 5, 6,6,6,6,6,6, 9, 10,11,12,13]
+                height:   [0, 1,1,2,2,3,3, 4, 5, 6,6,6,7,7,7, 9, 10,11,12,13]
+                width:    [0, 1,2,1,2,1,2, 4, 5, 6,7,8,6,7,8, 9, 10,11,12,13]
+        
+            This method also pre-computes decode-stage position_ids for the target image (last image),
+            which will be used during autoregressive generation.
+        
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default 
+                should you provide it.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image. For image generation,
+                temporal is typically 1.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+        
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`):
+                Position IDs for temporal, height, and width dimensions.
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size, 1)`):
+                Position deltas for multi-modal rotary position embedding (zeros for this task).
         """
+ 
+        batch_size, seq_len = input_ids.shape
+        device = input_ids.device
+        dtype = input_ids.dtype
 
-        position_ids = (
-            torch.arange(input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device)
-            .view(1, 1, -1)
-            .expand(3, input_ids.shape[0], -1)
-            .clone()
-        )
+        temporal_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+        height_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+        width_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+
+        image_start_token_id = self.configq.image_start_token_id
+        image_end_token_id = self.config.image_end_token_id
+
+        for b in range(batch_size):
+            current_pos = 0
+            image_idx = 0
+            token_idx = 0
+
+            while token_idx < seq_len:
+                token_id = input_ids[b, token_idx].item()
+                if token_id == image_start_token_id:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
+
+                    img_start_pos = current_pos
+                    current_pos += 1
+                    token_idx += 1
+
+                    if image_grid_thw is not None and image_idx < len(image_grid_thw):
+                        h = image_grid_thw[image_idx, 1].item()
+                        w = image_grid_thw[image_idx, 2].item()
+                        total_image_tokens = h * w
+
+                        for img_token_idx in range(total_image_tokens):
+                            if token_idx >= seq_len:
+                                break
+                            temporal_ids[b, token_idx] = img_start_pos + 1
+                            height_ids[b, token_idx] = img_start_pos + 1 + (img_token_idx // w)
+                            width_ids[b, token_idx] = img_start_pos + 1 + (img_token_idx % w)
+                            token_idx += 1
+
+                        current_pos = img_start_pos + 1 + max(h, w)
+                        image_idx += 1
+
+                elif token_id == image_end_token_id:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
+                    current_pos += 1
+                    token_idx += 1
+
+                else:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
+                    current_pos += 1
+                    token_idx += 1
+
+        position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
 
         if attention_mask is not None:
             valid_lengths = attention_mask.sum(dim=1)
             gen_st_idx = valid_lengths[0].item()
         else:
-            gen_st_idx = input_ids.shape[1]
+            gen_st_idx = seq_len
         self._gen_st_idx = gen_st_idx
 
         if image_grid_thw is not None and len(image_grid_thw) > 0:
@@ -814,12 +931,12 @@ class GlmImageModel(Glm4vModel):
             w = image_grid_thw[-1, 2].item()
             total_vision_tokens = h * w
 
-            h_indices = torch.arange(h, device=input_ids.device).unsqueeze(1).expand(h, w).flatten()
-            w_indices = torch.arange(w, device=input_ids.device).unsqueeze(0).expand(h, w).flatten()
+            h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
+            w_indices = torch.arange(w, device=device).unsqueeze(0).expand(h, w).flatten()
 
             self._cached_decode_position_ids = torch.stack(
                 [
-                    torch.full((total_vision_tokens,), gen_st_idx, device=input_ids.device, dtype=torch.long),
+                    torch.full((total_vision_tokens,), gen_st_idx, device=device, dtype=torch.long),
                     gen_st_idx + h_indices,
                     gen_st_idx + w_indices,
                 ],
@@ -828,7 +945,7 @@ class GlmImageModel(Glm4vModel):
         else:
             self._cached_decode_position_ids = None
 
-        mrope_position_deltas = torch.zeros([input_ids.shape[0], 1], dtype=input_ids.dtype, device=input_ids.device)
+        mrope_position_deltas = torch.zeros([batch_size, 1], dtype=dtype, device=device)
 
         return position_ids, mrope_position_deltas
 
