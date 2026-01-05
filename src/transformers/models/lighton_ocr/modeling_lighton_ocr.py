@@ -993,11 +993,6 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
         self.post_init()
 
-    @property
-    def vision_model(self):
-        """Alias for vision_encoder to match standard composite model naming."""
-        return self.vision_encoder
-
     def get_input_embeddings(self):
         return self.language_model.get_input_embeddings()
 
