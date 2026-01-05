@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch MarkupLM model."""
 
-import os
 from collections.abc import Callable
 from typing import Optional, Union
 
@@ -486,9 +485,9 @@ class MarkupLMEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                output_attentions,
                 **kwargs,
             )
 
@@ -517,10 +516,8 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, MarkupLMLMPredictionHead):
             init.zeros_(module.bias)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        elif isinstance(module, MarkupLMEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
