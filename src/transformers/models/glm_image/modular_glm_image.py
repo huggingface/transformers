@@ -640,26 +640,6 @@ class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
 
 
-class GlmImageVQVAEResnetBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
-        self.norm1 = nn.GroupNorm(num_groups=32, num_channels=channels)
-        self.activate = nn.GELU()
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1)
-        self.norm2 = nn.GroupNorm(num_groups=32, num_channels=channels)
-
-    def forward(self, hidden_states):
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states = self.activate(hidden_states)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.activate(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        return hidden_states + residual
-
-
 class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
     def forward(self, hidden_state: torch.Tensor):
         hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
@@ -698,7 +678,6 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
     config: GlmImageVQVAEConfig
     _no_split_modules = [
         "GlmImageVectorQuantizer",
-        "GlmImageVQVAEResnetBlock",
     ]
 
     def __init__(self, config: GlmImageVQVAEConfig):
@@ -707,9 +686,9 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         self.quantize = GlmImageVectorQuantizer(config)
         self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = nn.Conv2d(config.embed_dim, config.latent_channels, 1)
-        self.post_conv = nn.Sequential(
-            *[GlmImageVQVAEResnetBlock(config.latent_channels) for _ in range(config.num_res_blocks)]
-        )
+
+        self.eval()  # GLM-Image's VQ model is frozen
+        self.post_init()
 
     def encode(self, hidden_states):
         hidden_states = self.quant_conv(hidden_states)

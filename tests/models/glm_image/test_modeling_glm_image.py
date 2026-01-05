@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-Image model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -220,7 +219,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         patches_per_side = self.model_tester.image_size // patch_size
 
         filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw"] else v
+            k: v[:batch_size, ...]
+            if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw"]
+            else v
             for k, v in inputs_dict.items()
             if k not in input_keys_to_ignore
         }
@@ -244,35 +245,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         text_gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
-
-    @unittest.skip(reason="No available kernels - not supported")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("GLM-Image is not compatible `token_indices, weight_indices = torch.where(mask)`.")
-    def test_generate_compilation_all_outputs(self):
-        pass
-
-    @unittest.skip("Error with compilation")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    # Skip gradient checkpointing tests - GLM-Image has custom behavior
-    @unittest.skip("GLM-Image has custom gradient checkpointing behavior")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("GLM-Image has custom gradient checkpointing behavior")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip("GLM-Image has custom gradient checkpointing behavior")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     # Skip tests that have issues with GLM-Image's special architecture
     @unittest.skip("GLM-Image has special image_grid_thw handling")
