@@ -117,19 +117,22 @@ class GptOssConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    @property
-    def _attn_implementation(self):
-        return self._attn_implementation_internal
+    def __setattr__(self, key, value):
+        """
+        Overwritten to allow checking for the proper attention implementation to be used.
 
-    @_attn_implementation.setter
-    def _attn_implementation(self, value):
-        if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
-            raise ValueError(
-                f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
-                "Only 'kernels-community/vllm-flash-attn3' is supported."
-            )
-
-        super(GptOssConfig, self.__class__)._attn_implementation.fset(self, value)
+        Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
+        the specific attention setter is not enough. Applying a specific for `_attn_implementation_internal` would result in
+        a recursive dependency between `_attn_implementation` and `_attn_implementation_internal` (as `_attn_implementation`
+        acts as a wrapper around the internal attribute).
+        """
+        if key in ("_attn_implementation", "_attn_implementation_internal"):
+            if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
+                raise ValueError(
+                    f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
+                    "Only `kernels-community/vllm-flash-attn3` is supported."
+                )
+        super().__setattr__(key, value)
 
 
 __all__ = ["GptOssConfig"]

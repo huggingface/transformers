@@ -77,25 +77,26 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         """
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        kernel_attn = "kernels-community/vllm-flash-attn3"
+
+        # Checking each via `set_attn_implementation` and manually setting within the config
+        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+        model.set_attn_implementation("kernels-community/vllm-flash-attn3")
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        config._attn_implementation = kernel_attn
+        self.assertTrue(model.config._attn_implementation == kernel_attn)
+
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
+
+        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
+            model.set_attn_implementation("flash_attention_2")
 
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
             config._attn_implementation = "flash_attention_2"
 
-        config._attn_implementation = "kernels-community/vllm-flash-attn3"
-        model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
-
-        model.eval()
-        with torch.no_grad():
-            output = model(**inputs_dict)
-        self.assertIsNotNone(output)
-
-        with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
-            model.config._attn_implementation = "flash_attention_2"
-
-        model.config._attn_implementation = "kernels-community/vllm-flash-attn3"
-        with torch.no_grad():
-            output = model(**inputs_dict)
-        self.assertIsNotNone(output)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
