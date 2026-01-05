@@ -99,9 +99,9 @@ class Qwen3VLProcessor(ProcessorMixin):
         **kwargs: Unpack[Qwen3VLProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        Main method to prepare for the model one or several sequence(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
+        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwargs` arguments to
         Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
@@ -113,7 +113,7 @@ class Qwen3VLProcessor(ProcessorMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                The video or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
