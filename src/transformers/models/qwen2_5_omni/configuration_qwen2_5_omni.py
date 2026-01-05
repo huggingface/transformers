@@ -725,42 +725,51 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
-            The dimension of the model.
+            Hidden dimension of the DiT blocks.
         num_hidden_layers (`int`, *optional*, defaults to 22):
-            The number of transformer blocks in the DiT model.
+            Number of DiT decoder layers.
         num_attention_heads (`int`, *optional*, defaults to 16):
-            The number of attention heads in each transformer block.
+            Number of attention heads per layer.
         ff_mult (`int`, *optional*, defaults to 2):
-            The multiplier for the feedforward layer in each transformer block.
+            Multiplier applied inside the feed-forward expansion.
         emb_dim (`int`, *optional*, defaults to 512):
-            The dimension of the embedding layer.
+            Dimension of the codec embedding table.
         head_dim (`int`, *optional*, defaults to 64):
-            The dimension of each attention head.
+            Dimension of each attention head.
+        rope_parameters (`Dict` or [`RopeParameters`], *optional*):
+            Parameters controlling the rotary positional encoding.
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
+            Maximum number of timesteps supported by the DiT.
+        block_size (`int`, *optional*, defaults to 24):
+            Temporal block size used when building block-wise attention masks.
+        look_ahead_layers (`List[int]`, *optional*, defaults to `[10]`):
+            Layer indices that enable look-ahead attention.
+        look_backward_layers (`List[int]`, *optional*, defaults to `[0, 20]`):
+            Layer indices that enable look-back attention.
         repeats (`int`, *optional*, defaults to 2):
-            The number of times the codec embeddings are repeated.
+            Number of times codec embeddings are repeated across time.
         num_embeds (`int`, *optional*, defaults to 8193):
-            The number of unique embeddings in the codec.
+            Vocabulary size of the codec embeddings.
         mel_dim (`int`, *optional*, defaults to 80):
-            The dimension of the mel-spectrogram.
+            Mel-spectrogram dimension predicted by the DiT.
         dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the transformer blocks.
-
+            Dropout probability applied within the DiT.
         enc_emb_dim (`int`, *optional*, defaults to 192):
-            The dimension of the pre-trained speaker embedding.
+            Dimension of the speaker embedding input.
         enc_dim (`int`, *optional*, defaults to 128):
-            The dimension of the encoder output.
-        enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
-            A list of output channels for each TDNN/SERes2Net layer in the encoder.
-        enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
-            A list of kernel sizes for each layer in the encoder.
-        enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
-            A list of dilations for each layer in the encoder.
+            Hidden dimension of the reference encoder output.
+        enc_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
+            Output channels for each TDNN/SE-Res2Net block.
+        enc_kernel_sizes (`List[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
+            Kernel sizes per encoder block.
+        enc_dilations (`List[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
+            Dilations per encoder block.
         enc_attention_channels (`int`, *optional*, defaults to 64):
-            The number of attention channels in the SqueezeExcitationBlock.
+            Channels used inside the squeeze-and-excitation attention module.
         enc_res2net_scale (`int`, *optional*, defaults to 2):
-            The scale of the Res2Net block in the encoder.
+            Res2Net scale factor for the encoder.
         enc_se_channels (`int`, *optional*, defaults to 64):
-            The number of output channels after squeeze in the SqueezeExcitationBlock.
+            Output channels after the SE squeeze step.
     """
 
     model_type = "qwen2_5_omni_dit"
