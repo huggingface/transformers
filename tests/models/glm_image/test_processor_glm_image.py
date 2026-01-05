@@ -33,7 +33,7 @@ if is_torch_available():
 @require_torch
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
-    model_id = "/opensource/GLM-Image-AR-0105"
+    model_id = "zai-org/GLM-Image"
 
     @classmethod
     def _setup_test_attributes(cls, processor):

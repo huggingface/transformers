@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Union
@@ -26,6 +27,7 @@ from typing import Any, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -594,6 +596,32 @@ class GlmImageTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
 @auto_docstring
 class GlmImagePreTrainedModel(PreTrainedModel):
     config: GlmImageConfig
@@ -624,6 +652,15 @@ class GlmImagePreTrainedModel(PreTrainedModel):
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight)
 
 
 @dataclass

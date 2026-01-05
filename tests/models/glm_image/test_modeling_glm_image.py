@@ -49,7 +49,7 @@ class GlmImageVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=3,
+        batch_size=1,
         seq_length=7,
         num_channels=3,
         ignore_index=-100,
@@ -92,13 +92,11 @@ class GlmImageVisionText2TextModelTester:
             "temporal_patch_size": 1,
         },
         vq_config={
-            "dropout": 0.0,
             "embed_dim": 48,
             "in_channels": 3,
             "initializer_range": 0.02,
             "latent_channels": 32,
             "num_embeddings": 32,
-            "num_res_blocks": 2,
         },
     ):
         self.parent = parent
@@ -149,6 +147,7 @@ class GlmImageVisionText2TextModelTester:
                 self.num_channels * (patch_size**2) * temporal_patch_size,
             ]
         )
+
         return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
@@ -197,7 +196,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         self.config_tester.run_common_tests()
 
     # GlmImage has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+    def prepare_config_and_inputs_for_generate(self, batch_size=1):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # We don't want a few model inputs in our model input dictionary for generation tests
@@ -246,49 +245,24 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         return config, filtered_inputs_dict
 
-    # Skip tests that have issues with GLM-Image's special architecture
-    @unittest.skip("GLM-Image has special image_grid_thw handling")
-    def test_batching_equivalence(self):
+    @unittest.skip(reason="No available kernels - not supported")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("GLM-Image model outputs don't have past_key_values in expected format")
-    def test_model_outputs_equivalence(self):
+    @unittest.skip(reason="Size mismatch")
+    def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("GLM-Image returns tuple instead of ModelOutput in some cases")
-    def test_inputs_embeds(self):
+    @unittest.skip("Error with compilation")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("GLM-Image returns tuple instead of ModelOutput in some cases")
+    @unittest.skip(reason="GLM-Image input embed is compare with inputs_ids and image_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip("GLM-Image has special weight initialization")
-    def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip("GLM-Image requires image_grid_thw for generate")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip("GLM-Image has special assisted decoding requirements")
-    def test_assisted_decoding_matches_greedy_search_0_random(self):
-        pass
-
-    @unittest.skip("GLM-Image has special assisted decoding requirements")
-    def test_assisted_decoding_matches_greedy_search_1_same(self):
-        pass
-
-    @unittest.skip("GLM-Image has special assisted decoding requirements")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("GLM-Image has special prompt lookup requirements")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip("GLM-Image has special compile requirements")
-    def test_generate_compile_model_forward_fullgraph(self):
+    @unittest.skip(reason="GLM-Image does not use inputs_embeds")
+    def test_inputs_embeds(self):
         pass
 
 

@@ -61,7 +61,7 @@ from ..glm4v_moe.modeling_glm4v_moe import apply_multimodal_rotary_pos_emb, eage
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
-from ..siglip.modeling_siglip import SiglipMLP
+from ..siglip.modeling_siglip import SiglipMLP, lecun_normal_
 
 
 logger = logging.get_logger(__name__)
@@ -624,6 +624,15 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
             inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight)
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
