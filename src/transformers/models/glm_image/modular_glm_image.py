@@ -238,71 +238,20 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm_image_text"
-    base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `GlmImage`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
     def __init__(
         self,
         vocab_size: Optional[int] = 168064,
-        vision_vocab_size: Optional[int] = 16512,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 13696,
-        num_hidden_layers: Optional[int] = 40,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[bool] = True,
         tie_word_embeddings: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        **kwargs,
+        **super_kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.vision_vocab_size = vision_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
+            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **super_kwargs
         )
 
 
 class GlmImageConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GLM-Image`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
@@ -358,7 +307,7 @@ class GlmImageConfig(PreTrainedConfig):
         if isinstance(vq_config, dict):
             self.vq_config = self.sub_configs["vq_config"](**vq_config)
         elif vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"](**kwargs)
+            self.vq_config = self.sub_configs["vq_config"]()
 
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
@@ -1110,7 +1059,7 @@ class GlmImageModel(Glm4vModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw[:-1])
-            image_embeds = torch.cat(image_embeds, dim=0).to(image_embeds[0].device, image_embeds[0].dtype)
+            image_embeds = torch.cat(image_embeds, dim=0)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw[:-1])
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
 
