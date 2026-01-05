@@ -82,52 +82,48 @@ class GlmImageVisionConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate an GlmImageVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
     a similar configuration to that of
-    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image).
 
     Args:
-            depth (`int`, *optional*, defaults to 24):
-                Number of layers (depth) in the model.
-            hidden_size (`int`, *optional*, defaults to 1536):
-                Dimensionality of the encoder layers and the pooler layer.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-                `"relu"`, `"selu"` and `"gelu_new"` are supported.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to add a bias to the queries, keys and values.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability for attention weights.
-            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            image_size (`int` or `list[int]`, *optional*, defaults to 336):
-                The size (resolution) of each image.
-            patch_size (`int`, *optional*, defaults to 14):
-                The size (resolution) of each patch.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-                The epsilon used by the rms normalization layers.
-            spatial_merge_size (`int`, *optional*, defaults to 2):
-                The size used for merging spatial dimensions.
-            temporal_patch_size (`int`, *optional*, defaults to 2):
-                The size used for patches along the temporal dimension.
-            out_hidden_size (`int`, *optional*, defaults to 4096):
-                The output hidden size of the vision model.
-            intermediate_size (`int`, *optional*, defaults to 13696):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    Example:
+        depth (`int`, *optional*, defaults to 40):
+            Number of layers (depth) in the model.
+        hidden_size (`int`, *optional*, defaults to 1536):
+            Dimensionality of the encoder layers and the pooler layer.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for attention weights.
+        num_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer architecture.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The size used for merging spatial dimensions.
+        temporal_patch_size (`int`, *optional*, defaults to 1):
+            The size used for patches along the temporal dimension.
+        intermediate_size (`int`, *optional*, defaults to 6144):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        Example:
 
-    ```python
-    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+        ```python
+        >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
 
-    >>> # Initializing a GlmImageVisionConfig GLM-4.1V-9B style configuration
-    >>> configuration = GlmImageVisionConfig()
+        >>> # Initializing a Glm4vVisionConfig GLM- style configuration
+        >>> configuration = GlmImageVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
-    >>> model = GlmImageVisionModel(configuration)
+        >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+        >>> model = GlmImageVisionModel(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```"""
 
     model_type = "glm_image_vision_model"
     base_config_key = "vision_config"
