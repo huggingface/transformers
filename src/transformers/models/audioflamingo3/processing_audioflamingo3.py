@@ -32,9 +32,6 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-MAX_AUDIO_LEN = 10 * 60  # 10 minutes
-DEFAULT_TRANSCRIPTION_PROMPT = "Transcribe the input speech."
-
 
 class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
@@ -63,15 +60,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
     [`Qwen2TokenizerFast`]. See the [`~AudioFlamingo3Processor.__call__`] for more information.
 
     Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-            template will be used.
-        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-            Special token used to represent audio inputs in the chat template.
+            feature_extractor ([`WhisperFeatureExtractor`]):
+                The feature extractor is a required input.
+            tokenizer ([`Qwen2TokenizerFast`]):
+                The tokenizer is a required input.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+                template will be used.
+            audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+                Special token used to represent audio inputs in the chat template.
+            default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
+                Default prompt to use for transcription tasks when applying transcription requests.
+            max_audio_len (`int`, *optional*, defaults to 600):
+                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
     def __init__(
@@ -80,10 +81,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token="<sound>",
+        default_transcription_prompt="Transcribe the input speech.",
+        max_audio_len=600,
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.default_transcription_prompt = default_transcription_prompt
+        self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+
+    def _get_audio_token_length(self, audio_lengths: "torch.Tensor") -> "torch.Tensor":
+        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
+        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+        return audio_tokens_lengths
 
     def __call__(
         self,
@@ -139,7 +149,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             # Determine number of chunks per sample, and flatten
             window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(MAX_AUDIO_LEN // audio_kwargs["chunk_length"])
+            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
@@ -149,7 +159,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 n_win = max(1, (n_samples + window_size - 1) // window_size)
                 if n_win > max_windows:
                     logger.warning(
-                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {MAX_AUDIO_LEN}s; truncating to first {MAX_AUDIO_LEN}s."
+                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
                     )
                     n_win = max_windows
                 per_sample_windows.append(n_win)
@@ -167,8 +177,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
-            audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+            audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
 
             # expand audio tokens in text
             for i, audio_length in enumerate(audio_tokens_lengths):
@@ -232,7 +241,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             raise ValueError("`audio` must contain at least one sample.")
 
         if prompt is None:
-            prompts = [DEFAULT_TRANSCRIPTION_PROMPT] * batch_size
+            prompts = [self.default_transcription_prompt] * batch_size
         elif isinstance(prompt, str):
             prompts = [prompt] * batch_size
         elif isinstance(prompt, (list, tuple)):
@@ -243,7 +252,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             prompts = []
             for item in prompt:
                 if item is None:
-                    prompts.append(DEFAULT_TRANSCRIPTION_PROMPT)
+                    prompts.append(self.default_transcription_prompt)
                 elif isinstance(item, str):
                     prompts.append(item)
                 else:
