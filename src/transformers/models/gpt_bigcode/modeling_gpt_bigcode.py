@@ -483,7 +483,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             encoder_attention_mask = (
                 encoder_attention_mask.bool()
                 if (encoder_attention_mask is not None and 0 in encoder_attention_mask)

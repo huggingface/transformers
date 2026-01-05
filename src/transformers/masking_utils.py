@@ -1117,7 +1117,7 @@ def create_chunked_causal_mask(
         raise ValueError("Could not find an `attention_chunk_size` argument in the config, or it is not set")
 
     # Raise if using chunked attention on context too large with FA2
-    if config._attn_implementation == "flash_attention_2" and kv_length + kv_offset > chunk_size:
+    if "flash" in config._attn_implementation and kv_length + kv_offset > chunk_size:
         raise ValueError(
             "Flash attention 2 cannot handle chunked attention, and the key-value length is larger than the chunk size so the "
             "chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"

@@ -243,10 +243,6 @@ class PixtralAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # Since we use packing, if flash_attention_2 is selected we rely on position_ids
-        if self.config._attn_implementation == "flash_attention_2":
-            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -514,12 +510,12 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
         )
-        kwargs["position_ids"] = position_ids
+        kwargs["position_ids"] = position_ids.to(patch_embeds.device, non_blocking=True)
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
-        if self.config._attn_implementation == "flash_attention_2":
-            # We only rely on position_ids when using flash_attention_2
+        if "flash" in self.config._attn_implementation:
+            # We only rely on position_ids when using flash attention
             attention_mask = None
         else:
             attention_mask = generate_block_attention_mask(

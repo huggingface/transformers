@@ -602,7 +602,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash" in self.config._attn_implementation:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.config._attn_implementation == "sdpa":

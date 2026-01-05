@@ -492,7 +492,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif self.config._attn_implementation != "flash_attention_2":
+        elif "flash" in self.config._attn_implementation:
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -735,7 +735,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = (
             _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if self.config._attn_implementation != "flash_attention_2"
+            if "flash" in self.config._attn_implementation
             else attention_mask
         )
 
