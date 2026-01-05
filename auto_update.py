@@ -158,8 +158,16 @@ class ReplacementPosition:
                       Values: "torch.tensor", "Expectations", "list", "dict", 
                               "string", "number", "tuple", "torch.tensor_inline",
                               "string_inline", "list_inline"
-        indent_level: Base indentation level (number of spaces) at the assignment
-                      Used for formatting multi-line replacements
+        indent_level: Base indentation level (number of spaces) where the opening
+                      bracket/brace SHOULD be positioned in multi-line format
+        is_function_call: True if value is inside a function call (torch.tensor, Expectations, etc.)
+                          False for direct assignments (plain list, dict, etc.)
+        has_multiline_structure: True if original has opening/closing on separate lines
+                                 For function calls: whether ( and ) are on different lines
+                                 For direct assignments: whether opening bracket is on assignment line
+        is_data_inline: True if data/value starts on same line as function call opening (
+                        Only relevant for function calls
+        assignment_indent: Column position of the assignment statement (for reference)
     """
     start_line: int
     start_col: int
@@ -167,6 +175,10 @@ class ReplacementPosition:
     end_col: int
     pattern_type: str
     indent_level: int
+    is_function_call: bool = False
+    has_multiline_structure: bool = False
+    is_data_inline: bool = False
+    assignment_indent: int = 0
 
 
 @dataclass
@@ -931,13 +943,38 @@ class TestFileAnalyzer(cst.CSTVisitor):
                         data_node = unwrapped.args[0].value
                         data_pos = self.get_metadata(PositionProvider, data_node)
                         
+                        # Get the call node position (for torch.tensor( ... ))
+                        call_pos = self.get_metadata(PositionProvider, unwrapped)
+                        
+                        # Check if this is a multi-line structure:
+                        # If the opening ( and closing ) are on different lines
+                        has_multiline_structure = call_pos.start.line != call_pos.end.line
+                        
+                        # Check if data is inline with the opening (
+                        # This matters for adding leading newline when converting to multi-line
+                        is_data_inline = data_pos.start.line == call_pos.start.line
+                        
+                        # Compute indent_level:
+                        # - If original has multi-line structure, use data_pos column
+                        # - If original is single-line, use assignment column + 4
+                        if has_multiline_structure:
+                            # Data position tells us where content should be indented
+                            indent_level = data_pos.start.column
+                        else:
+                            # For single-line → multi-line conversion, indent is assignment + 4
+                            indent_level = assign_pos.start.column + 4
+                        
                         return ReplacementPosition(
                             start_line=data_pos.start.line,
                             start_col=data_pos.start.column,
                             end_line=data_pos.end.line,
                             end_col=data_pos.end.column,
                             pattern_type="torch.tensor",
-                            indent_level=assign_pos.start.column
+                            indent_level=indent_level,
+                            is_function_call=True,
+                            has_multiline_structure=has_multiline_structure,
+                            is_data_inline=is_data_inline,
+                            assignment_indent=assign_pos.start.column
                         )
                 
                 # Handle Expectations(device_dict)
@@ -953,13 +990,32 @@ class TestFileAnalyzer(cst.CSTVisitor):
                             value_node = matching_element.value
                             value_pos = self.get_metadata(PositionProvider, value_node)
                             
+                            # Get the call node position
+                            call_pos = self.get_metadata(PositionProvider, unwrapped)
+                            
+                            # Check if this is a multi-line structure
+                            has_multiline_structure = call_pos.start.line != call_pos.end.line
+                            
+                            # Check if value is inline with the opening (
+                            is_data_inline = value_pos.start.line == call_pos.start.line
+                            
+                            # Compute indent_level
+                            if has_multiline_structure:
+                                indent_level = value_pos.start.column
+                            else:
+                                indent_level = assign_pos.start.column + 4
+                            
                             return ReplacementPosition(
                                 start_line=value_pos.start.line,
                                 start_col=value_pos.start.column,
                                 end_line=value_pos.end.line,
                                 end_col=value_pos.end.column,
                                 pattern_type="Expectations",
-                                indent_level=assign_pos.start.column
+                                indent_level=indent_level,
+                                is_function_call=True,
+                                has_multiline_structure=has_multiline_structure,
+                                is_data_inline=is_data_inline,
+                                assignment_indent=assign_pos.start.column
                             )
                         else:
                             # No matching key found - this shouldn't happen but handle gracefully
@@ -969,57 +1025,100 @@ class TestFileAnalyzer(cst.CSTVisitor):
             # Handle plain values: lists, dicts, strings, numbers
             if isinstance(unwrapped, cst.List):
                 value_pos = self.get_metadata(PositionProvider, unwrapped)
+                
+                # For plain lists, opening [ stays on assignment line
+                # Check if list is already multi-line
+                has_multiline_structure = value_pos.start.line != value_pos.end.line
+                
+                # Indent level is where content inside [ should be
+                if has_multiline_structure:
+                    # Multi-line: use position of first element if available
+                    # For now, use value_pos column (opening [) + some default
+                    indent_level = value_pos.start.column + 4
+                else:
+                    # Single-line or converting to multi-line
+                    indent_level = value_pos.start.column + 4
+                
                 return ReplacementPosition(
                     start_line=value_pos.start.line,
                     start_col=value_pos.start.column,
                     end_line=value_pos.end.line,
                     end_col=value_pos.end.column,
                     pattern_type="list",
-                    indent_level=assign_pos.start.column
+                    indent_level=indent_level,
+                    is_function_call=False,
+                    has_multiline_structure=has_multiline_structure,
+                    is_data_inline=True,  # Opening [ is always on assignment line
+                    assignment_indent=assign_pos.start.column
                 )
             
             elif isinstance(unwrapped, cst.Dict):
                 value_pos = self.get_metadata(PositionProvider, unwrapped)
+                has_multiline_structure = value_pos.start.line != value_pos.end.line
+                indent_level = value_pos.start.column + 4
+                
                 return ReplacementPosition(
                     start_line=value_pos.start.line,
                     start_col=value_pos.start.column,
                     end_line=value_pos.end.line,
                     end_col=value_pos.end.column,
                     pattern_type="dict",
-                    indent_level=assign_pos.start.column
+                    indent_level=indent_level,
+                    is_function_call=False,
+                    has_multiline_structure=has_multiline_structure,
+                    is_data_inline=True,
+                    assignment_indent=assign_pos.start.column
                 )
             
             elif isinstance(unwrapped, (cst.SimpleString, cst.ConcatenatedString)):
                 value_pos = self.get_metadata(PositionProvider, unwrapped)
+                has_multiline_structure = value_pos.start.line != value_pos.end.line
+                
                 return ReplacementPosition(
                     start_line=value_pos.start.line,
                     start_col=value_pos.start.column,
                     end_line=value_pos.end.line,
                     end_col=value_pos.end.column,
                     pattern_type="string",
-                    indent_level=assign_pos.start.column
+                    indent_level=assign_pos.start.column,
+                    is_function_call=False,
+                    has_multiline_structure=has_multiline_structure,
+                    is_data_inline=True,
+                    assignment_indent=assign_pos.start.column
                 )
             
             elif isinstance(unwrapped, (cst.Integer, cst.Float)):
                 value_pos = self.get_metadata(PositionProvider, unwrapped)
+                
                 return ReplacementPosition(
                     start_line=value_pos.start.line,
                     start_col=value_pos.start.column,
                     end_line=value_pos.end.line,
                     end_col=value_pos.end.column,
                     pattern_type="number",
-                    indent_level=assign_pos.start.column
+                    indent_level=assign_pos.start.column,
+                    is_function_call=False,
+                    has_multiline_structure=False,
+                    is_data_inline=True,
+                    assignment_indent=assign_pos.start.column
                 )
             
             elif isinstance(unwrapped, cst.Tuple):
                 value_pos = self.get_metadata(PositionProvider, unwrapped)
+                has_multiline_structure = value_pos.start.line != value_pos.end.line
+                indent_level = value_pos.start.column + 4
+                
                 return ReplacementPosition(
                     start_line=value_pos.start.line,
                     start_col=value_pos.start.column,
                     end_line=value_pos.end.line,
                     end_col=value_pos.end.column,
                     pattern_type="tuple",
-                    indent_level=assign_pos.start.column
+                    indent_level=indent_level,
+                    is_function_call=False,
+                    has_multiline_structure=has_multiline_structure,
+                    is_data_inline=True,
+                    assignment_indent=assign_pos.start.column
                 )
         
         except KeyError:
@@ -1521,41 +1620,77 @@ def compute_replacement_text(new_value: str, position: ReplacementPosition, is_m
     if len(value_lines) == 1:
         return new_value
     
-    # Multi-line replacement - handle indentation using simple string operations
+    # Multi-line replacement
+    # Need to handle different combinations of structure and format
     
-    if position.pattern_type in ["torch.tensor", "torch.tensor_inline"]:
-        # For torch.tensor, the first line is opening bracket
-        # Middle lines need indent_level + 4
-        # Last line needs indent_level
+    if position.is_function_call:
+        # Function call (torch.tensor, Expectations, etc.)
+        # Format: function(\n    data\n)
         
-        result_lines = []
-        result_lines.append(value_lines[0])  # Opening bracket line
-        
-        # Middle lines
-        inner_indent = ' ' * (position.indent_level + 4)
-        for line in value_lines[1:-1]:
-            content = line.strip()
-            result_lines.append(inner_indent + content)
-        
-        # Closing bracket line
-        close_indent = ' ' * position.indent_level
-        result_lines.append(close_indent + value_lines[-1].strip())
-        
-        return '\n'.join(result_lines)
+        if position.is_data_inline:
+            # Data was inline with opening (, needs leading newline
+            # Example: tensor([[old]]) → tensor(\n    [[new]]\n)
+            base_indent = ' ' * position.indent_level
+            inner_indent = ' ' * (position.indent_level + 4)
+            
+            result_lines = []
+            # Add leading newline + opening bracket
+            result_lines.append('\n' + base_indent + value_lines[0])
+            
+            # Middle lines
+            for line in value_lines[1:-1]:
+                content = line.strip()
+                result_lines.append(inner_indent + content)
+            
+            # Closing bracket  
+            if len(value_lines) > 1:
+                result_lines.append(base_indent + value_lines[-1].strip())
+            
+            return '\n'.join(result_lines)
+        else:
+            # Data already on separate line, no leading newline needed
+            # Example: tensor(\n    [[old]]\n) → tensor(\n    [[new]]\n)
+            base_indent = ' ' * position.indent_level
+            inner_indent = ' ' * (position.indent_level + 4)
+            
+            result_lines = []
+            # Opening bracket (no leading newline)
+            result_lines.append(value_lines[0])
+            
+            # Middle lines
+            for line in value_lines[1:-1]:
+                content = line.strip()
+                result_lines.append(inner_indent + content)
+            
+            # Closing bracket
+            if len(value_lines) > 1:
+                result_lines.append(base_indent + value_lines[-1].strip())
+            
+            return '\n'.join(result_lines)
     
     else:
-        # For other patterns, preserve the formatting from captured_info
-        # but adjust base indentation
-        result_lines = []
-        base_indent = ' ' * position.indent_level
+        # Direct assignment (plain list, dict, tuple)
+        # Opening bracket stays on assignment line
+        # Example: var = [\n    items\n]
         
-        for line in value_lines:
-            # Strip and re-indent
+        content_indent = ' ' * position.indent_level
+        
+        result_lines = []
+        # Opening bracket (no leading newline, stays on assignment line)
+        result_lines.append(value_lines[0])
+        
+        # Content lines
+        for line in value_lines[1:-1]:
             content = line.strip()
             if content:
-                result_lines.append(base_indent + content)
-            else:
-                result_lines.append('')
+                result_lines.append(content_indent + content)
+        
+        # Closing bracket
+        if len(value_lines) > 1:
+            # Closing bracket aligns with opening bracket
+            # Use assignment_indent, not content_indent
+            close_indent = ' ' * position.assignment_indent
+            result_lines.append(close_indent + value_lines[-1].strip())
         
         return '\n'.join(result_lines)
 
