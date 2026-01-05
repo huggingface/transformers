@@ -1460,8 +1460,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
+        >>> panoptic_seg.shape
+        torch.Size([300, 500])
         >>> # Get prediction score and segment_id to class_id mapping of each segment
         >>> panoptic_segments_info = result[0]["segments_info"]
+        >>> len(panoptic_segments_info)
+        5
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
