@@ -30,7 +30,6 @@ from ...generation import GenerationMixin
 from ...image_utils import (
     ImageInput,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -53,7 +52,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
 )
-from ..glm4v_moe.modeling_glm4v_moe import rotate_half, eager_attention_forward
+from ..glm4v_moe.modeling_glm4v_moe import eager_attention_forward, rotate_half
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
@@ -547,6 +546,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
 
     return q_embed, k_embed
+
 
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
