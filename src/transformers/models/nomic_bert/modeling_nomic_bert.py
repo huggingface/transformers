@@ -891,9 +891,29 @@ class NomicBertEncoder(nn.Module):
                 past_key_value = past_key_values
 
             if self.gradient_checkpointing and self.training:
+                if not hidden_states.requires_grad:
+                    hidden_states.requires_grad_(True)
 
-                def custom_forward(*inputs):
-                    return layer(*inputs)
+                def custom_forward(
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    output_attentions,
+                    position_ids,
+                ):
+                    # We manually reconstruct the call to layer() ensuring arguments match layer.forward signature
+                    return layer(
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                        None,  # past_key_value is always None during checkpointing
+                        output_attentions,
+                        position_ids,
+                    )
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     custom_forward,
@@ -902,10 +922,11 @@ class NomicBertEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    None,
                     output_attentions,
                     position_ids,
+                    use_reentrant=False,  # Optional: Recommended for modern PyTorch
                 )
+
             else:
                 layer_outputs = layer(
                     hidden_states,
