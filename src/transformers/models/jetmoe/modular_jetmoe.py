@@ -435,6 +435,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
 
     @torch.no_grad()
     def _init_weights(self, module):
