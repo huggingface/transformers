@@ -131,6 +131,7 @@ from .utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytest_order_available,
     is_pytorch_quantization_available,
     is_quark_available,
     is_qutlass_available,
@@ -2670,9 +2671,13 @@ def run_first(test_case):
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
     """
-    import pytest
+    # Without this check, we get unwanted warnings when it's not installed
+    if is_pytest_order_available():
+        import pytest
 
-    return pytest.mark.order(1)(test_case)
+        return pytest.mark.order(1)(test_case)
+    else:
+        return test_case
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
