@@ -970,6 +970,10 @@ class GlmImageModel(GlmImagePreTrainedModel):
             Each embedding sequence may contain image tokens (for generation) and text tokens,
             or just text tokens.
 
+            Input format:
+                - Text-to-Image: [text tokens] + <|dit_token_16384|>
+                - Image-to-Image: <|dit_token_16384|> [image tokens] <|dit_token_16385|> + [text tokens] + <|dit_token_16384|>
+
             For pure text embedding sequence, the rotary position embedding is the same across all 3 dimensions.
             Examples:
                 input_ids: [T T T T T], here T is for text.
@@ -991,40 +995,36 @@ class GlmImageModel(GlmImagePreTrainedModel):
             This ensures sufficient positional separation between images and subsequent tokens.
 
             Examples:
-                === Case 1: Image-to-Image Generation (single or multiple source images + 1 target image_grid) ===
+                === Case 1: Image-to-Image Generation ===
 
-                Two source images with grid [1, 3, 2] and [1, 2, 3], followed by text.
-                input_ids: [<|dit_token_16384|> V V V V V V <|dit_token_16385|> <|dit_token_16384|> V V V V V V <|dit_token_16385|> T T T T]
-                image_grid_thw: [[1, 3, 2], [1, 2, 3], [1, 4, 4]]  # last one is target image grid
+                Source image with grid [1, 3, 2], followed by text, then generation.
+                input_ids: [<|dit_token_16384|> V V V V V V <|dit_token_16385|> T T T T <|dit_token_16384|>]
+                image_grid_thw: [[1, 3, 2], [1, 4, 4]]  # first is source, second is target
 
-                For image 1 (h=3, w=2, 6 tokens):
+                For source image (h=3, w=2, 6 tokens):
                     Start marker at position 0
                     Image tokens at temporal=1, height=[1,1,2,2,3,3], width=[1,2,1,2,1,2]
                     End marker at position 4 (= 0 + 1 + max(3,2))
 
-                For image 2 (h=2, w=3, 6 tokens):
-                    Start marker at position 5
-                    Image tokens at temporal=6, height=[6,6,6,7,7,7], width=[6,7,8,6,7,8]
-                    End marker at position 9 (= 5 + 1 + max(2,3))
-
-                Text tokens continue from position 10.
+                Text tokens and trailing start marker continue from position 5.
 
                 Full prefill position_ids:
-                temporal: [0, 1,1,1,1,1,1, 4, 5, 6,6,6,6,6,6, 9, 10,11,12,13]
-                height:   [0, 1,1,2,2,3,3, 4, 5, 6,6,6,7,7,7, 9, 10,11,12,13]
-                width:    [0, 1,2,1,2,1,2, 4, 5, 6,7,8,6,7,8, 9, 10,11,12,13]
+                temporal: [0, 1,1,1,1,1,1, 4, 5,6,7,8, 9]
+                height:   [0, 1,1,2,2,3,3, 4, 5,6,7,8, 9]
+                width:    [0, 1,2,1,2,1,2, 4, 5,6,7,8, 9]
 
-                Decode stage: only use image_grid_thw[-1] = [1, 4, 4] to build cached position_ids.
+                Decode stage: use image_grid_thw[-1] = [1, 4, 4] to build cached position_ids,
+                starting from gen_st_idx = 10.
 
-                === Case 2: Text-to-Image Generation (no source images + 2 image_grids for multi-resolution) ===
+                === Case 2: Text-to-Image Generation (multi-resolution) ===
 
                 Pure text input with two image_grids for progressive generation.
-                input_ids: [hello<sop>3 3<eop><sop>3 2<eop> <|dit_token_16384|>]
-                Assume "hello<sop>3 3<eop><sop>3 2<eop>" = 4 tokens (positions 0-3)
+                input_ids: [你 好 <sop> 3 3 <eop> <sop> 3 2 <eop> <|dit_token_16384|>]
+                Assume "你好<sop>3 3<eop><sop>3 2<eop>" = 4 tokens (positions 0-3)
                 <|dit_token_16384|> at position 4
                 image_grid_thw: [[1, 3, 3], [1, 3, 2]]
-                    - image_grid_thw[-1] = [1, 3, 2]: first generated image (draft)
-                    - image_grid_thw[-2] = [1, 3, 3]: second generated image (final)
+                    - image_grid_thw[-1] = [1, 3, 2]: first generated image (smaller/draft)
+                    - image_grid_thw[-2] = [1, 3, 3]: second generated image (larger/final)
 
                 Prefill position_ids (5 tokens: 4 text + 1 start marker):
                 temporal: [0, 1, 2, 3, 4]
@@ -1047,7 +1047,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
                 Finally: <|dit_token_16385|> end marker at position 11
 
-                Full sequence position_ids:
+                Full sequence position_ids (prefill + decode):
                 temporal: [0,1,2,3, 4, 5,5,5,5,5,5, 8,8,8,8,8,8,8,8,8, 11]
                 height:   [0,1,2,3, 4, 5,5,6,6,7,7, 8,8,8,9,9,9,10,10,10, 11]
                 width:    [0,1,2,3, 4, 5,6,5,6,5,6, 8,9,10,8,9,10,8,9,10, 11]
@@ -1062,7 +1062,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image. For image generation,
                 temporal is typically 1.
-                - For image-to-image: includes source image grids + 1 target image grid (last one)
+                - For image-to-image: includes source image grids + target image grid(s)
                 - For text-to-image with multi-resolution: includes multiple target grids,
                   processed in reverse order (last grid first, second-to-last grid second, etc.)
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1088,7 +1088,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         image_start_token_id = self.config.image_start_token_id
         image_end_token_id = self.config.image_end_token_id
 
-        num_images_in_input = (input_ids == image_start_token_id).sum().item()
+        num_complete_images = (input_ids == image_end_token_id).sum().item()
 
         for b in range(batch_size):
             current_pos = 0
@@ -1097,7 +1097,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
             while token_idx < seq_len:
                 token_id = input_ids[b, token_idx].item()
-                if token_id == image_start_token_id:
+
+                if token_id == image_start_token_id and image_idx < num_complete_images:
+                    # This is a complete image (has corresponding end marker)
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1106,6 +1108,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     current_pos += 1
                     token_idx += 1
 
+                    # Fill image tokens using grid info
                     if image_grid_thw is not None and image_idx < len(image_grid_thw):
                         h = image_grid_thw[image_idx, 1].item()
                         w = image_grid_thw[image_idx, 2].item()
@@ -1123,6 +1126,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                         image_idx += 1
 
                 elif token_id == image_end_token_id:
+                    # Image end marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1130,6 +1134,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     token_idx += 1
 
                 else:
+                    # Regular text token or trailing start marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1138,19 +1143,26 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
 
+        # Save the starting position for decode stage
         self._gen_st_idx = current_pos
+        self._prefill_len = seq_len
 
+        # Build cached decode position_ids
         if image_grid_thw is not None and len(image_grid_thw) > 0:
-            num_decode_grids = len(image_grid_thw) - num_images_in_input
+            # Number of grids for decode = total grids - complete images in input
+            num_decode_grids = len(image_grid_thw) - num_complete_images
+
             if num_decode_grids <= 0:
                 num_decode_grids = 1
 
+            # Collect position_ids for all decode grids in reverse order
             decode_temporal_list = []
             decode_height_list = []
             decode_width_list = []
 
             decode_pos = self._gen_st_idx
 
+            # Process grids in reverse order: [-1], [-2], ... [-num_decode_grids]
             for i in range(1, num_decode_grids + 1):
                 grid_idx = -i
                 h = image_grid_thw[grid_idx, 1].item()
@@ -1164,12 +1176,15 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 decode_height_list.append(decode_pos + h_indices)
                 decode_width_list.append(decode_pos + w_indices)
 
+                # Update position for next grid
                 decode_pos = decode_pos + max(h, w)
 
+            # Add end marker position
             decode_temporal_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
 
+            # Concatenate all decode position_ids
             self._cached_decode_position_ids = torch.stack(
                 [
                     torch.cat(decode_temporal_list, dim=0),
@@ -1262,9 +1277,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw[:-1])
             image_embeds = torch.cat(image_embeds, dim=0).to(image_embeds[0].device, image_embeds[0].dtype)
-            image_ids = self.get_image_tokens(image_embeds, image_grid_thw)
+            image_ids = self.get_image_tokens(image_embeds, image_grid_thw[:-1])
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
 
         if inputs_embeds is None:
@@ -1303,7 +1318,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
-                step = cache_position[0].item() - self._gen_st_idx
+                # Use prefill token length, not position value
+                step = cache_position[0].item() - self._prefill_len
                 # Direct lookup - no tensor creation overhead
                 position_ids = self._cached_decode_position_ids[:, step : step + seq_length]
                 position_ids = position_ids.unsqueeze(1).expand(-1, batch_size, -1)
