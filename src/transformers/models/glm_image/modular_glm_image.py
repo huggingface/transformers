@@ -524,7 +524,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
 
 
 class GlmImageTextAttention(Glm4vTextAttention):
-
     def forward(
         self,
         hidden_states: torch.Tensor,
