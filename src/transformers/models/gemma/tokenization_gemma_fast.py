@@ -36,6 +36,7 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
     Construct a Gemma tokenizer fast. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no prefix space. Normalization is applied to replace  `" "` with `"▁"`
+    The fast tokenizer does not apply an additional whitespace pre-tokenizer (`backend_tokenizer.pre_tokenizer` is `None`).
 
     ```python
     >>> from transformers import GemmaTokenizerFast
