@@ -364,9 +364,10 @@ class TestFileAnalyzer(cst.CSTVisitor):
     
     METADATA_DEPENDENCIES = (PositionProvider,)
     
-    def __init__(self, tasks: List[UpdateTask]):
+    def __init__(self, tasks: List[UpdateTask], device: tuple = ("cuda", (8, 6))):
         super().__init__()
         self.tasks = tasks
+        self.device = device
         self.results: Dict[str, ReplacementPosition] = {}
         
         # Track current method context
@@ -593,19 +594,26 @@ class TestFileAnalyzer(cst.CSTVisitor):
                     if unwrapped.args:
                         dict_node = unwrapped.args[0].value
                         
-                        # For Expectations, we need to find the specific device key
-                        # that matches our target device
-                        # For now, extract the whole dict position
-                        dict_pos = self.get_metadata(PositionProvider, dict_node)
+                        # Use CST to find the matching device key and get its value position
+                        matching_element = self._find_matching_dict_element(dict_node)
                         
-                        return ReplacementPosition(
-                            start_line=dict_pos.start.line,
-                            start_col=dict_pos.start.column,
-                            end_line=dict_pos.end.line,
-                            end_col=dict_pos.end.column,
-                            pattern_type="Expectations",
-                            indent_level=assign_pos.start.column
-                        )
+                        if matching_element:
+                            # Extract the exact position of the VALUE only
+                            value_node = matching_element.value
+                            value_pos = self.get_metadata(PositionProvider, value_node)
+                            
+                            return ReplacementPosition(
+                                start_line=value_pos.start.line,
+                                start_col=value_pos.start.column,
+                                end_line=value_pos.end.line,
+                                end_col=value_pos.end.column,
+                                pattern_type="Expectations",
+                                indent_level=assign_pos.start.column
+                            )
+                        else:
+                            # No matching key found - this shouldn't happen but handle gracefully
+                            # Return None so this task will be skipped
+                            return None
             
             # Handle plain values: lists, dicts, strings, numbers
             if isinstance(unwrapped, cst.List):
@@ -736,9 +744,127 @@ class TestFileAnalyzer(cst.CSTVisitor):
         if isinstance(node.func, cst.Name):
             return node.func.value == "Expectations"
         return False
+    
+    def _parse_cst_tuple_key(self, node: cst.BaseExpression) -> Optional[tuple]:
+        """
+        Parse a CST tuple node to extract device information.
+        
+        Examples:
+        - ("cuda", (8, 6)) -> ("cuda", (8, 6))
+        - ("cuda", 8) -> ("cuda", 8)
+        - ("cuda", None) -> ("cuda", None)
+        - (None, None) -> (None, None)
+        
+        Uses only CST node inspection, no string operations.
+        """
+        if not isinstance(node, cst.Tuple):
+            return None
+        
+        elements = node.elements
+        if len(elements) != 2:
+            return None
+        
+        # Parse first element (device string)
+        first_elem = elements[0].value
+        if isinstance(first_elem, cst.SimpleString):
+            device_str = first_elem.value.strip('"\'')
+        elif isinstance(first_elem, cst.Name) and first_elem.value == "None":
+            device_str = None
+        else:
+            return None
+        
+        # Parse second element (version - can be tuple, int, or None)
+        second_elem = elements[1].value
+        
+        if isinstance(second_elem, cst.Name) and second_elem.value == "None":
+            version = None
+        elif isinstance(second_elem, cst.Integer):
+            version = int(second_elem.value)
+        elif isinstance(second_elem, cst.Tuple):
+            # Parse nested tuple like (8, 6)
+            version_elements = second_elem.elements
+            if len(version_elements) == 2:
+                try:
+                    major = int(version_elements[0].value.value)
+                    minor = int(version_elements[1].value.value)
+                    version = (major, minor)
+                except:
+                    return None
+            else:
+                return None
+        else:
+            return None
+        
+        return (device_str, version)
+    
+    def _device_matches(self, key_device: tuple, target_device: tuple) -> int:
+        """
+        Check if key_device matches target_device using fallback logic.
+        
+        Returns priority (lower is better):
+        - 0: exact match
+        - 1: major version match
+        - 2: device match (None version)
+        - 3: wildcard match (None, None)
+        - -1: no match
+        
+        Fallback order for target=("cuda", (8, 6)):
+        1. ("cuda", (8, 6)) - exact match
+        2. ("cuda", 8) - major version match
+        3. ("cuda", None) - device match
+        4. (None, None) - wildcard match
+        """
+        key_str, key_ver = key_device
+        target_str, target_ver = target_device
+        
+        # Exact match
+        if key_str == target_str and key_ver == target_ver:
+            return 0
+        
+        # Major version match: ("cuda", 8) matches ("cuda", (8, 6))
+        if key_str == target_str and isinstance(target_ver, tuple) and key_ver == target_ver[0]:
+            return 1
+        
+        # Device match: ("cuda", None) matches ("cuda", (8, 6))
+        if key_str == target_str and key_ver is None:
+            return 2
+        
+        # Wildcard match: (None, None) matches anything
+        if key_str is None and key_ver is None:
+            return 3
+        
+        return -1
+    
+    def _find_matching_dict_element(self, dict_node: cst.Dict) -> Optional[cst.DictElement]:
+        """
+        Find the DictElement in an Expectations dict that matches self.device.
+        
+        Uses CST to inspect dict structure and find the best matching key
+        according to the fallback logic.
+        
+        Returns the DictElement with the best matching key, or None if no match.
+        """
+        if not isinstance(dict_node, cst.Dict):
+            return None
+        
+        best_match = None
+        best_priority = 999
+        
+        for element in dict_node.elements:
+            if isinstance(element, cst.DictElement):
+                key_tuple = self._parse_cst_tuple_key(element.key)
+                if key_tuple:
+                    priority = self._device_matches(key_tuple, self.device)
+                    if priority >= 0 and priority < best_priority:
+                        best_match = element
+                        best_priority = priority
+        
+        return best_match
 
 
-def analyze_test_file(filepath: str, tasks: List[UpdateTask]) -> Dict[str, ReplacementPosition]:
+
+
+def analyze_test_file(filepath: str, tasks: List[UpdateTask], device: tuple = ("cuda", (8, 6))) -> Dict[str, ReplacementPosition]:
     """
     Analyze test file with CST to find exact positions for all updates.
     
@@ -750,6 +876,7 @@ def analyze_test_file(filepath: str, tasks: List[UpdateTask]) -> Dict[str, Repla
     Args:
         filepath: Path to test file
         tasks: List of UpdateTask objects (what to find)
+        device: Device tuple for Expectations matching
     
     Returns:
         Dictionary mapping variable_name -> ReplacementPosition
@@ -760,7 +887,7 @@ def analyze_test_file(filepath: str, tasks: List[UpdateTask]) -> Dict[str, Repla
     tree = cst.parse_module(code)
     wrapper = cst.metadata.MetadataWrapper(tree)
     
-    analyzer = TestFileAnalyzer(tasks)
+    analyzer = TestFileAnalyzer(tasks, device)
     wrapper.visit(analyzer)
     
     return analyzer.results
@@ -770,149 +897,17 @@ def analyze_test_file(filepath: str, tasks: List[UpdateTask]) -> Dict[str, Repla
 # PHASE 3: COMPUTE REPLACEMENTS (STRING OPERATIONS ONLY)
 # ============================================================================
 
-def find_matching_device_key_in_expectations(dict_text: str, device: tuple) -> tuple:
-    """
-    Find the matching device key in an Expectations dict using fallback logic.
-    
-    Args:
-        dict_text: The dict content as text
-        device: Target device tuple, e.g. ("cuda", (8, 6))
-    
-    Returns:
-        Matching key tuple or None
-    
-    Fallback order for device=("cuda", (8, 6)):
-    1. ("cuda", (8, 6))
-    2. ("cuda", 8) 
-    3. ("cuda", None)
-    4. (None, None)
-    """
-    device_str, version = device
-    
-    # Build fallback candidates
-    candidates = []
-    if version:
-        if isinstance(version, tuple):
-            # ("cuda", (8, 6))
-            candidates.append(f'("{device_str}", {version})')
-            # ("cuda", 8) - first element of version tuple
-            candidates.append(f'("{device_str}", {version[0]})')
-        else:
-            # ("cuda", 8)
-            candidates.append(f'("{device_str}", {version})')
-    
-    # ("cuda", None)
-    candidates.append(f'("{device_str}", None)')
-    # (None, None)
-    candidates.append('(None, None)')
-    
-    # Find which candidate exists in the dict
-    for candidate in candidates:
-        if candidate in dict_text:
-            return candidate
-    
-    return None
 
-
-def update_expectations_dict(dict_text: str, new_value: str, device: tuple) -> str:
-    """
-    Update a specific device key in an Expectations dict.
-    
-    Args:
-        dict_text: The current dict as text
-        new_value: The new value to set
-        device: Device tuple for key matching
-    
-    Returns:
-        Updated dict text
-    """
-    # Find matching key
-    matching_key = find_matching_device_key_in_expectations(dict_text, device)
-    
-    if not matching_key:
-        # No matching key found - return dict with just our device key
-        device_str, version = device
-        if version and isinstance(version, tuple):
-            key_str = f'("{device_str}", {version})'
-        elif version:
-            key_str = f'("{device_str}", {version})'
-        else:
-            key_str = f'("{device_str}", None)'
-        
-        return f'{{{key_str}: {new_value}}}'
-    
-    # Find the value for this key
-    # Pattern: key: value,  or  key: value}
-    key_pos = dict_text.find(matching_key)
-    if key_pos == -1:
-        return dict_text
-    
-    # Find the colon after the key
-    colon_pos = dict_text.find(':', key_pos)
-    if colon_pos == -1:
-        return dict_text
-    
-    # Find where the value ends (either comma or closing brace)
-    # Need to handle nested brackets
-    value_start = colon_pos + 1
-    
-    # Skip whitespace
-    while value_start < len(dict_text) and dict_text[value_start] in ' \n\t':
-        value_start += 1
-    
-    # Find value end by counting brackets
-    bracket_count = 0
-    in_string = False
-    string_char = None
-    i = value_start
-    
-    while i < len(dict_text):
-        char = dict_text[i]
-        
-        # Handle strings
-        if char in '"\'':
-            if not in_string:
-                in_string = True
-                string_char = char
-            elif char == string_char and (i == 0 or dict_text[i-1] != '\\'):
-                in_string = False
-                string_char = None
-        
-        if not in_string:
-            if char in '[{(':
-                bracket_count += 1
-            elif char in ']}':
-                bracket_count -= 1
-                if bracket_count < 0:
-                    # Reached end of dict
-                    break
-            elif char == ',' and bracket_count == 0:
-                # Reached end of this entry
-                break
-        
-        i += 1
-    
-    value_end = i
-    
-    # Replace the value
-    before = dict_text[:value_start]
-    after = dict_text[value_end:]
-    
-    return before + new_value + after
-
-
-def compute_replacement_text(new_value: str, position: ReplacementPosition, is_multiline: bool, device: tuple = ("cuda", (8, 6)), original_text: str = None) -> str:
+def compute_replacement_text(new_value: str, position: ReplacementPosition, is_multiline: bool) -> str:
     """
     Compute the exact text to replace at the given position.
     
-    This uses ONLY string operations - no CST, no AST, no regex.
+    This uses ONLY simple string operations - no CST, no AST, no regex.
     
     Args:
         new_value: The new value from captured_info (may include formatting)
         position: The exact position to replace
         is_multiline: Whether the new value spans multiple lines
-        device: Device tuple for Expectations matching
-        original_text: Original file text (needed for Expectations)
     
     Returns:
         The formatted text ready to insert
@@ -921,54 +916,11 @@ def compute_replacement_text(new_value: str, position: ReplacementPosition, is_m
     new_value = new_value.strip()
     value_lines = new_value.split('\n')
     
-    # Special handling for Expectations pattern
-    if position.pattern_type == "Expectations":
-        if original_text:
-            # Extract the current dict text
-            lines = original_text.split('\n')
-            start_line_idx = position.start_line - 1
-            end_line_idx = position.end_line - 1
-            
-            
-            if start_line_idx == end_line_idx:
-                dict_text = lines[start_line_idx][position.start_col:position.end_col]
-            else:
-                # Multi-line dict
-                dict_lines = []
-                dict_lines.append(lines[start_line_idx][position.start_col:])
-                for i in range(start_line_idx + 1, end_line_idx):
-                    dict_lines.append(lines[i])
-                dict_lines.append(lines[end_line_idx][:position.end_col])
-                dict_text = '\n'.join(dict_lines)
-            
-            # Update the specific device key
-            updated_dict = update_expectations_dict(dict_text, new_value, device)
-            return updated_dict
-        else:
-            # Fallback: create new dict with device key
-            device_str, version = device
-            if version and isinstance(version, tuple):
-                key_str = f'("{device_str}", {version})'
-            elif version:
-                key_str = f'("{device_str}", {version})'
-            else:
-                key_str = f'("{device_str}", None)'
-            
-            if len(value_lines) == 1:
-                return f'{{{key_str}: {new_value}}}'
-            else:
-                result = ['{']
-                result.append(f'    {key_str}: {value_lines[0]}')
-                for line in value_lines[1:]:
-                    result.append(f'        {line.strip()}')
-                result.append('}')
-                return '\n'.join(result)
-    
+    # Single-line replacement - just return the value
     if len(value_lines) == 1:
-        # Single-line replacement - just return the value
         return new_value
     
-    # Multi-line replacement - need to handle indentation
+    # Multi-line replacement - handle indentation using simple string operations
     
     if position.pattern_type in ["torch.tensor", "torch.tensor_inline"]:
         # For torch.tensor, the first line is opening bracket
@@ -1011,18 +963,69 @@ def compute_replacement_text(new_value: str, position: ReplacementPosition, is_m
 # PHASE 4: APPLY REPLACEMENTS (IN-MEMORY, SINGLE WRITE)
 # ============================================================================
 
+def line_col_to_char_pos(text: str, line: int, col: int) -> int:
+    """
+    Convert (line, col) position to character position in text.
+    
+    Args:
+        text: The source text
+        line: 1-indexed line number
+        col: 0-indexed column number
+        
+    Returns:
+        Character position in the text
+    """
+    lines = text.split('\n')
+    char_pos = 0
+    
+    # Add lengths of all lines before target line
+    for i in range(line - 1):
+        if i < len(lines):
+            char_pos += len(lines[i]) + 1  # +1 for newline
+    
+    # Add column offset
+    char_pos += col
+    
+    return char_pos
+
+
+def replace_substrings(s: str, replacements: List[Tuple[int, int, str]]) -> str:
+    """
+    Replace multiple substrings in s according to the replacement list.
+    
+    This is the elegant solution - works on character positions, no need for
+    reverse order processing or position tracking.
+    
+    Args:
+        s: The original string
+        replacements: List of (start, end, replacement_string) tuples, MUST be sorted by start
+        
+    Returns:
+        The string with replacements applied
+    """
+    result = []
+    last_end = 0
+    
+    for start, end, r in replacements:
+        result.append(s[last_end:start])
+        result.append(r)
+        last_end = end
+    
+    result.append(s[last_end:])
+    
+    return ''.join(result)
+
+
 def apply_replacements(filepath: str, replacements: List[Replacement], dry_run: bool = True) -> bool:
     """
-    Apply all replacements to the file.
+    Apply all replacements to the file using the elegant character-position approach.
     
     Algorithm:
-    1. Read file into memory
-    2. Sort replacements by position (highest first)
-    3. Apply each replacement as string operation
-    4. Write file once
-    
-    The key insight: by processing from highest position to lowest,
-    each replacement doesn't affect the positions of subsequent replacements.
+    1. Read file as single string
+    2. Convert all positions from (line, col) to character positions
+    3. Sort by character position (ascending)
+    4. Use replace_substrings to apply all at once
+    5. Write file once
     
     Args:
         filepath: Path to file
@@ -1032,58 +1035,34 @@ def apply_replacements(filepath: str, replacements: List[Replacement], dry_run: 
     Returns:
         True if successful
     """
-    # Read file
+    # Read file as single string
     with open(filepath) as f:
-        lines = f.readlines()
+        original_text = f.read()
     
-    # Sort replacements by position (highest line first, then highest column)
-    # This ensures we process from end to beginning
-    replacements_sorted = sorted(
-        replacements,
-        key=lambda r: (r.position.start_line, r.position.start_col),
-        reverse=True
-    )
+    # Convert positions to character positions and prepare replacement tuples
+    char_replacements = []
     
-    # Apply each replacement
-    for replacement in replacements_sorted:
+    for replacement in replacements:
         pos = replacement.position
         
-        # Convert to 0-indexed
-        start_idx = pos.start_line - 1
-        end_idx = pos.end_line - 1
+        # Convert start position
+        start_char = line_col_to_char_pos(original_text, pos.start_line, pos.start_col)
         
-        if start_idx == end_idx:
-            # Single-line replacement
-            line = lines[start_idx]
-            new_line = (line[:pos.start_col] + 
-                       replacement.new_text + 
-                       line[pos.end_col:])
-            lines[start_idx] = new_line
+        # Convert end position
+        end_char = line_col_to_char_pos(original_text, pos.end_line, pos.end_col)
         
-        else:
-            # Multi-line replacement
-            # Take prefix from first line, suffix from last line
-            prefix = lines[start_idx][:pos.start_col]
-            suffix = lines[end_idx][pos.end_col:]
-            
-            # Combine
-            new_content = prefix + replacement.new_text + suffix
-            
-            # Split into lines (need to preserve newlines for writelines)
-            new_lines = new_content.split('\n')
-            # Add back newlines (except for the last line which gets suffix's newline)
-            new_lines_with_newlines = [line + '\n' for line in new_lines[:-1]]
-            # Last line keeps its original ending
-            if new_lines:
-                new_lines_with_newlines.append(new_lines[-1])
-            
-            # Replace the span
-            lines[start_idx:end_idx + 1] = new_lines_with_newlines
+        char_replacements.append((start_char, end_char, replacement.new_text))
+    
+    # Sort by start position (ascending) - required by replace_substrings
+    char_replacements.sort(key=lambda x: x[0])
+    
+    # Apply all replacements using the elegant function
+    updated_text = replace_substrings(original_text, char_replacements)
     
     # Write file (if not dry-run)
     if not dry_run:
         with open(filepath, 'w') as f:
-            f.writelines(lines)
+            f.write(updated_text)
     
     return True
 
@@ -1166,12 +1145,8 @@ def process_captured_info(captured_file: str, apply: bool = False, device: tuple
         
         # Phase 2: CST Analysis
         print("  [2a] Analyzing with CST...")
-        positions = analyze_test_file(filepath, tasks)
+        positions = analyze_test_file(filepath, tasks, device)
         print(f"       Found positions for {len(positions)}/{len(tasks)} tasks")
-        
-        # Read file for Expectations processing
-        with open(filepath) as f:
-            original_text = f.read()
         
         # Phase 3: Compute Replacements
         print("  [2b] Computing replacements...")
@@ -1188,9 +1163,7 @@ def process_captured_info(captured_file: str, apply: bool = False, device: tuple
             new_text = compute_replacement_text(
                 task.new_value, 
                 pos, 
-                is_multi,
-                device=device,
-                original_text=original_text
+                is_multi
             )
             
             replacement = Replacement(
