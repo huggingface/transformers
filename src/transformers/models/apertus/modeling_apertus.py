@@ -25,7 +25,7 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
+from ...activations import ACT2CLS, ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -49,6 +49,8 @@ class ApertusMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        if config.hidden_act == "xielu":
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.up_proj(x)))
@@ -92,7 +94,7 @@ class ApertusRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(

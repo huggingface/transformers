@@ -84,7 +84,7 @@ class ChameleonRotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -809,6 +809,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
+        self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
         hidden_states = self.encoder(pixel_values)
@@ -1122,6 +1123,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1135,12 +1137,15 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
-            # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if not is_first_iteration and use_cache:
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = None
 
         return model_inputs

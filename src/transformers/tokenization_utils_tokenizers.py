@@ -182,6 +182,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["vocab"], local_kwargs["merges"] = TikTokenConverter(
                     vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
                 ).extract_vocab_merges_from_model(vocab_file)
+
             return local_kwargs
 
         # Fallback to standard vocab/merges files if they existed!
@@ -339,7 +340,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokens.append(token)
             if tokens:
                 # These tokens are from the special tokens map
-                self.add_tokens(tokens, special_tokens=True)
+                self.add_tokens(tokens)
 
         try:
             vocab_size = self._tokenizer.get_vocab_size()
@@ -900,6 +901,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if isinstance(token_ids, int):
             token_ids = [token_ids]
+        if isinstance(token_ids, dict):
+            token_ids = token_ids["input_ids"]
         return self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
 
     def _save_pretrained(
