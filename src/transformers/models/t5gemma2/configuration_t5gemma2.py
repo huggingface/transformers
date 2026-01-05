@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -121,26 +121,26 @@ class T5Gemma2TextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262_208,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 131_072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
+        vocab_size: int = 262_208,
+        hidden_size: int = 2304,
+        intermediate_size: int = 9216,
+        num_hidden_layers: int = 26,
+        num_attention_heads: int = 8,
+        num_key_value_heads: int = 4,
+        head_dim: int = 256,
+        hidden_activation: str = "gelu_pytorch_tanh",
+        max_position_embeddings: int = 131_072,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-6,
+        use_cache: bool = True,
+        pad_token_id: int = 0,
+        eos_token_id: int = 1,
+        bos_token_id: int = 2,
+        tie_word_embeddings: bool = True,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        query_pre_attn_scalar: int = 256,
+        sliding_window: int = 4096,
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
@@ -287,10 +287,10 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
             text_config = T5Gemma2TextConfig()
             logger.info("text_config is None, using default T5Gemma2EncoderTextConfig text config.")
         elif isinstance(text_config, dict):
-            text_config = T5Gemma2TextConfig(**text_config)
+            text_config = T5Gemma2TextConfig(**cast(dict[str, Any], text_config))
 
         if isinstance(vision_config, dict):
-            vision_config = SiglipVisionConfig(**vision_config)
+            vision_config = SiglipVisionConfig(**cast(dict[str, Any], vision_config))
         elif vision_config is None:
             vision_config = SiglipVisionConfig()
             logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
@@ -397,26 +397,26 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262_208,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 131_072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
+        vocab_size: int = 262_208,
+        hidden_size: int = 2304,
+        intermediate_size: int = 9216,
+        num_hidden_layers: int = 26,
+        num_attention_heads: int = 8,
+        num_key_value_heads: int = 4,
+        head_dim: int = 256,
+        hidden_activation: str = "gelu_pytorch_tanh",
+        max_position_embeddings: int = 131_072,
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-6,
+        use_cache: bool = True,
+        pad_token_id: int = 0,
+        eos_token_id: int = 1,
+        bos_token_id: int = 2,
+        tie_word_embeddings: bool = True,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        query_pre_attn_scalar: int = 256,
+        sliding_window: int = 4096,
         layer_types: Optional[list[str]] = None,
         final_logit_softcapping: Optional[float] = None,
         attn_logit_softcapping: Optional[float] = None,
@@ -547,7 +547,7 @@ class T5Gemma2Config(PreTrainedConfig):
         **kwargs,
     ):
         if isinstance(encoder, dict):
-            encoder = T5Gemma2EncoderConfig(**encoder)
+            encoder = T5Gemma2EncoderConfig(**cast(dict[str, Any], encoder))
         elif encoder is None:
             encoder = T5Gemma2EncoderConfig()
             logger.info("encoder is None, using default T5Gemma2EncoderConfig encoder config.")
@@ -556,7 +556,7 @@ class T5Gemma2Config(PreTrainedConfig):
                 raise ValueError(f"{type(encoder)} is not supported.")
 
         if isinstance(decoder, dict):
-            decoder = T5Gemma2DecoderConfig(**decoder)
+            decoder = T5Gemma2DecoderConfig(**cast(dict[str, Any], decoder))
         elif decoder is None:
             decoder = T5Gemma2DecoderConfig()
             logger.info("decoder is None, using default T5Gemma2DecoderConfig decoder config.")
