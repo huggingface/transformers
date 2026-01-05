@@ -20,7 +20,6 @@ import pytest
 from packaging import version
 
 from transformers import AutoTokenizer, NomicBertConfig, is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -37,7 +36,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
         DataCollatorWithFlattening,
         NomicBertForMaskedLM,
         NomicBertForMultipleChoice,
@@ -114,14 +112,26 @@ class NomicBertModelTester:
         sequence_labels = None
         token_labels = None
         choice_labels = None
+        next_sentence_label = None
+
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
+            next_sentence_label = ids_tensor([self.batch_size], 2)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            next_sentence_label,
+        )
 
     def get_config(self):
         """
@@ -151,6 +161,7 @@ class NomicBertModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+            next_sentence_label,
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
@@ -170,7 +181,15 @@ class NomicBertModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         model = NomicBertModel(config=config)
         model.to(torch_device)
@@ -233,7 +252,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         model = NomicBertForMaskedLM(config=config)
         model.to(torch_device)
@@ -335,7 +362,15 @@ class NomicBertModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_next_sequence_prediction(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         model = NomicBertForNextSentencePrediction(config=config)
         model.to(torch_device)
@@ -349,7 +384,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_pretraining(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         model = NomicBertForPreTraining(config=config)
         model.to(torch_device)
@@ -365,7 +408,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         model = NomicBertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -381,7 +432,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         config.num_labels = self.num_labels
         model = NomicBertForSequenceClassification(config)
@@ -391,7 +450,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         config.num_labels = self.num_labels
         model = NomicBertForTokenClassification(config=config)
@@ -401,7 +468,15 @@ class NomicBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        next_sentence_label,
     ):
         config.num_choices = self.num_choices
         model = NomicBertForMultipleChoice(config=config)
@@ -428,6 +503,7 @@ class NomicBertModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+            next_sentence_label,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
@@ -470,15 +546,41 @@ class NomicBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "NomicBertForPreTraining" or model_class in get_values(
-                MODEL_FOR_PRETRAINING_MAPPING
-            ):
+            if model_class.__name__ == "NomicBertForPreTraining":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
                 inputs_dict["next_sentence_label"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
+
+            elif model_class.__name__ in [
+                "NomicBertForSequenceClassification",
+                "NomicBertForMultipleChoice",
+                "NomicBertForNextSentencePrediction",
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+            elif model_class.__name__ in [
+                "NomicBertForMaskedLM",
+                "NomicBertForTokenClassification",
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+
+            elif model_class.__name__ == "NomicBertForQuestionAnswering":
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                if "labels" in inputs_dict:
+                    del inputs_dict["labels"]
+
         return inputs_dict
 
     # Overwriting to add `is_decoder` flag
