@@ -50,12 +50,12 @@ from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
 
-if is_flash_attn_2_available():
+"""if is_flash_attn_2_available():
     from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
     from flash_attn.layers.rotary import RotaryEmbedding
     from flash_attn.ops.triton.rotary import apply_rotary
-else:
-    RotaryEmbedding = object
+else:"""
+RotaryEmbedding = object
 
 
 logger = logging.get_logger(__name__)
