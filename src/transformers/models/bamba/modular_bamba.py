@@ -43,7 +43,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
 )
 
 from ... import initialization as init
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import lazy_load_kernel
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -1151,6 +1151,7 @@ class BambaForCausalLM(LlamaForCausalLM):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
@@ -1183,7 +1184,7 @@ class BambaForCausalLM(LlamaForCausalLM):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and empty_past_kv:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases

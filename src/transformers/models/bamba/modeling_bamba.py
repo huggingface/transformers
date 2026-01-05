@@ -35,8 +35,7 @@ from transformers.activations import ACT2FN
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import lazy_load_kernel, use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -1488,6 +1487,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- has a unique cache type, `HybridMambaAttentionDynamicCache`
@@ -1520,7 +1520,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and empty_past_kv:
+        if inputs_embeds is not None and is_first_iteration:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
