@@ -3868,6 +3868,20 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
 
         return output
 
+    def _prepare_initial_state(
+        self,
+        reference_mel_spectrogram: torch.Tensor,
+        quantized_code: torch.Tensor,
+        noise_initialization: Optional[torch.Tensor] = None,
+    ) -> tuple[torch.Tensor, int]:
+        return _prepare_initial_state(
+            reference_mel_spectrogram,
+            quantized_code,
+            self.repeats,
+            self.mel_dim,
+            noise_initialization,
+        )
+
     @torch.no_grad()
     def sample(
         self,
@@ -3879,8 +3893,8 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         sway_coefficient=-1.0,
         noise_initialization: Optional[torch.Tensor] = None,
     ):
-        initial_state, maximum_duration = _prepare_initial_state(
-            reference_mel_spectrogram, quantized_code, self.repeats, self.mel_dim, noise_initialization
+        initial_state, maximum_duration = self._prepare_initial_state(
+            reference_mel_spectrogram, quantized_code, noise_initialization
         )
         batch_size = reference_mel_spectrogram.shape[0]
         conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
