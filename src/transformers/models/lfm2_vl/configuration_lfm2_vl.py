@@ -46,6 +46,8 @@ class Lfm2VlConfig(PreTrainedConfig):
             The hidden size of the multimodal projector.
         projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        projector_use_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to use layernorm in the multimodal projector.
         downsample_factor (`int`, *optional*, defaults to 2):
             The downsample_factor factor of the vision backbone.
     """
@@ -61,6 +63,7 @@ class Lfm2VlConfig(PreTrainedConfig):
         projector_hidden_act="gelu",
         projector_hidden_size=2560,
         projector_bias=True,
+        projector_use_layernorm=True,
         downsample_factor=2,
         **kwargs,
     ):
@@ -68,6 +71,7 @@ class Lfm2VlConfig(PreTrainedConfig):
         self.projector_hidden_act = projector_hidden_act
         self.projector_hidden_size = projector_hidden_size
         self.projector_bias = projector_bias
+        self.projector_use_layernorm = projector_use_layernorm
         self.downsample_factor = downsample_factor
 
         if isinstance(vision_config, dict):
