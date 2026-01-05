@@ -25,6 +25,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import deepcopy
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
@@ -51,6 +52,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.integrations.moe import batched_mm_experts_forward, grouped_mm_experts_forward
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -507,6 +509,118 @@ def _test_eager_matches_sdpa_inference(
                     f"mean relative difference for {key}: {mean_relative_diff:.3e}, torch atol = {atol}, torch rtol = "
                     f"{rtol}"
                 )
+
+
+TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION = [
+    (
+        # test name for the test runner
+        f"{dtype}",
+        # parameterization
+        *(dtype,),
+    )
+    for dtype in ("fp16", "fp32", "bf16")
+]
+
+
+def _get_output_tensors(outputs):
+    output_tensors = []
+
+    if hasattr(outputs, "logits"):
+        output_tensors.append(outputs.logits)
+    if hasattr(outputs, "last_hidden_state"):
+        output_tensors.append(outputs.last_hidden_state)
+    if hasattr(outputs, "start_logits"):
+        output_tensors.append(outputs.start_logits)
+    if hasattr(outputs, "end_logits"):
+        output_tensors.append(outputs.end_logits)
+
+    return output_tensors
+
+
+def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+    if not self.all_model_classes[0]._can_set_experts_implementation():
+        self.skipTest(f"{self.all_model_classes[0].__name__} does not support grouped_mm")
+
+    # convert shorthand name to torch.dtype
+    if dtype == "fp16":
+        dtype = torch.float16
+    elif dtype == "bf16":
+        dtype = torch.bfloat16
+    elif dtype == "fp32":
+        dtype = torch.float32
+
+    if not is_torch_fp16_available_on_device(torch_device) and dtype == torch.float16:
+        self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+    if not is_torch_bf16_available_on_device(torch_device) and dtype == torch.bfloat16:
+        self.skipTest(
+            f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+        )
+
+    for model_class in self.all_model_classes:
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
+        model = model_class(config)
+        set_model_for_less_flaky_test(model)
+
+        # Load with dtype
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
+
+        with torch.no_grad():
+            inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            mock_batched_mm_forward = Mock(wraps=batched_mm_experts_forward)
+            mock_grouped_mm_forward = Mock(wraps=grouped_mm_experts_forward)
+            with (
+                # This is needed because we call the functions through the interface's global mapping
+                patch.dict(
+                    "transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping",
+                    {"batched_mm": mock_batched_mm_forward, "grouped_mm": mock_grouped_mm_forward},
+                ),
+            ):
+                model.set_experts_implementation("eager")
+                self.assertEqual(model.config._experts_implementation, "eager")
+                outputs_eager = model(**prepared_inputs)
+                mock_batched_mm_forward.assert_not_called()
+                mock_grouped_mm_forward.assert_not_called()
+
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
+
+                model.set_experts_implementation("batched_mm")
+                self.assertEqual(model.config._experts_implementation, "batched_mm")
+                outputs_batched_mm = model(**prepared_inputs)
+                mock_grouped_mm_forward.assert_not_called()
+                mock_batched_mm_forward.assert_called()
+
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
+
+                model.set_experts_implementation("grouped_mm")
+                self.assertEqual(model.config._experts_implementation, "grouped_mm")
+                outputs_grouped_mm = model(**prepared_inputs)
+                mock_batched_mm_forward.assert_not_called()
+                mock_grouped_mm_forward.assert_called()
+
+                mock_batched_mm_forward.reset_mock()
+                mock_grouped_mm_forward.reset_mock()
+
+        # extract output tensors for comparison
+        outputs_eager = _get_output_tensors(outputs_eager)
+        outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
+        outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
+
+        # make sure we have collected some tensors from the outputs
+        self.assertTrue(outputs_eager, "No outputs from eager implementation")
+        self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
+        self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
+
+        # make sure all implementations give numerically close outputs
+        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
 
 
 def _config_zero_init(config):
@@ -3343,6 +3457,10 @@ class ModelTesterMixin:
         _test_eager_matches_sdpa_inference(
             self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
         )
+
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     @require_torch_accelerator
     @slow

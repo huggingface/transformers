@@ -2178,8 +2178,10 @@ class GenerationMixin(ContinuousMixin):
                 "will be skipped."
             )
 
-            # Finally: if we can compile, disable tokenizers parallelism and check for FA2 + static cache
+        if can_compile:
+            # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+
             # If we use FA2 and a static cache, we cannot compile with fullgraph
             if self.config._attn_implementation == "flash_attention_2":
                 # only raise warning if the user passed an explicit compile-config
@@ -2189,6 +2191,15 @@ class GenerationMixin(ContinuousMixin):
                         "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
+
+            # If we use grouped_mm and dtype different than bfloat16, we fallback to batched_mm
+            if self.config._experts_implementation == "grouped_mm":
+                if self.dtype != torch.bfloat16:
+                    logger.warning_once(
+                        "torch._grouped_mm currently only supports bfloat16 when being compiled with torch.compile. "
+                        "Falling back to batched_mm implementation for compilation."
+                    )
+                    self.set_experts_implementation("batched_mm")
 
         return can_compile
 

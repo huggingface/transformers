@@ -324,6 +324,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
+        # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._experts_implementation = kwargs.pop("experts_implementation", None)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -416,6 +419,28 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def _experts_implementation(self):
+        return self._experts_implementation_internal
+
+    @_experts_implementation.setter
+    def _experts_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_moe = getattr(self, "_experts_implementation", None)
+        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        self._experts_implementation_internal = experts_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                )
+                subconfig._experts_implementation = sub_implementation
 
     @property
     def torch_dtype(self):
@@ -756,8 +781,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # If both are present, use `dtype`
             kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
 
-        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        # We remove them from kwargs so that they do not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+        config_dict["experts_implementation"] = kwargs.pop("experts_implementation", None)
 
         config = cls(**config_dict)
 
@@ -1082,6 +1108,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_experts_implementation_internal" in d:
+            del d["_experts_implementation_internal"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]

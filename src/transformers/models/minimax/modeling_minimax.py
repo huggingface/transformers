@@ -31,7 +31,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -473,6 +478,7 @@ class MiniMaxTopKRouter(nn.Module):
         return router_logits, router_scores, router_indices
 
 
+@use_experts_implementation
 class MiniMaxExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -596,7 +602,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class MiniMaxCache
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name="mlp.gate", index=0),

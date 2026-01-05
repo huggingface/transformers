@@ -37,7 +37,7 @@ class CacheLayerMixin(ABC):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def lazy_initialization(self, key_states: torch.Tensor): ...
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None: ...
 
     @abstractmethod
     def update(
@@ -89,7 +89,7 @@ class DynamicLayer(CacheLayerMixin):
 
     is_sliding = False
 
-    def lazy_initialization(self, key_states: torch.Tensor):
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
         self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
@@ -114,7 +114,7 @@ class DynamicLayer(CacheLayerMixin):
         """
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(key_states)
+            self.lazy_initialization(key_states, value_states)
 
         self.keys = torch.cat([self.keys, key_states], dim=-2)
         self.values = torch.cat([self.values, value_states], dim=-2)
@@ -178,8 +178,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self.cumulative_length = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
 
-    def lazy_initialization(self, key_states: torch.Tensor) -> None:
-        super().lazy_initialization(key_states)
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states, value_states)
         self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
@@ -201,7 +201,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         """
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(key_states)
+            self.lazy_initialization(key_states, value_states)
 
         self.cumulative_length += key_states.shape[-2]
 
@@ -267,7 +267,7 @@ class StaticLayer(CacheLayerMixin):
         super().__init__()
         self.max_cache_len = max_cache_len
 
-    def lazy_initialization(self, key_states: torch.Tensor):
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
         Lazy initialization of the keys and values tensors. This allows to get all properties (dtype, device,
         num_heads in case of TP etc...) at runtime directly, which is extremely practical as it avoids moving
@@ -281,16 +281,18 @@ class StaticLayer(CacheLayerMixin):
         i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
         not be compiled anyway for performances!
         """
-        self.max_batch_size, self.num_heads, _, self.head_dim = key_states.shape
         self.dtype, self.device = key_states.dtype, key_states.device
+        self.max_batch_size, self.num_heads = key_states.shape[:2]
+        self.v_head_dim = value_states.shape[-1]
+        self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
             dtype=self.dtype,
             device=self.device,
         )
@@ -323,7 +325,7 @@ class StaticLayer(CacheLayerMixin):
         """
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(key_states)
+            self.lazy_initialization(key_states, value_states)
 
         # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
         # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
@@ -398,7 +400,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         """
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(key_states)
+            self.lazy_initialization(key_states, value_states)
 
         # Some old models give None for `cache_position` or even omit passing `cache_kwargs` when used as cross-attention,
         # in which case we should copy the whole Layer (key_states.shape[-2] == self.max_cache_len)
@@ -533,7 +535,7 @@ class QuantizedLayer(DynamicLayer):
 
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(key_states)
+            self.lazy_initialization(key_states, value_states)
             self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
             self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
             return key_states, value_states
@@ -795,10 +797,10 @@ class Cache:
         # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
         # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
         # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
-        fake_keys_tensor = torch.zeros((batch_size, num_heads, 0, head_dim), dtype=dtype, device=device)
+        fake_kv_tensor = torch.zeros((batch_size, num_heads, 0, head_dim), dtype=dtype, device=device)
         # Init all layers
         for layer in self.layers:
-            layer.lazy_initialization(fake_keys_tensor)
+            layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""

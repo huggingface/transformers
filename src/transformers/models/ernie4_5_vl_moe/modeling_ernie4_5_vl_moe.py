@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -357,7 +357,7 @@ class Ernie4_5_VL_MoeMoeTopKRouter(nn.Module):
         )
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            router_logits = F.linear(hidden_states.float(), self.weight)
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
             routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
             _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
             routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
@@ -368,6 +368,7 @@ class Ernie4_5_VL_MoeMoeTopKRouter(nn.Module):
         return router_logits, selected_experts, routing_weights
 
 
+@use_experts_implementation
 class Ernie4_5_VL_MoeMoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 

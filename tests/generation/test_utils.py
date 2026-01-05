@@ -1220,27 +1220,15 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
 
-            text_config = model.config.get_text_config()
-            head_dim = (
-                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-            )
-            num_key_value_heads = (
-                text_config.num_attention_heads
-                if getattr(text_config, "num_key_value_heads", None) is None
-                else text_config.num_key_value_heads
-            )
-            num_hidden_layers = text_config.num_hidden_layers
-
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
             # -1 because the last generated token isn't yet in the cache.
+            text_config = model.config.get_text_config()
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
-            cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self._check_past_key_values_for_generate(batch_size, outputs.past_key_values, max_length, text_config)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -1445,22 +1433,12 @@ class GenerationTesterMixin:
                 )
 
                 # Check 1: The cache shapes must match the expected shapes
+                text_config = model.config.get_text_config()
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
-                text_config = config.text_config if hasattr(config, "text_config") else config
-                head_dim = (
-                    getattr(text_config, "head_dim", None)
-                    or text_config.hidden_size // text_config.num_attention_heads
-                )
-                num_key_value_heads = (
-                    text_config.num_attention_heads
-                    if getattr(text_config, "num_key_value_heads", None) is None
-                    else text_config.num_key_value_heads
-                )
-                num_hidden_layers = text_config.num_hidden_layers
-                cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self._check_past_key_values_for_generate(
+                    batch_size, static_cache_generation.past_key_values, max_cache_len, text_config
+                )
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
