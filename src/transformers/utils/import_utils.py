@@ -888,6 +888,10 @@ def is_flash_attn_2_available() -> bool:
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
+    # Version could be "N/A" if __version__ attribute is not available
+    if flash_attn_version == "N/A":
+        return False
+
     import torch
 
     if torch.version.cuda:
@@ -909,13 +913,17 @@ def is_flash_attn_3_available() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal_2_10() -> bool:
     _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    if flash_attn_version == "N/A":
+        return False
     return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    if not is_available or flash_attn_version == "N/A":
+        return False
+    return version.parse(flash_attn_version) >= version.parse(library_version)
 
 
 @lru_cache
