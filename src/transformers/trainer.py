@@ -683,9 +683,11 @@ class Trainer:
         if (
             train_dataset is not None
             and isinstance(train_dataset, torch.utils.data.IterableDataset)
-            and args.group_by_length
         ):
-            raise ValueError("the `--group_by_length` option is only available for `Dataset`, not `IterableDataset")
+            logger.warning(
+                f"The `train_sampler='{args.train_sampler}'` option is ignored when using an `IterableDataset`. "
+                "Samplers cannot be used with IterableDataset as they require indexed access to the dataset."
+            )
 
         self._signature_columns = None
 
@@ -995,7 +997,7 @@ class Trainer:
             return None
 
         # Build the sampler.
-        if self.args.group_by_length:
+        if self.args.train_sampler == "group_by_length":
             if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
                 lengths = (
                     train_dataset[self.args.length_column_name]
@@ -1013,7 +1015,7 @@ class Trainer:
                 lengths=lengths,
                 model_input_name=model_input_name,
             )
-        if self.args.sequential_sampling:
+        elif self.args.train_sampler == "sequential":
             return SequentialSampler(train_dataset)
         else:
             return RandomSampler(train_dataset)
@@ -1092,7 +1094,7 @@ class Trainer:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
 
-        if self.args.group_by_length:
+        if self.args.train_sampler == "group_by_length":
             if is_datasets_available() and isinstance(eval_dataset, datasets.Dataset):
                 lengths = (
                     eval_dataset[self.args.length_column_name]
