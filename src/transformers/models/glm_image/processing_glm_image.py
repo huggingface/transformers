@@ -52,8 +52,8 @@ class GlmImageProcessor(ProcessorMixin):
     """
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.image_token_id = tokenizer.image_token_id
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
