@@ -154,20 +154,6 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-        Example:
-        ```python
-        >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
-
-        >>> # Initializing a GlmImageVisionConfig GLM-Image style configuration
-        >>> configuration = GlmImageVisionConfig()
-
-        >>> # Initializing a model (with random weights) from the GLM-Image configuration
-        >>> model = GlmImageVisionModel(configuration)
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
     """
 
     model_type = "glm_image_vision_model"
@@ -335,18 +321,18 @@ class GlmImageConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmImageTextConfig`):
-                The config object or dictionary of the text backbone.
-            vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmImageVisionConfig`):
-                The config object or dictionary of the vision backbone.
-            vq_config (`Union[Dict, GlmImageVQVAEConfig]`, *optional*):
-                GlmImageVQVAEConfig instance containing the configuration for the VQ-VAE model.
-            image_token_id (`int`, *optional*, defaults to 167855):
-                The image token index to encode the image prompt.
-            image_start_token_id (`int`, *optional*, defaults to 16384):
-                The image start token index to encode the start of image.
-            image_end_token_id (`int`, *optional*, defaults to 16385):
-                The image end token index to encode the end of image.
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmImageTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmImageVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        vq_config (`Union[Dict, GlmImageVQVAEConfig]`, *optional*):
+            GlmImageVQVAEConfig instance containing the configuration for the VQ-VAE model.
+        image_token_id (`int`, *optional*, defaults to 167855):
+            The image token index to encode the image prompt.
+        image_start_token_id (`int`, *optional*, defaults to 16384):
+            The image start token index to encode the start of image.
+        image_end_token_id (`int`, *optional*, defaults to 16385):
+            The image end token index to encode the end of image.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
