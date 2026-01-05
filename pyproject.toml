@@ -72,3 +72,5 @@ markers = [
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
+# The above pytest-asyncio rule emits unnessecary warnings when it's not installed, so skip it by regex here
+filterwarnings = ["ignore:Unknown config option.*asyncio_default_fixture_loop_scope"]

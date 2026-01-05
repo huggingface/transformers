@@ -1085,6 +1085,11 @@ def is_pytest_available() -> bool:
 
 
 @lru_cache
+def is_pytest_order_available() -> bool:
+    return is_pytest_available() and _is_package_available("pytest_order")
+
+
+@lru_cache
 def is_spacy_available() -> bool:
     return _is_package_available("spacy")
 
