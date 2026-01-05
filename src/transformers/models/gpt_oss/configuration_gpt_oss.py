@@ -122,9 +122,9 @@ class GptOssConfig(PreTrainedConfig):
         Overwritten to allow checking for the proper attention implementation to be used.
 
         Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
-        the specific attention setter is not enough. Applying a specific for `_attn_implementation_internal` would result in
-        a recursive dependency between `_attn_implementation` and `_attn_implementation_internal` (as `_attn_implementation`
-        acts as a wrapper around the internal attribute).
+        the specific attention setter is not enough. Using a property/setter for `_attn_implementation_internal` would result in
+        a recursive dependency (as `_attn_implementation` acts as a wrapper around `_attn_implementation_internal`) - hence, this
+        workaround.
         """
         if key in ("_attn_implementation", "_attn_implementation_internal"):
             if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
