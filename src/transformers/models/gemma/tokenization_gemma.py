@@ -14,7 +14,7 @@
 # limitations under the License.
 from typing import Optional, Union
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers import Tokenizer, decoders, normalizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -94,8 +94,8 @@ class GemmaTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Sequence(
             [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
+        # Normalization replaces literal spaces with "▁", so splitting on " " would be a no-op.
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Split(" ", "merged_with_previous")
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
