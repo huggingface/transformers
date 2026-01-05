@@ -673,6 +673,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        self.initializer_range = self.text_config.initializer_range
         super().__init__(**kwargs)
 
 
@@ -763,6 +764,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         upsampling_ratios=(2, 2),
         decoder_dim=1536,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.codebook_size = codebook_size
@@ -782,6 +784,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
 
         super().__init__(**kwargs)
@@ -870,6 +873,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         self.thinker_config = Qwen3OmniMoeThinkerConfig(**thinker_config)
         self.talker_config = Qwen3OmniMoeTalkerConfig(**talker_config)
         self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**code2wav_config)
+        self.initializer_range = self.thinker_config.initializer_range
         self.enable_audio_output = enable_audio_output
         self.im_start_token_id = im_start_token_id
         self.im_end_token_id = im_end_token_id
@@ -1869,6 +1873,9 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 
 
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
+    _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
+    _tp_plan = {"codec_head": "colwise_rep"}
+    _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _no_split_modules = ["Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration"]
