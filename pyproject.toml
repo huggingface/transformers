@@ -72,5 +72,11 @@ markers = [
 log_cli = 1
 log_cli_level = "WARNING"
 asyncio_default_fixture_loop_scope = "function"
-# The above pytest-asyncio rule emits unnessecary warnings when it's not installed, so skip it by regex here
-filterwarnings = ["ignore:Unknown config option.*asyncio_default_fixture_loop_scope"]
+filterwarnings = [
+    # The above pytest-asyncio rule emits unnessecary warnings when it's not installed, so skip it here
+    "ignore:Unknown config option.*asyncio_default_fixture_loop_scope",
+    # Latest sentencepiece (v0.2.1) triggers those warnings when installed due to its build with afflicted version of swig - skip them
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
