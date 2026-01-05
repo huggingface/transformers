@@ -71,7 +71,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
                   downsampled version of the entire mel spectrogram.
-            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy
+            If `config.fusion` is set to True, shorter audios also need to return 4 mels, which will just be a copy
             of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
         padding (`str`, *optional*, defaults to `"repeatpad"`):
@@ -279,7 +279,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 Truncation pattern for long audio inputs. Two patterns are available:
                     - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and
                       a downsampled version of the entire mel spectrogram.
-                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a
+                If `config.fusion` is set to True, shorter audios also need to return 4 mels, which will just be a
                 copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
             padding (`str`, *optional*):
