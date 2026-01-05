@@ -16,6 +16,7 @@
 
 import copy
 import json
+import math
 import os
 import warnings
 from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
@@ -49,6 +50,9 @@ logger = logging.get_logger(__name__)
 
 # type hinting: specifying the type of config class that inherits from PreTrainedConfig
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
+
+_FLOAT_TAG_KEY = "__float__"
+_FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
@@ -121,9 +125,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
             in `AUTO_MODELS_FOR_CAUSAL_LM`.
-        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
-            and decoder model to have the exact same parameter names.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -213,7 +214,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         is_decoder: bool = False,
         cross_attention_hidden_size: Optional[int] = None,
         add_cross_attention: bool = False,
-        tie_encoder_decoder: bool = False,
         # Fine-tuning task arguments
         architectures: Optional[list[str]] = None,
         finetuning_task: Optional[str] = None,
@@ -277,6 +277,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
+        if "tie_encoder_decoder" in kwargs:
+            tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
+            tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
+
         self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
@@ -285,7 +289,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
         self.cross_attention_hidden_size = cross_attention_hidden_size
         self.add_cross_attention = add_cross_attention
-        self.tie_encoder_decoder = tie_encoder_decoder
 
         # Fine-tuning task attributes
         self.architectures = architectures
@@ -320,6 +323,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
+
+        # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._experts_implementation = kwargs.pop("experts_implementation", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -413,6 +419,28 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def _experts_implementation(self):
+        return self._experts_implementation_internal
+
+    @_experts_implementation.setter
+    def _experts_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_moe = getattr(self, "_experts_implementation", None)
+        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        self._experts_implementation_internal = experts_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                )
+                subconfig._experts_implementation = sub_implementation
 
     @property
     def torch_dtype(self):
@@ -753,8 +781,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # If both are present, use `dtype`
             kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
 
-        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        # We remove them from kwargs so that they do not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+        config_dict["experts_implementation"] = kwargs.pop("experts_implementation", None)
 
         config = cls(**config_dict)
 
@@ -812,7 +841,56 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
-        return json.loads(text)
+        config_dict = json.loads(text)
+
+        return cls._decode_special_floats(config_dict)
+
+    @classmethod
+    def _encode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and encode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        It serializes floats like `Infinity` as an object: `{'__float__': Infinity}`.
+        """
+        if isinstance(obj, float):
+            if math.isnan(obj):
+                return {_FLOAT_TAG_KEY: "NaN"}
+            if obj == float("inf"):
+                return {_FLOAT_TAG_KEY: "Infinity"}
+            if obj == float("-inf"):
+                return {_FLOAT_TAG_KEY: "-Infinity"}
+            return obj
+
+        if isinstance(obj, dict):
+            return {k: cls._encode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, (list, tuple)):
+            return [cls._encode_special_floats(v) for v in obj]
+
+        return obj
+
+    @classmethod
+    def _decode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and decode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        This method deserializes objects like `{'__float__': Infinity}` to their float values like `Infinity`.
+        """
+        if isinstance(obj, dict):
+            if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(obj[_FLOAT_TAG_KEY], str):
+                tag = obj[_FLOAT_TAG_KEY]
+                if tag in _FLOAT_TAG_VALUES:
+                    return _FLOAT_TAG_VALUES[tag]
+                return obj
+
+            return {k: cls._decode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [cls._decode_special_floats(v) for v in obj]
+
+        return obj
 
     def __eq__(self, other):
         return isinstance(other, PreTrainedConfig) and (self.__dict__ == other.__dict__)
@@ -932,6 +1010,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        # Handle +/-Infinity and NaNs
+        config_dict = self._encode_special_floats(config_dict)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: str | os.PathLike, use_diff: bool = True):
@@ -1026,6 +1108,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_experts_implementation_internal" in d:
+            del d["_experts_implementation_internal"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
@@ -1209,18 +1293,24 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 PretrainedConfig = PreTrainedConfig
 
 
-ALLOWED_LAYER_TYPES = (
+ALLOWED_ATTENTION_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
     "linear_attention",  # used in minimax
 )
 
+ALLOWED_MLP_LAYER_TYPES = (
+    "sparse",
+    "dense",
+)
 
-def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None, attention: bool = True):
     """Check that `layer_types` is correctly defined."""
-    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
-        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
+    if not all(layer_type in allowed_layer_types for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {allowed_layer_types}")
     if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
         raise ValueError(
             f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "

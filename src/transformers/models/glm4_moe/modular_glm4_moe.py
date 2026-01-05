@@ -273,7 +273,7 @@ class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
-    _can_compile_fullgraph = False
+    pass
 
 
 class Glm4MoeModel(DeepseekV3Model):
