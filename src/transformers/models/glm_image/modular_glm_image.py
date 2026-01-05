@@ -169,6 +169,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
         super().__init__(**kwargs)
         del self.out_hidden_size
         del self.rms_norm_eps
+        del self.temporal_patch_size
         self.layer_norm_eps = layer_norm_eps
 
 
@@ -452,7 +453,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
 
 class GlmImageVisionPatchEmbed(Glm4vVisionPatchEmbed):
     def __init__(self, config: GlmImageVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
 
         del self.temporal_patch_size
         kernel_size = [self.patch_size, self.patch_size]

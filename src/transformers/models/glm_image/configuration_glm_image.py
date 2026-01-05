@@ -134,7 +134,6 @@ class GlmImageVisionConfig(PreTrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
         self.intermediate_size = intermediate_size
         self.initializer_range = initializer_range
         self.attention_bias = attention_bias
