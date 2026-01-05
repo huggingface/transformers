@@ -46,6 +46,7 @@ from ..pixtral.modeling_pixtral import (
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Model,
+    eager_attention_forward,
 )
 
 
@@ -493,35 +494,12 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-# Copied from transformers.models.siglip.modeling_siglip.eager_attention_forward
-def vision_eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class LightOnOcrAttention(PixtralAttention):
-    """
-    Multi-headed attention using vision_eager_attention_forward to avoid
-    naming collision with Qwen3's eager_attention_forward (which has GQA support).
-    """
+    """Multi-headed attention for vision encoder."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_key_value_groups = 1  # needed for eager_attention_forward compatibility
 
     def forward(
         self,
@@ -546,7 +524,7 @@ class LightOnOcrAttention(PixtralAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attention_interface: Callable = vision_eager_attention_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
