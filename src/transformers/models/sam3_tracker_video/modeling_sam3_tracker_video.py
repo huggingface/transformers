@@ -213,7 +213,7 @@ class Sam3TrackerVideoInferenceSession:
         device_inputs = {}
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
-                device_inputs[key] = value.to(self.inference_device, non_blocking=True)
+                device_inputs[key] = value.to(self.inference_device, non_blocking=False)
             else:
                 device_inputs[key] = value
         self.point_inputs_per_obj[obj_idx][frame_idx] = device_inputs
