@@ -28,8 +28,14 @@ def run_and_parse_cb_example(args: list[str]) -> dict:
 
 
 if __name__ == "__main__":
-
-    results = [{"args": "Arguments", "time_seconds": "Duration (s)", "num_tokens": "Generated tokens", "throughput_tok_per_sec": "Throughput (tok/s)"}]
+    results = [
+        {
+            "args": "Arguments",
+            "time_seconds": "Duration (s)",
+            "num_tokens": "Generated tokens",
+            "throughput_tok_per_sec": "Throughput (tok/s)",
+        }
+    ]
 
     # Benchmark with different number of samples
     results.append(run_and_parse_cb_example("--samples 10"))

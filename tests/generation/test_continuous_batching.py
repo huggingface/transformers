@@ -504,11 +504,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
-
     @parameterized.expand([True, False])
     @require_torch_accelerator
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
-
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
         user_messages = [
@@ -545,4 +543,3 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         self.assertEqual(len(results), 2, f"Expected 2 results, but got {len(results) = }")
         self.assertEqual(results[0].generated_tokens, results[1].generated_tokens)
-
