@@ -85,10 +85,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
             Number of channels for the latent space.
         in_channels (`int`, *optional*, defaults to 3):
             Number of input channels.
-        num_res_blocks (`int`, *optional*, defaults to 2):
-            Number of residual blocks.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout rate.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
@@ -102,8 +98,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
         num_embeddings: int = 16384,
         latent_channels: int = 1536,
         in_channels: int = 3,
-        num_res_blocks: int = 2,
-        dropout: float = 0.0,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -112,8 +106,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
         self.num_embeddings = num_embeddings
         self.latent_channels = latent_channels
         self.in_channels = in_channels
-        self.num_res_blocks = num_res_blocks
-        self.dropout = dropout
         self.initializer_range = initializer_range
 
 
@@ -148,8 +140,6 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
             The epsilon used by the layer normalization layers.
         spatial_merge_size (`int`, *optional*, defaults to 1):
             The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The size used for patches along the temporal dimension.
         intermediate_size (`int`, *optional*, defaults to 6144):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -172,7 +162,6 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
         patch_size=16,
         layer_norm_eps=1e-06,
         spatial_merge_size=1,
-        temporal_patch_size=1,
         intermediate_size=6144,
         initializer_range=0.02,
         **kwargs,
