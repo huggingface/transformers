@@ -121,9 +121,11 @@ if TYPE_CHECKING:
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
+    from .eomt import *
     from .ernie import *
     from .ernie4_5 import *
     from .ernie4_5_moe import *
+    from .ernie4_5_vl_moe import *
     from .esm import *
     from .evolla import *
     from .exaone4 import *
@@ -187,10 +189,12 @@ if TYPE_CHECKING:
     from .instructblip import *
     from .instructblipvideo import *
     from .internvl import *
+    from .jais2 import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
+    from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
     from .lasr import *
     from .layoutlm import *
@@ -226,6 +230,7 @@ if TYPE_CHECKING:
     from .mbart50 import *
     from .megatron_bert import *
     from .megatron_gpt2 import *
+    from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
@@ -237,6 +242,7 @@ if TYPE_CHECKING:
     from .mlcd import *
     from .mllama import *
     from .mluke import *
+    from .mm_grounding_dino import *
     from .mobilebert import *
     from .mobilenet_v1 import *
     from .mobilenet_v2 import *
@@ -277,6 +283,9 @@ if TYPE_CHECKING:
     from .parakeet import *
     from .patchtsmixer import *
     from .patchtst import *
+    from .pe_audio import *
+    from .pe_audio_video import *
+    from .pe_video import *
     from .pegasus import *
     from .pegasus_x import *
     from .perceiver import *
@@ -325,8 +334,10 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3 import *
     from .sam3_tracker import *
     from .sam3_tracker_video import *
+    from .sam3_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
