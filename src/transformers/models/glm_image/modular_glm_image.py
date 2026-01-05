@@ -31,7 +31,6 @@ from ...image_utils import (
     ImageInput,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -1390,8 +1389,8 @@ def smart_resize(
     if max_side * scale > longest_edge:
         scale = longest_edge / max_side
 
-    new_h = h * scale
-    new_w = w * scale
+    new_h = height * scale
+    new_w = height * scale
 
     h_bar = max(factor, int(round(new_h / factor)) * factor)
     w_bar = max(factor, int(round(new_w / factor)) * factor)

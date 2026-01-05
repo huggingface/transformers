@@ -71,8 +71,8 @@ def smart_resize(
     if max_side * scale > longest_edge:
         scale = longest_edge / max_side
 
-    new_h = h * scale
-    new_w = w * scale
+    new_h = height * scale
+    new_w = height * scale
 
     h_bar = max(factor, int(round(new_h / factor)) * factor)
     w_bar = max(factor, int(round(new_w / factor)) * factor)
