@@ -570,7 +570,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and "flash" in self.config._attn_implementation:
+        if attention_mask is not None and "flash" not in self.config._attn_implementation:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
