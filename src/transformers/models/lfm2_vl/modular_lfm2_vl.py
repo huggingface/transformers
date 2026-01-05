@@ -41,7 +41,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
         super().__init__()
         in_channels = config.vision_config.hidden_size * (config.downsample_factor**2)
         self.factor = config.downsample_factor
-        self.layer_norm = nn.LayerNorm(in_channels)
+        self.use_layer_norm = config.projector_use_layernorm
+        self.layer_norm = nn.LayerNorm(in_channels) if config.projector_use_layernorm else None
         self.linear_1 = nn.Linear(
             in_channels,
             config.projector_hidden_size,
@@ -56,7 +57,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
 
     def forward(self, image_features: torch.Tensor):
         image_features = self.pixel_unshuffle(image_features)
-        image_features = self.layer_norm(image_features)
+        if self.use_layer_norm:
+            image_features = self.layer_norm(image_features)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
