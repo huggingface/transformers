@@ -830,6 +830,9 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = PerceiverModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer(transfer_nested_tensors=True)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

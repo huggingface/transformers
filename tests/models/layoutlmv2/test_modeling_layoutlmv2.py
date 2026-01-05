@@ -482,6 +482,9 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             for key in model_batched_output:
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer(transfer_nested_tensors=True)
+
 
 def prepare_layoutlmv2_batch_inputs():
     # Here we prepare a batch of 2 sequences to test a LayoutLMv2 forward pass on:
