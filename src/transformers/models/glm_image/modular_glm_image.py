@@ -440,19 +440,6 @@ class GlmImageVisionPatchEmbed(Glm4vVisionPatchEmbed):
 
 class GlmImageVisionEmbeddings(Glm4vVisionEmbeddings):
     def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
-        """
-        Forward pass with integrated position encoding adaptation using 2D interpolation.
-
-        Args:
-            embeddings: Input embeddings tensor
-            lengths (torch.Tensor): Sequence lengths for each image in the batch.
-            image_shapes (torch.Tensor): Tensor of shape [batch_size, 3] representing the image shapes (t, h, w).
-            h_coords (torch.Tensor): Tensor of shape [total_seq] representing the h coordinate for each patch.
-            w_coords (torch.Tensor): Tensor of shape [total_seq] representing the w coordinate for each patch.
-
-        Returns:
-            torch.Tensor: Embeddings with adapted position encoding added.
-        """
         # Get position embedding parameters
         pos_embed_weight = self.position_embedding.weight
         hidden_size = pos_embed_weight.shape[1]
@@ -537,10 +524,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
 
 
 class GlmImageTextAttention(Glm4vTextAttention):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-    and "Generating Long Sequences with Sparse Transformers".
-    """
 
     def forward(
         self,
@@ -704,6 +687,10 @@ class GlmImageVisionModel(Glm4vVisionModel):
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
+
+        head_dim = config.hidden_size // config.num_heads
+        self.head_dim = head_dim
+
         del self.merger
         del self.rotary_pos_emb
         del self.post_conv_layernorm
@@ -926,7 +913,6 @@ class GlmImageModel(Glm4vModel):
                 token_id = input_ids[b, token_idx].item()
 
                 if token_id == image_start_token_id and image_idx < num_complete_images:
-                    # This is a complete image (has corresponding end marker)
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -935,7 +921,6 @@ class GlmImageModel(Glm4vModel):
                     current_pos += 1
                     token_idx += 1
 
-                    # Fill image tokens using grid info
                     if image_grid_thw is not None and image_idx < len(image_grid_thw):
                         h = image_grid_thw[image_idx, 1].item()
                         w = image_grid_thw[image_idx, 2].item()
@@ -953,7 +938,6 @@ class GlmImageModel(Glm4vModel):
                         image_idx += 1
 
                 elif token_id == image_end_token_id:
-                    # Image end marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -961,7 +945,6 @@ class GlmImageModel(Glm4vModel):
                     token_idx += 1
 
                 else:
-                    # Regular text token or trailing start marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -970,26 +953,21 @@ class GlmImageModel(Glm4vModel):
 
         position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
 
-        # Save the starting position for decode stage
         self._gen_st_idx = current_pos
         self._prefill_len = seq_len
 
-        # Build cached decode position_ids
         if image_grid_thw is not None and len(image_grid_thw) > 0:
-            # Number of grids for decode = total grids - complete images in input
             num_decode_grids = len(image_grid_thw) - num_complete_images
 
             if num_decode_grids <= 0:
                 num_decode_grids = 1
 
-            # Collect position_ids for all decode grids in reverse order
             decode_temporal_list = []
             decode_height_list = []
             decode_width_list = []
 
             decode_pos = self._gen_st_idx
 
-            # Process grids in reverse order: [-1], [-2], ... [-num_decode_grids]
             for i in range(1, num_decode_grids + 1):
                 grid_idx = -i
                 h = image_grid_thw[grid_idx, 1].item()
@@ -1002,16 +980,12 @@ class GlmImageModel(Glm4vModel):
                 decode_temporal_list.append(torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long))
                 decode_height_list.append(decode_pos + h_indices)
                 decode_width_list.append(decode_pos + w_indices)
-
-                # Update position for next grid
                 decode_pos = decode_pos + max(h, w)
 
-            # Add end marker position
             decode_temporal_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
 
-            # Concatenate all decode position_ids
             self._cached_decode_position_ids = torch.stack(
                 [
                     torch.cat(decode_temporal_list, dim=0),

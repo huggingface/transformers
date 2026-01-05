@@ -764,6 +764,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
         self.gradient_checkpointing = False
+        self.head_dim = head_dim
         self.post_init()
 
     def rot_pos_emb(self, grid_thw):
@@ -1099,7 +1100,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 token_id = input_ids[b, token_idx].item()
 
                 if token_id == image_start_token_id and image_idx < num_complete_images:
-                    # This is a complete image (has corresponding end marker)
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1108,7 +1108,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     current_pos += 1
                     token_idx += 1
 
-                    # Fill image tokens using grid info
                     if image_grid_thw is not None and image_idx < len(image_grid_thw):
                         h = image_grid_thw[image_idx, 1].item()
                         w = image_grid_thw[image_idx, 2].item()
@@ -1126,7 +1125,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                         image_idx += 1
 
                 elif token_id == image_end_token_id:
-                    # Image end marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1134,7 +1132,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     token_idx += 1
 
                 else:
-                    # Regular text token or trailing start marker
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
                     width_ids[b, token_idx] = current_pos
@@ -1143,26 +1140,21 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
 
-        # Save the starting position for decode stage
         self._gen_st_idx = current_pos
         self._prefill_len = seq_len
 
-        # Build cached decode position_ids
         if image_grid_thw is not None and len(image_grid_thw) > 0:
-            # Number of grids for decode = total grids - complete images in input
             num_decode_grids = len(image_grid_thw) - num_complete_images
 
             if num_decode_grids <= 0:
                 num_decode_grids = 1
 
-            # Collect position_ids for all decode grids in reverse order
             decode_temporal_list = []
             decode_height_list = []
             decode_width_list = []
 
             decode_pos = self._gen_st_idx
 
-            # Process grids in reverse order: [-1], [-2], ... [-num_decode_grids]
             for i in range(1, num_decode_grids + 1):
                 grid_idx = -i
                 h = image_grid_thw[grid_idx, 1].item()
@@ -1175,16 +1167,12 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 decode_temporal_list.append(torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long))
                 decode_height_list.append(decode_pos + h_indices)
                 decode_width_list.append(decode_pos + w_indices)
-
-                # Update position for next grid
                 decode_pos = decode_pos + max(h, w)
 
-            # Add end marker position
             decode_temporal_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
             decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
 
-            # Concatenate all decode position_ids
             self._cached_decode_position_ids = torch.stack(
                 [
                     torch.cat(decode_temporal_list, dim=0),
