@@ -41,65 +41,66 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
+
 if is_torch_available():
     import torch
 
 
 class GlmImageVisionText2TextModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=3,
-            seq_length=7,
-            num_channels=3,
-            ignore_index=-100,
-            image_size=128,
-            image_start_token_id=5,
-            image_end_token_id=6,
-            image_token_id=7,
-            is_training=True,
-            text_config={
-                "vocab_size": 99,
-                "vision_vocab_size": 99,
-                "hidden_size": 16,
-                "intermediate_size": 22,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 2,
-                "num_key_value_heads": 1,
-                "output_channels": 64,
-                "hidden_act": "silu",
-                "max_position_embeddings": 512,
-                "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1]},
-                "rope_theta": 10000,
-                "tie_word_embeddings": True,
-                "bos_token_id": 0,
-                "eos_token_id": 0,
-                "pad_token_id": 0,
-                "n_routed_experts": 8,
-                "n_shared_experts": 1,
-                "n_group": 1,
-                "topk_group": 1,
-                "num_experts_per_tok": 8,
-            },
-            vision_config={
-                "depth": 2,
-                "hidden_act": "gelu",
-                "hidden_size": 32,
-                "out_hidden_size": 16,
-                "intermediate_size": 22,
-                "patch_size": 16,
-                "spatial_merge_size": 1,
-                "temporal_patch_size": 1,
-            },
-            vq_config={
-                "dropout": 0.0,
-                "embed_dim": 48,
-                "in_channels": 3,
-                "initializer_range": 0.02,
-                "latent_channels": 32,
-                "num_embeddings": 32,
-                "num_res_blocks": 2,
-            },
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        num_channels=3,
+        ignore_index=-100,
+        image_size=128,
+        image_start_token_id=5,
+        image_end_token_id=6,
+        image_token_id=7,
+        is_training=True,
+        text_config={
+            "vocab_size": 99,
+            "vision_vocab_size": 99,
+            "hidden_size": 16,
+            "intermediate_size": 22,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "output_channels": 64,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "rope_parameters": {"type": "default", "mrope_section": [2, 1, 1]},
+            "rope_theta": 10000,
+            "tie_word_embeddings": True,
+            "bos_token_id": 0,
+            "eos_token_id": 0,
+            "pad_token_id": 0,
+            "n_routed_experts": 8,
+            "n_shared_experts": 1,
+            "n_group": 1,
+            "topk_group": 1,
+            "num_experts_per_tok": 8,
+        },
+        vision_config={
+            "depth": 2,
+            "hidden_act": "gelu",
+            "hidden_size": 32,
+            "out_hidden_size": 16,
+            "intermediate_size": 22,
+            "patch_size": 16,
+            "spatial_merge_size": 1,
+            "temporal_patch_size": 1,
+        },
+        vq_config={
+            "dropout": 0.0,
+            "embed_dim": 48,
+            "in_channels": 3,
+            "initializer_range": 0.02,
+            "latent_channels": 32,
+            "num_embeddings": 32,
+            "num_res_blocks": 2,
+        },
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -145,8 +146,8 @@ class GlmImageVisionText2TextModelTester:
         temporal_patch_size = config.vision_config.temporal_patch_size
         pixel_values = floats_tensor(
             [
-                self.batch_size * (self.image_size ** 2) // (patch_size ** 2),
-                self.num_channels * (patch_size ** 2) * temporal_patch_size,
+                self.batch_size * (self.image_size**2) // (patch_size**2),
+                self.num_channels * (patch_size**2) * temporal_patch_size,
             ]
         )
 
@@ -163,7 +164,7 @@ class GlmImageVisionText2TextModelTester:
         input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
 
         input_ids[:, 0] = self.image_start_token_id
-        input_ids[:, 1: 1 + self.num_image_tokens] = self.image_token_id
+        input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
         input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
@@ -173,7 +174,7 @@ class GlmImageVisionText2TextModelTester:
             "image_grid_thw": torch.tensor(
                 [[1, patches_per_side, patches_per_side]] * self.batch_size
                 + [[1, patches_per_side, patches_per_side]],
-                device=torch_device
+                device=torch_device,
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -214,7 +215,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         # The diff from the general `prepare_config_and_inputs_for_generate` lies here
         patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size ** 2) // (patch_size ** 2)
+        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
         filtered_inputs_dict = {
             k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
             for k, v in inputs_dict.items()

@@ -120,7 +120,6 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 
 
 class GlmImageVisionConfig(Glm4vVisionConfig):
-
     r"""
     This is the configuration class to store the configuration of a [`GlmImageVisionModel`]. It is used to instantiate an GlmImageVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -141,7 +140,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
             Dropout probability for attention weights.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer architecture.
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         spatial_merge_size (`int`, *optional*, defaults to 1):
             The size used for merging spatial dimensions.
@@ -166,7 +165,9 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
-        ```"""
+        ```
+    """
+
     model_type = "glm_image_vision_model"
     base_config_key = "vision_config"
 

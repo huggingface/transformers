@@ -98,7 +98,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
             Dropout probability for attention weights.
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer architecture.
-        patch_size (`int`, *optional*, defaults to 14):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         spatial_merge_size (`int`, *optional*, defaults to 1):
             The size used for merging spatial dimensions.
@@ -123,7 +123,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
-        ```"""
+        ```
+    """
 
     model_type = "glm_image_vision_model"
     base_config_key = "vision_config"
