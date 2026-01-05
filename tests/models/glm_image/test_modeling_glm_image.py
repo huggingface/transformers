@@ -40,6 +40,7 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
+
 if is_torch_available():
     import torch
 
@@ -213,14 +214,14 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         # The diff from the general `prepare_config_and_inputs_for_generate` lies here
         patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size ** 2) // (patch_size ** 2)
+        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
         filtered_inputs_dict = {
             k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
             for k, v in inputs_dict.items()
             if k not in input_keys_to_ignore
         }
         filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:filtered_image_length + 1]
+        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: filtered_image_length + 1]
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -282,6 +283,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     @unittest.skip(reason="GlmImageVisionModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
 
 @require_torch
 @slow
