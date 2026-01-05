@@ -1145,39 +1145,42 @@ class ModelTesterMixin:
             # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
             # TODO: relax this as we patch more and more models
             if addition_year < 2023:
-                self.skipTest(reason=f"{model_class} is not a priorited model for now.")
+                self.skipTest(reason=f"{model_class} is not a prioritized model for now.")
 
             # This context manager makes sure that we get the same results deterministically for random new weights
             with seeded_weight_init():
-                # First, initialize the model from config -> this ensure everything is correctly initialized, even if
+                # First, initialize the model from __init__ -> this ensure everything is correctly initialized, even if
                 # _init_weights() does not take all weights into account correctly
-                model_from_config = model_class(copy.deepcopy(config))
+                model_from_init = model_class(copy.deepcopy(config))
                 # Here, passing an empty state dict will force all weights to be moved from meta to cpu, then be initialized
                 # by _init_weights()
                 model_from_pretrained = model_class.from_pretrained(None, config=copy.deepcopy(config), state_dict={})
 
-            # First, check if any parameters are still on meta -> this is usually an issue with tied weights
+            # First, check if any parameters/buffers are still on meta -> this is usually an issue with tied weights
             params_on_meta = []
             for k, v in model_from_pretrained.named_parameters():
+                if v.device.type == "meta":
+                    params_on_meta.append(k)
+            for k, v in model_from_pretrained.named_buffers():
                 if v.device.type == "meta":
                     params_on_meta.append(k)
 
             self.assertTrue(
                 len(params_on_meta) == 0,
-                f"The following keys are still on the meta device, it probably comes from an issue in the tied weights:\n{params_on_meta}",
+                f"The following keys are still on the meta device, it probably comes from an issue in the tied weights or buffers:\n{params_on_meta}",
             )
 
             from_pretrained_state_dict = model_from_pretrained.state_dict()
-            from_config_state_dict = model_from_config.state_dict()
+            from_init_state_dict = model_from_init.state_dict()
             self.assertEqual(
                 sorted(from_pretrained_state_dict.keys()),
-                sorted(from_config_state_dict.keys()),
+                sorted(from_init_state_dict.keys()),
                 "The keys from each model should be the exact same",
             )
 
             # Everything must be exactly the same as we set the same seed for each init
             different_weights = set()
-            for k1, v1 in from_config_state_dict.items():
+            for k1, v1 in from_init_state_dict.items():
                 # In case using torch.nn.utils.parametrizations on a module, we should skip the resulting keys
                 if re.search(r"\.parametrizations\..*?\.original[01]", k1):
                     continue
@@ -1187,27 +1190,12 @@ class ModelTesterMixin:
                 if not (v1 == v2).all():
                     different_weights.add(k1)
 
-            # Buffers that are initialized randomly are ignored as they are not initialized on meta device anyway
-            buffer_names = {name for name, _ in model_from_config.named_buffers()}
-            different_weights = {k for k in different_weights if k not in buffer_names}
-
-            # Find the parent structure of the buffers that are different
+            # Find the parent structure of the weights/buffers that are different for explicit error messages
             unique_bad_module_traceback = set()
             for weight in different_weights.copy():
-                parent_name, weight_name = weight.rsplit(".", 1) if "." in weight else ("", weight)
-                parent = model_from_config.get_submodule(parent_name)
-                immediate_parent_class = type(parent).__name__
-                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
-                while not isinstance(parent, PreTrainedModel):
-                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
-                    parent = model_from_config.get_submodule(parent_name)
-                # Get the exact XXXPreTrainedModel
-                pretrained_parent_class = next(
-                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                weight_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
+                    weight, model_from_init
                 )
-                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
-                if pretrained_parent_class == "PreTrainedModel":
-                    pretrained_parent_class = type(parent).__name__
 
                 # We cannot control timm model weights initialization, so skip in this case
                 if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in weight) or (
@@ -1271,23 +1259,12 @@ class ModelTesterMixin:
                 if not (v1 == v2).all():
                     different_buffers.add(k1)
 
-            # Find the parent structure of the buffers that are different
+            # Find the parent structure of the buffers that are different for explicit error messages
             unique_bad_module_traceback = set()
             for buffer in different_buffers.copy():
-                parent_name, buf_name = buffer.rsplit(".", 1) if "." in buffer else ("", buffer)
-                parent = model_from_init.get_submodule(parent_name)
-                immediate_parent_class = type(parent).__name__
-                # Go back recursively to find the first PreTrainedModel that triggered the _init_weights call
-                while not isinstance(parent, PreTrainedModel):
-                    parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
-                    parent = model_from_init.get_submodule(parent_name)
-                # Get the exact XXXPreTrainedModel
-                pretrained_parent_class = next(
-                    x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__
+                buf_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
+                    buffer, model_from_init
                 )
-                # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
-                if pretrained_parent_class == "PreTrainedModel":
-                    pretrained_parent_class = type(parent).__name__
 
                 # We cannot control timm model weights initialization, so skip in this case
                 if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
@@ -4636,6 +4613,25 @@ def skip_weight_init():
     finally:
         # Restore it
         PreTrainedModel._initialize_weights = original_initialize_weights
+
+
+def find_parent_traceback(full_param_name: str, model: PreTrainedModel) -> tuple[str, str, str]:
+    """From a given parameter or buffer `full_param_name`, find its immediate parent class name and immediate
+    PreTrainedModel parent class name."""
+    parent_name, name = full_param_name.rsplit(".", 1) if "." in full_param_name else ("", full_param_name)
+    parent = model.get_submodule(parent_name)
+    immediate_parent_class = type(parent).__name__
+    # Go back recursively to find the first PreTrainedModel from which we inherit
+    while not isinstance(parent, PreTrainedModel):
+        parent_name = parent_name.rsplit(".", 1)[0] if "." in parent_name else ""
+        parent = model.get_submodule(parent_name)
+    # Get the exact XXXPreTrainedModel
+    pretrained_parent_class = next(x.__name__ for x in type(parent).mro() if "PreTrainedModel" in x.__name__)
+    # Some models directly inherit from `PreTrainedModel` instead of `XXXPreTrainedModel`
+    if pretrained_parent_class == "PreTrainedModel":
+        pretrained_parent_class = type(parent).__name__
+
+    return name, immediate_parent_class, pretrained_parent_class
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):
