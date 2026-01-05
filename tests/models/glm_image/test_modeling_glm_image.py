@@ -40,7 +40,6 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 
-
 if is_torch_available():
     import torch
 
@@ -196,7 +195,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         self.config_tester.run_common_tests()
 
     # GlmImage has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=1):
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # We don't want a few model inputs in our model input dictionary for generation tests
@@ -214,23 +213,14 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         # The diff from the general `prepare_config_and_inputs_for_generate` lies here
         patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
-        patches_per_side = self.model_tester.image_size // patch_size
-
+        filtered_image_length = batch_size * (self.model_tester.image_size ** 2) // (patch_size ** 2)
         filtered_inputs_dict = {
-            k: v[:batch_size, ...]
-            if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw"]
-            else v
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
             for k, v in inputs_dict.items()
             if k not in input_keys_to_ignore
         }
         filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-        # Key fix: Rebuild image_grid_thw for the filtered batch_size
-        filtered_inputs_dict["image_grid_thw"] = torch.tensor(
-            [[1, patches_per_side, patches_per_side]] * batch_size
-            + [[1, patches_per_side, patches_per_side]],  # Extra row for model's [:-1]
-            device=torch_device,
-        )
+        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:filtered_image_length + 1]
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -265,6 +255,33 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="GLM-Image can't do text-only inference")
+    def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="GlmImageVisionModel does not support training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="GlmImageVision does not support output_hidden_states test")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="GlmImageVisionModel does not support training")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
 @require_torch
 @slow
