@@ -34,9 +34,14 @@
 
 ### Setup & Quick Start
 
+<<<<<<< HEAD
 First, install the package. It can be done in two ways:
 - From source using the official Github repository [**SINQ**](https://github.com/huawei-csl/SINQ/tree/main) **[Recommended]**
 - Using pip package:
+=======
+First, install the package:
+
+>>>>>>> origin/sinq_integration
 ```bash
 pip install sinq
 ```
@@ -94,6 +99,7 @@ qmodel = AutoModelForCausalLM.from_pretrained(
 ### Save & reload
 
 If you want to reuse a quantized model later, save it to disk or push it on the HuggingFace Hub and reload it without needing base FP weights.
+<<<<<<< HEAD
 If you installed SINQ from source you should call *patch_hf_pretrained_io* function:
 ```python
 from sinq.hf_io import patch_hf_pretrained_io
@@ -108,6 +114,8 @@ tokenizer  = AutoTokenizer.from_pretrained(hf_hub_model)
 model = AutoModelForCausalLM.from_pretrained(hf_hub_model)
 ```
 Otherwise, if you installed SINQ through pip, you can simply use HF built-in functions:
+=======
+>>>>>>> origin/sinq_integration
 
 ```python
 # --- Save to a folder (sharded safetensors) ---
@@ -119,6 +127,12 @@ qmodel.save_pretrained("/path/to/save/qwen3-1.7B-sinq-4bit")
 qmodel.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit", safe_serialization=True)
 tok.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 
+<<<<<<< HEAD
+=======
+```
+
+```python
+>>>>>>> origin/sinq_integration
 # --- Reload later--
 
 save_dir = "/path/to/save/qwen3-1.7B-sinq-4bit"
