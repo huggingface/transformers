@@ -1083,6 +1083,8 @@
         title: InstructBlipVideo
       - local: model_doc/internvl
         title: InternVL
+      - local: model_doc/isaac
+        title: Isaac
       - local: model_doc/janus
         title: Janus
       - local: model_doc/kosmos-2
