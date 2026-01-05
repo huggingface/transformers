@@ -1546,21 +1546,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def _get_image_nums(
         self,
         input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Get the number of images for each sample.
+        For GLM-Image, only input_ids allow us to get the number of images.
 
         Returns:
             image_counts (`torch.LongTensor` of shape `(batch_size,)`)
         """
-        if inputs_embeds is not None:
-            image_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            is_image = (inputs_embeds == image_token_embed).all(dim=-1)
-        else:
-            is_image = input_ids == self.config.image_start_token_id
+        is_image = input_ids == self.config.image_start_token_id
 
         return is_image.sum(dim=1)
 
@@ -1583,7 +1577,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            image_nums = self._get_image_nums(input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None))
+            image_nums = self._get_image_nums(input_ids)
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)

@@ -183,9 +183,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vocab_size (`int`, *optional*, defaults to 168064):
             Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GlmImageModel`]
-        vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 13696):
@@ -220,6 +217,9 @@ class GlmImageTextConfig(Glm4vTextConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        vision_vocab_size (`int`, *optional*, defaults to 16512):
+            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
@@ -237,9 +237,12 @@ class GlmImageTextConfig(Glm4vTextConfig):
     def __init__(
         self,
         vocab_size: Optional[int] = 168064,
+        vision_vocab_size: Optional[int] = 16512,
         tie_word_embeddings: Optional[bool] = False,
         **super_kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.vision_vocab_size = vision_vocab_size
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **super_kwargs
         )
@@ -1263,21 +1266,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def _get_image_nums(
         self,
         input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Get the number of images for each sample.
+        For GLM-Image, only input_ids allow us to get the number of images.
 
         Returns:
             image_counts (`torch.LongTensor` of shape `(batch_size,)`)
         """
-        if inputs_embeds is not None:
-            image_token_embed = self.get_input_embeddings()(
-                torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            is_image = (inputs_embeds == image_token_embed).all(dim=-1)
-        else:
-            is_image = input_ids == self.config.image_start_token_id
+        is_image = input_ids == self.config.image_start_token_id
 
         return is_image.sum(dim=1)
 
@@ -1300,7 +1297,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            image_nums = self._get_image_nums(input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None))
+            image_nums = self._get_image_nums(input_ids)
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)

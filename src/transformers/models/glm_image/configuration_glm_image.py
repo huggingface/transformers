@@ -155,9 +155,6 @@ class GlmImageTextConfig(PreTrainedConfig):
         vocab_size (`int`, *optional*, defaults to 168064):
             Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GlmImageModel`]
-        vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 13696):
@@ -192,6 +189,9 @@ class GlmImageTextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        vision_vocab_size (`int`, *optional*, defaults to 16512):
+            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
@@ -240,8 +240,11 @@ class GlmImageTextConfig(PreTrainedConfig):
         tie_word_embeddings: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        vision_vocab_size: Optional[int] = 16512,
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.vision_vocab_size = vision_vocab_size
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
