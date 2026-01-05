@@ -145,6 +145,7 @@ from .import_utils import (
     is_gguf_available,
     is_gptqmodel_available,
     is_grokadamw_available,
+    is_grouped_mm_available,
     is_habana_gaudi1,
     is_hadamard_available,
     is_hqq_available,
