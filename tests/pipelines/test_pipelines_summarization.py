@@ -93,6 +93,19 @@ class SummarizationPipelineTests(unittest.TestCase):
             ],
         )
 
+    def test_check_inputs_with_none_values(self):
+        """Test that check_inputs handles None values for max_new_tokens and min_length gracefully."""
+        # This tests the fix for issue #43093 where check_inputs would fail with TypeError
+        # when max_new_tokens or min_length is None
+        result = SummarizationPipeline.check_inputs(None, input_length=100, min_length=None, max_new_tokens=50)
+        self.assertTrue(result)
+
+        result = SummarizationPipeline.check_inputs(None, input_length=100, min_length=10, max_new_tokens=None)
+        self.assertTrue(result)
+
+        result = SummarizationPipeline.check_inputs(None, input_length=100, min_length=None, max_new_tokens=None)
+        self.assertTrue(result)
+
     @require_torch
     @slow
     def test_integration_torch_summarization(self):

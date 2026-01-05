@@ -298,6 +298,9 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         """
         Checks whether there might be something wrong with given input with regard to the model.
         """
+        if max_new_tokens is None or min_length is None:
+            return True
+
         if max_new_tokens < min_length:
             logger.warning(f"Your min_length={min_length} must be inferior than your max_new_tokens={max_new_tokens}.")
 
