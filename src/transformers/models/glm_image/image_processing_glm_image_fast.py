@@ -60,10 +60,8 @@ def smart_resize(
 
     shortest_edge = int(round(math.sqrt(min_pixels)))
     longest_edge = int(round(math.sqrt(max_pixels)))
-
-    h, w = height, width
-    min_side = min(h, w)
-    max_side = max(h, w)
+    min_side = min(height, width)
+    max_side = max(height, width)
 
     scale = 1.0
 

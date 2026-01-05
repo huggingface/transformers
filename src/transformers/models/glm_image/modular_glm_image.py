@@ -1379,10 +1379,8 @@ def smart_resize(
 
     shortest_edge = int(round(math.sqrt(min_pixels)))
     longest_edge = int(round(math.sqrt(max_pixels)))
-
-    h, w = height, width
-    min_side = min(h, w)
-    max_side = max(h, w)
+    min_side = min(height, width)
+    max_side = max(height, width)
 
     scale = 1.0
 
@@ -1433,11 +1431,7 @@ class GlmImageProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.image_token_id = (
-            tokenizer.image_token_id
-            if getattr(tokenizer, "image_token_id", None)
-            else tokenizer.convert_tokens_to_ids(self.image_token)
-        )
+        self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
