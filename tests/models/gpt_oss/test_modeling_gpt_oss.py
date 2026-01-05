@@ -97,7 +97,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "GPT-OSS model does not support"):
             config._attn_implementation = "flash_attention_2"
 
-
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
