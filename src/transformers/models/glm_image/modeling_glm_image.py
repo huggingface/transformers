@@ -1282,7 +1282,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw[:-1])
-            image_embeds = torch.cat(image_embeds, dim=0).to(image_embeds[0].device, image_embeds[0].dtype)
+            image_embeds = torch.cat(image_embeds, dim=0)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw[:-1])
             input_ids = self.get_placeholder_mask(input_ids, image_ids)
 
@@ -1605,6 +1605,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "image_grid_thw":
+                    # get the num of images for each sample
                     lengths = list(image_nums)
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key][:image_nums], lengths=lengths, repeat_times=expand_size

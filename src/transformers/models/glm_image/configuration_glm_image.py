@@ -227,7 +227,6 @@ class GlmImageTextConfig(PreTrainedConfig):
     def __init__(
         self,
         vocab_size: Optional[int] = 168064,
-        vision_vocab_size: Optional[int] = 16512,
         hidden_size: Optional[int] = 4096,
         intermediate_size: Optional[int] = 13696,
         num_hidden_layers: Optional[int] = 40,
@@ -243,25 +242,6 @@ class GlmImageTextConfig(PreTrainedConfig):
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.vision_vocab_size = vision_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -288,7 +268,7 @@ class GlmImageTextConfig(PreTrainedConfig):
 
 class GlmImageConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GLM-Image`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
@@ -344,7 +324,7 @@ class GlmImageConfig(PreTrainedConfig):
         if isinstance(vq_config, dict):
             self.vq_config = self.sub_configs["vq_config"](**vq_config)
         elif vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"](**kwargs)
+            self.vq_config = self.sub_configs["vq_config"]()
 
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
