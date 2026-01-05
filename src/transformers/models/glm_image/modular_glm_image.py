@@ -46,6 +46,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextModel,
+    Glm4vTextRotaryEmbedding,
     Glm4vVisionAttention,
     Glm4vVisionBlock,
     Glm4vVisionEmbeddings,
@@ -170,7 +171,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
 
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmImageModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image).
@@ -246,7 +247,7 @@ class GlmImageTextConfig(Glm4vTextConfig):
 
 class GlmImageConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmImageTextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmImageModel`]. It is used to instantiate a
     GLM-Image model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image) architecture.
@@ -548,13 +549,27 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
+class GlmImageTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
+    pass
+
+
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
     config: GlmImageConfig
     input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        """Initialize the weights"""
+        if isinstance(module, GlmImageTextRotaryEmbedding):
+            config = module.config
+            base = config.rope_parameters["rope_theta"]
+            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+            head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+            dim = int(head_dim * partial_rotary_factor)
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -1114,6 +1129,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    base_model_prefix = "model"
+    config: GlmImageConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1122,12 +1139,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
