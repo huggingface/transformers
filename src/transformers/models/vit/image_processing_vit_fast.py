@@ -29,7 +29,7 @@ from ...utils import (
 
 @auto_docstring
 class ViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 224, "width": 224}
