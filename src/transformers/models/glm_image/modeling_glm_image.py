@@ -1020,8 +1020,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 === Case 2: Text-to-Image Generation (multi-resolution) ===
 
                 Pure text input with two image_grids for progressive generation.
-                input_ids: [你 好 <sop> 3 3 <eop> <sop> 3 2 <eop> <|dit_token_16384|>]
-                Assume "你好<sop>3 3<eop><sop>3 2<eop>" = 4 tokens (positions 0-3)
+                input_ids: [hello<sop>3 3<eop><sop>3 2<eop><|dit_token_16384|>]
+                Assume "hello<sop>3 3<eop><sop>3 2<eop>" = 4 tokens (positions 0-3)
                 <|dit_token_16384|> at position 4
                 image_grid_thw: [[1, 3, 3], [1, 3, 2]]
                     - image_grid_thw[-1] = [1, 3, 2]: first generated image (smaller/draft)
