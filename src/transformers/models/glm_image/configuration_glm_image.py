@@ -83,37 +83,37 @@ class GlmImageVisionConfig(PreTrainedConfig):
     GLM-Image [zai-org/GLM-Image](https://huggingface.co/zai-org/GLM-Image).
 
     Args:
-        depth (`int`, *optional*, defaults to 40):
-            Number of layers (depth) in the model.
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        num_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer architecture.
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input channels.
-        image_size (`int` or `list[int]`, *optional*, defaults to 336):
-                The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        spatial_merge_size (`int`, *optional*, defaults to 1):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The size used for patches along the temporal dimension.
-        intermediate_size (`int`, *optional*, defaults to 6144):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        Example:
+            depth (`int`, *optional*, defaults to 40):
+                Number of layers (depth) in the model.
+            hidden_size (`int`, *optional*, defaults to 1536):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            attention_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the queries, keys and values.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                Dropout probability for attention weights.
+            num_heads (`int`, *optional*, defaults to 16):
+                Number of attention heads for each attention layer in the Transformer architecture.
+            in_channels (`int`, *optional*, defaults to 3):
+                Number of input channels.
+            image_size (`int` or `list[int]`, *optional*, defaults to 2048):
+                    The size (resolution) of each image.
+            patch_size (`int`, *optional*, defaults to 16):
+                The size (resolution) of each patch.
+            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the layer normalization layers.
+            spatial_merge_size (`int`, *optional*, defaults to 1):
+                The size used for merging spatial dimensions.
+            temporal_patch_size (`int`, *optional*, defaults to 1):
+                The size used for patches along the temporal dimension.
+            intermediate_size (`int`, *optional*, defaults to 6144):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
+        Example:
         ```python
         >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
 
@@ -323,18 +323,18 @@ class GlmImageConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmImageTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmImageVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        vq_config (`Union[Dict, GlmImageVQVAEConfig]`, *optional*):
-            GlmImageVQVAEConfig instance containing the configuration for the VQ-VAE model.
-        image_token_id (`int`, *optional*, defaults to 167855):
-            The image token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 167851):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 167852):
-            The image end token index to encode the end of image.
+            text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmImageTextConfig`):
+                The config object or dictionary of the text backbone.
+            vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmImageVisionConfig`):
+                The config object or dictionary of the vision backbone.
+            vq_config (`Union[Dict, GlmImageVQVAEConfig]`, *optional*):
+                GlmImageVQVAEConfig instance containing the configuration for the VQ-VAE model.
+            image_token_id (`int`, *optional*, defaults to 167855):
+                The image token index to encode the image prompt.
+            image_start_token_id (`int`, *optional*, defaults to 16384):
+                The image start token index to encode the start of image.
+            image_end_token_id (`int`, *optional*, defaults to 16385):
+                The image end token index to encode the end of image.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
