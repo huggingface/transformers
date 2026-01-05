@@ -114,7 +114,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
-    model_type = "glm_image_vision_model"
+    model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
     def __init__(

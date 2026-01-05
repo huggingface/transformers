@@ -21,7 +21,10 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_glm_image import *
+    from .image_processing_glm_image import *
+    from .image_processing_glm_image_fast import *
     from .modeling_glm_image import *
+    from .processing_glm_image import *
 else:
     import sys
 
