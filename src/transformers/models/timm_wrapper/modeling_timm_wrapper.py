@@ -115,8 +115,8 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
         # Also, reinit all non-persistemt buffers if any!
-        if hasattr(module, "_init_buffers"):
-            module._init_buffers()
+        if hasattr(module, "init_non_persistent_buffer"):
+            module.init_non_persistent_buffer()
         elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
             init.zeros_(module.running_mean)
             init.ones_(module.running_var)
