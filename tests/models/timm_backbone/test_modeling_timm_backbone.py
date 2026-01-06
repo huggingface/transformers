@@ -155,6 +155,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_save_load(self):
         pass
 
+    @unittest.skip(reason="Only checkpoints on timm can be loaded into TimmBackbone")
+    def test_load_contiguous_weights(self):
+        pass
+
     @unittest.skip(reason="TimmBackbone uses its own `from_pretrained` without device_map support")
     def test_can_load_with_device_context_manager(self):
         pass
