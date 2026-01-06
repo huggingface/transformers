@@ -590,8 +590,7 @@ class TrainingArguments:
                 - `"random"`: Uses `RandomSampler` (default).
                 - `"sequential"`: Uses `SequentialSampler`.
                 - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
-                  together (to minimize padding and be more efficient). Requires the dataset to not be an
-                  `IterableDataset`.
+                  together (to minimize padding and be more efficient).
 
             Note: When using an `IterableDataset`, this argument is ignored and a warning is raised.
         length_column_name (`str`, *optional*, defaults to `"length"`):
