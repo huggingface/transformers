@@ -3672,33 +3672,17 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         num_steps=10,
         guidance_scale=0.5,
         sway_coefficient=-1.0,
-        max_mel_frames=30000,
     ):
         maximum_duration = quantized_code.shape[1] * self.repeats
         batch_size = reference_mel_spectrogram.shape[0]
         if batch_size != 1:
             raise ValueError("Only batch size = 1 is currently supported")
 
-        max_target_duration = min(max_mel_frames, self.config.max_position_embeddings)
-        target_duration = min(maximum_duration, max_target_duration)
-        align_to = math.lcm(self.repeats, self.block_size)
-        target_duration = target_duration // align_to * align_to
-        if target_duration == 0:
-            target_duration = min(maximum_duration, max_target_duration) // self.repeats * self.repeats
-        if target_duration == 0:
+        if maximum_duration > self.config.max_position_embeddings:
             raise ValueError(
-                f"Aligned mel length is 0 (got `max_mel_frames`={max_mel_frames}, "
-                f"`dit_config.max_position_embeddings`={self.config.max_position_embeddings})."
+                f"Requested mel length ({maximum_duration}) exceeds `dit_config.max_position_embeddings` "
+                f"({self.config.max_position_embeddings}). Provide shorter `quantized_code`."
             )
-
-        if target_duration != maximum_duration:
-            logger.warning_once(
-                f"Requested mel length ({maximum_duration}) exceeds the supported length "
-                f"(`max_mel_frames`={max_mel_frames}, `dit_config.max_position_embeddings`={self.config.max_position_embeddings}); "
-                f"capping to {target_duration}."
-            )
-            quantized_code = quantized_code[:, : target_duration // self.repeats]
-            maximum_duration = target_duration
 
         initial_state = torch.randn(
             [batch_size, maximum_duration, self.mel_dim],
@@ -3790,7 +3774,6 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
         num_steps=10,
         guidance_scale=0.5,
         sway_coefficient=-1.0,
-        max_mel_frames=30000,
         **kwargs,
     ):
         """Generates a waveform from input code and conditioning parameters."""
@@ -3802,7 +3785,6 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
             num_steps=num_steps,
             guidance_scale=guidance_scale,
             sway_coefficient=sway_coefficient,
-            max_mel_frames=max_mel_frames,
         )
 
         waveform = self.code2wav_bigvgan_model(mel_spectrogram)
