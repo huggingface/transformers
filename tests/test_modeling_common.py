@@ -933,7 +933,7 @@ class ModelTesterMixin:
                     )
                     self.assertTrue(len(load_result.unexpected_keys) == 0)
 
-    def test_load_contigous_weights(self):
+    def test_load_contiguous_weights(self):
         """
         Checks whether the loaded weights are contiguous or not; inherently checking whether a conversion
         operation from `core_model_loading` may have affected the original weights.
