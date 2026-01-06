@@ -516,8 +516,24 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
 
     def _init_weights(self, module):
-        """Initialize weights - S3Tokenizer uses pretrained weights, no random initialization needed."""
-        pass
+        """Initialize weights.
+
+        S3Tokenizer models are expected to be loaded from pretrained checkpoints, but we still need to correctly
+        (re)initialize buffers when the model is created on meta device then materialized with `to_empty()`.
+        """
+        # These buffers are registered in `__init__` to match checkpoint keys. When a model is initialized on meta
+        # device, then materialized via `to_empty()`, buffers may contain uninitialized values and need to be restored
+        # deterministically here.
+        if isinstance(module, S3TokenizerModel):
+            module.window = torch.zeros(module.config.n_fft, device=module.window.device, dtype=module.window.dtype)
+            module._mel_filters = torch.zeros(
+                module.config.n_mels,
+                module.config.n_fft // 2 + 1,
+                device=module._mel_filters.device,
+                dtype=module._mel_filters.dtype,
+            )
+        elif isinstance(module, AudioEncoderV2):
+            module.freqs_cis = precompute_freqs_cis(64, 1024 * 2).to(device=module.freqs_cis.device)
 
 
 class S3TokenizerModel(S3TokenizerPreTrainedModel):

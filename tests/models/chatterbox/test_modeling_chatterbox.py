@@ -17,7 +17,9 @@
 import tempfile
 import unittest
 
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
 from transformers.models.chatterbox.configuration_chatterbox import ChatterboxConfig
+from transformers.models.chatterbox.feature_extraction_chatterbox import ChatterboxFeatureExtractor
 from transformers.models.chatterbox.modeling_chatterbox import ChatterboxModel
 from transformers.testing_utils import require_torch
 
@@ -42,6 +44,7 @@ class ChatterboxModelTest(unittest.TestCase):
         # Check that sub-modules exist
         self.assertIsNotNone(model.t3)
         self.assertIsNotNone(model.s3gen)
+        self.assertIsInstance(model.feature_extractor, ChatterboxFeatureExtractor)
 
     def test_config_attributes(self):
         """Test that config attributes are properly set."""
@@ -71,6 +74,10 @@ class ChatterboxModelTest(unittest.TestCase):
             # Load model
             loaded_model = ChatterboxModel.from_pretrained(tmpdirname)
             self.assertIsInstance(loaded_model, ChatterboxModel)
+
+    def test_auto_feature_extractor_mapping(self):
+        self.assertIn("chatterbox", FEATURE_EXTRACTOR_MAPPING_NAMES)
+        self.assertEqual(FEATURE_EXTRACTOR_MAPPING_NAMES["chatterbox"], "ChatterboxFeatureExtractor")
 
     @unittest.skip("Requires CUDA and full tokenizer setup")
     def test_generate_basic(self):

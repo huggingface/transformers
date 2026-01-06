@@ -934,6 +934,12 @@ class HiFTGenerator(nn.Module):
         # Use cache_source to avoid glitch
         if cache_source.shape[2] != 0:
             s[:, :, : cache_source.shape[2]] = cache_source
+        else:
+            # Smoothly fade-in the source when starting from scratch to reduce onset transients.
+            n_fade = min(int(self.sampling_rate // 40), s.size(2))  # ~25ms at 24kHz
+            if n_fade > 1:
+                fade = (torch.cos(torch.linspace(torch.pi, 0, n_fade, device=s.device, dtype=s.dtype)) + 1) / 2
+                s[:, :, :n_fade] *= fade
 
         generated_speech = self.decode(x=speech_feat, s=s)
         return generated_speech, s
@@ -1510,18 +1516,23 @@ class PositionalEncoding(nn.Module):
         self.xscale = math.sqrt(self.d_model)
         self.dropout = nn.Dropout(p=dropout_rate)
         self.max_len = max_len
+        # Lazily created on first forward to support meta-device initialization.
+        self.pe = None
 
-        self.pe = torch.zeros(self.max_len, self.d_model)
-        position = torch.arange(0, self.max_len, dtype=torch.float32).unsqueeze(1)
+    def _build_pe(self, device: torch.device):
+        pe = torch.zeros(self.max_len, self.d_model, device=device, dtype=torch.float32)
+        position = torch.arange(0, self.max_len, dtype=torch.float32, device=device).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.float32, device=device) * -(math.log(10000.0) / self.d_model)
         )
-        self.pe[:, 0::2] = torch.sin(position * div_term)
-        self.pe[:, 1::2] = torch.cos(position * div_term)
-        self.pe = self.pe.unsqueeze(0)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        # Keep in float32 (as originally) for numerical stability; do not follow `x.dtype` (often fp16/bf16).
+        self.pe = pe.unsqueeze(0)
 
     def forward(self, x: torch.Tensor, offset: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
-        self.pe = self.pe.to(x.device)
+        if self.pe is None or self.pe.is_meta or self.pe.device != x.device:
+            self._build_pe(device=x.device)
         pos_emb = self.position_encoding(offset, x.size(1), False)
         x = x * self.xscale + pos_emb
         return self.dropout(x), self.dropout(pos_emb)
@@ -1544,7 +1555,8 @@ class RelPositionalEncoding(PositionalEncoding):
         super().__init__(d_model, dropout_rate, max_len, reverse=True)
 
     def forward(self, x: torch.Tensor, offset: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
-        self.pe = self.pe.to(x.device)
+        if self.pe is None or self.pe.is_meta or self.pe.device != x.device:
+            self._build_pe(device=x.device)
         x = x * self.xscale
         pos_emb = self.position_encoding(offset, x.size(1), False)
         return self.dropout(x), self.dropout(pos_emb)
@@ -1559,19 +1571,21 @@ class EspnetRelPositionalEncoding(nn.Module):
         self.xscale = math.sqrt(self.d_model)
         self.dropout = nn.Dropout(p=dropout_rate)
         self.pe = None
-        self.extend_pe(torch.tensor(0.0).expand(1, max_len))
 
     def extend_pe(self, x: torch.Tensor):
         if self.pe is not None:
-            if self.pe.size(1) >= x.size(1) * 2 - 1:
+            if self.pe.is_meta:
+                self.pe = None
+            elif self.pe.size(1) >= x.size(1) * 2 - 1:
                 if self.pe.dtype != x.dtype or self.pe.device != x.device:
                     self.pe = self.pe.to(dtype=x.dtype, device=x.device)
                 return
-        pe_positive = torch.zeros(x.size(1), self.d_model)
-        pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        pe_positive = torch.zeros(x.size(1), self.d_model, device=x.device, dtype=torch.float32)
+        pe_negative = torch.zeros(x.size(1), self.d_model, device=x.device, dtype=torch.float32)
+        position = torch.arange(0, x.size(1), dtype=torch.float32, device=x.device).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.float32, device=x.device)
+            * -(math.log(10000.0) / self.d_model)
         )
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
@@ -2328,11 +2342,23 @@ class CausalConditionalCFM(nn.Module):
         self.training_cfg_rate = 0.2
         self.inference_cfg_rate = 0.7
         self.estimator = estimator
-        self.rand_noise = torch.randn([1, 80, 50 * 300])
+        # Lazily materialized on first forward to support meta-device initialization.
+        self.rand_noise = None
 
     @torch.inference_mode()
     def forward(self, mu, mask, n_timesteps, temperature=1.0, spks=None, cond=None):
-        z = self.rand_noise[:, :, : mu.size(2)].to(mu.device).to(mu.dtype) * temperature
+        needed_len = mu.size(2)
+        if (
+            self.rand_noise is None
+            or self.rand_noise.is_meta
+            or self.rand_noise.device != mu.device
+            or self.rand_noise.dtype != mu.dtype
+            or self.rand_noise.size(2) < needed_len
+        ):
+            # Keep a small cache so repeated calls don't reallocate for slightly different lengths.
+            cache_len = max(needed_len, 50 * 300)
+            self.rand_noise = torch.randn(1, 80, cache_len, device=mu.device, dtype=mu.dtype)
+        z = self.rand_noise[:, :, :needed_len] * temperature
         t_span = torch.linspace(0, 1, n_timesteps + 1, device=mu.device, dtype=mu.dtype)
         if self.t_scheduler == "cosine":
             t_span = 1 - torch.cos(t_span * 0.5 * torch.pi)
@@ -2555,10 +2581,11 @@ class S3GenModel(S3GenPreTrainedModel):
         )
         self.mel2wav = HiFTGenerator(hiftnet_config)
 
-        # Trim fade buffer for reducing artifacts
-        n_trim = config.sampling_rate // 50
-        trim_fade = torch.zeros(2 * n_trim)
-        trim_fade[n_trim:] = (torch.cos(torch.linspace(torch.pi, 0, n_trim)) + 1) / 2
+        # Trim/fade buffer for reducing startup artifacts (glitches/clicks) from the vocoder.
+        # Use a short fade-in (no trimming) to avoid reintroducing discontinuities.
+        n_trim = 0  # ~10ms at 24kHz
+        # Smooth fade-in from 0 -> 1.
+        trim_fade = (torch.cos(torch.linspace(torch.pi, 0, n_trim)) + 1) / 2
         self.register_buffer("trim_fade", trim_fade, persistent=False)
 
         self.post_init()
@@ -2679,10 +2706,12 @@ class S3GenModel(S3GenPreTrainedModel):
 
         output_wavs, output_sources = self.mel2wav.inference(speech_feat=output_mels, cache_source=cache_source)
 
-        # Reduce spillover artifacts (non-inplace to avoid InferenceMode error)
+        # Reduce spillover artifacts at the start (non-inplace to avoid InferenceMode error)
         trim_fade = self.trim_fade.to(output_wavs.device)
         output_wavs = output_wavs.clone()  # Clone to allow inplace operation
-        output_wavs[:, : len(trim_fade)] *= trim_fade
+        n_fade = len(trim_fade)
+        if output_wavs.size(1) > n_fade:
+            output_wavs[:, :n_fade] *= trim_fade
 
         return output_wavs, output_sources
 

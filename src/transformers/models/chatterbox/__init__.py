@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_chatterbox import *
+    from .feature_extraction_chatterbox import *
     from .modeling_chatterbox import *
 else:
     import sys

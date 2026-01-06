@@ -25,7 +25,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from numpy.lib.stride_tricks import as_strided
 from tokenizers import Tokenizer
 from torch import Tensor
 
@@ -33,11 +32,16 @@ from ...generation.utils import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
-from ...models.s3tokenizer.feature_extraction_s3tokenizer import S3TokenizerFeatureExtractor
 from ...models.s3tokenizer.modeling_s3tokenizer import drop_invalid_tokens
 from ...utils import auto_docstring
 from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
 from .configuration_chatterbox import ChatterboxConfig
+from .feature_extraction_chatterbox import (
+    ChatterboxFeatureExtractor,
+    VoiceEncConfig,
+    melspectrogram_voice_encoder,
+    stride_as_partials,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -85,89 +89,6 @@ def punc_norm(text: str) -> str:
         text += "."
 
     return text
-
-
-# ============================================================================
-# Voice Encoder Components
-# ============================================================================
-
-
-class VoiceEncConfig:
-    """Configuration for Voice Encoder."""
-
-    def __init__(self):
-        self.sample_rate = 16000
-        self.num_mels = 40
-        self.n_fft = 512
-        self.hop_length = 160
-        self.win_length = 400
-        self.fmin = 0
-        self.fmax = 8000
-        self.ve_partial_frames = 160
-        self.ve_hidden_size = 256
-        self.speaker_embed_size = 256
-        self.normalized_mels = True
-        self.ve_final_relu = False
-        self.flatten_lstm_params = False
-
-
-def melspectrogram_voice_encoder(wav, config: VoiceEncConfig):
-    """Extract mel spectrogram for voice encoder."""
-    import librosa
-
-    mel = librosa.feature.melspectrogram(
-        y=wav,
-        sr=config.sample_rate,
-        n_fft=config.n_fft,
-        hop_length=config.hop_length,
-        win_length=config.win_length,
-        n_mels=config.num_mels,
-        fmin=config.fmin,
-        fmax=config.fmax,
-    )
-    # Convert to dB scale
-    mel_db = librosa.power_to_db(mel, ref=np.max)
-    # Normalize to [0, 1]
-    mel_norm = (mel_db - mel_db.min()) / (mel_db.max() - mel_db.min() + 1e-8)
-    return mel_norm
-
-
-def stride_as_partials(mel: np.ndarray, hp: VoiceEncConfig, overlap=0.5, rate: float | None = None, min_coverage=0.8):
-    """Stride mel spectrogram into overlapping partials."""
-
-    def get_frame_step(overlap, rate, hp):
-        assert 0 <= overlap < 1
-        if rate is None:
-            frame_step = int(np.round(hp.ve_partial_frames * (1 - overlap)))
-        else:
-            frame_step = int(np.round((hp.sample_rate / rate) / hp.ve_partial_frames))
-        assert 0 < frame_step <= hp.ve_partial_frames
-        return frame_step
-
-    def get_num_wins(n_frames, step, min_coverage, hp):
-        assert n_frames > 0
-        win_size = hp.ve_partial_frames
-        n_wins, remainder = divmod(max(n_frames - win_size + step, 0), step)
-        if n_wins == 0 or (remainder + (win_size - step)) / win_size >= min_coverage:
-            n_wins += 1
-        target_n = win_size + step * (n_wins - 1)
-        return n_wins, target_n
-
-    assert 0 < min_coverage <= 1
-    frame_step = get_frame_step(overlap, rate, hp)
-    n_partials, target_len = get_num_wins(len(mel), frame_step, min_coverage, hp)
-
-    # Trim or pad
-    if target_len > len(mel):
-        mel = np.concatenate((mel, np.full((target_len - len(mel), hp.num_mels), 0)))
-    elif target_len < len(mel):
-        mel = mel[:target_len]
-
-    mel = mel.astype(np.float32, order="C")
-    shape = (n_partials, hp.ve_partial_frames, hp.num_mels)
-    strides = (mel.strides[0] * frame_step, mel.strides[0], mel.strides[1])
-    partials = as_strided(mel, shape, strides)
-    return partials
 
 
 class VoiceEncoder(nn.Module):
@@ -1078,6 +999,10 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
 
         # Text tokenizer
         self.text_tokenizer = None
+        self.feature_extractor = ChatterboxFeatureExtractor(
+            sampling_rate=self.s3_sr,
+            s3gen_sampling_rate=self.s3gen_sr,
+        )
 
         # Post init
         self.post_init()
@@ -1108,19 +1033,22 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
 
         Args:
             text: Input text string
-            tokenizer: Text tokenizer (if None, uses self.text_tokenizer or dummy tokens)
+            tokenizer: Text tokenizer. If None, uses `self.text_tokenizer`.
 
         Returns:
             Text tokens with start/stop markers
         """
         text = punc_norm(text)
+        # Match chatterbox `EnTokenizer`: replace spaces with a dedicated token before encoding.
+        text = text.replace(" ", "[SPACE]")
 
-        # Use provided tokenizer, or self.text_tokenizer, or create dummy
+        # Use provided tokenizer, or self.text_tokenizer
         if tokenizer is not None:
             if hasattr(tokenizer, "encode"):
-                # HuggingFace tokenizers-style
+                # Tokenizers-style: may return an Encoding with `.ids` or directly a list of ids.
                 encoding = tokenizer.encode(text)
-                text_tokens = torch.tensor([encoding.ids], dtype=torch.long)
+                ids = encoding.ids if hasattr(encoding, "ids") else encoding
+                text_tokens = torch.tensor([ids], dtype=torch.long)
             else:
                 text_tokens = tokenizer.text_to_tokens(text)
         elif self.text_tokenizer is not None:
@@ -1128,10 +1056,10 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
             encoding = self.text_tokenizer.encode(text)
             text_tokens = torch.tensor([encoding.ids], dtype=torch.long)
         else:
-            # For testing: create dummy tokens
-            logger.warning("No tokenizer provided, using dummy tokens")
-            num_tokens = min(len(text.split()), 50)
-            text_tokens = torch.randint(1, self.config.t3_config.text_tokens_dict_size - 1, (1, num_tokens))
+            raise ValueError(
+                "No text tokenizer provided and `self.text_tokenizer` is not loaded. "
+                "Please pass a tokenizer or call `load_text_tokenizer()` first."
+            )
 
         # Add start/stop tokens if not already present
         sot = self.config.t3_config.start_text_token
@@ -1154,66 +1082,22 @@ class ChatterboxModel(ChatterboxPreTrainedModel):
         """
         Mirror the original Chatterbox prepare_conditionals method for parity.
         """
-        if reference_wav.ndim == 1:
-            ref_np = reference_wav
-        else:
-            ref_np = reference_wav.squeeze()
-
-        # Prepare audio for S3Gen (24kHz) and T3 components (16kHz)
-        if reference_sr != self.s3gen_sr:
-            ref_24k = librosa.resample(ref_np, orig_sr=reference_sr, target_sr=self.s3gen_sr)
-        else:
-            ref_24k = ref_np
-
-        if reference_sr != self.s3_sr:
-            ref_16k = librosa.resample(ref_np, orig_sr=reference_sr, target_sr=self.s3_sr)
-        else:
-            ref_16k = ref_np
-
-        # Truncate for conditioning lengths
-        dec_len = 10 * self.s3gen_sr
-        enc_len = 6 * self.s3_sr
-        ref_24k = ref_24k[:dec_len]
-        ref_16k = ref_16k[:enc_len]
-
-        # Compute S3Gen conditioning dict
-        ref_tensor_24k = torch.from_numpy(ref_24k).unsqueeze(0).to(self.device)
-        with torch.no_grad():
-            s3gen_ref_dict = self.s3gen.embed_ref(ref_tensor_24k, self.s3gen_sr, device=self.device)
-
-        # Voice encoder speaker embedding
-        ve_embed = self.t3.voice_encoder.embeds_from_wavs([ref_16k], sample_rate=self.s3_sr)
-        speaker_emb = torch.from_numpy(ve_embed).to(self.device)
-
-        # Speech prompt tokens for T3
-        cond_prompt_speech_tokens = None
-        if self.config.t3_config.speech_cond_prompt_len > 0:
-            # Use feature extractor for prompt tokens
-            if not hasattr(self, "s3_feature_extractor"):
-                self.s3_feature_extractor = S3TokenizerFeatureExtractor()
-
-            features = self.s3_feature_extractor(ref_16k, sampling_rate=self.s3_sr, return_tensors="pt").to(
-                self.device
-            )
-
-            with torch.no_grad():
-                prompt_tokens, _ = self.s3gen.tokenizer(
-                    input_features=features.input_features,
-                    attention_mask=features.attention_mask,
-                    return_dict=False,
-                    max_len=self.config.t3_config.speech_cond_prompt_len,
-                )
-            cond_prompt_speech_tokens = prompt_tokens.to(self.device)
-
-        # Build T3 conditioning
-        emotion_adv = exaggeration * torch.ones(1, 1, 1, device=self.device)
+        extracted = self.feature_extractor.extract_conditioning(
+            reference_wav,
+            reference_sr,
+            s3gen=self.s3gen,
+            voice_encoder=self.t3.voice_encoder,
+            device=self.device,
+            exaggeration=exaggeration,
+            speech_cond_prompt_len=self.config.t3_config.speech_cond_prompt_len,
+        )
         t3_cond = T3Cond(
-            speaker_emb=speaker_emb,
-            cond_prompt_speech_tokens=cond_prompt_speech_tokens,
-            emotion_adv=emotion_adv,
+            speaker_emb=extracted["speaker_emb"],
+            cond_prompt_speech_tokens=extracted["cond_prompt_speech_tokens"],
+            emotion_adv=extracted["emotion_adv"],
         )
 
-        return Conditionals(t3=t3_cond, gen=s3gen_ref_dict)
+        return Conditionals(t3=t3_cond, gen=extracted["s3gen_ref_dict"])
 
     @torch.inference_mode()
     def generate(

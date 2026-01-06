@@ -17,6 +17,7 @@
 from typing import Optional, Union
 
 import numpy as np
+import torch
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -74,7 +75,8 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self._mel_filters = None
-        self._window = None
+        self._mel_filters_torch = None
+        self._window_torch = None
 
     def _get_mel_filters(self):
         if self._mel_filters is None:
@@ -86,39 +88,56 @@ class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
             self._mel_filters = librosa.filters.mel(sr=self.sampling_rate, n_fft=self.n_fft, n_mels=self.n_mels)
         return self._mel_filters
 
-    def _get_window(self):
-        if self._window is None:
-            self._window = np.hanning(self.n_fft)
-        return self._window
+    def _get_mel_filters_torch(self) -> torch.Tensor:
+        """
+        Cached torch.Tensor version of mel filters for torch STFT path.
+        """
+        if self._mel_filters_torch is None:
+            self._mel_filters_torch = torch.tensor(self._get_mel_filters(), dtype=torch.float32)
+        return self._mel_filters_torch
+
+    def _get_window_torch(self) -> torch.Tensor:
+        """
+        Cached torch.Tensor Hann window. Matches the model's `torch.hann_window` usage.
+        """
+        if self._window_torch is None:
+            self._window_torch = torch.hann_window(self.n_fft, periodic=True, dtype=torch.float32)
+        return self._window_torch
 
     def _extract_mel_features(self, audio: np.ndarray) -> np.ndarray:
-        """Compute the log-Mel spectrogram of audio using numpy/librosa."""
-        # STFT
-        # We use librosa for stft if available for consistency with original torch implementation
-        if not is_librosa_available():
-            raise ImportError("librosa is required for S3TokenizerFeatureExtractor.")
+        """
+        Compute the log-Mel spectrogram of audio using torch STFT.
 
-        stft = librosa.stft(
-            audio,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            window=self._get_window(),
+        This intentionally mirrors the model-side preprocessing (`S3Tokenizer.log_mel_spectrogram`):
+        - `torch.stft(..., center=True)` with default `pad_mode="reflect"`
+        - Hann window
+        - power spectrogram + mel projection
+        - log10 clamp + dynamic range compression + scaling
+
+        Returns:
+            np.ndarray of shape (time, n_mels) for Transformers padding convention.
+        """
+        audio_t = torch.as_tensor(audio, dtype=torch.float32)
+        window = self._get_window_torch()
+        stft = torch.stft(
+            audio_t,
+            self.n_fft,
+            self.hop_length,
+            window=window,
             center=True,
+            return_complex=True,
         )
+        magnitudes = stft[..., :-1].abs().pow(2)
 
-        # Power spectrogram
-        magnitudes = np.abs(stft[..., :-1]) ** 2
+        mel_filters = self._get_mel_filters_torch()
+        mel_spec = mel_filters @ magnitudes
 
-        # Mel spectrogram
-        mel_spec = self._get_mel_filters() @ magnitudes
-
-        # Log mel spectrogram
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
 
-        # Transpose to [time, n_mels] for Transformers padding convention
-        return log_spec.T
+        # Transpose to [time, n_mels] for padding convention, and return numpy.
+        return log_spec.transpose(0, 1).cpu().numpy()
 
     def __call__(
         self,
