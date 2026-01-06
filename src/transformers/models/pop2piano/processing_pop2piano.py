@@ -57,16 +57,6 @@ class Pop2PianoProcessor(ProcessorMixin):
             <fill_docstring>
         notes (<fill_type>):
             <fill_docstring>
-        padding (<fill_type>):
-            <fill_docstring>
-        truncation (<fill_type>):
-            <fill_docstring>
-        max_length (<fill_type>):
-            <fill_docstring>
-        pad_to_multiple_of (<fill_type>):
-            <fill_docstring>
-        verbose (<fill_type>):
-            <fill_docstring>
         """
         if (audio is None and sampling_rate is None) and (notes is None):
             raise ValueError(

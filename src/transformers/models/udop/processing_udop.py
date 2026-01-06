@@ -31,13 +31,6 @@ logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
-    """
-    word_labels (`<fill_type>`):
-        <fill_docstring>
-    boxes (`<fill_type>`):
-        <fill_docstring>
-    """
-
     word_labels: Optional[Union[list[int], list[list[int]]]]
     boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 

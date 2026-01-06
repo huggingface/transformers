@@ -53,40 +53,6 @@ class LayoutLMv3Processor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        r"""
-        text_pair (<fill_type>):
-            <fill_docstring>
-        boxes (<fill_type>):
-            <fill_docstring>
-        word_labels (<fill_type>):
-            <fill_docstring>
-        add_special_tokens (<fill_type>):
-            <fill_docstring>
-        padding (<fill_type>):
-            <fill_docstring>
-        truncation (<fill_type>):
-            <fill_docstring>
-        max_length (<fill_type>):
-            <fill_docstring>
-        stride (<fill_type>):
-            <fill_docstring>
-        pad_to_multiple_of (<fill_type>):
-            <fill_docstring>
-        return_token_type_ids (<fill_type>):
-            <fill_docstring>
-        return_attention_mask (<fill_type>):
-            <fill_docstring>
-        return_overflowing_tokens (<fill_type>):
-            <fill_docstring>
-        return_special_tokens_mask (<fill_type>):
-            <fill_docstring>
-        return_offsets_mapping (<fill_type>):
-            <fill_docstring>
-        return_length (<fill_type>):
-            <fill_docstring>
-        verbose (<fill_type>):
-            <fill_docstring>
-        """
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
                 "You cannot provide bounding boxes if you initialized the image processor with apply_ocr set to True."

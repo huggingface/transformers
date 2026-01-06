@@ -273,14 +273,6 @@ class BarkProcessor(ProcessorMixin):
             `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
             it can be a valid file name of a local `.npz` single voice preset containing the keys
             `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`.
-        max_length (<fill_type>):
-            <fill_docstring>
-        add_special_tokens (<fill_type>):
-            <fill_docstring>
-        return_attention_mask (<fill_type>):
-            <fill_docstring>
-        return_token_type_ids (<fill_type>):
-            <fill_docstring>
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.

@@ -334,6 +334,191 @@ class ProcessorArgs:
         "shape": None,
     }
 
+    # Standard tokenizer arguments
+    add_special_tokens = {
+        "description": """
+    Whether or not to add special tokens when encoding the sequences. This will use the underlying
+    `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
+    automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
+    automatically.
+    """,
+        "type": "bool",
+    }
+
+    padding = {
+        "description": """
+    Activates and controls padding. Accepts the following values:
+
+    - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+      sequence is provided).
+    - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+      acceptable input length for the model if that argument is not provided.
+    - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+      lengths).
+    """,
+        "type": "bool, str or [`~utils.PaddingStrategy`]",
+    }
+
+    truncation = {
+        "description": """
+    Activates and controls truncation. Accepts the following values:
+
+    - `True` or `'longest_first'`: Truncate to a maximum length specified with the argument `max_length` or
+      to the maximum acceptable input length for the model if that argument is not provided. This will
+      truncate token by token, removing a token from the longest sequence in the pair if a pair of
+      sequences (or a batch of pairs) is provided.
+    - `'only_first'`: Truncate to a maximum length specified with the argument `max_length` or to the
+      maximum acceptable input length for the model if that argument is not provided. This will only
+      truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+    - `'only_second'`: Truncate to a maximum length specified with the argument `max_length` or to the
+      maximum acceptable input length for the model if that argument is not provided. This will only
+      truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+    - `False` or `'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+      greater than the model maximum admissible input size).
+    """,
+        "type": "bool, str or [`~tokenization_utils_base.TruncationStrategy`]",
+    }
+
+    max_length = {
+        "description": """
+    Controls the maximum length to use by one of the truncation/padding parameters.
+
+    If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+    is required by one of the truncation/padding parameters. If the model has no specific maximum input
+    length (like XLNet) truncation/padding to a maximum length will be deactivated.
+    """,
+        "type": "int",
+    }
+
+    stride = {
+        "description": """
+    If set to a number along with `max_length`, the overflowing tokens returned when
+    `return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
+    returned to provide some overlap between truncated and overflowing sequences. The value of this
+    argument defines the number of overlapping tokens.
+    """,
+        "type": "int",
+    }
+
+    pad_to_multiple_of = {
+        "description": """
+    If set will pad the sequence to a multiple of the provided value. Requires `padding` to be activated.
+    This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+    `>= 7.5` (Volta).
+    """,
+        "type": "int",
+    }
+
+    return_token_type_ids = {
+        "description": """
+    Whether to return token type IDs. If left to the default, will return the token type IDs according to
+    the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+    [What are token type IDs?](../glossary#token-type-ids)
+    """,
+        "type": "bool",
+    }
+
+    return_attention_mask = {
+        "description": """
+    Whether to return the attention mask. If left to the default, will return the attention mask according
+    to the specific tokenizer's default, defined by the `return_outputs` attribute.
+
+    [What are attention masks?](../glossary#attention-mask)
+    """,
+        "type": "bool",
+    }
+
+    return_overflowing_tokens = {
+        "description": """
+    Whether or not to return overflowing token sequences. If a pair of sequences of input ids (or a batch
+    of pairs) is provided with `truncation_strategy = longest_first` or `True`, an error is raised instead
+    of returning overflowing tokens.
+    """,
+        "type": "bool",
+    }
+
+    return_special_tokens_mask = {
+        "description": """
+    Whether or not to return special tokens mask information.
+    """,
+        "type": "bool",
+    }
+
+    return_offsets_mapping = {
+        "description": """
+    Whether or not to return `(char_start, char_end)` for each token.
+
+    This is only available on fast tokenizers inheriting from [`PreTrainedTokenizerFast`], if using
+    Python's tokenizer, this method will raise `NotImplementedError`.
+    """,
+        "type": "bool",
+    }
+
+    return_length = {
+        "description": """
+    Whether or not to return the lengths of the encoded inputs.
+    """,
+        "type": "bool",
+    }
+
+    verbose = {
+        "description": """
+    Whether or not to print more information and warnings.
+    """,
+        "type": "bool",
+    }
+
+    text_pair = {
+        "description": """
+    Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
+    the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+    method).
+    """,
+        "type": "str, list[str] or list[int]",
+    }
+
+    text_target = {
+        "description": """
+    The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+    list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+    you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    """,
+        "type": "str, list[str] or list[list[str]]",
+    }
+
+    text_pair_target = {
+        "description": """
+    The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+    list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+    you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    """,
+        "type": "str, list[str] or list[list[str]]",
+    }
+
+    is_split_into_words = {
+        "description": """
+    Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
+    tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
+    which it will tokenize. This is useful for NER or token classification.
+    """,
+        "type": "bool",
+    }
+
+    boxes = {
+        "description": """
+    Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
+    """,
+        "type": "list[list[int]] or list[list[list[int]]]",
+    }
+
+    word_labels = {
+        "description": """
+    Word-level integer labels (for token classification tasks such as FUNSD, CORD).
+    """,
+        "type": "list[int] or list[list[int]]",
+    }
+
 
 class ModelArgs:
     labels = {

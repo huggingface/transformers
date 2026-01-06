@@ -1084,21 +1084,29 @@ def generate_new_docstring_for_signature(
     # Remove pre-existing entries for *args and untyped **kwargs from the docstring
     # (No longer needed since *args are excluded from args_in_signature)
 
-    # Remove args that are the same as the ones in the source args doc
+    # Remove args that are the same as the ones in the source args doc OR have placeholders
     for arg in args_docstring_dict:
         if arg in get_args_doc_from_source(source_args_doc) and arg not in ALWAYS_OVERRIDE:
             source_arg_doc = get_args_doc_from_source(source_args_doc)[arg]
-            if source_arg_doc["description"].strip("\n ") == args_docstring_dict[arg]["description"].strip("\n "):
-                if source_arg_doc.get("shape") is not None and args_docstring_dict[arg].get("shape") is not None:
-                    if source_arg_doc.get("shape").strip("\n ") == args_docstring_dict[arg].get("shape").strip("\n "):
+            arg_doc = args_docstring_dict[arg]
+
+            # Check if this arg has placeholders
+            has_placeholder = "<fill_type>" in arg_doc.get("type", "") or "<fill_docstring>" in arg_doc.get(
+                "description", ""
+            )
+
+            # Remove if has placeholder (source will provide the real doc)
+            if has_placeholder:
+                docstring_args_ro_remove.append(arg)
+            # Or remove if description matches source exactly
+            elif source_arg_doc["description"].strip("\n ") == arg_doc["description"].strip("\n "):
+                if source_arg_doc.get("shape") is not None and arg_doc.get("shape") is not None:
+                    if source_arg_doc.get("shape").strip("\n ") == arg_doc.get("shape").strip("\n "):
                         docstring_args_ro_remove.append(arg)
-                elif (
-                    source_arg_doc.get("additional_info") is not None
-                    and args_docstring_dict[arg].get("additional_info") is not None
-                ):
-                    if source_arg_doc.get("additional_info").strip("\n ") == args_docstring_dict[arg].get(
-                        "additional_info"
-                    ).strip("\n "):
+                elif source_arg_doc.get("additional_info") is not None and arg_doc.get("additional_info") is not None:
+                    if source_arg_doc.get("additional_info").strip("\n ") == arg_doc.get("additional_info").strip(
+                        "\n "
+                    ):
                         docstring_args_ro_remove.append(arg)
                 else:
                     docstring_args_ro_remove.append(arg)
@@ -1409,7 +1417,9 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
     Find all custom TypedDict kwargs classes in the source.
 
     Returns:
-        List of dicts with TypedDict info: name, line, fields, field_types, docstring info
+        List of dicts with TypedDict info: name, line, fields, all_fields, field_types, docstring info
+        - fields: fields that need custom documentation (not in standard args, not nested TypedDicts)
+        - all_fields: all fields including those in standard args (for redundancy checking)
     """
     tree = ast.parse(source)
 
@@ -1451,7 +1461,8 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
             continue
 
         # Extract fields and their types (in declaration order)
-        fields = []
+        fields = []  # Fields that need custom documentation
+        all_fields = []  # All fields including those in standard args
         field_types = {}
         for class_item in node.body:
             if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
@@ -1465,12 +1476,14 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
                             # Skip nested TypedDicts
                             if type_name in typed_dict_names or type_name.endswith("Kwargs"):
                                 continue
-                    # Skip fields in standard args
-                    if field_name in standard_args:
-                        continue
-                    fields.append(field_name)
+                    # Track all fields for redundancy checking
+                    all_fields.append(field_name)
+                    # Only add to fields if not in standard args (needs custom documentation)
+                    if field_name not in standard_args:
+                        fields.append(field_name)
 
-        if not fields:
+        # Skip if no fields at all (including standard args)
+        if not all_fields:
             continue
 
         # Extract docstring info
@@ -1492,6 +1505,7 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
                 "name": node.name,
                 "line": node.lineno,
                 "fields": fields,
+                "all_fields": all_fields,
                 "field_types": field_types,
                 "docstring": docstring,
                 "docstring_start_line": docstring_start_line,
@@ -1505,7 +1519,7 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
 def _process_typed_dict_docstrings(
     candidate_file: str,
     overwrite: bool = False,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """
     Check and optionally fix TypedDict docstrings.
     Runs as a separate pass after @auto_docstring processing.
@@ -1515,17 +1529,21 @@ def _process_typed_dict_docstrings(
         overwrite: Whether to fix issues by writing to the file
 
     Returns:
-        Tuple of (missing_warnings, fill_warnings)
+        Tuple of (missing_warnings, fill_warnings, redundant_warnings)
     """
     with open(candidate_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     typed_dicts = _find_typed_dict_classes(content)
     if not typed_dicts:
-        return [], []
+        return [], [], []
+
+    # Get source args for comparison
+    source_args_doc = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
 
     missing_warnings = []
     fill_warnings = []
+    redundant_warnings = []
 
     # Process each TypedDict
     for td in typed_dicts:
@@ -1538,20 +1556,38 @@ def _process_typed_dict_docstrings(
             except Exception:
                 pass
 
-        # Find missing and fill fields
+        # Find missing, fill, and redundant fields
         missing_fields = []
         fill_fields = []
+        redundant_fields = []
 
+        # Check fields that need custom documentation (not in source args)
         for field in td["fields"]:
             if field not in documented_fields:
                 missing_fields.append(field)
             else:
-                # Check for placeholders
                 field_doc = documented_fields[field]
                 desc = field_doc.get("description", "")
                 type_str = field_doc.get("type", "")
-                if "<fill_type>" in type_str or "<fill_docstring>" in desc:
+                has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+                if has_placeholder:
                     fill_fields.append(field)
+
+        # Check ALL documented fields (including those in source args) for redundancy
+        for field in documented_fields:
+            if field in source_args_doc:
+                field_doc = documented_fields[field]
+                desc = field_doc.get("description", "")
+                type_str = field_doc.get("type", "")
+                has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+
+                source_doc = source_args_doc[field]
+                source_desc = source_doc.get("description", "").strip("\n ")
+                field_desc = desc.strip("\n ")
+
+                # Mark as redundant if has placeholder OR description matches source
+                if has_placeholder or source_desc == field_desc:
+                    redundant_fields.append(field)
 
         if missing_fields:
             field_list = ", ".join(sorted(missing_fields))
@@ -1561,8 +1597,14 @@ def _process_typed_dict_docstrings(
             field_list = ", ".join(sorted(fill_fields))
             fill_warnings.append(f"    - {td['name']} (line {td['line']}): fields with placeholders: {field_list}")
 
-    # If overwrite mode and there are missing fields, fix them
-    if overwrite and missing_warnings:
+        if redundant_fields:
+            field_list = ", ".join(sorted(redundant_fields))
+            redundant_warnings.append(
+                f"    - {td['name']} (line {td['line']}): redundant fields (in source): {field_list}"
+            )
+
+    # If overwrite mode, fix missing fields and remove redundant ones
+    if overwrite and (missing_warnings or redundant_warnings):
         lines = content.split("\n")
 
         # Process TypedDicts in reverse order to avoid line number shifts
@@ -1576,17 +1618,46 @@ def _process_typed_dict_docstrings(
                 except Exception:
                     pass
 
-            # Check if any fields are missing
+            # Determine which fields to remove (redundant with source)
+            fields_to_remove = set()
+            for field in documented_fields:
+                if field in source_args_doc:
+                    field_doc = documented_fields[field]
+                    desc = field_doc.get("description", "")
+                    type_str = field_doc.get("type", "")
+                    has_placeholder = "<fill_type>" in type_str or "<fill_docstring>" in desc
+
+                    source_doc = source_args_doc[field]
+                    source_desc = source_doc.get("description", "").strip("\n ")
+                    field_desc = desc.strip("\n ")
+
+                    # Remove if has placeholder OR description matches source
+                    if has_placeholder or source_desc == field_desc:
+                        fields_to_remove.add(field)
+
+            # Check if any fields are missing or need removal
             has_missing = any(f not in documented_fields for f in td["fields"])
-            if not has_missing:
+            has_changes = has_missing or len(fields_to_remove) > 0
+
+            if not has_changes:
                 continue
 
-            # Build new docstring dict (preserving existing + adding missing)
+            # Build new docstring dict (preserving existing, removing redundant, adding missing)
+            # We iterate over documented_fields first to preserve order, then add missing fields
             new_doc_dict = OrderedDict()
+
+            # First, add documented fields that should be kept (not redundant)
+            for field in documented_fields:
+                if field not in fields_to_remove:
+                    # Only keep fields that are either:
+                    # 1. In td["fields"] (needs custom documentation)
+                    # 2. Not in source_args_doc (might be inherited or custom)
+                    if field in td["fields"] or field not in source_args_doc:
+                        new_doc_dict[field] = documented_fields[field]
+
+            # Then, add missing fields from td["fields"]
             for field in td["fields"]:
-                if field in documented_fields:
-                    new_doc_dict[field] = documented_fields[field]
-                else:
+                if field not in documented_fields and field not in new_doc_dict:
                     # Add placeholder for missing field
                     new_doc_dict[field] = {
                         "type": "`<fill_type>`",
@@ -1597,10 +1668,18 @@ def _process_typed_dict_docstrings(
                         "additional_info": None,
                     }
 
-            # Build new docstring text using same format as generate_new_docstring_for_signature
+            # Build new docstring text
             class_line_idx = td["line"] - 1
             class_line = lines[class_line_idx]
             indent = len(class_line) - len(class_line.lstrip())
+
+            # If all fields were removed, remove the docstring entirely
+            if not new_doc_dict and not remaining_docstring:
+                if td["docstring"] is not None:
+                    doc_start_idx = td["docstring_start_line"] - 1
+                    doc_end_idx = td["docstring_end_line"]
+                    lines = lines[:doc_start_idx] + lines[doc_end_idx:]
+                continue
 
             # Build docstring content (without indentation first)
             docstring_content = '"""\n'
@@ -1640,7 +1719,7 @@ def _process_typed_dict_docstrings(
         with open(candidate_file, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-    return missing_warnings, fill_warnings
+    return missing_warnings, fill_warnings, redundant_warnings
 
 
 def update_file_with_new_docstrings(
@@ -1776,8 +1855,8 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
 
         # Process TypedDict kwargs (separate pass to avoid line number conflicts)
         # This runs AFTER @auto_docstring processing is complete
-        typed_dict_missing_warnings, typed_dict_fill_warnings = _process_typed_dict_docstrings(
-            candidate_file, overwrite=overwrite
+        typed_dict_missing_warnings, typed_dict_fill_warnings, typed_dict_redundant_warnings = (
+            _process_typed_dict_docstrings(candidate_file, overwrite=overwrite)
         )
 
         # Report TypedDict errors
@@ -1790,6 +1869,16 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                 )
             print(f"[ERROR] Undocumented fields in custom TypedDict kwargs in {candidate_file}:")
             for warning in typed_dict_missing_warnings:
+                print(warning)
+        if typed_dict_redundant_warnings:
+            has_errors = True
+            if not overwrite:
+                print(
+                    "Some TypedDict fields are redundant (same as source or have placeholders). "
+                    "Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove them."
+                )
+            print(f"[ERROR] Redundant TypedDict docstrings in {candidate_file}:")
+            for warning in typed_dict_redundant_warnings:
                 print(warning)
         if typed_dict_fill_warnings:
             has_errors = True
