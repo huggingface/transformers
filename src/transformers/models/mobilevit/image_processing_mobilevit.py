@@ -79,7 +79,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Controls the size of the output image after resizing. Can be overridden by the `size` parameter in the
             `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Defines the resampling filter to use if resizing the image. Can be overridden by the `resample` parameter
             in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -112,7 +112,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_center_crop: bool = True,
@@ -137,12 +137,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.do_flip_channel_order = do_flip_channel_order
         self.do_reduce_labels = do_reduce_labels
 
-    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -156,7 +156,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]`):
                 Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
