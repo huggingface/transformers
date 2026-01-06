@@ -32,8 +32,7 @@ from ...modeling_outputs import CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
 from ...models.s3tokenizer.modeling_s3tokenizer import drop_invalid_tokens
-from ...utils import auto_docstring
-from ...utils import is_librosa_available
+from ...utils import auto_docstring, is_librosa_available
 from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
 from .configuration_chatterbox import ChatterboxConfig
 from .feature_extraction_chatterbox import (
