@@ -17,7 +17,7 @@ Image/Text processor class for FLAVA
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 @auto_docstring

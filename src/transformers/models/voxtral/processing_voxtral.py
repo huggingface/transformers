@@ -16,8 +16,7 @@
 import io
 from typing import Optional, Union
 
-from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
 
 
 if is_torch_available():

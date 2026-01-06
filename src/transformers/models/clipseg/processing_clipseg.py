@@ -18,7 +18,7 @@ Image/Text processor class for CLIPSeg
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 @auto_docstring

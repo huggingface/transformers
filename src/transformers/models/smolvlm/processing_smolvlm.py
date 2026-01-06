@@ -23,8 +23,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import is_num2words_available, is_vision_available, logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
 
 

@@ -26,10 +26,10 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Un
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
 )
-from ...utils.auto_docstring import auto_docstring
 from ...utils.import_utils import requires
 
 

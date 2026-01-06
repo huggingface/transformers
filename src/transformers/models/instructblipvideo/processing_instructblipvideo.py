@@ -27,8 +27,7 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType, logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring, logging
 from ...video_utils import VideoInput
 
 

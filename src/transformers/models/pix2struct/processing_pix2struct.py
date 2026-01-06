@@ -21,8 +21,7 @@ from typing import Union
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 
 
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):

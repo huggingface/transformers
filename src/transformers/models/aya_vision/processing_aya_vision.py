@@ -21,7 +21,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):

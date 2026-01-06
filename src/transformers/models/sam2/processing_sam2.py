@@ -24,8 +24,7 @@ import numpy as np
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType, is_torch_available, logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
 

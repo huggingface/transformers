@@ -17,7 +17,7 @@ Image/Text processor class for SigLIP2.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):

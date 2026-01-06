@@ -21,7 +21,7 @@ from typing import Optional, Union
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 @auto_docstring

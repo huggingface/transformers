@@ -21,8 +21,7 @@ from typing import Optional, Union
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_soundfile_available, is_torch_available
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available
 
 
 if is_torch_available():

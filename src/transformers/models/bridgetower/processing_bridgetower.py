@@ -17,7 +17,7 @@ Processor class for BridgeTower.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):

@@ -19,8 +19,7 @@ from typing import Any, Optional, Union
 
 import numpy as np
 
-from ...utils import is_soundfile_available, is_torch_available
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available
 
 
 if is_torch_available():

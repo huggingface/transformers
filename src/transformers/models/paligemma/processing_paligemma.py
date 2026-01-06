@@ -30,8 +30,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)

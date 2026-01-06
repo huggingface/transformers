@@ -56,7 +56,6 @@ from ...utils import (
     filter_out_non_signature_kwargs,
     logging,
 )
-from ...utils.auto_docstring import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor

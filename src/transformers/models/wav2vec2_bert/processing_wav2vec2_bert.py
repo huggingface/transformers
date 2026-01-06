@@ -20,7 +20,7 @@ from typing import Optional, Union
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):

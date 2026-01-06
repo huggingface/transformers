@@ -22,7 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
 )
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]

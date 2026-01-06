@@ -27,8 +27,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, logging, requires_backends
-from ...utils.auto_docstring import auto_docstring
+from ...utils import ModelOutput, auto_docstring, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)

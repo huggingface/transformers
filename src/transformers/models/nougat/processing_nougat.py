@@ -21,8 +21,7 @@ from typing import Optional, Union
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
 from ...processing_utils import ProcessorMixin
-from ...utils import PaddingStrategy, TensorType
-from ...utils.auto_docstring import auto_docstring
+from ...utils import PaddingStrategy, TensorType, auto_docstring
 
 
 @auto_docstring

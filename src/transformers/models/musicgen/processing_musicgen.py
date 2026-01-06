@@ -21,8 +21,7 @@ from typing import Any
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import to_numpy
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, to_numpy
 
 
 @auto_docstring

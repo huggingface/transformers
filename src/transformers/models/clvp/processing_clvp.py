@@ -18,8 +18,7 @@ Processor class for CLVP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -27,7 +26,6 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class ClvpProcessor(ProcessorMixin):
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

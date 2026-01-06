@@ -25,8 +25,7 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 

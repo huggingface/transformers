@@ -21,7 +21,7 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class Llama4ProcessorKwargs(ProcessingKwargs, total=False):

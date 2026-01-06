@@ -17,8 +17,7 @@ Audio/Text processor class for CLAP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)

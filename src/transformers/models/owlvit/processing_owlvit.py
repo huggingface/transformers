@@ -29,8 +29,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -77,8 +76,8 @@ class OwlViTProcessor(ProcessorMixin):
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-            `None`).
+                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+                `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """

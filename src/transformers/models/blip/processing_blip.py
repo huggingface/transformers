@@ -17,11 +17,11 @@ Processor class for Blip.
 """
 
 from typing import Optional, Union
-from ...utils.auto_docstring import auto_docstring
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class BlipProcessorKwargs(ProcessingKwargs, total=False):
@@ -42,7 +42,6 @@ class BlipProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class BlipProcessor(ProcessorMixin):
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)

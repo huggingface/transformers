@@ -19,8 +19,7 @@ from typing import Union
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_python import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires_backends
 
 

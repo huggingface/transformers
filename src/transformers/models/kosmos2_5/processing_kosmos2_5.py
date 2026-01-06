@@ -22,8 +22,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():

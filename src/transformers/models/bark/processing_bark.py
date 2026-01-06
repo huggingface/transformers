@@ -25,8 +25,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, logging
 from ...utils.hub import cached_file
 from ..auto import AutoTokenizer
 

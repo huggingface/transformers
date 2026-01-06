@@ -20,8 +20,7 @@ from typing import Optional, Union
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring
 
 
 @auto_docstring

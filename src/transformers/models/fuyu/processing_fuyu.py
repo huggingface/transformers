@@ -29,8 +29,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging, requires_backends
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
 
 
@@ -491,14 +490,14 @@ class FuyuProcessor(ProcessorMixin):
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         r"""
-                Returns:
-                    [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
+        Returns:
+            [`FuyuBatchEncoding`]: A [`FuyuBatchEncoding`] with the following fields:
 
-                    - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
-                    - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
-                    - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
-                    - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
-                      `return_attention_mask=True`.
+            - **input_ids** -- Tensor of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **image_patches** -- List of Tensor of image patches. Returned when `images` is not `None`.
+            - **image_patches_indices** -- Tensor of indices where patch embeddings have to be inserted by the model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model when
+              `return_attention_mask=True`.
         """
         requires_backends(self, ["torch"])
 

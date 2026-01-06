@@ -17,12 +17,11 @@ Image/Text processor class for Chinese-CLIP
 """
 
 from ...processing_utils import ProcessorMixin
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 @auto_docstring
 class ChineseCLIPProcessor(ProcessorMixin):
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 

@@ -30,7 +30,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):
