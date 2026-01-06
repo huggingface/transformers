@@ -1286,10 +1286,11 @@ class ModelTesterMixin:
                 f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
-    def test_all_tensors_are_parameter_or_buffer(self):
+    def test_all_tensors_are_parameter_or_buffer(self) -> None:
         """Check that all tensors are registered as Parameter or Buffer, i.e. we don't have simple assignments such
-        as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not registered as
-        parameter/buffer)"""
+        as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not
+        registered as parameter/buffer). To test this, we initialize the model on a meta device and then move it onto
+        the torch_device and perform a forward pass."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1297,19 +1298,16 @@ class ModelTesterMixin:
             if "modeling_perceiver.py" in inspect.getfile(model_class):
                 _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            # Initialize the model fully on meta device, then move everything to cpu and run `init_weights`
+            # Initialize the model fully on meta device, then move everything to torch_device and run `init_weights`
             with torch.device("meta"):
                 model = model_class(copy.deepcopy(config)).eval()
-            # Move everything randomly to cpu
-            model.to_empty(device="cpu")
+            # Move everything randomly to torch_device
+            model.to_empty(device=torch_device)
             # Now, run all the inits
             model.init_weights()
 
             # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            # Inputs may be on cuda -> move to cpu, we don't care about accelerator for this test
-            inputs = {k: v.to("cpu") if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
                 _ = model(**inputs)
