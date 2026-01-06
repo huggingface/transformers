@@ -626,6 +626,13 @@ class AutoTokenizer:
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
+        if config is None:
+            config_tokenizer_class = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0][
+                "tokenizer_class"
+            ]
+        else:
+            config_tokenizer_class = getattr(config, "tokenizer_class")
+
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:
             if isinstance(tokenizer_config["auto_map"], (tuple, list)):
@@ -646,18 +653,21 @@ class AutoTokenizer:
             config_model_type = None
 
         if config_model_type is not None and not trust_remote_code:
-            if not isinstance(config, PreTrainedConfig):
-                if gguf_file:
-                    gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-                    config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
-                    config = AutoConfig.for_model(**config_dict)
-                else:
-                    config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                    )
-            config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
+            if config_tokenizer_class is None:
+                if not isinstance(config, PreTrainedConfig):
+                    if gguf_file:
+                        gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+                        config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+                        config = AutoConfig.for_model(**config_dict)
+                    else:
+                        config = AutoConfig.from_pretrained(
+                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                        )
+                config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
 
-            tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
+                tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
+            else:
+                tokenizer_class = tokenizer_class_from_name(config_tokenizer_class)
             try:
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             except ValueError as e:
