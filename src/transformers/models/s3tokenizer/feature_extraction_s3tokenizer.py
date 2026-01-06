@@ -22,7 +22,7 @@ import torch
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, is_librosa_available, logging
-
+from ...utils.import_utils import requires
 
 logger = logging.get_logger(__name__)
 
@@ -31,6 +31,7 @@ if is_librosa_available():
     import librosa
 
 
+@requires(backends=("torch",))
 class S3TokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a S3Tokenizer feature extractor.
