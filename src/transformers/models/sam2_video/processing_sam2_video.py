@@ -27,8 +27,7 @@ import torch
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 from .modeling_sam2_video import Sam2VideoInferenceSession
@@ -42,14 +41,13 @@ class Sam2VideoProcessor(ProcessorMixin):
     ):
         r"""
         target_size (`int`, *optional*):
-            The target size (in pixels) for normalizing input points and bounding boxes across video frames.
-            If not provided, defaults to the image processor's size configuration. All input coordinates
-            (points and boxes) are normalized to this size before being passed to the model. This ensures
-            consistent coordinate representation across all frames regardless of the original video dimensions.
+            The target size (in pixels) for normalizing input points and bounding boxes. If not provided, defaults
+            to the image processor's size configuration. All input coordinates (points and boxes) are normalized
+            to this size before being passed to the model. This ensures consistent coordinate representation
+            regardless of the original image dimensions.
         point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points when batching sequences of different lengths across video
-            frames. This value marks padded positions and is preserved during coordinate normalization to
-            distinguish real points from padding.
+            The value used for padding input points when batching sequences of different lengths. This value is
+            used to mark padded positions and is preserved during coordinate normalization.
         """
         super().__init__(image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value

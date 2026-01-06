@@ -1655,16 +1655,16 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 @auto_docstring(
     custom_intro="""
     Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
-    """
+    """,
+    custom_args="""
+    target_lang (`str`, *optional*):
+        Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+        adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
+        default.
+    """,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
-        r"""
-        target_lang (`str`, *optional*):
-            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
-            adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
-            default.
-        """
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)

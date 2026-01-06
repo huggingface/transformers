@@ -63,7 +63,7 @@ class BambaFlashAttentionKwargs(TypedDict, total=False):
         Maximum sequence length for query state.
     max_length_k (`int`):
         Maximum sequence length for key state.
-    seq_idx (`torch.IntTensor):
+    seq_idx (`torch.IntTensor`):
         Index of each packed sequence.
     """
 

@@ -24,6 +24,7 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2Encoder,
@@ -213,6 +214,11 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
         return super().forward(**super_kwargs)
 
 
+@auto_docstring(
+    custom_intro="""
+    Data2VecAudio Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
+)
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     def __init__(self, config):
         Data2VecAudioPreTrainedModel.__init__(self, config)

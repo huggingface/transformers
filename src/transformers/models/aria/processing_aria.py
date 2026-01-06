@@ -26,8 +26,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
-from ...utils import TensorType
-from ...utils.auto_docstring import auto_docstring
+from ...utils import TensorType, auto_docstring
 from ..auto import AutoTokenizer
 
 

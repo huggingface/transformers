@@ -24,7 +24,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):

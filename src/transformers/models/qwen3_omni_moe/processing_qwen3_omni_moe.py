@@ -29,7 +29,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, VideosKwargs
 from ...tokenization_utils_base import TextInput
-from ...utils.auto_docstring import auto_docstring
+from ...utils import auto_docstring
 from ...video_utils import VideoInput, make_batched_videos
 
 
@@ -64,7 +64,7 @@ class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
         videos are divided into temporal segments for processing.
-    position_id_per_seconds (`int` or `float`, *optional*, defaults to `13.0`):
+    position_id_per_seconds (`int` or `float`, *optional*, defaults to `25`):
         The number of position IDs allocated per second of video. This parameter controls the temporal resolution
         of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
     """
