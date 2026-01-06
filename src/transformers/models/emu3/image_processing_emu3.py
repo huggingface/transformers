@@ -42,7 +42,7 @@ from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
-    import PIL
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
@@ -459,7 +459,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         images = make_flat_list_of_images(images)
-        if isinstance(images[0], PIL.Image.Image):
+        if isinstance(images[0], Image.Image):
             return images if len(images) > 1 else images[0]
 
         if input_data_format is None:
@@ -480,7 +480,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                pixel_values.append(PIL.Image.fromarray(image))
+                pixel_values.append(Image.fromarray(image))
             else:
                 pixel_values.extend(image)
 

@@ -2192,10 +2192,13 @@ def _process_example_section(
     example_docstring = ""
 
     # Use existing example section if available
-
     if func_documentation is not None and (match := re.search(r"(?m)^([ \t]*)(?=Example)", func_documentation)):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
+    # Skip examples for processors
+    elif _is_processor_class(func, parent_class):
+        # Processors don't get auto-generated examples
+        return example_docstring
     # No examples for __init__ methods or if the class is not a model
     elif parent_class is None and model_name_lowercase is not None:
         task = rf"({'|'.join(PT_SAMPLE_DOCSTRINGS.keys())})"
