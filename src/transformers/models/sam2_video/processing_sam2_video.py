@@ -41,10 +41,15 @@ class Sam2VideoProcessor(ProcessorMixin):
         self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
     ):
         r"""
-        target_size (<fill_type>):
-            <fill_docstring>
+        target_size (`int`, *optional*):
+            The target size (in pixels) for normalizing input points and bounding boxes across video frames.
+            If not provided, defaults to the image processor's size configuration. All input coordinates
+            (points and boxes) are normalized to this size before being passed to the model. This ensures
+            consistent coordinate representation across all frames regardless of the original video dimensions.
         point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
+            The value used for padding input points when batching sequences of different lengths across video
+            frames. This value marks padded positions and is preserved during coordinate normalization to
+            distinguish real points from padding.
         """
         super().__init__(image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value

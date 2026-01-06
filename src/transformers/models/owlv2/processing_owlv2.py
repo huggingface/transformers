@@ -39,8 +39,10 @@ if TYPE_CHECKING:
 
 class Owlv2ImagesKwargs(ImagesKwargs, total=False):
     """
-    query_images (`<fill_type>`):
-        <fill_docstring>
+    query_images (`ImageInput`, *optional*):
+        Query images to use for image-guided object detection. When provided, these images serve as visual queries
+        to find similar objects in the main `images`. The query images override any text prompts, and the model
+        performs image-to-image matching instead of text-to-image matching.
     """
 
     query_images: Optional[ImageInput]

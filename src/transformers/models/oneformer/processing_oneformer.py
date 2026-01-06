@@ -31,10 +31,13 @@ class OneFormerProcessor(ProcessorMixin):
         self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
     ):
         r"""
-        max_seq_length (<fill_type>):
-            <fill_docstring>
-        task_seq_length (<fill_type>):
-            <fill_docstring>
+        max_seq_length (`int`, *optional*, defaults to `77`):
+            Maximum sequence length for encoding class names and text inputs. This parameter controls the
+            maximum number of tokens used when tokenizing class names and other text inputs for the model.
+        task_seq_length (`int`, *optional*, defaults to `77`):
+            Maximum sequence length specifically for encoding task descriptions. Task descriptions (e.g.,
+            "the task is semantic") are tokenized with this length limit, which may differ from the general
+            text sequence length.
         """
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
@@ -60,8 +63,10 @@ class OneFormerProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
         r"""
-        task_inputs (<fill_type>):
-            <fill_docstring>
+        task_inputs (`str` or `list[str]`, *required*):
+            The task type(s) for segmentation. Must be one or more of `"semantic"`, `"instance"`, or `"panoptic"`.
+            Can be a single string for a single image, or a list of strings (one per image) for batch processing.
+            The task type determines which type of segmentation the model will perform on the input images.
         segmentation_maps (`ImageInput`, *optional*):
             The corresponding semantic segmentation maps with the pixel-wise annotations.
 

@@ -40,8 +40,10 @@ class GraniteSpeechProcessor(ProcessorMixin):
         chat_template=None,
     ):
         r"""
-        audio_token (<fill_type>):
-            <fill_docstring>
+        audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
+            The special token used to represent audio in the text sequence. This token serves as a placeholder
+            that will be replaced with multiple audio tokens based on the actual audio length. The number of
+            audio tokens inserted depends on the audio feature dimensions extracted by the audio processor.
         """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(audio_processor, tokenizer, chat_template=chat_template)

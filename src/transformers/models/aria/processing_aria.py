@@ -33,12 +33,18 @@ from ..auto import AutoTokenizer
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
     """
-    split_image (`<fill_type>`):
-        <fill_docstring>
-    max_image_size (`<fill_type>`):
-        <fill_docstring>
-    min_image_size (`<fill_type>`):
-        <fill_docstring>
+    split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
+        divided into overlapping crops that are processed separately and then combined. This allows processing
+        of very high-resolution images that exceed the model's input size limits.
+    max_image_size (`int`, *optional*, defaults to `980`):
+        Maximum image size (in pixels) for a single image crop. Images larger than this will be split into
+        multiple crops when `split_image=True`, or resized if splitting is disabled. This parameter controls
+        the maximum resolution of individual image patches processed by the model.
+    min_image_size (`int`, *optional*):
+        Minimum image size (in pixels) for a single image crop. Images smaller than this will be upscaled to
+        meet the minimum requirement. If not specified, images are processed at their original size (subject
+        to the maximum size constraint).
     """
 
     split_image: bool

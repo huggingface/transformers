@@ -31,8 +31,11 @@ if is_vision_available():
 
 class Emu3TextKwargs(TextKwargs, total=False):
     """
-    return_for_image_generation (`<fill_type>`):
-        <fill_docstring>
+    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
+        inputs for image generation by appending image start tokens and size information to the prompt, and
+        images should not be provided. When `False`, the processor prepares inputs for text generation from
+        images and text, requiring both inputs to be provided.
     """
 
     return_for_image_generation: bool

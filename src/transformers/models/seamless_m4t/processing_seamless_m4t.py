@@ -30,10 +30,13 @@ logger = logging.get_logger(__name__)
 
 class SeamlessM4TTextKwargs(TextKwargs):
     """
-    src_lang (`<fill_type>`):
-        <fill_docstring>
-    tgt_lang (`<fill_type>`):
-        <fill_docstring>
+    src_lang (`str`, *optional*):
+        The source language code for the input text (e.g., "eng" for English, "fra" for French). This is used
+        to set the language token at the beginning of the input sequence, which helps the model understand the
+        input language for translation or transcription tasks.
+    tgt_lang (`str`, *optional*):
+        The target language code for the output (e.g., "eng" for English, "fra" for French). This is used to
+        specify the desired output language for translation tasks. The model will generate text in this language.
     """
 
     src_lang: Optional[str]

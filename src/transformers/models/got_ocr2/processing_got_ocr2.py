@@ -34,8 +34,9 @@ logger = logging.get_logger(__name__)
 
 class GotOcr2TextKwargs(TextKwargs, total=False):
     """
-    format (`<fill_type>`):
-        <fill_docstring>
+    format (`bool`, *optional*, defaults to `False`):
+        Whether to request formatted output from the OCR model. When enabled, the model is instructed to return
+        structured and formatted text output rather than raw OCR results.
     """
 
     format: Optional[bool]
@@ -43,20 +44,29 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
     """
-    crop_to_patches (`<fill_type>`):
-        <fill_docstring>
-    min_patches (`<fill_type>`):
-        <fill_docstring>
-    max_patches (`<fill_type>`):
-        <fill_docstring>
-    box (`<fill_type>`):
-        <fill_docstring>
-    color (`<fill_type>`):
-        <fill_docstring>
-    num_image_tokens (`<fill_type>`):
-        <fill_docstring>
-    multi_page (`<fill_type>`):
-        <fill_docstring>
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop images into patches before processing. When enabled, large images are divided into
+        smaller patches for more efficient OCR processing.
+    min_patches (`int`, *optional*, defaults to `1`):
+        Minimum number of patches to generate when cropping images. This ensures that even small images are
+        processed with at least this many patches.
+    max_patches (`int`, *optional*, defaults to `12`):
+        Maximum number of patches to generate when cropping images. Large images will be divided into at most
+        this many patches to control computational complexity.
+    box (`list`, `tuple[float, float]`, or `tuple[float, float, float, float]`, *optional*):
+        Bounding box coordinates for OCR region of interest. Can be specified as a single box `[x1, y1, x2, y2]`
+        or a list of boxes. Coordinates are normalized to the range [0, 1000] based on the image dimensions.
+        If not provided, OCR is performed on the entire image.
+    color (`str`, *optional*):
+        Color filter specification for OCR. When provided, the OCR query is prefixed with the color information
+        to focus on text of a specific color (e.g., "red", "blue").
+    num_image_tokens (`int`, *optional*, defaults to `256`):
+        Number of image tokens (patches) to use per image. This controls the resolution of the image representation
+        passed to the model. Higher values provide more detail but increase computational cost.
+    multi_page (`bool`, *optional*, defaults to `False`):
+        Whether the input consists of multi-page documents. When enabled, images can be provided as nested lists
+        where each inner list represents a page, and OCR is performed across all pages with appropriate handling
+        of page boundaries.
     """
 
     crop_to_patches: bool

@@ -56,22 +56,29 @@ class Llama4Processor(ProcessorMixin):
         r"""
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
-        pixel_shuffle_ratio (<fill_type>):
-            <fill_docstring>
-        fake_image_token (<fill_type>):
-            <fill_docstring>
+        pixel_shuffle_ratio (`float`, *optional*, defaults to `0.5`):
+            The ratio used for pixel shuffling when processing images. This controls the downsampling factor
+            applied to image patches. The actual downsampling ratio is calculated as `1 / (pixel_shuffle_ratio^2)`.
+        fake_image_token (`str`, *optional*, defaults to `"<|image|>"`):
+            The placeholder token in the text that will be replaced with actual image tokens. This token serves
+            as a marker indicating where images should be inserted in the text sequence.
         image_token (`str`, *optional*, defaults to `"<|image|>"`):
             The token to be used to represent an image in the text.
-        start_of_image_token (<fill_type>):
-            <fill_docstring>
-        end_of_image_token (<fill_type>):
-            <fill_docstring>
-        patch_token (<fill_type>):
-            <fill_docstring>
-        tile_x_separator_token (<fill_type>):
-            <fill_docstring>
-        tile_y_separator_token (<fill_type>):
-            <fill_docstring>
+        start_of_image_token (`str`, *optional*, defaults to `"<|image_start|>"`):
+            The special token that marks the beginning of an image sequence in the text. This token is prepended
+            to image token sequences to delimit image boundaries.
+        end_of_image_token (`str`, *optional*, defaults to `"<|image_end|>"`):
+            The special token that marks the end of an image sequence in the text. This token is appended to
+            image token sequences to delimit image boundaries.
+        patch_token (`str`, *optional*, defaults to `"<|patch|>"`):
+            The token used to represent individual image patches. Multiple patch tokens are used to represent
+            the full image, with the number depending on the image size and patch configuration.
+        tile_x_separator_token (`str`, *optional*, defaults to `"<|tile_x_separator|>"`):
+            The token used to separate tiles (patches) horizontally within an image. This token is inserted
+            between patches in the same row when images are split into multiple tiles.
+        tile_y_separator_token (`str`, *optional*, defaults to `"<|tile_y_separator|>"`):
+            The token used to separate tiles (patches) vertically within an image. This token is inserted
+            between rows of patches when images are split into multiple tiles.
         """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 

@@ -54,8 +54,11 @@ class ParakeetProcessor(ProcessorMixin):
         **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
         r"""
-        sampling_rate (<fill_type>):
-            <fill_docstring>
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
         """
         audio = make_list_of_audio(audio)
 

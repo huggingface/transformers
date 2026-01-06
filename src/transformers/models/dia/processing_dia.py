@@ -34,16 +34,23 @@ if is_soundfile_available():
 
 class DiaAudioKwargs(AudioKwargs, total=False):
     """
-    bos_token_id (`<fill_type>`):
-        <fill_docstring>
-    eos_token_id (`<fill_type>`):
-        <fill_docstring>
-    pad_token_id (`<fill_type>`):
-        <fill_docstring>
-    delay_pattern (`<fill_type>`):
-        <fill_docstring>
-    generation (`<fill_type>`):
-        <fill_docstring>
+    bos_token_id (`int`, *optional*, defaults to `1026`):
+        The token ID used as the beginning-of-sequence token for audio codebooks. This token is prepended to each
+        audio sequence during encoding.
+    eos_token_id (`int`, *optional*, defaults to `1024`):
+        The token ID used as the end-of-sequence token for audio codebooks. This token is appended to audio sequences
+        during training (when `generation=False`) to mark the end of the audio.
+    pad_token_id (`int`, *optional*, defaults to `1025`):
+        The token ID used for padding audio codebook sequences. This token is used to fill positions in the delay
+        pattern where no valid audio token exists.
+    delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+        A list of delay values (in frames) for each codebook channel. The delay pattern creates temporal offsets
+        between different codebook channels, allowing the model to capture dependencies across channels. Each value
+        represents the number of frames to delay that specific channel.
+    generation (`bool`, *optional*, defaults to `True`):
+        Whether the processor is being used for generation (text-to-speech) or training. When `True`, the processor
+        prepares inputs for generation mode where audio is generated from text. When `False`, it prepares inputs for
+        training where both text and audio are provided.
     """
 
     bos_token_id: int
@@ -95,8 +102,11 @@ class DiaProcessor(ProcessorMixin):
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
         r"""
-        output_labels (<fill_type>):
-            <fill_docstring>
+        output_labels (`bool`, *optional*, defaults to `False`):
+            Whether to return labels for training. When `True`, the processor generates labels from the decoder input
+            sequence by shifting it by one position. Labels use special values: `-100` for tokens to ignore in loss
+            computation (padding and BOS tokens), and `-101` for audio frames used only for the backbone model (when
+            `depth_decoder_labels_ratio < 1.0`). Cannot be used together with `generation=True`.
         """
         if not is_torch_available():
             raise ValueError(

@@ -33,8 +33,10 @@ logger = logging.get_logger(__name__)
 
 class Lfm2VlTextKwargs(TextKwargs, total=False):
     """
-    use_image_special_tokens (`<fill_type>`):
-        <fill_docstring>
+    use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+        Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
+        in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
+        When disabled, only the image token itself is used without delimiters.
     """
 
     use_image_special_tokens: Optional[bool]

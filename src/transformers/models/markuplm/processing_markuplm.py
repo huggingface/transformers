@@ -57,16 +57,25 @@ class MarkupLMProcessor(ProcessorMixin):
     ) -> BatchEncoding:
         # first, create nodes and xpaths
         r"""
-        html_strings (<fill_type>):
-            <fill_docstring>
-        nodes (<fill_type>):
-            <fill_docstring>
-        xpaths (<fill_type>):
-            <fill_docstring>
-        node_labels (<fill_type>):
-            <fill_docstring>
-        questions (<fill_type>):
-            <fill_docstring>
+        html_strings (`str` or `list[str]`, *optional*):
+            Raw HTML strings to parse and process. When `parse_html=True` (default), these strings are parsed
+            to extract nodes and xpaths automatically. If provided, `nodes`, `xpaths`, and `node_labels` should
+            not be provided. Required when `parse_html=True`.
+        nodes (`list[list[str]]`, *optional*):
+            Pre-extracted HTML nodes as a list of lists, where each inner list contains the text content of nodes
+            for a single document. Required when `parse_html=False`. Should not be provided when `parse_html=True`.
+        xpaths (`list[list[str]]`, *optional*):
+            Pre-extracted XPath expressions corresponding to the nodes. Should be a list of lists with the same
+            structure as `nodes`, where each XPath identifies the location of the corresponding node in the HTML
+            tree. Required when `parse_html=False`. Should not be provided when `parse_html=True`.
+        node_labels (`list[list[int]]`, *optional*):
+            Labels for the nodes, typically used for training or fine-tuning tasks. Should be a list of lists
+            with the same structure as `nodes`, where each label corresponds to a node. Optional and only used
+            when `parse_html=False`.
+        questions (`str` or `list[str]`, *optional*):
+            Question strings for question-answering tasks. When provided, the tokenizer processes questions
+            as the first sequence and nodes as the second sequence (text_pair). If a single string is provided,
+            it is converted to a list to match the batch dimension of the parsed HTML.
         """
         if self.parse_html:
             if html_strings is None:

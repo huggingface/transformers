@@ -37,26 +37,36 @@ from ...video_utils import VideoInput, make_batched_videos
 # and does not use them in video processor class
 class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     """
-    min_pixels (`<fill_type>`):
-        <fill_docstring>
-    max_pixels (`<fill_type>`):
-        <fill_docstring>
-    patch_size (`<fill_type>`):
-        <fill_docstring>
-    temporal_patch_size (`<fill_type>`):
-        <fill_docstring>
-    merge_size (`<fill_type>`):
-        <fill_docstring>
-    min_frames (`<fill_type>`):
-        <fill_docstring>
-    max_frames (`<fill_type>`):
-        <fill_docstring>
-    use_audio_in_video (`<fill_type>`):
-        <fill_docstring>
-    seconds_per_chunk (`<fill_type>`):
-        <fill_docstring>
-    position_id_per_seconds (`<fill_type>`):
-        <fill_docstring>
+    min_pixels (`int`, *optional*):
+        Minimum number of pixels (height × width) for video frames after resizing. Frames smaller than this
+        threshold will be upscaled to meet the minimum requirement.
+    max_pixels (`int`, *optional*):
+        Maximum number of pixels (height × width) for video frames after resizing. Frames larger than this
+        threshold will be downscaled to fit within the limit.
+    patch_size (`int`, *optional*):
+        The spatial patch size used by the vision encoder. Video frames are divided into patches of this size
+        in both height and width dimensions.
+    temporal_patch_size (`int`, *optional*):
+        The temporal patch size used by the vision encoder. This determines how many consecutive frames are
+        grouped together as a single temporal patch.
+    merge_size (`int`, *optional*):
+        The merge size used for combining spatial patches. Multiple patches are merged together to reduce the
+        sequence length while maintaining spatial information.
+    min_frames (`int`, *optional*):
+        Minimum number of frames to extract from the video. Videos with fewer frames will be padded or repeated
+        to meet this requirement.
+    max_frames (`int`, *optional*):
+        Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
+        within this limit.
+    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
+        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
+    seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
+        The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
+        videos are divided into temporal segments for processing.
+    position_id_per_seconds (`int` or `float`, *optional*, defaults to `13.0`):
+        The number of position IDs allocated per second of video. This parameter controls the temporal resolution
+        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
     """
 
     min_pixels: int

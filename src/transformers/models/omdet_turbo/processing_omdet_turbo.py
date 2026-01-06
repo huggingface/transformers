@@ -39,8 +39,10 @@ if TYPE_CHECKING:
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
     """
-    task (`<fill_type>`):
-        <fill_docstring>
+    task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+        The detection task description(s) to encode. If not provided, a default task description is generated
+        from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
+        or pre-tokenized input. The task description guides the model on what objects to detect in the images.
     """
 
     task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]

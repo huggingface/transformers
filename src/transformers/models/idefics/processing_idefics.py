@@ -41,10 +41,13 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsTextKwargs(TextKwargs, total=False):
     """
-    add_eos_token (`<fill_type>`):
-        <fill_docstring>
-    add_end_of_utterance_token (`<fill_type>`):
-        <fill_docstring>
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
+        appended to mark the end of the text sequence, which is useful for generation tasks.
+    add_end_of_utterance_token (`bool`, *optional*):
+        Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
+        This token helps the model distinguish between different utterances in a multi-turn conversation and is
+        particularly important for chat-based models.
     """
 
     add_eos_token: Optional[bool]

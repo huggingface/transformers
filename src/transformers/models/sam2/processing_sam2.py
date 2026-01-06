@@ -40,10 +40,14 @@ if is_torch_available():
 class Sam2Processor(ProcessorMixin):
     def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
         r"""
-        target_size (<fill_type>):
-            <fill_docstring>
+        target_size (`int`, *optional*):
+            The target size (in pixels) for normalizing input points and bounding boxes. If not provided, defaults
+            to the image processor's size configuration. All input coordinates (points and boxes) are normalized
+            to this size before being passed to the model. This ensures consistent coordinate representation
+            regardless of the original image dimensions.
         point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
+            The value used for padding input points when batching sequences of different lengths. This value is
+            used to mark padded positions and is preserved during coordinate normalization.
         """
         super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value

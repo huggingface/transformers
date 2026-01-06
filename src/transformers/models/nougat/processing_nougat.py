@@ -71,12 +71,16 @@ class NougatProcessor(ProcessorMixin):
         verbose: bool = True,
     ):
         r"""
-        do_crop_margin (<fill_type>):
-            <fill_docstring>
-        do_thumbnail (<fill_type>):
-            <fill_docstring>
-        do_align_long_axis (<fill_type>):
-            <fill_docstring>
+        do_crop_margin (`bool`, *optional*):
+            Whether to automatically crop white margins from document images. When enabled, the processor detects
+            and removes white space around the edges of document pages, which is useful for processing scanned
+            documents or PDFs with large margins.
+        do_thumbnail (`bool`, *optional*):
+            Whether to create a thumbnail version of the image. When enabled, a smaller version of the image is
+            generated alongside the main processed image, which can be useful for preview or faster processing.
+        do_align_long_axis (`bool`, *optional*):
+            Whether to automatically align images so that the longer axis is horizontal. When enabled, portrait
+            images are rotated to landscape orientation, which is typically better for document processing tasks.
         """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")

@@ -51,12 +51,17 @@ class Pop2PianoProcessor(ProcessorMixin):
         # Since Feature Extractor needs both audio and sampling_rate and tokenizer needs both token_ids and
         # feature_extractor_output, we must check for both.
         r"""
-        sampling_rate (<fill_type>):
-            <fill_docstring>
-        steps_per_beat (<fill_type>):
-            <fill_docstring>
-        notes (<fill_type>):
-            <fill_docstring>
+        sampling_rate (`int` or `list[int]`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate used by the feature
+            extractor. If not provided, the default sampling rate from the processor configuration will be used.
+        steps_per_beat (`int`, *optional*, defaults to `2`):
+            The number of time steps per musical beat. This parameter controls the temporal resolution of the
+            musical representation. A higher value provides finer temporal granularity but increases the sequence
+            length. Used when processing audio to extract musical features.
+        notes (`list` or `TensorType`, *optional*):
+            Pre-extracted musical notes in MIDI format. When provided, the processor skips audio feature extraction
+            and directly processes the notes through the tokenizer. Each note should be represented as a list or
+            tensor containing pitch, velocity, and timing information.
         """
         if (audio is None and sampling_rate is None) and (notes is None):
             raise ValueError(

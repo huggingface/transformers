@@ -35,8 +35,10 @@ from ...utils.auto_docstring import auto_docstring
 
 class ChameleonTextKwargs(TextKwargs, total=False):
     """
-    return_for_text_completion (`<fill_type>`):
-        <fill_docstring>
+    return_for_text_completion (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for text completion tasks. When `True`, the processor does not
+        append the separator token (`sep_token`) to the end of the prompt, which is typically used for chat
+        mode. When `False`, the separator token is appended for proper chat formatting.
     """
 
     return_for_text_completion: bool

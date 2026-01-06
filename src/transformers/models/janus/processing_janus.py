@@ -37,8 +37,10 @@ DEFAULT_SYSTEM_PROMPT = (
 
 class JanusTextKwargs(TextKwargs, total=False):
     """
-    generation_mode (`<fill_type>`):
-        <fill_docstring>
+    generation_mode (`str`, *optional*, defaults to `"text"`):
+        The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
+        to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
+        for image generation by appending image start tokens to the prompt.
     """
 
     generation_mode: str

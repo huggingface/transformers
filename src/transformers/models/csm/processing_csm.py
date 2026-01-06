@@ -37,8 +37,11 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 class CsmAudioKwargs(AudioKwargs, total=False):
     """
-    encoded_length_kwargs (`<fill_type>`):
-        <fill_docstring>
+    encoded_length_kwargs (`dict[str, Any]`, *optional*):
+        Dictionary of keyword arguments used to compute the encoded audio sequence length. This includes parameters
+        such as `kernel_sizes`, `strides`, `dilations`, and `use_causal_conv` that define the convolutional layers
+        used in audio encoding. The encoded length is used to determine how many audio tokens to generate for each
+        audio input in the text sequence.
     """
 
     encoded_length_kwargs: Optional[dict[str, Any]]
