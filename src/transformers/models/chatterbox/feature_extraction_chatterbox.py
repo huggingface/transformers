@@ -21,6 +21,7 @@ from typing import Any, Union
 
 import numpy as np
 import torch
+
 from numpy.lib.stride_tricks import as_strided
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -178,6 +179,7 @@ def stride_as_partials(mel: np.ndarray, hp: VoiceEncConfig, overlap=0.5, rate: f
     return partials
 
 
+@requires(backends=("torch",))
 class ChatterboxFeatureExtractor(SequenceFeatureExtractor):
     """
     Constructs a Chatterbox feature extractor.
