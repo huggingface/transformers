@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import time
-from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 
