@@ -152,8 +152,12 @@ class TextToAudioPipeline(Pipeline):
 
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
+            # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
+            max_length = 256
+            if hasattr(self.generation_config, "semantic_config"):
+                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
-                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": max_length,
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
