@@ -119,7 +119,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
         if hasattr(module, "_init_buffers"):
             module._init_buffers()
-        elif isinstance(module, nn.BatchNorm2d):
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
             init.zeros_(module.running_mean)
             init.ones_(module.running_var)
             init.zeros_(module.num_batches_tracked)
