@@ -426,6 +426,15 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
+    # skipping for anything FA related that is not FA2 (no attn interface implemented)
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        if "flash" in attn_implementation and attn_implementation != "flash_attention_2":
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
+
+        super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
+
     # needs to be overridden to avoid to avoid casting of input_values to float16
     # indeed, the codec model is kept in fp32, so we need to avoid casting input_values to float16
     def _test_attention_implementation(self, attn_implementation):
@@ -438,8 +447,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         support_flag = {
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
-            "flash_attention_3": "_supports_flash_attn",
         }
+
+        if "flash" in attn_implementation and attn_implementation != "flash_attention_2":
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):

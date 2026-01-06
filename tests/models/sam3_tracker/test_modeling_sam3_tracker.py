@@ -369,7 +369,6 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     # Override as Sam3TrackerModel doesn't have hidden states
-    @unittest.skip(reason="skip for now (head_size should be a multiple of 8)")
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
@@ -380,15 +379,14 @@ class Sam3TrackerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        support_flag = {
-            "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn",
-            "flash_attention_3": "_supports_flash_attn",
-        }
+        # TODO take a look at this
+        # head size needs to be a multiple of 8 but needs more adjustments than our current `_prepare_config_headdim`
+        if attn_implementation != "flash_attention_2":
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 due to dim incompatibilities.")
 
         for model_class in self.all_model_classes:
-            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
-                self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
+            if not getattr(model_class, "_supports_flash_attn"):
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)

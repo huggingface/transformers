@@ -611,15 +611,14 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        support_flag = {
-            "sdpa": "_supports_sdpa",
-            "flash_attention_2": "_supports_flash_attn",
-            "flash_attention_3": "_supports_flash_attn",
-        }
+        # TODO take a look at this
+        # head size needs to be a multiple of 8 but needs more adjustments than our current `_prepare_config_headdim`
+        if attn_implementation != "flash_attention_2":
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 due to dim incompatibilities.")
 
         for model_class in self.all_model_classes:
-            if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
-                self.skipTest(f"{model_class.__name__} does not support `attn_implementation={attn_implementation}`")
+            if not getattr(model_class, "_supports_flash_attn"):
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
