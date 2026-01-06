@@ -896,6 +896,7 @@ def convert_and_load_state_dict_in_model(
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
     disk_offload_folder: str | None = None,
+    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -989,8 +990,9 @@ def convert_and_load_state_dict_in_model(
     dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
-    missing_keys = set(meta_model_state_dict.keys())
+    model_buffers = {k for k, _ in model.named_buffers()}
 
+    missing_keys = set(meta_model_state_dict.keys())
     conversion_errors = {}
     mismatch_keys = set()
     unexpected_keys = set()
@@ -1108,7 +1110,7 @@ def convert_and_load_state_dict_in_model(
                         param = param[0] if isinstance(param, list) else param
                         param_device = get_device(device_map, target_name)
                         # Offloading support
-                        if param_device == "disk":
+                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
                                 target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
                             )
