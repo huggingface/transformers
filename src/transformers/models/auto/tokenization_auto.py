@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Auto Tokenizer class."""
+from datasets import Value
 
 import importlib
 import json
@@ -658,11 +659,13 @@ class AutoTokenizer:
             config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
 
             tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
-            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
-        # END PRIORITIZE MAPPING FOR MODELS
+            try:
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            except ValueError:
+                config_tokenizer_class = tokenizer_config.get("tokenizer_class")
         else:
             config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
             if not isinstance(config, PreTrainedConfig):
