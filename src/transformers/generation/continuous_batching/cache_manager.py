@@ -128,7 +128,24 @@ class BlockManager:
     ) -> tuple[list[list[int]], list[int], list[int]]:
         """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
         reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
-        later copy the physical cache."""
+        later copy the physical cache. For instance, when forking 4 blocks for 2 children:
+
+        Parent blocks: [0, 1, 2, 3], with all blocks being complete except the last one (block 3).
+
+        ----------------------------------------- IF BLOCKS ARE NOT SHAREABLE -----------------------------------------
+
+        Forked blocks lists: [[5, 6, 7, 8], [9, 10, 11, 12]]
+        Copy source:          [0, 1, 2, 3,   0,  1,  2,  3]
+                               ↓  ↓  ↓  ↓    ↓   ↓   ↓   ↓
+        Copy destination:     [5, 6, 7, 8,   9, 10, 11, 12]  → 8 blocks are newly allocated and copied
+
+        ----------------------------------------- IF BLOCKS ARE SHAREABLE ---------------------------------------------
+
+        Forked blocks lists: [[0, 1, 2, 5], [0, 1, 2, 6]]
+        Copy source:          [         3,            3]     (block 3 is not complete so it's copied, not referenced)
+                                        ↓             ↓
+        Copy destination:     [         5,            6]     → only 2 blocks are newly allocated and copied
+        """
         # First phase: reference all complete blocks
         forked_by_reference = []
 
@@ -293,10 +310,6 @@ class CacheAllocator(ABC):
         # Sanity checks
         if parent_request_id not in self.block_table:
             raise ValueError(f"No block table found for request {parent_request_id}")
-        # TODO: this check is good in the current context but it might be too much + slow things down
-        for children_request_id in children_request_ids:
-            if children_request_id in self.block_table:
-                raise ValueError(f"Block table already exists for request {children_request_id}")
 
         # Actual forking
         parent_blocks = self.block_table[parent_request_id]
@@ -311,6 +324,8 @@ class CacheAllocator(ABC):
 
         # Update the block table for all children requests
         for children_request_id, forked_blocks in zip(children_request_ids, list_forked_blocks):
+            if children_request_id in self.block_table:
+                raise ValueError(f"Block table already exists for request {children_request_id}")
             self.block_table[children_request_id] = forked_blocks
         return copy_src, copy_dst
 

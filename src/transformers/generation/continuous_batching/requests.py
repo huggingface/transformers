@@ -234,8 +234,24 @@ class RequestState:
 
     def fork(self, new_request_id: str) -> "RequestState":
         """Fork the request into a new request with the same state expect for request_id, created_time and lifespan."""
-        new = deepcopy(self)
-        new.request_id = new_request_id
-        new.created_time = time.perf_counter()
-        new.lifespan = (new.created_time, -1)
-        return new
+        t = time.perf_counter()
+        new_request = RequestState(
+            request_id=new_request_id,
+            initial_tokens=self.initial_tokens,
+            num_children=self.num_children,
+            tokens_to_process=self.tokens_to_process[:],
+            remaining_prefill_tokens=self.remaining_prefill_tokens[:],
+            generated_tokens=self.generated_tokens[:],
+            allocated_blocks=self.allocated_blocks,
+            position_offset=self.position_offset,
+            status=self.status,
+            max_new_tokens=self.max_new_tokens,
+            eos_token_id=self.eos_token_id,
+            streaming=self.streaming,
+            created_time=t,
+            lifespan=(t, -1),
+            timestamps=None if self.timestamps is None else self.timestamps[:],
+            error=self.error,
+            record_timestamps=self.record_timestamps,
+        )
+        return new_request
