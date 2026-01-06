@@ -66,7 +66,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to 0):
+        resample (`PILImageResampling` filter, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
@@ -102,7 +102,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PIL.Image.NEAREST,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = False,
         crop_size: Optional[dict[str, int]] = None,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -133,12 +133,11 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.NEAREST
     def resize(
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.NEAREST,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -151,8 +150,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.NEAREST`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.NEAREST`.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:

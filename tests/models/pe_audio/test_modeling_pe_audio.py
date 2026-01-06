@@ -158,6 +158,10 @@ class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+    @unittest.skip(reason="SDPA can't dispatch on flash with not None `attention_mask`")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 class PeAudioTextModelTester:
     """
