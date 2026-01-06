@@ -3571,10 +3571,6 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
                 model.to(torch_device)
 
-                if model.config._experts_implementation == "grouped_mm" and model.dtype != torch.bfloat16:
-                    # torch._grouped_mm still only supports bfloat16 when used with torch.compile
-                    model.set_experts_implementation("batched_mm")
-
                 # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
                 # on input tensors will be required. `mark_dynamic` currently raises inconsistent shape errors.
                 model = torch.compile(model, dynamic=True)
@@ -3921,10 +3917,6 @@ class ModelTesterMixin:
             config._attn_implementation = attn_implementation
 
         model = cls(config).to(torch_device)
-
-        if model.config._experts_implementation == "grouped_mm" and model.dtype != torch.bfloat16:
-            # torch._grouped_mm still only supports bfloat16 when used with torch.compile
-            model.set_experts_implementation("batched_mm")
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
