@@ -109,6 +109,7 @@ from .utils import (
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
@@ -1278,6 +1279,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
+        # setting it recursively)
+        self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
+            self.config._experts_implementation
+        )
         if self.can_generate():
             self.generation_config = GenerationConfig.from_model_config(config)
 
@@ -1465,9 +1471,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        # If passing `experts_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
+
         init_contexts = []
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
+
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
@@ -1729,6 +1740,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return True
 
+    def _grouped_mm_can_dispatch(self) -> bool:
+        """
+        Check the availability of Grouped MM for a given model.
+        """
+
+        if not self._can_set_experts_implementation():
+            raise ValueError(f"{self.__class__.__name__} does not support setting experts implementation.")
+
+        if not is_grouped_mm_available():
+            raise ImportError(
+                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
+            )
+
+        # If no error raised by this point, we can return `True`
+        return True
+
     def _flex_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flex Attention for a given model.
@@ -1837,6 +1864,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attn_implementation
 
+    def _check_and_adjust_experts_implementation(self, experts_implementation: Optional[str]) -> str:
+        """
+        Check that the `experts_implementation` exists and is supported by the models.
+
+        Args:
+            experts_implementation (`str` or `None`):
+                The experts implementation to check for existence/validity.
+        Returns:
+            `str`: The final experts implementation to use.
+        """
+        applicable_experts_implementation = self.get_correct_experts_implementation(experts_implementation)
+        return applicable_experts_implementation
+
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
@@ -1871,6 +1911,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attention
 
+    def get_correct_experts_implementation(self, requested_experts: Optional[str]) -> str:
+        applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+            message = (
+                f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
+            )
+            raise ValueError(message)
+
+        # Perform relevant checks
+        if applicable_experts == "grouped_mm":
+            try:
+                self._grouped_mm_can_dispatch()
+            except (ValueError, ImportError) as e:
+                if requested_experts == "grouped_mm":
+                    raise e
+                applicable_experts = "eager"
+
+        return applicable_experts
+
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
@@ -1888,6 +1948,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
+
+    @classmethod
+    def _can_set_experts_implementation(cls) -> bool:
+        """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
+        opening the file, but avoids maintaining yet another property flag.
+        """
+        class_file = sys.modules[cls.__module__].__file__
+        with open(class_file, "r") as f:
+            code = f.read()
+        # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
+        return "@use_experts_implementation" in code
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
@@ -1987,6 +2058,50 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
+
+    def set_experts_implementation(self, experts_implementation: Union[str, dict]):
+        """
+        Set the requested `experts_implementation` for this model.
+
+        Args:
+            experts_implementation (`str` or `dict`):
+                The experts implementation to set for this model. It can be either a `str`, in which case it will be
+                dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
+                submodel will dispatch the corresponding value.
+        """
+        requested_implementation = (
+            experts_implementation
+            if not isinstance(experts_implementation, dict)
+            else experts_implementation.get("", self.config._experts_implementation)
+        )
+
+        if requested_implementation != self.config._experts_implementation:
+            requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
+            # Apply the change (on the internal attr, to avoid setting it recursively)
+            self.config._experts_implementation_internal = requested_implementation
+
+        # Apply it to all submodels as well
+        for submodule in self.modules():
+            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+            # e.g. ForCausalLM has a Model inside, but no need to check it again)
+            if (
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config.__class__ != self.config.__class__
+            ):
+                # Set the experts on the submodule
+                sub_implementation = requested_implementation
+                if isinstance(experts_implementation, dict):
+                    for subconfig_key in self.config.sub_configs:
+                        # We need to check for exact object match here, with `is`
+                        if getattr(self.config, subconfig_key) is submodule.config:
+                            sub_implementation = experts_implementation.get(
+                                subconfig_key, submodule.config._experts_implementation
+                            )
+                            break
+                # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
+                sub_implementation = submodule.get_correct_experts_implementation(sub_implementation)
+                submodule.config._experts_implementation_internal = sub_implementation
 
     def enable_input_require_grads(self):
         """
@@ -3646,6 +3761,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                   "org/model@main"
                   "org/model:custom_kernel"
                   "org/model@v1.2.3:custom_kernel"
+            experts_implementation (`str`, *optional*):
+                The experts implementation to use in the model (if relevant). Can be any of:
+
+                - `"eager"` (sequential implementation of the experts matrix multiplications).
+                - `"batched_mm"` (using [`torch.bmm`](https://pytorch.org/docs/stable/generated/torch.bmm.html)).
+                - `"grouped_mm"` (using [`torch._grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
+
+                By default, if available, `grouped_mm` will be used for torch>=2.9.0. The default is otherwise the sequential `"eager"` implementation.
 
             > Parameters for big model inference
 
@@ -3868,6 +3991,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # to correctly redispatch recursively if the kwarg is provided
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
+
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
 
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
