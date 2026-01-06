@@ -16,8 +16,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
 

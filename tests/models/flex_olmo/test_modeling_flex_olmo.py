@@ -16,8 +16,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
