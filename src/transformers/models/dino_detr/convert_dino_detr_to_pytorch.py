@@ -1,0 +1,122 @@
+"""Convert Dino DETR checkpoints."""
+
+import argparse
+import json
+import re
+from pathlib import Path
+
+import torch
+from huggingface_hub import hf_hub_download
+
+from transformers import (
+    DinoDetrConfig,
+    DinoDetrForObjectDetection,
+    DinoDetrImageProcessor,
+)
+from transformers.utils import logging
+
+
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
+
+
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"(encoder\..*)norm1\.(weight|bias)": r"\1self_attn_layer_norm.\2",
+    r"(encoder\..*)norm2\.(weight|bias)": r"\1final_layer_norm.\2",
+    r"(encoder\..*)norm3\.(weight|bias)": r"\1final_layer_norm.\2",
+    r"(encoder\..*)linear1\.(weight|bias)": r"\1fc1.\2",
+    r"(encoder\..*)linear2\.(weight|bias)": r"\1fc2.\2",
+    r"backbone\.0\.body": r"backbone.conv_encoder.model",
+    r"tgt_embed": r"content_query_embeddings",
+    r"^(.*)$": r"model.\1",
+}
+
+
+@torch.no_grad()
+def convert_dino_detr_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub, repo_id):
+    """
+    Copy/paste/tweak model's weights to our Deformable DETR structure.
+    """
+
+    # load default config
+    config = DinoDetrConfig()
+    # set labels
+    config.num_labels = 91
+    label_repo_id = "huggingface/label-files"
+    filename = "coco-detection-id2label.json"
+    id2label = json.loads(Path(hf_hub_download(label_repo_id, filename, repo_type="dataset")).read_text())
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+
+    # load original state dict
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=False)["model"]
+
+    for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+        for key in list(state_dict.copy().keys()):
+            new_key = re.sub(original_key, converted_key, key)
+            if new_key != key:
+                state_dict[new_key] = state_dict.pop(key)
+
+    processor = DinoDetrImageProcessor()
+    model = DinoDetrForObjectDetection(config)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    # Save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
+    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    model.save_pretrained(pytorch_dump_folder_path)
+    processor.save_pretrained(pytorch_dump_folder_path)
+
+    # Push to hub
+    if push_to_hub:
+        # Upload model, image processor and config to the hub
+        logger.info("Uploading PyTorch model and image processor to the hub...")
+        config.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add config from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+        model.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add model from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+        processor.push_to_hub(
+            repo_id=repo_id,
+            commit_message="Add image processor from convert_dino_detr_original_pytorch_checkpoint_to_pytorch.py",
+        )
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        default="",
+        help="Path to Pytorch checkpoint (.pth file) you'd like to convert.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the folder to output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
+    )
+    parser.add_argument(
+        "--repo_id",
+        type=str,
+        help="repo_id where the model will be pushed to.",
+    )
+    args = parser.parse_args()
+    convert_dino_detr_checkpoint(
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.repo_id,
+    )

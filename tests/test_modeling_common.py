@@ -667,7 +667,9 @@ def _deepspeed_zero3(ds_config):
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     if version.parse(torch.__version__).release < version.parse("2.3").release:
         return torch.backends.cuda.sdp_kernel(
-            enable_flash=enable_flash, enable_math=enable_math, enable_mem_efficient=enable_mem_efficient
+            enable_flash=enable_flash,
+            enable_math=enable_math,
+            enable_mem_efficient=enable_mem_efficient,
         )
 
     backends = []
@@ -714,9 +716,11 @@ class ModelTesterMixin:
         inputs_dict = copy.deepcopy(inputs_dict)
         if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             inputs_dict = {
-                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim > 1
-                else v
+                k: (
+                    v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                    if isinstance(v, torch.Tensor) and v.ndim > 1
+                    else v
+                )
                 for k, v in inputs_dict.items()
             }
         elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
@@ -764,12 +768,16 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_CTC_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
             elif model_class.__name__ in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
-                    (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, num_patches**2),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
             elif model_class.__name__ in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
@@ -835,7 +843,8 @@ class ModelTesterMixin:
                 # the config file (and the generation config file, if it can generate) should be saved
                 self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
                 self.assertEqual(
-                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                    model.can_generate(),
+                    os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME)),
                 )
 
                 model = model_class.from_pretrained(tmpdirname)
@@ -969,7 +978,8 @@ class ModelTesterMixin:
             for n, m in model.named_modules():
                 if hasattr(m, "gradient_checkpointing"):
                     self.assertTrue(
-                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                        m.gradient_checkpointing,
+                        f"Module {n} does not have gradient_checkpointing set to True",
                     )
 
             # check disable works
@@ -980,7 +990,8 @@ class ModelTesterMixin:
             for n, m in model.named_modules():
                 if hasattr(m, "gradient_checkpointing"):
                     self.assertFalse(
-                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                        m.gradient_checkpointing,
+                        f"Module {n} does not have gradient_checkpointing set to False",
                     )
 
     def test_peft_gradient_checkpointing_enable_disable(self):
@@ -1007,7 +1018,8 @@ class ModelTesterMixin:
             for n, m in model.named_modules():
                 if hasattr(m, "gradient_checkpointing"):
                     self.assertTrue(
-                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to True"
+                        m.gradient_checkpointing,
+                        f"Module {n} does not have gradient_checkpointing set to True",
                     )
 
             # check disable works
@@ -1018,7 +1030,8 @@ class ModelTesterMixin:
             for n, m in model.named_modules():
                 if hasattr(m, "gradient_checkpointing"):
                     self.assertFalse(
-                        m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
+                        m.gradient_checkpointing,
+                        f"Module {n} does not have gradient_checkpointing set to False",
                     )
 
     def test_enable_input_require_grads(self):
@@ -1440,16 +1453,20 @@ class ModelTesterMixin:
                 slice_ids = [slice(0, index) for index in single_row_object.shape]
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
-                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                    torch.isnan(batched_row).any(),
+                    f"Batched output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                    torch.isinf(batched_row).any(),
+                    f"Batched output has `inf` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                    torch.isnan(single_row_object).any(),
+                    f"Single row output has `nan` in {model_name} for key={key}",
                 )
                 self.assertFalse(
-                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                    torch.isinf(single_row_object).any(),
+                    f"Single row output has `inf` in {model_name} for key={key}",
                 )
                 try:
                     torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
@@ -1676,12 +1693,21 @@ class ModelTesterMixin:
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        chunk_length,
+                        encoder_key_length,
+                    ],
                 )
             else:
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
             out_len = len(outputs)
 
@@ -1708,7 +1734,11 @@ class ModelTesterMixin:
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        decoder_key_length,
+                    ],
                 )
 
                 # cross attentions
@@ -1747,12 +1777,21 @@ class ModelTesterMixin:
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        chunk_length,
+                        encoder_key_length,
+                    ],
                 )
             else:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
     def test_hidden_states_output(self):
@@ -1767,7 +1806,9 @@ class ModelTesterMixin:
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -1944,8 +1985,14 @@ class ModelTesterMixin:
             # Check that it actually resizes the embeddings matrix
             if model.config.is_encoder_decoder:
                 encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
-                self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] + 10)
-                self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] + 10)
+                self.assertEqual(
+                    encoder_model_embed.weight.shape[0],
+                    encoder_cloned_embeddings.shape[0] + 10,
+                )
+                self.assertEqual(
+                    decoder_model_embed.weight.shape[0],
+                    decoder_cloned_embeddings.shape[0] + 10,
+                )
             else:
                 model_embed = model.get_position_embeddings()
                 self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
@@ -1961,8 +2008,14 @@ class ModelTesterMixin:
             # Check that it actually resizes the embeddings matrix
             if model.config.is_encoder_decoder:
                 encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
-                self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] - 5)
-                self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] - 5)
+                self.assertEqual(
+                    encoder_model_embed.weight.shape[0],
+                    encoder_cloned_embeddings.shape[0] - 5,
+                )
+                self.assertEqual(
+                    decoder_model_embed.weight.shape[0],
+                    decoder_cloned_embeddings.shape[0] - 5,
+                )
             else:
                 model_embed = model.get_position_embeddings()
                 self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 5)
@@ -2470,7 +2523,11 @@ class ModelTesterMixin:
                 # We are nuking ALL weights on file, so every parameter should
                 # yell on load. We're going to detect if we yell too much, or too little.
                 placeholder_dict = {"tensor": torch.tensor([1, 2])}
-                safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
+                safe_save_file(
+                    placeholder_dict,
+                    os.path.join(tmp_dir, "model.safetensors"),
+                    metadata={"format": "pt"},
+                )
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
                 params = dict(model_reloaded.named_parameters())
@@ -2545,7 +2602,9 @@ class ModelTesterMixin:
                     elif isinstance(tuple_object, torch.Tensor):
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -2590,7 +2649,10 @@ class ModelTesterMixin:
                 tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
                 check_equivalence(
-                    model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                    model,
+                    tuple_inputs,
+                    dict_inputs,
+                    {"output_hidden_states": True, "output_attentions": True},
                 )
 
     def test_inputs_embeds(self):
@@ -2667,9 +2729,15 @@ class ModelTesterMixin:
                 inputs_embeds = wte(encoder_input_ids)
                 decoder_inputs_embeds = wte(decoder_input_ids)
                 with torch.no_grad():
-                    out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
+                    out_ids = model(
+                        input_ids=encoder_input_ids,
+                        decoder_input_ids=decoder_input_ids,
+                        **inputs,
+                    )[0]
                     out_embeds = model(
-                        inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
+                        inputs_embeds=inputs_embeds,
+                        decoder_inputs_embeds=decoder_inputs_embeds,
+                        **inputs,
                     )[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
@@ -2888,8 +2956,16 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         problem_types = [
-            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.float},
-            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {
+                "title": "multi_label_classification",
+                "num_labels": 2,
+                "dtype": torch.float,
+            },
+            {
+                "title": "single_label_classification",
+                "num_labels": 1,
+                "dtype": torch.long,
+            },
             {"title": "regression", "num_labels": 1, "dtype": torch.float},
         ]
 
@@ -3393,7 +3469,12 @@ class ModelTesterMixin:
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.base_model
 
-                vision_model_names = {"visual", "image_tower", "vision_tower", "vision_model"}
+                vision_model_names = {
+                    "visual",
+                    "image_tower",
+                    "vision_tower",
+                    "vision_model",
+                }
                 language_model_names = {"language_model", "model", "text_model"}
                 vision_model_name = [name for name in vision_model_names if hasattr(model_sdpa, name)]
                 vision_model_name = vision_model_name[0] if len(vision_model_name) > 0 else None
@@ -3514,7 +3595,10 @@ class ModelTesterMixin:
                 inputs_dict.pop("decoder_attention_mask", None)
 
                 for name, inp in inputs_dict.items():
-                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [
+                        torch.float32,
+                        torch.float16,
+                    ]:
                         inputs_dict[name] = inp.to(torch.float16)
 
                 with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
@@ -3578,7 +3662,10 @@ class ModelTesterMixin:
                 inputs_dict.pop("attention_mask", None)
                 inputs_dict.pop("decoder_attention_mask", None)
                 for name, inp in inputs_dict.items():
-                    if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
+                    if isinstance(inp, torch.Tensor) and inp.dtype in [
+                        torch.float32,
+                        torch.float16,
+                    ]:
                         inputs_dict[name] = inp.to(torch.float16)
 
                 # use no_grad to save some memory
@@ -4012,7 +4099,10 @@ class ModelTesterMixin:
                 # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
                 # In case of outputs are different the error will be raised in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
-                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+                self.assertTrue(
+                    is_tested,
+                    msg=f"No outputs were compared for {model_class.__name__}",
+                )
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
