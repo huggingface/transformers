@@ -24,6 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, is_librosa_available, logging
 from ...utils.import_utils import requires
 
+
 logger = logging.get_logger(__name__)
 
 
