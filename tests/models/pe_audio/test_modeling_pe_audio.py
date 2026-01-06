@@ -17,6 +17,7 @@ from transformers import PeAudioConfig, PeAudioEncoderConfig
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -329,6 +330,10 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
         pass
+
+    @require_torch_gpu  # pe-audio contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch
