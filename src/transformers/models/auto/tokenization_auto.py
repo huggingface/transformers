@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Auto Tokenizer class."""
-from datasets import Value
 
 import importlib
 import json
@@ -661,8 +660,11 @@ class AutoTokenizer:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
             try:
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except ValueError as e :
-                if "Couldn't instantiate the backend tokenizer from one of:" in str(e) and tokenizer_config.get("tokenizer_class") is not None:
+            except ValueError as e:
+                if (
+                    "Couldn't instantiate the backend tokenizer from one of:" in str(e)
+                    and tokenizer_config.get("tokenizer_class") is not None
+                ):
                     config_tokenizer_class = tokenizer_config.get("tokenizer_class")
                 else:
                     raise e
