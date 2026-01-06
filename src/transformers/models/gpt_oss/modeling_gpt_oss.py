@@ -434,7 +434,7 @@ class GptOssPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = True
+    _supports_flex_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -444,8 +444,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "attentions": GptOssAttention,
     }
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
-    _supports_flash_attention = False
-    _supports_flex_attention = False
 
     @torch.no_grad()
     def _init_weights(self, module):
