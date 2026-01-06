@@ -5,6 +5,7 @@
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -12,7 +13,9 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -428,9 +431,9 @@ class VideoPrismSpatialEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_spatial_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -442,9 +445,9 @@ class VideoPrismTemporalEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_temporal_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
+            hidden_states = layer_module(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -453,7 +456,7 @@ class VideoPrismAuxiliaryEncoder(nn.Module):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(self.config.num_auxiliary_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
@@ -477,6 +480,32 @@ class VideoPrismTextEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
 @auto_docstring
 class VideoPrismPreTrainedModel(PreTrainedModel):
     config: VideoPrismConfig
@@ -495,38 +524,17 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
     ]
     _supports_sdpa = True
     _supports_flash_attn = True
-    _supports_flex_attn = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": VideoPrismLayer,
-        "attentions": VideoPrismSelfAttention,
-    }
+    _supports_flex_attention = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights"""
-
-        if getattr(module, "_is_hf_initialized", False):
-            return
-
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
-                module.bias.data.zero_()
-
-        elif isinstance(module, nn.Embedding):
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            lecun_normal_(module.weight)
+            init.zeros_(module.bias)
 
         elif isinstance(module, nn.LayerNorm):
-            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
-                module.bias.data.zero_()
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring

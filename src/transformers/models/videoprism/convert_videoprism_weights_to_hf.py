@@ -1,14 +1,24 @@
 import argparse
-from torch import nn
+import os
+import re
+
 import mediapy
 import numpy as np
 import torch
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file, save_file
-from transformers import VideoPrismConfig, VideoPrismTokenizer, VideoPrismVisionConfig, VideoPrismTextConfig, AutoModel, AutoConfig, AutoTokenizer
-from transformers.models.videoprism.modeling_videoprism import VideoPrismVisionModel, VideoPrismClipModel
-import re
-import os
+from torch import nn
+
+from transformers import (
+    AutoModel,
+    AutoTokenizer,
+    VideoPrismConfig,
+    VideoPrismTextConfig,
+    VideoPrismVisionConfig,
+)
+from transformers.models.videoprism.modeling_videoprism import VideoPrismClipModel, VideoPrismVisionModel
+
+
 torch.set_printoptions(precision=10)
 
 # backbone refers to VideoPrismVisionModel, lvt (original name) refers to VideoPrismClipModel
@@ -74,29 +84,26 @@ SENTENCES = [
 ]
 
 ORIGINAL_CHECKPOINTS = {
-    "backbone_base" : {
+    "backbone_base": {
         "repo_id": "google/videoprism-base-f16r288",
         "filename": "flax_base_f16r288_repeated.npz",
         "new_checkpoint_name": "videoprism-base-f16r288",
     },
-
-    "backbone_large" : {
+    "backbone_large": {
         "repo_id": "google/videoprism-large-f8r288",
         "filename": "flax_large_f8r288_repeated.npz",
         "new_checkpoint_name": "videoprism-large-f8r288",
     },
-
-    "lvt_base" : {
+    "lvt_base": {
         "repo_id": "google/videoprism-lvt-base-f16r288",
         "filename": "flax_lvt_base_f16r288_repeated.npz",
         "new_checkpoint_name": "videoprism-lvt-base-f16r288",
     },
-
-    "lvt_large" : {
+    "lvt_large": {
         "repo_id": "google/videoprism-lvt-large-f8r288",
         "filename": "flax_lvt_large_f8r288_repeated.npz",
         "new_checkpoint_name": "videoprism-lvt-large-f8r288",
-    }
+    },
 }
 
 EXPECTED_OUTPUTS = {
@@ -117,9 +124,15 @@ EXPECTED_OUTPUTS = {
     "lvt_base": {
         "vision": torch.tensor(
             [
-                -0.01940615,-0.04830061,0.0069022,
-                0.02915299,-0.05897291,0.02168823,
-                -0.01471708,-0.00971614,-0.00220576,
+                -0.01940615,
+                -0.04830061,
+                0.0069022,
+                0.02915299,
+                -0.05897291,
+                0.02168823,
+                -0.01471708,
+                -0.00971614,
+                -0.00220576,
             ]
         ),
         "text": torch.tensor(
@@ -135,9 +148,15 @@ EXPECTED_OUTPUTS = {
     "lvt_large": {
         "vision": torch.tensor(
             [
-                -0.00077759,0.00582959,-0.00158949,
-                0.04192347,-0.01581791,0.02410023,
-                -0.00364033,-0.02118852,0.00181754,
+                -0.00077759,
+                0.00582959,
+                -0.00158949,
+                0.04192347,
+                -0.01581791,
+                0.02410023,
+                -0.00364033,
+                -0.02118852,
+                0.00181754,
             ]
         ),
         "text": torch.tensor(
@@ -149,41 +168,39 @@ EXPECTED_OUTPUTS = {
                 [-0.00214194, -0.02825877, 0.01981462],
             ]
         ),
-    }
+    },
 }
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Vision Encoder
-    r"params(/vision_encoder)?/patch_projection/linear/(bias|kernel)"                                                                        : r"video_model.vision_encoder.spatial_embeddings.patch_embeddings.projection.\2", #? ok
-    r"params(/vision_encoder)?/(spatial|temporal)_pos_emb/emb_var"                                                                           : r"video_model.vision_encoder.\2_embeddings.position_embeddings", #? ok
-    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)"              : r"video_model.vision_encoder.\2_encoder.layer.intermediate.dense.\3", #? ok
-    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)"              : r"video_model.vision_encoder.\2_encoder.layer.output.dense.\3", #? ok
-    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/layer_norm/(bias|scale)"                      : r"video_model.vision_encoder.\2_encoder.layer.layernorm_after.\3", #? change scale to weight
-    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/layer_norm/(bias|scale)"                               : r"video_model.vision_encoder.\2_encoder.layer.layernorm_before.\3", #? change scale to weight
-    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/self_attention/(key|post|query|value)/(b|w)"           : r"video_model.vision_encoder.\2_encoder.layer.attention.attention.\3.\4", #? change attention.post to output.dense
-    r"params(/vision_encoder)?/(spatial|temporal)_ln/(bias|scale)"                                                                           : r"video_model.vision_encoder.layernorm\2.\3", #? ok
+    r"params(/vision_encoder)?/patch_projection/linear/(bias|kernel)": r"video_model.vision_encoder.spatial_embeddings.patch_embeddings.projection.\2",  # ? ok
+    r"params(/vision_encoder)?/(spatial|temporal)_pos_emb/emb_var": r"video_model.vision_encoder.\2_embeddings.position_embeddings",  # ? ok
+    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)": r"video_model.vision_encoder.\2_encoder.layer.intermediate.dense.\3",  # ? ok
+    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)": r"video_model.vision_encoder.\2_encoder.layer.output.dense.\3",  # ? ok
+    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/ff_layer/layer_norm/(bias|scale)": r"video_model.vision_encoder.\2_encoder.layer.layernorm_after.\3",  # ? change scale to weight
+    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/layer_norm/(bias|scale)": r"video_model.vision_encoder.\2_encoder.layer.layernorm_before.\3",  # ? change scale to weight
+    r"params(/vision_encoder)?/(spatial|temporal)_encoder/transformers_stack/x_layers/self_attention/(key|post|query|value)/(b|w)": r"video_model.vision_encoder.\2_encoder.layer.attention.attention.\3.\4",  # ? change attention.post to output.dense
+    r"params(/vision_encoder)?/(spatial|temporal)_ln/(bias|scale)": r"video_model.vision_encoder.layernorm\2.\3",  # ? ok
     # Auxiliary Encoder
-    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)"                                         : r"video_model.auxiliary_encoder.layer.intermediate.dense.\1", #? ok
-    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/layer_norm/(bias|scale)"                                                 : r"video_model.auxiliary_encoder.layer.layernorm_after.\1", #? change scale to weight
-    r"params/auxiliary_encoder/transformers_stack/x_layers/layer_norm/(bias|scale)"                                                          : r"video_model.auxiliary_encoder.layer.layernorm_before.\1", #? change scale to weight
-    r"params/auxiliary_encoder/transformers_stack/x_layers/self_attention/(key|post|query|value)/(b|w)"                                      : r"video_model.auxiliary_encoder.layer.attention.attention.\1.\2", #? change attention.post to output.dense
-    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)"                                         : r"video_model.auxiliary_encoder.layer.output.dense.\1", #? ok
-
+    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)": r"video_model.auxiliary_encoder.layer.intermediate.dense.\1",  # ? ok
+    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/layer_norm/(bias|scale)": r"video_model.auxiliary_encoder.layer.layernorm_after.\1",  # ? change scale to weight
+    r"params/auxiliary_encoder/transformers_stack/x_layers/layer_norm/(bias|scale)": r"video_model.auxiliary_encoder.layer.layernorm_before.\1",  # ? change scale to weight
+    r"params/auxiliary_encoder/transformers_stack/x_layers/self_attention/(key|post|query|value)/(b|w)": r"video_model.auxiliary_encoder.layer.attention.attention.\1.\2",  # ? change attention.post to output.dense
+    r"params/auxiliary_encoder/transformers_stack/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)": r"video_model.auxiliary_encoder.layer.output.dense.\1",  # ? ok
     # Attention Pooler
-    r"params/contrastive_vision_pooler/pooling_attention/(query|key|value|post)/(b|w)"                                                       : r"video_model.contrastive_vision_pooler.\1.\2", #? sub post with projection
-    r"params/contrastive_vision_pooler/pooling_attention/per_dim_scale/per_dim_scale"                                                        : r"video_model.contrastive_vision_pooler.per_dim_scale", #? ok but missing the buffer contrastive_vision_pooler.scale
-    r"params/contrastive_vision_pooler/pooling_attention_layer_norm/(bias|scale)"                                                            : r"video_model.contrastive_vision_pooler.layernorm.\1", #? scale to weight
-    r"params/contrastive_vision_pooler/pooling_attention_query"                                                                              : r"video_model.contrastive_vision_pooler.pooling_attention_query", #? ok
-
+    r"params/contrastive_vision_pooler/pooling_attention/(query|key|value|post)/(b|w)": r"video_model.contrastive_vision_pooler.\1.\2",  # ? sub post with projection
+    r"params/contrastive_vision_pooler/pooling_attention/per_dim_scale/per_dim_scale": r"video_model.contrastive_vision_pooler.per_dim_scale",  # ? ok but missing the buffer contrastive_vision_pooler.scale
+    r"params/contrastive_vision_pooler/pooling_attention_layer_norm/(bias|scale)": r"video_model.contrastive_vision_pooler.layernorm.\1",  # ? scale to weight
+    r"params/contrastive_vision_pooler/pooling_attention_query": r"video_model.contrastive_vision_pooler.pooling_attention_query",  # ? ok
     # Text Encoder
-    r"params/text_encoder/cls_emb"                                                                                                           : r"text_model.cls_emb", #? ok
-    r"params/text_encoder/token_emb/emb_var"                                                                                                 : r"text_model.token_embeddings.weight", #? ok
-    r"params/text_encoder/unimodal_ln/(bias|scale)"                                                                                          : r"text_model.layernorm.\1", #? scale to weight
-    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)"                                            : r"text_model.text_encoder.layer.intermediate.dense.\1", #? ok
-    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)"                                            : r"text_model.text_encoder.layer.output.dense.\1", #? ok
-    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/layer_norm/(bias|scale)"                                                    : r"text_model.text_encoder.layer.layernorm_after.\1", #? scale to weight
-    r"params/text_encoder/unimodal_transformer/x_layers/layer_norm/(bias|scale)"                                                             : r"text_model.text_encoder.layer.layernorm_before.\1", #? scale to weight
-    r"params/text_encoder/unimodal_transformer/x_layers/self_attention/(query|key|value|post)/(b|w)"                                         : r"text_model.text_encoder.layer.attention.attention.\1.\2", #? attention.post to output.dense
+    r"params/text_encoder/cls_emb": r"text_model.cls_emb",  # ? ok
+    r"params/text_encoder/token_emb/emb_var": r"text_model.token_embeddings.weight",  # ? ok
+    r"params/text_encoder/unimodal_ln/(bias|scale)": r"text_model.layernorm.\1",  # ? scale to weight
+    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer1/linear/(bias|kernel)": r"text_model.text_encoder.layer.intermediate.dense.\1",  # ? ok
+    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/ffn_layer2/linear/(bias|kernel)": r"text_model.text_encoder.layer.output.dense.\1",  # ? ok
+    r"params/text_encoder/unimodal_transformer/x_layers/ff_layer/layer_norm/(bias|scale)": r"text_model.text_encoder.layer.layernorm_after.\1",  # ? scale to weight
+    r"params/text_encoder/unimodal_transformer/x_layers/layer_norm/(bias|scale)": r"text_model.text_encoder.layer.layernorm_before.\1",  # ? scale to weight
+    r"params/text_encoder/unimodal_transformer/x_layers/self_attention/(query|key|value|post)/(b|w)": r"text_model.text_encoder.layer.attention.attention.\1.\2",  # ? attention.post to output.dense
 }
 
 
@@ -195,42 +212,55 @@ def download_flax_weights(checkpoint_info):
 
 
 def transform_block_params(key, param, hidden_size):
-    if re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/(key|query|value)/w", key):
+    if re.fullmatch(
+        r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/(key|query|value)/w",
+        key,
+    ):
         new_param = param.reshape(hidden_size, -1).T
-    
-    elif re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/post/w", key):
+
+    elif re.fullmatch(
+        r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/post/w",
+        key,
+    ):
         new_param = param.reshape(hidden_size, -1)
 
-    elif re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/(key|post|query|value)/b", key):
+    elif re.fullmatch(
+        r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/self_attention/(key|post|query|value)/b",
+        key,
+    ):
         new_param = param.reshape(-1)
 
-    elif re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/ff_layer/ffn_layer([12])/linear/kernel", key):
+    elif re.fullmatch(
+        r"params(/vision_encoder)?/(spatial|temporal|auxiliary|text)_encoder/(transformers_stack|unimodal_transformer)/x_layers/ff_layer/ffn_layer([12])/linear/kernel",
+        key,
+    ):
         new_param = param.T
 
     else:
         new_param = param
-    
+
     return new_param
+
 
 def transform_remaining_params(key, param, hidden_size):
     # Vision Encoder specific transformations
     if re.fullmatch(r"params(/vision_encoder)?/patch_projection/linear/kernel", key):
         # Hard-coded number of patches
         new_param = param.T.reshape(hidden_size, 1, 18, 18, 3).transpose(0, 4, 1, 2, 3)
-    
+
     elif re.fullmatch(r"params(/vision_encoder)?/(spatial|temporal)_pos_emb/emb_var", key):
         new_param = np.expand_dims(param, 0)
-    
+
     # Contrastive Vision Pooler specific transformations
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention_query", key):
         new_param = param.reshape(1, 1, -1)
-    
+
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/(query|key|value)/w", key):
         new_param = param.reshape(hidden_size, -1).T
-    
+
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/post/w", key):
         new_param = param.reshape(hidden_size, -1)
-    
+
     elif re.fullmatch(r"params/contrastive_vision_pooler/pooling_attention/(query|key|value|post)/b", key):
         new_param = param.reshape(-1)
 
@@ -246,21 +276,20 @@ def convert_params(flax_state_dict, model_name):
     if "lvt" in model_name:
         vision_config = COOMMON_CONFIG_PARAMS[model_name]["vision_config"]
         hidden_size = vision_config["hidden_size"]
-        text_config = COOMMON_CONFIG_PARAMS[model_name]["text_config"]
+        # text_config = COOMMON_CONFIG_PARAMS[model_name]["text_config"]
     else:
         config = COOMMON_CONFIG_PARAMS[model_name]
         hidden_size = config["hidden_size"]
 
     for key in flax_state_dict:
-
         for original_pattern, new_pattern in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
             if re.fullmatch(original_pattern, key):
                 try:
-                    new_key = re.sub(original_pattern, new_pattern , key)
+                    new_key = re.sub(original_pattern, new_pattern, key)
                 except Exception as e:
                     print(f"Error processing key: {key}")
                     raise e
-                
+
                 # Additional substitutions
                 new_key = re.sub(r"\.scale$", ".weight", new_key)
                 new_key = re.sub(r"attention\.post", "output.dense", new_key)
@@ -299,36 +328,36 @@ def convert_params(flax_state_dict, model_name):
 
 
 def read_and_preprocess_video(  # This function from the original code
-            filename: str, target_num_frames: int, target_frame_size: tuple[int, int]
-        ):
-            """Reads and preprocesses a video."""
+    filename: str, target_num_frames: int, target_frame_size: tuple[int, int]
+):
+    """Reads and preprocesses a video."""
 
-            frames = mediapy.read_video(filename)
+    frames = mediapy.read_video(filename)
 
-            # Sample to target number of frames.
-            frame_indices = np.linspace(0, len(frames), num=target_num_frames, endpoint=False, dtype=np.int32)
-            frames = np.array([frames[i] for i in frame_indices])
+    # Sample to target number of frames.
+    frame_indices = np.linspace(0, len(frames), num=target_num_frames, endpoint=False, dtype=np.int32)
+    frames = np.array([frames[i] for i in frame_indices])
 
-            # Resize to target size.
-            original_height, original_width = frames.shape[-3:-1]
-            target_height, target_width = target_frame_size
-            assert original_height * target_width == original_width * target_height, (
-                "Currently does not support aspect ratio mismatch."
-            )
-            frames = mediapy.resize_video(frames, shape=target_frame_size)
+    # Resize to target size.
+    original_height, original_width = frames.shape[-3:-1]
+    target_height, target_width = target_frame_size
+    assert original_height * target_width == original_width * target_height, (
+        "Currently does not support aspect ratio mismatch."
+    )
+    frames = mediapy.resize_video(frames, shape=target_frame_size)
 
-            # Normalize pixel values to [0.0, 1.0].
-            frames = mediapy.to_float01(frames)
+    # Normalize pixel values to [0.0, 1.0].
+    frames = mediapy.to_float01(frames)
 
-            return frames
+    return frames
 
 
 def get_tokenizer(checkpoint_name=None):
-    TEXT_QUERY_CSV = 'playing drums,sitting,playing flute,playing at playground,concert'  # @param {type: "string"}
-    PROMPT_TEMPLATE = 'a video of {}.'
+    TEXT_QUERY_CSV = "playing drums,sitting,playing flute,playing at playground,concert"  # @param {type: "string"}
+    PROMPT_TEMPLATE = "a video of {}."
 
-    text_queries = TEXT_QUERY_CSV.split(',')
-    text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]    
+    text_queries = TEXT_QUERY_CSV.split(",")
+    text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]
 
     tokenizer = AutoTokenizer.from_pretrained("MHRDYN7/" + checkpoint_name)
 
@@ -390,17 +419,19 @@ def convert_videoprism_checkpoint(
         flax_checkpoint = download_flax_weights(checkpoint)
         hf_checkpoint = convert_params(flax_checkpoint, model_name)
         save_file(hf_checkpoint, checkpoint_path, metadata={"format": "safetensors"})
-    
+
     if load_model:
         if not from_pretrained:
             model_config = vision_config if "lvt" not in model_name else VideoPrismConfig(text_config, vision_config)
-            model = VideoPrismVisionModel(model_config) if "lvt" not in model_name else VideoPrismClipModel(model_config)
-            
+            model = (
+                VideoPrismVisionModel(model_config) if "lvt" not in model_name else VideoPrismClipModel(model_config)
+            )
+
             model.config._attn_implementation = "eager"
             state_dict = load_file(checkpoint_path)
             model.load_state_dict(state_dict)
         else:
-            model = AutoModel.from_pretrained("MHRDYN7/" + checkpoint_name) # Hard-coded username of the contributer
+            model = AutoModel.from_pretrained("MHRDYN7/" + checkpoint_name)  # Hard-coded username of the contributer
             model.config._attn_implementation = "eager"
             model_config = model.config
 
@@ -421,7 +452,9 @@ def convert_videoprism_checkpoint(
         if "lvt" not in model_name:
             outputs = model(input_vid)
             logits = outputs.last_hidden_state[0, :3, :3]
-            assert torch.allclose(logits, EXPECTED_OUTPUTS[model_name], atol=1e-5), "The converted model logits do not match the expected logits."
+            assert torch.allclose(logits, EXPECTED_OUTPUTS[model_name], atol=1e-5), (
+                "The converted model logits do not match the expected logits."
+            )
             print("Inference successful and logits match expected outputs.")
 
         else:
@@ -435,14 +468,21 @@ def convert_videoprism_checkpoint(
             outputs = model(input_vid, input_ids, mask)
             video_logits = outputs.video_embeds[0, :9]
             text_logits = outputs.text_embeds[:, :3]
-            assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), "The converted model text logits do not match the expected logits."
-            assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), "The converted model video logits do not match the expected logits."
+            print(video_logits)
+            print(text_logits)
+            assert torch.allclose(video_logits, EXPECTED_OUTPUTS[model_name]["vision"], atol=1e-5), (
+                "The converted model video logits do not match the expected logits."
+            )
+            assert torch.allclose(text_logits, EXPECTED_OUTPUTS[model_name]["text"], atol=1e-5), (
+                "The converted model text logits do not match the expected logits."
+            )
             print("Inference successful and logits match expected outputs.")
 
     if upload:
         repo_id = f"MHRDYN7/{checkpoint_name}"
         model.push_to_hub(repo_id)
         print(f"Uploaded the model to the Hugging Face hub at {repo_id}.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -473,12 +513,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     convert_videoprism_checkpoint(
-        model_name="lvt_large",
+        model_name="backbone_base",
         pytorch_dump_folder_path=args.pytorch_dump_folder_path,
         convert=False,
         load_model=True,
-        from_pretrained=True, # if True, pulls the model weights from hub
-        from_tokenizer=True, # if True uses AutoTokenizer, otherwise loads custom ids
+        from_pretrained=True,  # if True, pulls the model weights from hub
+        from_tokenizer=True,  # if True uses AutoTokenizer, otherwise loads custom ids
         load_video=True,
         inference=True,
         upload=False,

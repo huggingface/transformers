@@ -7,7 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ...processing_utils import Unpack
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...utils import ModelOutput, auto_docstring, logging, torch_int, TransformersKwargs
 from ..t5.tokenization_t5 import T5Tokenizer
@@ -24,7 +25,7 @@ from ..vivit.modeling_vivit import (
 from ..llava_onevision.video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 from ..siglip.configuration_siglip import SiglipConfig
 from ..qwen3_next.modeling_qwen3_next import l2norm
-# from ..siglip.modeling_siglip import lecun_normal
+from ..siglip.modeling_siglip import lecun_normal_
 
 
 logger = logging.get_logger(__name__)
@@ -464,12 +465,6 @@ class VideoPrismSpatialEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_spatial_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
 
 class VideoPrismTemporalEncoder(VivitEncoder):
     def __init__(self, config: VideoPrismVisionConfig):
@@ -477,18 +472,12 @@ class VideoPrismTemporalEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_temporal_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
     
 class VideoPrismAuxiliaryEncoder(VivitEncoder):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         self.config = config
-        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(self.config.num_auxiliary_layers)])
+        self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range( config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
@@ -511,7 +500,7 @@ class VideoPrismTextEncoder(VivitEncoder):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 @auto_docstring
-class VideoPrismPreTrainedModel(VivitPreTrainedModel):
+class VideoPrismPreTrainedModel(PreTrainedModel):
     config: VideoPrismConfig
     base_model_prefix = "videoprism"
     main_input_name = "pixel_values_videos"
@@ -529,31 +518,17 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
+    _supports_flex_attention = True
 
     def _init_weights(self, module):
-        """Initialize the weights"""
-
-        if getattr(module, "_is_hf_initialized", False):
-            return
 
         if isinstance(module, (nn.Linear, nn.Conv3d)):
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            
-            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
-                module.bias.data.zero_()
-
-        elif isinstance(module, nn.Embedding):
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            lecun_normal_(module.weight)     
+            init.zeros_(module.bias)
 
         elif isinstance(module, nn.LayerNorm):
-            if module.bias is not None and not getattr(module.bias, "_is_hf_initialized", False):
-                module.bias.data.zero_()
-            if not getattr(module.weight, "_is_hf_initialized", False):
-                module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 @auto_docstring
