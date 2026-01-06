@@ -313,6 +313,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=dtype,
             attn_implementation=attn_implementation,
+            experts_implementation="eager",
             revision="refs/pr/10",
         )
 
@@ -549,6 +550,7 @@ class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=dtype,
             attn_implementation=attn_implementation,
+            experts_implementation="eager",
         )
 
     def test_small_model_integration_test(self):
