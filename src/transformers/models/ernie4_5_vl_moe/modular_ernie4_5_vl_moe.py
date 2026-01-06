@@ -1393,6 +1393,8 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         past_key_values=None,
         image_grid_thw=None,
         video_grid_thw=None,
+        use_cache=True,
+        is_first_iteration=False,
         # Intentionally ignore position ids to force custom cache logic
         position_ids=None,
         **kwargs,
@@ -1405,6 +1407,8 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
             past_key_values=past_key_values,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
@@ -1420,7 +1424,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
             mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
         )
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
             model_inputs["mm_token_type_ids"] = None
