@@ -430,6 +430,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
                 else self.config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, nn.Embedding):
             default_flax_embed_init(module.weight)
         elif isinstance(module, SiglipAttention):
@@ -465,6 +467,8 @@ class SiglipPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+        elif isinstance(module, SiglipTextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
@@ -502,9 +506,11 @@ class SiglipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class SiglipTextTransformer(nn.Module):
+class SiglipTextTransformer(SiglipPreTrainedModel):
+    _input_embed_layer = "token_embedding"
+
     def __init__(self, config: SiglipTextConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
         self.embeddings = SiglipTextEmbeddings(config)
@@ -512,6 +518,7 @@ class SiglipTextTransformer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.head = nn.Linear(embed_dim, config.projection_size)
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -614,6 +621,7 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 
 class SiglipVisionTransformer(SiglipPreTrainedModel):
+    _input_embed_layer = "patch_embedding"
     _can_record_outputs = {
         "hidden_states": SiglipEncoderLayer,
         "attentions": SiglipAttention,
@@ -775,6 +783,12 @@ class SiglipModel(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.embeddings.token_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.text_model.embeddings.token_embedding = value
 
     @filter_out_non_signature_kwargs()
     @auto_docstring
@@ -970,6 +984,12 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.vision_model.embeddings.patch_embedding = value
 
     @check_model_inputs
     @auto_docstring

@@ -198,11 +198,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
-        elif (
-            feature_extractor._processor_class
-            and feature_extractor._processor_class.endswith("WithLM")
-            and decoder is not None
-        ):
+        elif decoder is not None:
             self.decoder = decoder
             self.type = "ctc_with_lm"
         else:
