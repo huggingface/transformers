@@ -117,6 +117,10 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         # Also, reinit all non-persistemt buffers if any!
         if hasattr(module, "_init_buffers"):
             module._init_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """

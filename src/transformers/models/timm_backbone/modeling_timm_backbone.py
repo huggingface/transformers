@@ -16,20 +16,18 @@
 from typing import Optional, Union
 
 import torch
+from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, is_torch_available, requires_backends
+from ...utils import is_timm_available, requires_backends
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
 if is_timm_available():
     import timm
-
-
-if is_torch_available():
-    from torch import Tensor
 
 
 class TimmBackbone(PreTrainedModel, BackboneMixin):
@@ -121,6 +119,10 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
         if hasattr(module, "_init_buffers"):
             module._init_buffers()
+        elif isinstance(module, nn.BatchNorm2d):
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def forward(
         self,
