@@ -1308,9 +1308,6 @@ class ModelTesterMixin:
 
             # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            # Inputs may be on cuda -> move to torch_device, we usually don't care about accelerator for this test
-            inputs = {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
                 _ = model(**inputs)
