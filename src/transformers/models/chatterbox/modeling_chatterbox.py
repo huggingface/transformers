@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
-import librosa
 import numpy as np
 import torch
 import torch.nn as nn
@@ -34,6 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...models.s3gen.modeling_s3gen import S3GenModel
 from ...models.s3tokenizer.modeling_s3tokenizer import drop_invalid_tokens
 from ...utils import auto_docstring
+from ...utils import is_librosa_available
 from ..llama.modeling_llama import LlamaConfig, LlamaModel, LlamaPreTrainedModel
 from .configuration_chatterbox import ChatterboxConfig
 from .feature_extraction_chatterbox import (
@@ -42,6 +42,12 @@ from .feature_extraction_chatterbox import (
     melspectrogram_voice_encoder,
     stride_as_partials,
 )
+
+
+if is_librosa_available():
+    import librosa
+else:
+    librosa = None
 
 
 logger = logging.getLogger(__name__)
@@ -121,6 +127,11 @@ class VoiceEncoder(nn.Module):
         self, wavs: list[np.ndarray], sample_rate: int, overlap=0.5, rate: float = 1.3, batch_size=32
     ):
         """Extract embeddings from waveforms."""
+        if librosa is None:
+            raise ImportError(
+                "librosa is required for Chatterbox voice encoder preprocessing (resampling + trimming). "
+                "Please install it with `pip install librosa`."
+            )
         if sample_rate != self.config.sample_rate:
             wavs = [
                 librosa.resample(wav, orig_sr=sample_rate, target_sr=self.config.sample_rate, res_type="kaiser_fast")

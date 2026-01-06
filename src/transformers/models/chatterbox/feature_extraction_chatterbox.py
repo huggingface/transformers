@@ -19,13 +19,19 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Union
 
-import librosa
 import numpy as np
 import torch
 from numpy.lib.stride_tricks import as_strided
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...models.s3tokenizer.feature_extraction_s3tokenizer import S3TokenizerFeatureExtractor
+from ...utils import is_librosa_available
+
+
+if is_librosa_available():
+    import librosa
+else:
+    librosa = None
 
 
 class VoiceEncConfig:
@@ -56,6 +62,11 @@ class VoiceEncConfig:
 
 @lru_cache
 def _mel_basis_voice_encoder(hp: VoiceEncConfig):
+    if librosa is None:
+        raise ImportError(
+            "librosa is required to compute mel filters for Chatterbox voice encoder preprocessing. "
+            "Please install it with `pip install librosa`."
+        )
     assert hp.fmax <= hp.sample_rate // 2
     return librosa.filters.mel(
         sr=hp.sample_rate,
@@ -85,6 +96,11 @@ def _normalize_voice_encoder(s: np.ndarray, hp: VoiceEncConfig, headroom_db: flo
 
 
 def _stft_voice_encoder(y: np.ndarray, hp: VoiceEncConfig, pad: bool = True):
+    if librosa is None:
+        raise ImportError(
+            "librosa is required to compute STFT for Chatterbox voice encoder preprocessing. "
+            "Please install it with `pip install librosa`."
+        )
     # Match chatterbox: pad_mode="reflect" for historical/streaming consistency.
     return librosa.stft(
         y,
@@ -258,6 +274,11 @@ class ChatterboxFeatureExtractor(SequenceFeatureExtractor):
         ref_np = self._to_1d_float32_np(reference_wav)
 
         # Prepare audio for S3Gen (24kHz) and T3 components (16kHz).
+        if librosa is None:
+            raise ImportError(
+                "librosa is required to resample reference audio for Chatterbox conditioning. "
+                "Please install it with `pip install librosa`."
+            )
         if reference_sr != self.s3gen_sampling_rate:
             ref_24k = librosa.resample(ref_np, orig_sr=reference_sr, target_sr=self.s3gen_sampling_rate)
         else:
@@ -311,7 +332,4 @@ class ChatterboxFeatureExtractor(SequenceFeatureExtractor):
 
 __all__ = [
     "ChatterboxFeatureExtractor",
-    "VoiceEncConfig",
-    "melspectrogram_voice_encoder",
-    "stride_as_partials",
 ]

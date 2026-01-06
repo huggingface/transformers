@@ -270,6 +270,10 @@ If you use Chatterbox in your research, please cite:
 
 [[autodoc]] T3Config
 
+## ChatterboxFeatureExtractor
+
+[[autodoc]] ChatterboxFeatureExtractor
+
 ## ChatterboxModel
 
 [[autodoc]] ChatterboxModel
