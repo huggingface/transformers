@@ -1286,16 +1286,11 @@ class ModelTesterMixin:
                 f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
-    def test_all_tensors_are_parameter_or_buffer(
-        self,
-        non_meta_device: str = "cpu",
-        transfer_nested_tensors: bool = False,
-    ) -> None:
+    def test_all_tensors_are_parameter_or_buffer(self) -> None:
         """Check that all tensors are registered as Parameter or Buffer, i.e. we don't have simple assignments such
         as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not
         registered as parameter/buffer). To test this, we initialize the model on a meta device and then move it onto
-        the non_meta_device (cpu by default) and perform a forward pass. Since some models like modernbert cannot run on
-        CPU, we can specify a different device to test on."""
+        the torch_device and perform a forward pass."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1303,38 +1298,18 @@ class ModelTesterMixin:
             if "modeling_perceiver.py" in inspect.getfile(model_class):
                 _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            # Initialize the model fully on meta device, then move everything to non_meta_device and run `init_weights`
+            # Initialize the model fully on meta device, then move everything to torch_device and run `init_weights`
             with torch.device("meta"):
                 model = model_class(copy.deepcopy(config)).eval()
-            # Move everything randomly to non_meta_device
-            model.to_empty(device=non_meta_device)
+            # Move everything randomly to torch_device
+            model.to_empty(device=torch_device)
             # Now, run all the inits
             model.init_weights()
 
             # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            # Inputs may be on cuda -> move to non_meta_device, we usually don't care about accelerator for this test
-            inputs = {k: v.to(non_meta_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-
-            # Also transfer nested tensors if the flag is set (usefull for some model inputs like layoutlmv2)
-            if transfer_nested_tensors:
-                for name in list(inputs.keys()):
-                    input = inputs[name]
-                    # List and tuples
-                    if isinstance(input, (list, tuple)):
-                        inputs[name] = [(x.to(non_meta_device) if isinstance(x, torch.Tensor) else x) for x in input]
-                    # Dicts
-                    elif isinstance(input, dict):
-                        inputs[name] = {
-                            k: v.to(non_meta_device) if isinstance(v, torch.Tensor) else v for k, v in input.items()
-                        }
-                    # Other non-tensors types with tensors attributes
-                    elif not isinstance(input, torch.Tensor):
-                        for attr in dir(input):
-                            x = getattr(input, attr)
-                            if isinstance(x, torch.Tensor):
-                                setattr(input, attr, x.to(non_meta_device))
-                        inputs[name] = input
+            # Inputs may be on cuda -> move to torch_device, we usually don't care about accelerator for this test
+            inputs = {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
 
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:

@@ -329,7 +329,7 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_torch_gpu
     def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer(non_meta_device="cuda")
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

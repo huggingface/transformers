@@ -509,7 +509,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @require_torch_gpu
     def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer(non_meta_device="cuda")
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch
