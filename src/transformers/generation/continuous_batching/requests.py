@@ -222,8 +222,8 @@ class RequestState:
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens:] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[:self._true_initial_tokens]
+            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
