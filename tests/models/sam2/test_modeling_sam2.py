@@ -614,7 +614,9 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # TODO take a look at this
         # head size needs to be a multiple of 8 but needs more adjustments than our current `_prepare_config_headdim`
         if attn_implementation != "flash_attention_2":
-            self.skipTest(reason="Model fails for every other FA implementation than FA2 due to dim incompatibilities.")
+            self.skipTest(
+                reason="Model fails for every other FA implementation than FA2 due to dim incompatibilities."
+            )
 
         for model_class in self.all_model_classes:
             if not getattr(model_class, "_supports_flash_attn"):
