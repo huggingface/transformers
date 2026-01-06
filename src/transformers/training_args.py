@@ -584,7 +584,7 @@ class TrainingArguments:
             for a full list of optimizers.
         optim_args (`str`, *optional*):
             Optional arguments that are supplied to optimizers such as AnyPrecisionAdamW, AdEMAMix, and GaLore.
-        train_sampler (`str`, *optional*, defaults to `"random"`):
+        train_sampling_strategy (`str`, *optional*, defaults to `"random"`):
             The sampler to use for the training dataloader. Possible values are:
 
                 - `"random"`: Uses `RandomSampler` (default).
@@ -592,10 +592,10 @@ class TrainingArguments:
                 - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
                   together (to minimize padding and be more efficient).
 
-            Note: When using an `IterableDataset`, this argument is ignored and a warning is raised.
+            Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `train_sampler` is `"group_by_length"` and the dataset
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
             is an instance of `Dataset`.
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
@@ -1188,8 +1188,8 @@ class TrainingArguments:
         default=default_optim,
         metadata={"help": "The optimizer to use."},
     )
-    optim_args: Optional[str] = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
-    train_sampler: str = field(
+    optim_args: str | None = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
+    train_sampling_strategy: str = field(
         default="random",
         metadata={
             "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
