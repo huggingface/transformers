@@ -3922,10 +3922,6 @@ class ModelTesterMixin:
 
         model = cls(config).to(torch_device)
 
-        if model.config._experts_implementation == "grouped_mm" and model.dtype != torch.bfloat16:
-            # torch._grouped_mm still only supports bfloat16 when used with torch.compile
-            model.set_experts_implementation("batched_mm")
-
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
             "attention_mask": torch.tensor(
