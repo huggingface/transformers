@@ -35,6 +35,23 @@ NestedList = list[Union[Optional[float | int], "NestedList"]]
 
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):
+    """
+    segmentation_maps (`<fill_type>`):
+        <fill_docstring>
+    input_points (`<fill_type>`):
+        <fill_docstring>
+    input_labels (`<fill_type>`):
+        <fill_docstring>
+    input_boxes (`<fill_type>`):
+        <fill_docstring>
+    point_pad_value (`<fill_type>`):
+        <fill_docstring>
+    mask_size (`<fill_type>`):
+        <fill_docstring>
+    mask_pad_size (`<fill_type>`):
+        <fill_docstring>
+    """
+
     segmentation_maps: Optional[ImageInput]
     input_points: Optional[NestedList]
     input_labels: Optional[NestedList]

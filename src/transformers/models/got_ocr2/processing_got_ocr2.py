@@ -33,10 +33,32 @@ logger = logging.get_logger(__name__)
 
 
 class GotOcr2TextKwargs(TextKwargs, total=False):
+    """
+    format (`<fill_type>`):
+        <fill_docstring>
+    """
+
     format: Optional[bool]
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`<fill_type>`):
+        <fill_docstring>
+    min_patches (`<fill_type>`):
+        <fill_docstring>
+    max_patches (`<fill_type>`):
+        <fill_docstring>
+    box (`<fill_type>`):
+        <fill_docstring>
+    color (`<fill_type>`):
+        <fill_docstring>
+    num_image_tokens (`<fill_type>`):
+        <fill_docstring>
+    multi_page (`<fill_type>`):
+        <fill_docstring>
+    """
+
     crop_to_patches: bool
     min_patches: int
     max_patches: int
@@ -123,7 +145,7 @@ class GotOcr2Processor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

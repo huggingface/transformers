@@ -71,7 +71,7 @@ class Qwen2VLProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Qwen2VLProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

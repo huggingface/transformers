@@ -72,6 +72,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "lasr": "LasrCTCConfig",
+    "wav2vec2-with-lm": "Wav2Vec2Config",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -321,6 +322,16 @@ class ProcessorArgs:
     In case of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
     and T is the sample length of the audio.
     """,
+    }
+
+    return_tensors = {
+        "description": """
+    If set, will return tensors of a particular framework. Acceptable values are:
+
+    - `'pt'`: Return PyTorch `torch.Tensor` objects.
+    - `'np'`: Return NumPy `np.ndarray` objects.
+    """,
+        "shape": None,
     }
 
 
@@ -1519,15 +1530,8 @@ def _process_regular_parameters(
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    # Check if this is a processor (check both parent_class and class_name for "Processor")
-    is_processor = False
-    if parent_class is not None:
-        is_processor = "ProcessorMixin" in parent_class.__name__ or any(
-            "ProcessorMixin" in base.__name__ for base in parent_class.__mro__
-        )
-    elif class_name and "Processor" in class_name:
-        # When decorating methods directly, check if class name suggests it's a processor
-        is_processor = True
+    # Check if this is a processor by inspecting class hierarchy
+    is_processor = _is_processor_class(func, parent_class)
 
     # Use appropriate args source based on whether it's a processor or not
     if source_args_dict is None:
@@ -1611,6 +1615,47 @@ def find_sig_line(lines, line_end):
     return sig_line_end
 
 
+def _is_processor_class(func, parent_class):
+    """
+    Check if a function belongs to a ProcessorMixin class.
+
+    Uses two methods:
+    1. Check parent_class inheritance (if provided)
+    2. Check if the source file is named processing_*.py (multimodal processors)
+       vs image_processing_*.py, video_processing_*.py, etc. (single-modality processors)
+
+    Args:
+        func: The function to check
+        parent_class: Optional parent class (if available)
+
+    Returns:
+        bool: True if this is a multimodal processor (inherits from ProcessorMixin), False otherwise
+    """
+    # First, check if parent_class is provided and use it
+    if parent_class is not None:
+        return "ProcessorMixin" in parent_class.__name__ or any(
+            "ProcessorMixin" in base.__name__ for base in parent_class.__mro__
+        )
+
+    # If parent_class is None, check the filename
+    # Multimodal processors are in files named "processing_*.py"
+    # Single-modality processors are in "image_processing_*.py", "video_processing_*.py", etc.
+    try:
+        source_file = inspect.getsourcefile(func)
+        if source_file:
+            filename = os.path.basename(source_file)
+            # Check if it's a processing file (processing_*.py) but NOT a single-modality processor
+            # Single-modality processors: image_processing_*.py, video_processing_*.py, feature_extraction_*.py
+            if filename.startswith("processing_") and filename.endswith(".py"):
+                # This is a multimodal processor file
+                return True
+    except Exception:
+        pass
+
+    # Default to False (conservative approach)
+    return False
+
+
 def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters):
     """
     Process **kwargs parameters if needed.
@@ -1625,15 +1670,8 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     """
     docstring = ""
 
-    # Check if this is a processor (has ProcessorMixin in parent class hierarchy or class name contains "Processor")
-    is_processor = False
-    if parent_class is not None:
-        is_processor = "ProcessorMixin" in parent_class.__name__ or any(
-            "ProcessorMixin" in base.__name__ for base in parent_class.__mro__
-        )
-    # Also check by function's qualified name when decorating methods directly
-    elif "Processor" in func.__qualname__:
-        is_processor = True
+    # Check if this is a processor by inspecting class hierarchy
+    is_processor = _is_processor_class(func, parent_class)
 
     # Use appropriate args source based on whether it's a processor or not
     if is_processor:
@@ -1828,6 +1866,43 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     return docstring
 
 
+def _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level):
+    """
+    Add return_tensors parameter documentation for processor __call__ methods if not already present.
+
+    Args:
+        func (`function`): Function being processed
+        parent_class (`class`): Parent class of the function
+        docstring (`str`): Current docstring being built
+        indent_level (`int`): Indentation level
+
+    Returns:
+        str: Updated docstring with return_tensors if applicable
+    """
+    # Check if this is a processor __call__ method
+    is_processor_call = False
+    if func.__name__ == "__call__":
+        # Check if this is a processor by inspecting class hierarchy
+        is_processor_call = _is_processor_class(func, parent_class)
+
+    # If it's a processor __call__ method and return_tensors is not already documented
+    if is_processor_call and "return_tensors" not in docstring:
+        # Get the return_tensors documentation from ImageProcessorArgs
+        source_args_dict = get_args_doc_from_source(ProcessorArgs)
+        return_tensors_info = source_args_dict["return_tensors"]
+        param_type = return_tensors_info.get("type", "`str` or [`~utils.TensorType`]")
+        description = return_tensors_info["description"]
+
+        # Format the parameter type
+        param_type = param_type if "`" in param_type else f"`{param_type}`"
+
+        # Format the parameter docstring
+        param_docstring = f"return_tensors ({param_type}, *optional*):{description}"
+        docstring += set_min_indent(param_docstring, indent_level + 8)
+
+    return docstring
+
+
 def _process_parameters_section(
     func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
 ):
@@ -1864,6 +1939,9 @@ def _process_parameters_section(
         sig, func, parent_class, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
+
+    # Add return_tensors for processor __call__ methods if not already present
+    docstring = _add_return_tensors_for_processor_call(func, parent_class, docstring, indent_level)
 
     # Report undocumented parameters
     if len(undocumented_parameters) > 0:

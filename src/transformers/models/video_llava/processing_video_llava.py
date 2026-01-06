@@ -46,7 +46,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         num_additional_image_tokens=1,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*, defaults to 14):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -80,7 +80,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
-        """
+        r"""
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding
             index) among:
@@ -90,10 +90,10 @@ class VideoLlavaProcessor(ProcessorMixin):
                 acceptable input length for the model if that argument is not provided.
             - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                 lengths).
-        max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
         truncation (`bool`, *optional*):
             Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+        max_length (`int`, *optional*):
+            Maximum length of the returned list and optionally padding length (see above).
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class InstructBlipVideoProcessor(ProcessorMixin):
     def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        """
+        r"""
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
         num_query_tokens (`int`, *optional*):
@@ -73,6 +73,34 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
+        r"""
+        add_special_tokens (<fill_type>):
+            <fill_docstring>
+        padding (<fill_type>):
+            <fill_docstring>
+        truncation (<fill_type>):
+            <fill_docstring>
+        max_length (<fill_type>):
+            <fill_docstring>
+        stride (<fill_type>):
+            <fill_docstring>
+        pad_to_multiple_of (<fill_type>):
+            <fill_docstring>
+        return_attention_mask (<fill_type>):
+            <fill_docstring>
+        return_overflowing_tokens (<fill_type>):
+            <fill_docstring>
+        return_special_tokens_mask (<fill_type>):
+            <fill_docstring>
+        return_offsets_mapping (<fill_type>):
+            <fill_docstring>
+        return_token_type_ids (<fill_type>):
+            <fill_docstring>
+        return_length (<fill_type>):
+            <fill_docstring>
+        verbose (<fill_type>):
+            <fill_docstring>
+        """
         if images is None and text is None:
             raise ValueError("You have to specify at least one of images or text.")
 

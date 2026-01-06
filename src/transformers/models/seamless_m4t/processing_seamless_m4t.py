@@ -29,6 +29,13 @@ logger = logging.get_logger(__name__)
 
 
 class SeamlessM4TTextKwargs(TextKwargs):
+    """
+    src_lang (`<fill_type>`):
+        <fill_docstring>
+    tgt_lang (`<fill_type>`):
+        <fill_docstring>
+    """
+
     src_lang: Optional[str]
     tgt_lang: Optional[str]
 
@@ -52,7 +59,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        """
+        r"""
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 

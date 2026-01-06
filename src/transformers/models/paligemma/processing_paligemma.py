@@ -136,32 +136,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        The usage for PaliGemma fine-tuning preparation is slightly different than usual. suffix passed are suffixes to
-        the prompt in `text`, and will be placed after the prompt. This is because attention is handled differently for
-        the prefix and the suffix. For instance,
-        ```python
-        image = PIL_cow_image
-        prompt = "answer en Where is the cow standing?"
-        suffix = "on the beach"
-        inputs = processor(text=prompt, images=image, suffix=suffix)
-        ```
-        Here `inputs` will contain the `input_ids` and `token_type_ids` that follow
-        ```python
-        inputs["input_ids"][:, 256:]
-        # tensor([[     2,   6006,    603,    573,  13910,   9980, 235336,    108,    477,   573,   8318]])
-        inputs["token_type_ids"][:, 256:]
-        tensor([[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]])
-        ```
-        Meaning the last three tokens are of "label" ("suffix") type while the other ones are of "prefix" type.
-
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

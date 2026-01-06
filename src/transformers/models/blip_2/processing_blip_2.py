@@ -48,7 +48,7 @@ class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Blip2Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
-        """
+        r"""
         num_query_tokens (`int`, *optional*):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
         """

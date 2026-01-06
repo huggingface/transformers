@@ -48,12 +48,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         tokenizer,
         **kwargs,
     ):
-        r"""
-        fake_image_token_pattern (`str`, *optional*, defaults to `r"<\|image_\d+\|>"`):
-            The fake image token pattern.
-        fake_audio_token_pattern (`str`, *optional*, defaults to `r"<\|audio_\d+\|>"`):
-            The fake audio token pattern.
-        """
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
         self.audio_token = tokenizer.audio_token
@@ -68,7 +62,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

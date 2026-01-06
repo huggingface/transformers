@@ -36,6 +36,11 @@ DEFAULT_SYSTEM_PROMPT = (
 
 
 class JanusTextKwargs(TextKwargs, total=False):
+    """
+    generation_mode (`<fill_type>`):
+        <fill_docstring>
+    """
+
     generation_mode: str
 
 
@@ -50,7 +55,7 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=False, **kwargs):
-        """
+        r"""
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Use default system prompt for Text Generation.
         """
@@ -69,7 +74,7 @@ class JanusProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

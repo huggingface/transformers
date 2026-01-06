@@ -50,6 +50,24 @@ class Pop2PianoProcessor(ProcessorMixin):
     ) -> Union[BatchFeature, BatchEncoding]:
         # Since Feature Extractor needs both audio and sampling_rate and tokenizer needs both token_ids and
         # feature_extractor_output, we must check for both.
+        r"""
+        sampling_rate (<fill_type>):
+            <fill_docstring>
+        steps_per_beat (<fill_type>):
+            <fill_docstring>
+        notes (<fill_type>):
+            <fill_docstring>
+        padding (<fill_type>):
+            <fill_docstring>
+        truncation (<fill_type>):
+            <fill_docstring>
+        max_length (<fill_type>):
+            <fill_docstring>
+        pad_to_multiple_of (<fill_type>):
+            <fill_docstring>
+        verbose (<fill_type>):
+            <fill_docstring>
+        """
         if (audio is None and sampling_rate is None) and (notes is None):
             raise ValueError(
                 "You have to specify at least audios and sampling_rate in order to use feature extractor or "

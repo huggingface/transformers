@@ -30,11 +30,11 @@ class OneFormerProcessor(ProcessorMixin):
     def __init__(
         self, image_processor=None, tokenizer=None, max_seq_length: int = 77, task_seq_length: int = 77, **kwargs
     ):
-        """
-        max_seq_len (`int`, *optional*, defaults to 77)):
-            Sequence length for input text list.
-        task_seq_len (`int`, *optional*, defaults to 77):
-            Sequence length for input task token.
+        r"""
+        max_seq_length (<fill_type>):
+            <fill_docstring>
+        task_seq_length (<fill_type>):
+            <fill_docstring>
         """
         self.max_seq_length = max_seq_length
         self.task_seq_length = task_seq_length
@@ -59,7 +59,9 @@ class OneFormerProcessor(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, images=None, task_inputs=None, segmentation_maps=None, **kwargs):
-        """
+        r"""
+        task_inputs (<fill_type>):
+            <fill_docstring>
         segmentation_maps (`ImageInput`, *optional*):
             The corresponding semantic segmentation maps with the pixel-wise annotations.
 

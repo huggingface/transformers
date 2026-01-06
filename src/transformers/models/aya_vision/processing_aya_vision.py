@@ -56,7 +56,7 @@ class AyaVisionProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
@@ -123,7 +123,7 @@ class AyaVisionProcessor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[AyaVisionProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

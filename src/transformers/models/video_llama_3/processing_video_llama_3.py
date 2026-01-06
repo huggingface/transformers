@@ -68,7 +68,7 @@ class VideoLlama3Processor(ProcessorMixin):
         videos: VideoInput = None,
         **kwargs: Unpack[VideoLlama3ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

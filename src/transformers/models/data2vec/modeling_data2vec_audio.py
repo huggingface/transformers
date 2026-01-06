@@ -815,12 +815,6 @@ _HIDDEN_STATES_START_POSITION = 2
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     def __init__(self, config):
-        r"""
-        target_lang (`str`, *optional*):
-            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
-            adapter.<lang>.bin. Only relevant when using an instance of [`Data2VecAudioForCTC`] with adapters. Uses 'eng' by
-            default.
-        """
         super().__init__(config)
 
         self.data2vec_audio = Data2VecAudioModel(config)

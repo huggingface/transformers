@@ -34,6 +34,11 @@ from ...utils.auto_docstring import auto_docstring
 
 
 class ChameleonTextKwargs(TextKwargs, total=False):
+    """
+    return_for_text_completion (`<fill_type>`):
+        <fill_docstring>
+    """
+
     return_for_text_completion: bool
 
 
@@ -54,7 +59,7 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class ChameleonProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
-        """
+        r"""
         image_seq_length (`int`, *optional*, defaults to 1024):
             Sequence length of one image embedding.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -81,7 +86,7 @@ class ChameleonProcessor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

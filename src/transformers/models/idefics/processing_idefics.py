@@ -40,6 +40,13 @@ IMAGE_TOKEN = "<image>"
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
+    """
+    add_eos_token (`<fill_type>`):
+        <fill_docstring>
+    add_end_of_utterance_token (`<fill_type>`):
+        <fill_docstring>
+    """
+
     add_eos_token: Optional[bool]
     add_end_of_utterance_token: Optional[bool]
 
@@ -138,7 +145,7 @@ def is_url(string):
 @auto_docstring
 class IdeficsProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
-        """
+        r"""
         image_size (int, *optional*, defaults to 224):
             The size of the image to be processed.
         add_end_of_utterance_token (bool, *optional*, defaults to None):
@@ -175,7 +182,7 @@ class IdeficsProcessor(ProcessorMixin):
         ] = None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
             directly passed to `model.generate`

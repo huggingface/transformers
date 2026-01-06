@@ -30,6 +30,11 @@ if is_vision_available():
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
+    """
+    return_for_image_generation (`<fill_type>`):
+        <fill_docstring>
+    """
+
     return_for_image_generation: bool
 
 
@@ -74,7 +79,7 @@ class Emu3Processor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

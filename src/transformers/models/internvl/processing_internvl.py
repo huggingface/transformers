@@ -51,7 +51,7 @@ class InternVLProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        """
+        r"""
         image_seq_length (`int`, *optional*, defaults to 256):
             The number of image token to use per image patch. it should be set so that:
             image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
@@ -140,7 +140,7 @@ class InternVLProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[InternVLProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

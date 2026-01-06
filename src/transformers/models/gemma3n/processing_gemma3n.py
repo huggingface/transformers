@@ -42,7 +42,7 @@ class Gemma3nProcessor(ProcessorMixin):
         image_seq_length: int = 256,
         **kwargs,
     ):
-        """
+        r"""
         audio_seq_length (int, *optional*, defaults to 188):
             The number of audio soft tokens that will be added to the text prompt
         image_seq_length (int, *optional*, defaults to 256):

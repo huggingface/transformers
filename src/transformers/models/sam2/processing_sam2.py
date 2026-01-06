@@ -39,7 +39,9 @@ if is_torch_available():
 @auto_docstring
 class Sam2Processor(ProcessorMixin):
     def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
-        """
+        r"""
+        target_size (<fill_type>):
+            <fill_docstring>
         point_pad_value (`int`, *optional*, defaults to -10):
             The value used for padding input points.
         """
@@ -59,7 +61,7 @@ class Sam2Processor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        """
+        r"""
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to process.
         input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):

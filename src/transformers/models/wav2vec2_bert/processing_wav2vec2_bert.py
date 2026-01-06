@@ -39,7 +39,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
     ):
-        """
+        r"""
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.

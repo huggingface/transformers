@@ -48,7 +48,7 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
-        """
+        r"""
         num_image_tokens (`int`, *optional*, defaults to 2048):
             Number of image tokens used as a placeholder.
         """

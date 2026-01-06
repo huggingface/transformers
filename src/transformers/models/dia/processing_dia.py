@@ -33,6 +33,19 @@ if is_soundfile_available():
 
 
 class DiaAudioKwargs(AudioKwargs, total=False):
+    """
+    bos_token_id (`<fill_type>`):
+        <fill_docstring>
+    eos_token_id (`<fill_type>`):
+        <fill_docstring>
+    pad_token_id (`<fill_type>`):
+        <fill_docstring>
+    delay_pattern (`<fill_type>`):
+        <fill_docstring>
+    generation (`<fill_type>`):
+        <fill_docstring>
+    """
+
     bos_token_id: int
     eos_token_id: int
     pad_token_id: int
@@ -67,7 +80,7 @@ class DiaProcessor(ProcessorMixin):
     audio_tokenizer_class = "DacModel"
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
-        """
+        r"""
         audio_tokenizer (`DacModel`):
             An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
         """
@@ -81,6 +94,10 @@ class DiaProcessor(ProcessorMixin):
         output_labels: Optional[bool] = False,
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
+        r"""
+        output_labels (<fill_type>):
+            <fill_docstring>
+        """
         if not is_torch_available():
             raise ValueError(
                 "The `DiaProcessor` relies on the `audio_tokenizer` which requires `torch` but we couldn't "

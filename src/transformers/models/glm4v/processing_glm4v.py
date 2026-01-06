@@ -70,7 +70,7 @@ class Glm4vProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

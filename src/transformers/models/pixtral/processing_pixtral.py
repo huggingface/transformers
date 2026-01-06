@@ -95,7 +95,7 @@ class PixtralProcessor(ProcessorMixin):
         image_end_token="[IMG_END]",
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*, defaults to 16):
             Patch size from the vision tower.
         spatial_merge_size (`int`, *optional*, defaults to 1):
@@ -126,7 +126,7 @@ class PixtralProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[PixtralProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

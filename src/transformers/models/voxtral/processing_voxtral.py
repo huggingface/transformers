@@ -39,10 +39,16 @@ logger = logging.get_logger(__name__)
 
 
 class VoxtralAudioKwargs(AudioKwargs, total=False):
+    """
+    max_source_positions (`int`, *optional*, defaults to `3000`):
+        Maximum number of positions per chunk when splitting mel spectrogram features along the time dimension.
+    """
+
     max_source_positions: Optional[int]
 
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: VoxtralAudioKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -216,20 +222,21 @@ class VoxtralProcessor(ProcessorMixin):
 
         return encoded_instruct_inputs
 
-    @auto_docstring
+    @auto_docstring(
+        custom_intro=r"""
+    Method to prepare text to be fed as input to the model. This method forwards the `text`
+    arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
+    the text. Please refer to the docstring of the above methods for more information.
+    This method does not support audio. To prepare the audio, please use:
+    1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
+    2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
+    """
+    )
     def __call__(
         self,
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
-        r"""
-        Method to prepare text to be fed as input to the model. This method forwards the `text`
-        arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
-        the text. Please refer to the docstring of the above methods for more information.
-        This methods does not support audio. To prepare the audio, please use:
-        1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
-        """
         if isinstance(text, str):
             text = [text]
 

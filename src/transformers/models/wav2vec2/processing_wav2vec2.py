@@ -40,7 +40,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
-        """
+        r"""
         Returns:
             This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
         """

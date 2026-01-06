@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 
 
 class OwlViTImagesKwargs(ImagesKwargs, total=False):
+    """
+    query_images (`<fill_type>`):
+        <fill_docstring>
+    """
+
     query_images: Optional[ImageInput]
 
 
@@ -65,12 +70,7 @@ class OwlViTProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[OwlViTProcessorKwargs],
     ) -> BatchFeature:
-        """
-        query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-            The query image to be prepared, one query image is expected per target image to be queried. Each image
-            can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
-            should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.

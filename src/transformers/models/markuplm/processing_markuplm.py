@@ -56,6 +56,44 @@ class MarkupLMProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         # first, create nodes and xpaths
+        r"""
+        html_strings (<fill_type>):
+            <fill_docstring>
+        nodes (<fill_type>):
+            <fill_docstring>
+        xpaths (<fill_type>):
+            <fill_docstring>
+        node_labels (<fill_type>):
+            <fill_docstring>
+        questions (<fill_type>):
+            <fill_docstring>
+        add_special_tokens (<fill_type>):
+            <fill_docstring>
+        padding (<fill_type>):
+            <fill_docstring>
+        truncation (<fill_type>):
+            <fill_docstring>
+        max_length (<fill_type>):
+            <fill_docstring>
+        stride (<fill_type>):
+            <fill_docstring>
+        pad_to_multiple_of (<fill_type>):
+            <fill_docstring>
+        return_token_type_ids (<fill_type>):
+            <fill_docstring>
+        return_attention_mask (<fill_type>):
+            <fill_docstring>
+        return_overflowing_tokens (<fill_type>):
+            <fill_docstring>
+        return_special_tokens_mask (<fill_type>):
+            <fill_docstring>
+        return_offsets_mapping (<fill_type>):
+            <fill_docstring>
+        return_length (<fill_type>):
+            <fill_docstring>
+        verbose (<fill_type>):
+            <fill_docstring>
+        """
         if self.parse_html:
             if html_strings is None:
                 raise ValueError("Make sure to pass HTML strings in case `parse_html` is set to `True`")

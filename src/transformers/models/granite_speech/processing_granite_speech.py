@@ -39,9 +39,9 @@ class GraniteSpeechProcessor(ProcessorMixin):
         audio_token="<|audio|>",
         chat_template=None,
     ):
-        """
-        audio_toke (str, *optional*, defaults to "<|audio|>"):
-            The audio token to use for the processor.
+        r"""
+        audio_token (<fill_type>):
+            <fill_docstring>
         """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(audio_processor, tokenizer, chat_template=chat_template)

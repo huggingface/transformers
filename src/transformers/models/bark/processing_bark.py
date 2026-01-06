@@ -43,14 +43,13 @@ class BarkProcessor(ProcessorMixin):
     }
 
     def __init__(self, tokenizer, speaker_embeddings=None):
-        """
+        r"""
         speaker_embeddings (`dict[dict[str]]`, *optional*):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
             `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
             embeddings. The values correspond to the path of the corresponding `np.ndarray`. See
             [here](https://suno-ai.notion.site/8b8e8749ed514b0cbf3f699013548683?v=bc67cff786b04b50b3ceb756fd05f68c) for
             a list of `voice_preset_names`.
-
         """
         super().__init__(tokenizer)
 
@@ -268,12 +267,20 @@ class BarkProcessor(ProcessorMixin):
         return_token_type_ids=False,
         **kwargs,
     ) -> BatchEncoding:
-        """
+        r"""
         voice_preset (`str`, `dict[np.ndarray]`):
             The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
             `"en_speaker_1"`, or directly a dictionary of `np.ndarray` embeddings for each submodel of `Bark`. Or
             it can be a valid file name of a local `.npz` single voice preset containing the keys
             `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`.
+        max_length (<fill_type>):
+            <fill_docstring>
+        add_special_tokens (<fill_type>):
+            <fill_docstring>
+        return_attention_mask (<fill_type>):
+            <fill_docstring>
+        return_token_type_ids (<fill_type>):
+            <fill_docstring>
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] object containing the output of the `tokenizer`.

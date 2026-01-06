@@ -83,7 +83,7 @@ class ColPaliProcessor(ProcessorMixin):
         visual_prompt_prefix: str = "Describe the image.",
         query_prefix: str = "Question: ",
     ):
-        """
+        r"""
         visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
             A string that gets tokenized and prepended to the image tokens.
         query_prefix (`str`, *optional*, defaults to `"Question: "`):
@@ -119,7 +119,7 @@ class ColPaliProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

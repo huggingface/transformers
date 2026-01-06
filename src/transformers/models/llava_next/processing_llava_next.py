@@ -62,7 +62,7 @@ class LlavaNextProcessor(ProcessorMixin):
         num_additional_image_tokens=0,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
@@ -92,7 +92,7 @@ class LlavaNextProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[LlavaNextProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

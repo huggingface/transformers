@@ -43,7 +43,7 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
         chat_template=None,
         num_image_tokens=576,
     ):
-        """
+        r"""
         num_image_tokens (`int`, *optional*, defaults to 576):
             The number of special image tokens used as placeholders for visual content in text sequences.
         """
@@ -59,7 +59,7 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

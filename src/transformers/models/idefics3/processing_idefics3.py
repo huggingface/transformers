@@ -107,7 +107,7 @@ class Idefics3Processor(ProcessorMixin):
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
     ):
-        """
+        r"""
         image_seq_len (`int`, *optional*, defaults to 169):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the
@@ -161,7 +161,7 @@ class Idefics3Processor(ProcessorMixin):
         image_seq_len: Optional[int] = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
-        """
+        r"""
         image_seq_len (`int`, *optional*):
             The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
             image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))

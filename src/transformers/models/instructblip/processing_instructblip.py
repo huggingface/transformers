@@ -48,10 +48,11 @@ class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        """
+        r"""
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
-        num_query_tokens (`int`, *optional*):"
+        num_query_tokens (`int`, *optional*):
+            "
             Number of tokens used by the Qformer as queries, should be same as in model's config.
         """
         if not hasattr(tokenizer, "image_token"):

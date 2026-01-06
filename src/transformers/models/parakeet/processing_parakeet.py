@@ -53,6 +53,10 @@ class ParakeetProcessor(ProcessorMixin):
         sampling_rate: Optional[int] = None,
         **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
+        r"""
+        sampling_rate (<fill_type>):
+            <fill_docstring>
+        """
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(

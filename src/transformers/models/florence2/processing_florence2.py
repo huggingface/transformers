@@ -53,7 +53,7 @@ class Florence2Processor(ProcessorMixin):
         post_processor_config: Optional[dict] = None,
         **kwargs,
     ):
-        """
+        r"""
         num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
@@ -141,7 +141,7 @@ class Florence2Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

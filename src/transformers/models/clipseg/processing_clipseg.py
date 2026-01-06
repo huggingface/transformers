@@ -28,7 +28,7 @@ class CLIPSegProcessor(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, text=None, images=None, visual_prompt=None, return_tensors=None, **kwargs):
-        """
+        r"""
         visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
             The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
             NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape

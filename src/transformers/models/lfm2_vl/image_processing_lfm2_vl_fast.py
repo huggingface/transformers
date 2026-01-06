@@ -173,6 +173,26 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.
+    do_image_splitting (`<fill_type>`):
+        <fill_docstring>
+    min_tiles (`<fill_type>`):
+        <fill_docstring>
+    max_tiles (`<fill_type>`):
+        <fill_docstring>
+    use_thumbnail (`<fill_type>`):
+        <fill_docstring>
+    min_image_tokens (`<fill_type>`):
+        <fill_docstring>
+    max_image_tokens (`<fill_type>`):
+        <fill_docstring>
+    encoder_patch_size (`<fill_type>`):
+        <fill_docstring>
+    tile_size (`<fill_type>`):
+        <fill_docstring>
+    max_pixels_tolerance (`<fill_type>`):
+        <fill_docstring>
+    return_row_col_info (`<fill_type>`):
+        <fill_docstring>
     """
 
     downsample_factor: int

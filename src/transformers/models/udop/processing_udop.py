@@ -31,6 +31,13 @@ logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
+    """
+    word_labels (`<fill_type>`):
+        <fill_docstring>
+    boxes (`<fill_type>`):
+        <fill_docstring>
+    """
+
     word_labels: Optional[Union[list[int], list[list[int]]]]
     boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
 
@@ -79,19 +86,6 @@ class UdopProcessor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
-        [`UdopImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
-        bounding boxes along with the additional arguments to [`~UdopTokenizer.__call__`] and returns the output,
-        together with the prepared `pixel_values`. In case [`UdopImageProcessor`] was initialized with `apply_ocr` set
-        to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the
-        additional arguments to [`~UdopTokenizer.__call__`] and returns the output, together with the prepared
-        `pixel_values`.
-
-        Alternatively, one can pass `text_target` and `text_pair_target` to prepare the targets of UDOP.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         # verify input
         output_kwargs = self._merge_kwargs(
             UdopProcessorKwargs,

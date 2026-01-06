@@ -62,7 +62,7 @@ class Idefics2Processor(ProcessorMixin):
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 64, chat_template: Optional[str] = None, **kwargs
     ):
-        """
+        r"""
         image_seq_len (`int`, *optional*, defaults to 64):
             The length of the image sequence i.e. the number of <image> tokens per image in the input.
             This parameter is used to build the string from the input prompt and image tokens and should match the

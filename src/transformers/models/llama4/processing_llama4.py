@@ -53,27 +53,25 @@ class Llama4Processor(ProcessorMixin):
         chat_template=chat_template,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
-        img_size (`int`, *optional*, defaults to 364):
-            The size of the image to be tokenized. This should correspond to the size given to the image processor.
+        pixel_shuffle_ratio (<fill_type>):
+            <fill_docstring>
+        fake_image_token (<fill_type>):
+            <fill_docstring>
         image_token (`str`, *optional*, defaults to `"<|image|>"`):
             The token to be used to represent an image in the text.
-        downsample_factor (`int`, *optional*, defaults to 1):
-            The factor by which to scale the patch size.
-        start_of_img_token (`str`, *optional*, defaults to `"<|START_OF_IMG|>"`):
-            The token to be used to represent the start of an image in the text.
-        end_of_img_token (`str`, *optional*, defaults to `"<|END_OF_IMG|>"`):
-            The token to be used to represent the end of an image in the text.
-        img_patch_token (`str`, *optional*, defaults to `"<|IMG_PATCH|>"`):
-            The token to be used to represent an image patch in the text.
-        img_line_break_token (`str`, *optional*, defaults to `"<|IMG_LINE_BREAK|>"`):
-            The token to be used to represent a line break in the text.
-        tile_token (`str`, *optional*, defaults to `"TILE"`):
-            The token to be used to represent an image patch in the text.
-        tile_global_token (`str`, *optional*, defaults to `"TILE_GLOBAL"`):
-            The token to be used to represent the cover image in the text.
+        start_of_image_token (<fill_type>):
+            <fill_docstring>
+        end_of_image_token (<fill_type>):
+            <fill_docstring>
+        patch_token (<fill_type>):
+            <fill_docstring>
+        tile_x_separator_token (<fill_type>):
+            <fill_docstring>
+        tile_y_separator_token (<fill_type>):
+            <fill_docstring>
         """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -123,7 +121,7 @@ class Llama4Processor(ProcessorMixin):
         text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         **kwargs: Unpack[Llama4ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

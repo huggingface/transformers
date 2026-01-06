@@ -36,6 +36,11 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
+    """
+    encoded_length_kwargs (`<fill_type>`):
+        <fill_docstring>
+    """
+
     encoded_length_kwargs: Optional[dict[str, Any]]
 
 
@@ -165,14 +170,14 @@ class CsmProcessor(ProcessorMixin):
         depth_decoder_labels_ratio: Optional[float] = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
-        """
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
-                - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
-                - `-100` will be ignored in the loss computation
-                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
-            depth_decoder_labels_ratio (float, *optional*, default=1.0):
-                The ratio of audio frames to keep for the depth decoder labels.
+        r"""
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
+            - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
+            - `-100` will be ignored in the loss computation
+            - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
+        depth_decoder_labels_ratio (float, *optional*, default=1.0):
+            The ratio of audio frames to keep for the depth decoder labels.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

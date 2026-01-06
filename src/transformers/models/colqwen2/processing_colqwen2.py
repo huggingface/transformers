@@ -57,7 +57,7 @@ class ColQwen2Processor(ProcessorMixin):
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        """
+        r"""
         visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
             A string that gets tokenized and prepended to the image tokens.
         query_prefix (`str`, *optional*, defaults to `"Query: "`):
@@ -82,7 +82,7 @@ class ColQwen2Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

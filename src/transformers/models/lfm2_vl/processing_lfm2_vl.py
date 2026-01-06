@@ -32,6 +32,11 @@ logger = logging.get_logger(__name__)
 
 
 class Lfm2VlTextKwargs(TextKwargs, total=False):
+    """
+    use_image_special_tokens (`<fill_type>`):
+        <fill_docstring>
+    """
+
     use_image_special_tokens: Optional[bool]
 
 

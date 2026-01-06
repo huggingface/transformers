@@ -46,7 +46,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         audio_bos_token="<|audio_bos|>",
         audio_eos_token="<|audio_eos|>",
     ):
-        """
+        r"""
         audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
             The token to use for audio tokens.
         audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):

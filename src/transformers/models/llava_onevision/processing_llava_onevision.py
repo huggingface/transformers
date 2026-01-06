@@ -61,7 +61,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         vision_aspect_ratio="anyres_max_9",
         **kwargs,
     ):
-        """
+        r"""
         num_image_tokens (`int`, *optional*):
             Number of image tokens for one imagethat will be returned by vision tower.
         vision_feature_select_strategy (`str`, *optional*):
@@ -99,7 +99,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

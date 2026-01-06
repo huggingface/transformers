@@ -31,7 +31,7 @@ PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 @auto_docstring
 class EvollaProcessor(ProcessorMixin):
     def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
-        """
+        r"""
         protein_tokenizer (`EsmTokenizer`):
             An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
         protein_max_length (`int`, *optional*, defaults to 1024):
@@ -97,22 +97,18 @@ class EvollaProcessor(ProcessorMixin):
         **kwargs,
     ):
         r"""
-        This method takes batched or non-batched proteins and messages_list and converts them into format that can be used by
-        the model.
-
-        Args:
-            proteins (`Union[List[dict], dict]`):
-                A list of dictionaries or a single dictionary containing the following keys:
-                    - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
-                    - `"foldseek"` (`str`) -- The foldseek string of the protein.
-            messages_list (`Union[List[List[dict]], List[dict]]`):
-                A list of lists of dictionaries or a list of dictionaries containing the following keys:
-                    - `"role"` (`str`) -- The role of the message.
-                    - `"content"` (`str`) -- The content of the message.
-            protein_max_length (`int`, *optional*, defaults to 1024):
-                The maximum length of the sequence to be generated.
-            text_max_length (`int`, *optional*, defaults to 512):
-                The maximum length of the text.
+        proteins (`Union[List[dict], dict]`):
+            A list of dictionaries or a single dictionary containing the following keys:
+                - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
+                - `"foldseek"` (`str`) -- The foldseek string of the protein.
+        messages_list (`Union[List[List[dict]], List[dict]]`):
+            A list of lists of dictionaries or a list of dictionaries containing the following keys:
+                - `"role"` (`str`) -- The role of the message.
+                - `"content"` (`str`) -- The content of the message.
+        protein_max_length (`int`, *optional*, defaults to 1024):
+            The maximum length of the sequence to be generated.
+        text_max_length (`int`, *optional*, defaults to 512):
+            The maximum length of the text.
 
         Return:
             a dict with following keys:

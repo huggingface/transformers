@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
+    """
+    task (`<fill_type>`):
+        <fill_docstring>
+    """
+
     task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
 
 

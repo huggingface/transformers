@@ -32,6 +32,15 @@ from ..auto import AutoTokenizer
 
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
+    """
+    split_image (`<fill_type>`):
+        <fill_docstring>
+    max_image_size (`<fill_type>`):
+        <fill_docstring>
+    min_image_size (`<fill_type>`):
+        <fill_docstring>
+    """
+
     split_image: bool
     max_image_size: int
     min_image_size: int
@@ -62,7 +71,7 @@ class AriaProcessor(ProcessorMixin):
         chat_template: Optional[str] = None,
         size_conversion: Optional[dict[Union[float, int], int]] = None,
     ):
-        """
+        r"""
         size_conversion (`Dict`, *optional*):
             A dictionary indicating size conversions for images.
         """
@@ -84,7 +93,7 @@ class AriaProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.

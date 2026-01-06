@@ -62,7 +62,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         num_additional_image_tokens=0,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
@@ -101,7 +101,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

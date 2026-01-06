@@ -46,7 +46,7 @@ class Ovis2Processor(ProcessorMixin):
         image_seq_length=256,
         **kwargs,
     ):
-        """
+        r"""
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
         image_seq_length (`int`, *optional*, defaults to 256):
@@ -68,7 +68,7 @@ class Ovis2Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[Ovis2ProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

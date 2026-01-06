@@ -53,7 +53,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         pooling_ratio=2,
         **kwargs,
     ):
-        """
+        r"""
         patch_size (`int`, *optional*):
             Patch size from the vision tower.
         pooling_ratio (`int`, *optional*, defaults to 2):
@@ -75,7 +75,7 @@ class PerceptionLMProcessor(ProcessorMixin):
         videos: Optional[VideoInput] = None,
         **kwargs: Unpack[PerceptionLMProcessorKwargs],
     ) -> BatchFeature:
-        """
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

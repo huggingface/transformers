@@ -75,7 +75,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
     ):
-        """
+        r"""
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
         """
