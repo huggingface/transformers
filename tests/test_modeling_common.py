@@ -933,6 +933,23 @@ class ModelTesterMixin:
                     )
                     self.assertTrue(len(load_result.unexpected_keys) == 0)
 
+    def test_load_contiguous_weights(self):
+        """
+        Checks whether the loaded weights are contiguous or not; inherently checking whether a conversion
+        operation from `core_model_loading` may have affected the original weights.
+        """
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config)
+            self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

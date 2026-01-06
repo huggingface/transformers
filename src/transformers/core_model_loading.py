@@ -432,7 +432,7 @@ class Transpose(ConversionOps):
             tensor = input_dict.get(key, [])
             if len(tensor) != 1:
                 raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
-            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1)
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1).contiguous()
         return output
 
     @property
