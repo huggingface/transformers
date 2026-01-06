@@ -24,7 +24,7 @@ from numpy.lib.stride_tricks import as_strided
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...models.s3tokenizer.feature_extraction_s3tokenizer import S3TokenizerFeatureExtractor
-from ...utils import is_librosa_available
+from ...utils import is_librosa_available, is_torch_available
 from ...utils.import_utils import requires
 
 
