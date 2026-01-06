@@ -1265,14 +1265,6 @@ class ModelTesterMixin:
                 buf_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
                     buffer, model_from_init
                 )
-
-                # We cannot control timm model weights initialization, so skip in this case
-                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
-                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
-                ):
-                    different_buffers.discard(buffer)
-                    continue
-
                 # Add it to the traceback
                 traceback = (
                     f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
