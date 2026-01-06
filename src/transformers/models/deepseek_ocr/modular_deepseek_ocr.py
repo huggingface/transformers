@@ -1340,8 +1340,6 @@ __all__ = [
     "DeepseekOcrConfig",
     "DeepseekOcrVisionConfig",
     "DeepseekOcrSamConfig",
-    "DeepseekOcrCLIPConfig",
-    "DeepseekOcrCLIPTextConfig",
     "DeepseekOcrCLIPVisionConfig",
     "DeepseekOcrCLIPPreTrainedModel",
     "DeepseekOcrProjectorConfig",

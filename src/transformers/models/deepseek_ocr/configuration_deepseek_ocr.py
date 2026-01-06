@@ -449,8 +449,6 @@ __all__ = [
     "DeepseekOcrConfig",
     "DeepseekOcrVisionConfig",
     "DeepseekOcrSamConfig",
-    "DeepseekOcrCLIPConfig",
-    "DeepseekOcrCLIPTextConfig",
     "DeepseekOcrCLIPVisionConfig",
     "DeepseekOcrProjectorConfig",
 ]
