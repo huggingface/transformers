@@ -267,6 +267,15 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
     @unittest.skip(reason="GlmImageVisionModel does not support training")
     def test_training_gradient_checkpointing(self):
         pass

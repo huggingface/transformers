@@ -22,7 +22,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -30,7 +29,7 @@ from ...generation import GenerationMixin
 from ...image_utils import (
     ImageInput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -57,7 +56,7 @@ from ..glm4v_moe.modeling_glm4v_moe import eager_attention_forward, rotate_half
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
-from ..siglip.modeling_siglip import SiglipMLP, lecun_normal_
+from ..siglip.modeling_siglip import SiglipMLP
 
 
 logger = logging.get_logger(__name__)
@@ -562,25 +561,7 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, GlmImageTextRotaryEmbedding):
-            config = module.config
-            base = config.rope_parameters["rope_theta"]
-            partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-            head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-            dim = int(head_dim * partial_rotary_factor)
-            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-            init.copy_(module.inv_freq, inv_freq)
-            init.copy_(module.original_inv_freq, inv_freq)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            lecun_normal_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight)
+        PreTrainedModel._init_weights(module)
 
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
@@ -1317,7 +1298,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                     )
                 elif key == "image_grid_thw":
                     # get the num of images for each sample and +1 for the image being generated
-                    lengths = list(image_nums) + [1]
+                    lengths = list(image_nums)
                     last_image = dict_to_expand[key][:-1]
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key][: sum(image_nums)], lengths=lengths, repeat_times=expand_size
