@@ -104,7 +104,15 @@ class DbrxFFNConfig(PreTrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
+        for k in [
+            "model_type",
+            "attn_implementation",
+            "experts_implementation",
+            "transformers_version",
+            "_commit_hash",
+            "torch_dtype",
+            "dtype",
+        ]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:

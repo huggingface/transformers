@@ -576,7 +576,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
