@@ -137,6 +137,7 @@ class RequestState:
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
+    _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
 
     @property
     def status(self) -> RequestStatus:
@@ -220,6 +221,9 @@ class RequestState:
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
+        if self._true_initial_tokens:
+            self.generated_tokens = self.initial_tokens[self._true_initial_tokens:] + self.generated_tokens
+            self.initial_tokens = self.initial_tokens[:self._true_initial_tokens]
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,

@@ -427,6 +427,36 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
+    def soft_reset_one_request(self) -> None:
+        """Soft resets the oldest request (or shortest if block_new_requests is True) by removing it from the active
+        requests, and adding a new waiting request with the generated tokens as addition to the initial prompt. Also
+        turns the block_new_requests state to True to avoid infinite loops when offloading requests with this method."""
+        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
+        if self.scheduler.block_new_requests:
+            request_id, state = self.scheduler.active_requests.popitem()
+        else:
+            request_id, state = next(iter(self.scheduler.active_requests.items()))
+        logger.info(
+            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
+            f"{len(state.generated_tokens)} generated tokens"
+        )
+        # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
+        new_state = RequestState(
+            request_id=request_id,
+            initial_tokens=state.initial_tokens + state.generated_tokens,
+            num_children=state.num_children,
+            record_timestamps=state.record_timestamps,
+            tokens_to_process=state.initial_tokens + state.generated_tokens,
+            max_new_tokens=state.max_new_tokens - len(state.generated_tokens),
+            eos_token_id=state.eos_token_id,
+            streaming=state.streaming,
+        )
+        new_state._true_initial_tokens = len(state.initial_tokens)
+        # Actual offloading of the request
+        self.scheduler.finish_request(request_id, evict_from_cache=True)
+        self.scheduler.add_waiting_request(new_state)
+        self.scheduler.block_new_requests = True
+
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -441,8 +471,17 @@ class ContinuousBatchProcessor:
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
         self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
+
+        # If requests_in_batch is None, it means we need to offload some requests if possible
+        if self.requests_in_batch is None:
+            if len(self.scheduler.active_requests) > 1:
+                self.soft_reset_one_request()
+            else:
+                raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
+        # If it's an empty list, it means we have no requests to process
         if not self.requests_in_batch:
             return False
+        # Otherwise, we can continue with the non-empty batch
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         # Reset the static tensors used for storage
@@ -591,6 +630,7 @@ class ContinuousBatchProcessor:
                 if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
+                    self.scheduler.block_new_requests = False
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:

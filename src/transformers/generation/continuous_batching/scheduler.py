@@ -36,6 +36,7 @@ class Scheduler(ABC):
         self._cancellation_lock = threading.Lock()
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
+        self.block_new_requests = False  # this state is used to avoid infinite loops when offloading requests
 
     @traced
     def add_waiting_request(self, state: RequestState):
@@ -62,14 +63,13 @@ class Scheduler(ABC):
         return len(self.active_requests) or len(self.waiting_requests)
 
     @traced
-    def finish_request(self, request_id: str, evict_from_cache: bool = True):
+    def finish_request(self, request_id: str, evict_from_cache: bool = True) -> None:
         """Completes processing of a request and optionally frees its allocated cache blocks. This method is called
         when a request has finished generation or encountered an error.
         """
         if evict_from_cache:
             self.cache.free_blocks(request_id)
-            if request_id in self.active_requests:
-                del self.active_requests[request_id]
+            self.active_requests.pop(request_id, None)
 
     @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
@@ -89,10 +89,8 @@ class Scheduler(ABC):
         """Remove all cancelled requests from active and waiting queues."""
         with self._cancellation_lock:
             for request_id in self._requests_to_cancel:
-                if request_id in self.active_requests:
-                    del self.active_requests[request_id]
-                if request_id in self.waiting_requests:
-                    del self.waiting_requests[request_id]
+                self.active_requests.pop(request_id, None)
+                self.waiting_requests.pop(request_id, None)
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
@@ -138,6 +136,8 @@ class Scheduler(ABC):
                 self.active_requests[state.request_id] = state
                 request_ids_to_remove_from_waiting.add(state.request_id)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
+                # We keep track of the number of allocated blocks to avoid double allocation
+                state.allocated_blocks += prefill_length // self.cache.block_size
                 # Even if we match the whole request, we keep at least 1 token to start decoding
                 prefill_length = min(prefill_length, len(state.tokens_to_process) - 1)
                 state.remaining_prefill_tokens = state.tokens_to_process[prefill_length:]
@@ -195,7 +195,7 @@ class FIFOScheduler(Scheduler):
         self.safety_margin = safety_margin
 
     @traced
-    def schedule_batch(self, token_budget: int) -> list[RequestState]:
+    def schedule_batch(self, token_budget: int) -> list[RequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
         scheduled_requests = []
@@ -207,8 +207,9 @@ class FIFOScheduler(Scheduler):
                 second_priority_states.append(state)
 
         # Add waiting requests to second priority
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
+        if not self.block_new_requests:
+            for req_id in self.waiting_requests_order:
+                second_priority_states.append(self.waiting_requests[req_id])
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
@@ -252,9 +253,9 @@ class FIFOScheduler(Scheduler):
             if token_budget == 0:
                 break
 
-        # If no requests were scheduled and the cache is full, we raise an error
+        # If no requests were scheduled and the cache is full, we signal it by returning None
         if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
-            raise RuntimeError("No requests can be scheduled and the cache is full")
+            return None
 
         self.waiting_requests_order = deque(
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
@@ -271,7 +272,7 @@ class PrefillFirstScheduler(Scheduler):
     decoding requests."""
 
     @traced
-    def schedule_batch(self, token_budget: int) -> list[RequestState]:
+    def schedule_batch(self, token_budget: int) -> list[RequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
         scheduled_requests = []
@@ -284,8 +285,9 @@ class PrefillFirstScheduler(Scheduler):
                 second_priority_states.append(state)
 
         # Add waiting requests to second priority
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests[req_id])
+        if not self.block_new_requests:
+            for req_id in self.waiting_requests_order:
+                second_priority_states.append(self.waiting_requests[req_id])
 
         candidates = priority_states + second_priority_states
 
@@ -323,9 +325,9 @@ class PrefillFirstScheduler(Scheduler):
             if token_budget == 0:
                 break
 
-        # If no requests were scheduled and the cache is full, we raise an error
+        # If no requests were scheduled and the cache is full, we signal it by returning None
         if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
-            raise RuntimeError("No requests can be scheduled and the cache is full")
+            return None
 
         self.waiting_requests_order = deque(
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
