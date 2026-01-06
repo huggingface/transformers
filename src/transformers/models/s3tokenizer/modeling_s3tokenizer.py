@@ -525,15 +525,22 @@ class S3TokenizerPreTrainedModel(PreTrainedModel):
         # device, then materialized via `to_empty()`, buffers may contain uninitialized values and need to be restored
         # deterministically here.
         if isinstance(module, S3TokenizerModel):
-            module.window = torch.zeros(module.config.n_fft, device=module.window.device, dtype=module.window.dtype)
-            module._mel_filters = torch.zeros(
-                module.config.n_mels,
-                module.config.n_fft // 2 + 1,
-                device=module._mel_filters.device,
-                dtype=module._mel_filters.dtype,
-            )
+            # During `from_pretrained`, core loading will set `_is_hf_initialized=True` on loaded tensors.
+            # Do not overwrite buffers that were loaded from the checkpoint.
+            if not getattr(module.window, "_is_hf_initialized", False):
+                module.window = torch.zeros(
+                    module.config.n_fft, device=module.window.device, dtype=module.window.dtype
+                )
+            if not getattr(module._mel_filters, "_is_hf_initialized", False):
+                module._mel_filters = torch.zeros(
+                    module.config.n_mels,
+                    module.config.n_fft // 2 + 1,
+                    device=module._mel_filters.device,
+                    dtype=module._mel_filters.dtype,
+                )
         elif isinstance(module, AudioEncoderV2):
-            module.freqs_cis = precompute_freqs_cis(64, 1024 * 2).to(device=module.freqs_cis.device)
+            if not getattr(module.freqs_cis, "_is_hf_initialized", False):
+                module.freqs_cis = precompute_freqs_cis(64, 1024 * 2).to(device=module.freqs_cis.device)
 
 
 class S3TokenizerModel(S3TokenizerPreTrainedModel):
