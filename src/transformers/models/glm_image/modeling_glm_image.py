@@ -1533,6 +1533,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             is_first_iteration=is_first_iteration,
+            use_cache=use_cache,
             **kwargs,
         )
 
@@ -1588,18 +1589,20 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             for key in dict_to_expand:
                 if key == "pixel_values":
                     # split images into samples
-                    samples = torch.split(image_grid_thw[:image_nums], list(image_nums))
+                    samples = torch.split(image_grid_thw[: sum(image_nums)], list(image_nums))
                     # compute the sequence length of images for each sample
                     lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=lengths, repeat_times=expand_size
                     )
                 elif key == "image_grid_thw":
-                    # get the num of images for each sample
+                    # get the num of images for each sample and +1 for the image being generated
                     lengths = list(image_nums)
+                    last_image = dict_to_expand[key][:-1]
                     dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key][:image_nums], lengths=lengths, repeat_times=expand_size
+                        dict_to_expand[key][: sum(image_nums)], lengths=lengths, repeat_times=expand_size
                     )
+                    dict_to_expand[key] = torch.cat([dict_to_expand[key], last_image], dim=0)
             return dict_to_expand
 
         def _expand_dict_for_generation(dict_to_expand):

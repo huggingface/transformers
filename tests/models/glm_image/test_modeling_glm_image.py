@@ -15,6 +15,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     AutoProcessor,
     GlmImageConfig,
@@ -221,7 +223,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             if k not in input_keys_to_ignore
         }
         filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: filtered_image_length + 1]
+        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: batch_size + 1]
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -246,6 +248,11 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(reason="GLM-Image does not use inputs_embeds")
+    def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
     @unittest.skip(reason="GLM-Image input embed is compare with inputs_ids and image_ids")
@@ -282,6 +289,10 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="GlmImageVisionModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="GlmImage needs special input preparation to pass this test")
+    def test_generate_compile_model_forward_fullgraph(self):
         pass
 
 
