@@ -441,17 +441,7 @@ class ContinuousBatchProcessor:
             f"{len(state.generated_tokens)} generated tokens"
         )
         # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
-        new_state = RequestState(
-            request_id=request_id,
-            initial_tokens=state.initial_tokens + state.generated_tokens,
-            num_children=state.num_children,
-            record_timestamps=state.record_timestamps,
-            tokens_to_process=state.initial_tokens + state.generated_tokens,
-            max_new_tokens=state.max_new_tokens - len(state.generated_tokens),
-            eos_token_id=state.eos_token_id,
-            streaming=state.streaming,
-        )
-        new_state._true_initial_tokens = len(state.initial_tokens)
+        new_state = state.create_equivalent_initial_request()
         # Actual offloading of the request
         self.scheduler.finish_request(request_id, evict_from_cache=True)
         self.scheduler.add_waiting_request(new_state)
