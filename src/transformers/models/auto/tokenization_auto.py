@@ -160,7 +160,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("llama", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
@@ -633,16 +632,6 @@ class AutoTokenizer:
         else:
             config_tokenizer_class = getattr(config, "tokenizer_class")
 
-        tokenizer_auto_map = None
-        if "auto_map" in tokenizer_config:
-            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
-                # Legacy format for dynamic tokenizers
-                tokenizer_auto_map = tokenizer_config["auto_map"]
-            else:
-                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
-
-        # START PRIORITIZE MAPPING FOR MODELS
-        # Check config's model_type (not tokenizer_config's) for all models but remote
         try:
             config_model_type = (
                 getattr(config, "model_type", None)
@@ -652,8 +641,8 @@ class AutoTokenizer:
         except Exception:
             config_model_type = None
 
-        if config_model_type is not None and not trust_remote_code:
-            if config_tokenizer_class is None:
+        if config_tokenizer_class is None:
+            if  config_model_type is not None:
                 if not isinstance(config, PreTrainedConfig):
                     if gguf_file:
                         gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
@@ -664,22 +653,30 @@ class AutoTokenizer:
                             pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                         )
                 config_for_lookup = config.encoder if isinstance(config, EncoderDecoderConfig) else config
-
                 tokenizer_class = TOKENIZER_MAPPING.get(type(config_for_lookup), TokenizersBackend)
             else:
-                tokenizer_class = tokenizer_class_from_name(config_tokenizer_class)
-            try:
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            except ValueError as e:
-                if (
-                    "Couldn't instantiate the backend tokenizer from one of:" in str(e)
-                    and tokenizer_config.get("tokenizer_class") is not None
-                ):
-                    config_tokenizer_class = tokenizer_config.get("tokenizer_class")
-                else:
-                    raise e
+                tokenizer_class = TokenizersBackend
         else:
-            config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+            tokenizer_class = tokenizer_class_from_name(config_tokenizer_class)
+
+        try:
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        except ValueError as e:
+            if (
+                "Couldn't instantiate the backend tokenizer from one of:" in str(e)
+                and tokenizer_config.get("tokenizer_class") is not None
+            ):
+                config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+            else:
+                raise e
+
+        tokenizer_auto_map = None
+        if "auto_map" in tokenizer_config:
+            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
+                # Legacy format for dynamic tokenizers
+                tokenizer_auto_map = tokenizer_config["auto_map"]
+            else:
+                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         # If that did not work, let's try to use the config.
         if config_tokenizer_class is None:
@@ -726,6 +723,10 @@ class AutoTokenizer:
             )
 
         if has_remote_code and trust_remote_code:
+
+
+
+
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             tokenizer_class.register_for_auto_class()
