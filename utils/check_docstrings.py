@@ -1404,17 +1404,13 @@ def _extract_type_name(annotation) -> str | None:
     return None
 
 
-def _check_and_fix_custom_typed_dict_kwargs(
-    source: str, lines: list[str], overwrite: bool = False
-) -> tuple[list[str], list[str]]:
+def _find_typed_dict_classes(source: str) -> list[dict]:
     """
-    Check for custom TypedDict kwargs used in processors and validate that all fields are documented.
-    If overwrite=True, generates placeholder docstrings for undocumented fields.
+    Find all custom TypedDict kwargs classes in the source.
 
     Returns:
-        Tuple of (warnings, updated_lines) where updated_lines is modified if overwrite=True
+        List of dicts with TypedDict info: name, line, fields, field_types, docstring info
     """
-    warnings = []
     tree = ast.parse(source)
 
     # Get standard args that are already documented in source classes
@@ -1424,15 +1420,23 @@ def _check_and_fix_custom_typed_dict_kwargs(
     except Exception:
         pass
 
-    # First pass: Find all TypedDict classes and their fields
-    typed_dict_classes = {}  # name -> {fields: set, line: int, docstring: str|None, class_node: ast.ClassDef}
-    typed_dict_names = set()  # Track names of all TypedDict classes
+    # Collect all TypedDict class names first (for excluding nested TypedDicts)
+    typed_dict_names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                if isinstance(base, ast.Name) and ("TypedDict" in base.id or "Kwargs" in base.id):
+                    typed_dict_names.add(node.name)
+                    break
 
+    typed_dicts = []
+
+    # Check each TypedDict class
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
 
-        # Check if this is a TypedDict (inherits from TypedDict or ends with Kwargs)
+        # Check if this is a TypedDict
         is_typed_dict = False
         for base in node.bases:
             if isinstance(base, ast.Name) and ("TypedDict" in base.id or "Kwargs" in base.id):
@@ -1442,23 +1446,36 @@ def _check_and_fix_custom_typed_dict_kwargs(
         if not is_typed_dict:
             continue
 
-        typed_dict_names.add(node.name)  # Track TypedDict class names
+        # Skip standard kwargs classes
+        if node.name in ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]:
+            continue
 
-        # Extract fields (class attributes with type annotations) and their types
-        fields = set()
-        field_types = {}  # field_name -> type_name (if it's a simple Name)
+        # Extract fields and their types (in declaration order)
+        fields = []
+        field_types = {}
         for class_item in node.body:
             if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
                 field_name = class_item.target.id
-                fields.add(field_name)
-                # Try to extract the type name (handle Optional[TypeName] and plain TypeName)
-                if class_item.annotation:
-                    type_name = _extract_type_name(class_item.annotation)
-                    if type_name:
-                        field_types[field_name] = type_name
+                if not field_name.startswith("_"):
+                    # Extract type and check if it's a nested TypedDict
+                    if class_item.annotation:
+                        type_name = _extract_type_name(class_item.annotation)
+                        if type_name:
+                            field_types[field_name] = type_name
+                            # Skip nested TypedDicts
+                            if type_name in typed_dict_names or type_name.endswith("Kwargs"):
+                                continue
+                    # Skip fields in standard args
+                    if field_name in standard_args:
+                        continue
+                    fields.append(field_name)
 
-        # Extract docstring if present
+        if not fields:
+            continue
+
+        # Extract docstring info
         docstring = None
+        docstring_start_line = None
         docstring_end_line = None
         if (
             node.body
@@ -1467,198 +1484,163 @@ def _check_and_fix_custom_typed_dict_kwargs(
             and isinstance(node.body[0].value.value, str)
         ):
             docstring = node.body[0].value.value
+            docstring_start_line = node.body[0].lineno
             docstring_end_line = node.body[0].end_lineno
 
-        typed_dict_classes[node.name] = {
-            "fields": fields,
-            "field_types": field_types,
-            "line": node.lineno,
-            "docstring": docstring,
-            "docstring_end_line": docstring_end_line,
-            "class_node": node,
-        }
+        typed_dicts.append(
+            {
+                "name": node.name,
+                "line": node.lineno,
+                "fields": fields,
+                "field_types": field_types,
+                "docstring": docstring,
+                "docstring_start_line": docstring_start_line,
+                "docstring_end_line": docstring_end_line,
+            }
+        )
 
-    # Second pass: For each custom TypedDict, check if all fields are documented
-    classes_to_fix = []  # List of (class_name, info, undocumented_fields)
+    return typed_dicts
 
-    for class_name, info in typed_dict_classes.items():
-        # Skip if no fields or if it's a base kwargs class (no custom fields)
-        if not info["fields"]:
-            continue
 
-        # Skip standard kwargs classes that don't need per-field documentation
-        if class_name in ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]:
-            continue
+def _process_typed_dict_docstrings(
+    candidate_file: str,
+    overwrite: bool = False,
+) -> tuple[list[str], list[str]]:
+    """
+    Check and optionally fix TypedDict docstrings.
+    Runs as a separate pass after @auto_docstring processing.
 
-        # Parse the docstring to find documented fields
-        documented_fields = set()
-        if info["docstring"]:
+    Args:
+        candidate_file: Path to the file to process
+        overwrite: Whether to fix issues by writing to the file
+
+    Returns:
+        Tuple of (missing_warnings, fill_warnings)
+    """
+    with open(candidate_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    typed_dicts = _find_typed_dict_classes(content)
+    if not typed_dicts:
+        return [], []
+
+    missing_warnings = []
+    fill_warnings = []
+
+    # Process each TypedDict
+    for td in typed_dicts:
+        # Parse existing docstring
+        documented_fields = {}
+        remaining_docstring = ""
+        if td["docstring"]:
             try:
-                parsed_doc, _ = parse_docstring(info["docstring"])
-                documented_fields = set(parsed_doc.keys())
+                documented_fields, remaining_docstring = parse_docstring(td["docstring"])
             except Exception:
                 pass
 
-        # Find undocumented fields (excluding private fields, fields starting with _,
-        # fields already documented in standard args classes, and nested TypedDict fields)
-        field_types = info.get("field_types", {})
-        undocumented = set()
-        for field in info["fields"]:
-            if field.startswith("_"):
+        # Find missing and fill fields
+        missing_fields = []
+        fill_fields = []
+
+        for field in td["fields"]:
+            if field not in documented_fields:
+                missing_fields.append(field)
+            else:
+                # Check for placeholders
+                field_doc = documented_fields[field]
+                desc = field_doc.get("description", "")
+                type_str = field_doc.get("type", "")
+                if "<fill_type>" in type_str or "<fill_docstring>" in desc:
+                    fill_fields.append(field)
+
+        if missing_fields:
+            field_list = ", ".join(sorted(missing_fields))
+            missing_warnings.append(f"    - {td['name']} (line {td['line']}): undocumented fields: {field_list}")
+
+        if fill_fields:
+            field_list = ", ".join(sorted(fill_fields))
+            fill_warnings.append(f"    - {td['name']} (line {td['line']}): fields with placeholders: {field_list}")
+
+    # If overwrite mode and there are missing fields, fix them
+    if overwrite and missing_warnings:
+        lines = content.split("\n")
+
+        # Process TypedDicts in reverse order to avoid line number shifts
+        for td in sorted(typed_dicts, key=lambda x: x["line"], reverse=True):
+            # Parse existing docstring
+            documented_fields = {}
+            remaining_docstring = ""
+            if td["docstring"]:
+                try:
+                    documented_fields, remaining_docstring = parse_docstring(td["docstring"])
+                except Exception:
+                    pass
+
+            # Check if any fields are missing
+            has_missing = any(f not in documented_fields for f in td["fields"])
+            if not has_missing:
                 continue
-            if field in documented_fields:
-                continue
-            if field in standard_args:
-                continue
 
-            field_type = field_types.get(field)
-            # Exclude nested TypedDict fields (defined in same file)
-            if field_type in typed_dict_names:
-                continue
-            # Exclude likely TypedDict fields (imported, by naming convention)
-            if field_type and field_type.endswith("Kwargs"):
-                continue
+            # Build new docstring dict (preserving existing + adding missing)
+            new_doc_dict = OrderedDict()
+            for field in td["fields"]:
+                if field in documented_fields:
+                    new_doc_dict[field] = documented_fields[field]
+                else:
+                    # Add placeholder for missing field
+                    new_doc_dict[field] = {
+                        "type": "`<fill_type>`",
+                        "optional": False,
+                        "shape": None,
+                        "description": "\n    <fill_docstring>",
+                        "default": None,
+                        "additional_info": None,
+                    }
 
-            undocumented.add(field)
+            # Build new docstring text using same format as generate_new_docstring_for_signature
+            class_line_idx = td["line"] - 1
+            class_line = lines[class_line_idx]
+            indent = len(class_line) - len(class_line.lstrip())
 
-        # Report undocumented fields
-        if undocumented:
-            field_list = ", ".join(sorted(undocumented))
-            warnings.append(f"    - {class_name} (line {info['line']}): undocumented fields: {field_list}")
-            classes_to_fix.append((class_name, info, undocumented))
+            # Build docstring content (without indentation first)
+            docstring_content = '"""\n'
+            for field_name, field_doc in new_doc_dict.items():
+                additional_info = field_doc.get("additional_info", "") or ""
+                description = field_doc["description"]
+                if description.endswith('"""'):
+                    description = "\n".join(description.split("\n")[:-1])
+                docstring_content += f"{field_name} ({field_doc['type']}{additional_info}):{description}\n"
 
-    # If overwrite mode, generate placeholder docstrings
-    updated_lines = lines.copy()
-    if overwrite and classes_to_fix:
-        # Process in reverse order (bottom to top) to avoid line number shifts
-        for class_name, info, undocumented in sorted(classes_to_fix, key=lambda x: x[1]["line"], reverse=True):
-            updated_lines = _add_placeholder_docstring_to_typed_dict(
-                updated_lines, class_name, info, undocumented, standard_args, typed_dict_names
-            )
+            # Add remaining docstring content if any
+            close_docstring = True
+            if remaining_docstring:
+                if remaining_docstring.endswith('"""'):
+                    close_docstring = False
+                end_str = "\n" if close_docstring else ""
+                docstring_content += f"{set_min_indent(remaining_docstring, 0)}{end_str}"
+            if close_docstring:
+                docstring_content += '"""'
 
-    return warnings, updated_lines
+            # Apply proper indentation
+            docstring_content = set_min_indent(docstring_content, indent + 4)
+            docstring_lines = docstring_content.split("\n")
 
+            # Replace in lines
+            if td["docstring"] is None:
+                # Insert new docstring after class definition
+                insert_idx = class_line_idx + 1
+                lines = lines[:insert_idx] + docstring_lines + lines[insert_idx:]
+            else:
+                # Replace existing docstring
+                doc_start_idx = td["docstring_start_line"] - 1
+                doc_end_idx = td["docstring_end_line"]  # end_lineno is 1-based, we want to include this line
+                lines = lines[:doc_start_idx] + docstring_lines + lines[doc_end_idx:]
 
-def _add_placeholder_docstring_to_typed_dict(
-    lines: list[str], class_name: str, info: dict, undocumented: set, standard_args: set, typed_dict_names: set
-) -> list[str]:
-    """
-    Rebuild the docstring of a TypedDict class to:
-    1. Remove fields that don't exist in the TypedDict anymore
-    2. Remove fields that are redundant (already in standard args or nested TypedDicts)
-    3. Add placeholders for undocumented fields
-    4. Reorder fields to match declaration order
+        # Write updated content
+        with open(candidate_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
 
-    Args:
-        lines: List of file lines
-        class_name: Name of the TypedDict class
-        info: Dict with class info (line, docstring, docstring_end_line, class_node, fields, field_types)
-        undocumented: Set of undocumented field names
-        standard_args: Set of standard arg names to exclude
-        typed_dict_names: Set of all TypedDict class names (to exclude nested TypedDicts)
-
-    Returns:
-        Updated list of lines with rebuilt docstring
-    """
-    class_line_idx = info["line"] - 1  # Convert to 0-based
-    docstring_end_line = info.get("docstring_end_line")
-    class_node = info["class_node"]
-
-    # Get all fields in declaration order (excluding private fields)
-    all_fields = []
-    field_types = info.get("field_types", {})
-    for class_item in class_node.body:
-        if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
-            field_name = class_item.target.id
-            if not field_name.startswith("_"):
-                all_fields.append(field_name)
-
-    # Parse existing docstring to get documented fields
-    existing_docs = {}
-    if info["docstring"]:
-        try:
-            parsed_doc, _ = parse_docstring(info["docstring"])
-            existing_docs = parsed_doc
-        except Exception:
-            pass
-
-    # Build new docstring dict with proper ordering and filtering
-    new_docstring_dict = {}
-
-    for field_name in all_fields:
-        field_type = field_types.get(field_name)
-
-        # Skip nested TypedDict fields (defined in same file)
-        if field_type in typed_dict_names:
-            continue
-
-        # Skip likely TypedDict fields (imported, by naming convention)
-        if field_type and field_type.endswith("Kwargs"):
-            continue
-
-        # Skip fields already in standard args
-        if field_name in standard_args:
-            continue
-
-        # Add field to new docstring
-        if field_name in existing_docs:
-            # Use existing documentation
-            new_docstring_dict[field_name] = existing_docs[field_name]
-        else:
-            # Add placeholder
-            new_docstring_dict[field_name] = {
-                "type": "<fill_type>",
-                "optional": False,
-                "shape": None,
-                "description": "\n        <fill_docstring>",
-                "default": None,
-                "additional_info": None,
-            }
-
-    # Determine indentation
-    class_line = lines[class_line_idx]
-    indent = len(class_line) - len(class_line.lstrip())
-    doc_indent = " " * (indent + 4)
-
-    # Build new docstring
-    if new_docstring_dict:
-        docstring_lines = [f'{doc_indent}"""']
-        for field_name in new_docstring_dict:
-            field_doc = new_docstring_dict[field_name]
-            additional_info = field_doc.get("additional_info", "") or ""
-            description = field_doc["description"]
-
-            # Format field documentation
-            docstring_lines.append(f"{doc_indent}{field_name} (`{field_doc['type']}{additional_info}`):{description}")
-
-        docstring_lines.append(f'{doc_indent}"""')
-        docstring_lines.append("")  # Empty line after docstring
-
-        # Replace old docstring with new one
-        if info["docstring"] is None:
-            # No docstring exists - insert after class definition
-            insert_pos = class_line_idx + 1
-            lines = lines[:insert_pos] + docstring_lines + lines[insert_pos:]
-        else:
-            # Replace existing docstring
-            if docstring_end_line is None:
-                return lines
-
-            docstring_start_idx = class_line_idx + 1  # Line after class definition
-
-            # Find the end of the docstring (the closing """)
-            docstring_end_idx = docstring_end_line  # This should be the line with closing """
-
-            # Remove old docstring and insert new one
-            lines = lines[:docstring_start_idx] + docstring_lines + lines[docstring_end_idx + 1 :]
-    else:
-        # No fields to document - remove docstring if it exists
-        if info["docstring"] is not None and docstring_end_line is not None:
-            docstring_start_idx = class_line_idx + 1
-            docstring_end_idx = docstring_end_line
-            lines = lines[:docstring_start_idx] + lines[docstring_end_idx + 1 :]
-
-    return lines
+    return missing_warnings, fill_warnings
 
 
 def update_file_with_new_docstrings(
@@ -1776,46 +1758,43 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         # Parse file once to find all @auto_docstring decorated items
         decorated_items = _build_ast_indexes(content)
 
-        # Check custom TypedDict kwargs for undocumented fields
-        # This also fixes them if overwrite=True
-        custom_kwargs_warnings, lines = _check_and_fix_custom_typed_dict_kwargs(content, lines, overwrite=overwrite)
+        missing_docstring_args_warnings = []
+        fill_docstring_args_warnings = []
+        docstring_args_ro_remove_warnings = []
 
-        if not decorated_items and not custom_kwargs_warnings:
-            continue
-
-        # Update docstrings for all decorated items (if any)
-        # Pass the updated lines (which may have TypedDict fixes) to update_file_with_new_docstrings
-        # It will handle the final file write if overwrite=True
+        # Process @auto_docstring decorated items
         if decorated_items:
-            # Reconstruct content from updated lines
-            updated_content = "\n".join(lines)
-            # IMPORTANT: Re-parse AST to get updated line numbers after TypedDict fixes
-            # Otherwise, line numbers will be stale and docstrings will be inserted in wrong places
-            decorated_items = _build_ast_indexes(updated_content)
             missing_docstring_args_warnings, fill_docstring_args_warnings, docstring_args_ro_remove_warnings = (
                 update_file_with_new_docstrings(
                     candidate_file,
                     lines,
                     decorated_items,
-                    updated_content,
+                    content,
                     overwrite=overwrite,
                 )
             )
-        else:
-            # No decorated items, but we have TypedDict fixes to write
-            missing_docstring_args_warnings = []
-            fill_docstring_args_warnings = []
-            docstring_args_ro_remove_warnings = []
 
-            # Write the TypedDict fixes if in overwrite mode
-            if overwrite and custom_kwargs_warnings:
-                content_new = "\n".join(lines)
-                with open(candidate_file, "w", encoding="utf-8") as f:
-                    f.write(content_new)
-        if custom_kwargs_warnings:
+        # Process TypedDict kwargs (separate pass to avoid line number conflicts)
+        # This runs AFTER @auto_docstring processing is complete
+        typed_dict_missing_warnings, typed_dict_fill_warnings = _process_typed_dict_docstrings(
+            candidate_file, overwrite=overwrite
+        )
+
+        # Report TypedDict errors
+        if typed_dict_missing_warnings:
             has_errors = True
+            if not overwrite:
+                print(
+                    "Some TypedDict fields are undocumented. Run `make fix-copies` or "
+                    "`python utils/check_docstrings.py --fix_and_overwrite` to generate placeholders."
+                )
             print(f"[ERROR] Undocumented fields in custom TypedDict kwargs in {candidate_file}:")
-            for warning in custom_kwargs_warnings:
+            for warning in typed_dict_missing_warnings:
+                print(warning)
+        if typed_dict_fill_warnings:
+            has_errors = True
+            print(f"[ERROR] TypedDict docstrings need to be filled in {candidate_file}:")
+            for warning in typed_dict_fill_warnings:
                 print(warning)
         if missing_docstring_args_warnings:
             has_errors = True

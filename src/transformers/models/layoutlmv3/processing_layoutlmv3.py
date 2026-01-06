@@ -53,7 +53,6 @@ class LayoutLMv3Processor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        # verify input
         r"""
         text_pair (<fill_type>):
             <fill_docstring>
