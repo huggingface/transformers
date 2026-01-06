@@ -117,7 +117,8 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
         # Also, reinit all non-persistemt buffers if any!
-        _maybe_reinit_non_persistent_buffer(module)
+        if hasattr(module, "_init_buffers"):
+            module._init_buffers()
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
