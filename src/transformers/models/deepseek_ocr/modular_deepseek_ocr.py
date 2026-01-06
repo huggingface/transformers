@@ -18,11 +18,11 @@ from typing import Optional, Union
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -38,7 +38,6 @@ from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
     DeepseekV2Model,
-    DeepseekV2PreTrainedModel,
     DeepseekV2RMSNorm,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
@@ -120,6 +119,11 @@ class DeepseekOcrSamConfig(PreTrainedConfig):
         self.out_channels = output_channels
 
 
+class DeepseekOcrCLIPTextConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip_text"
+    base_config_key = "text_config"
+
+
 class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_clip_vision"
     base_config_key = "clip_vision_config"
@@ -151,6 +155,15 @@ class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
+
+
+class DeepseekOcrCLIPConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip"
+    sub_configs = {"text_config": DeepseekOcrCLIPTextConfig, "vision_config": DeepseekOcrCLIPVisionConfig}
+
+
+class DeepseekOcrCLIPPreTrainedModel(PreTrainedModel):
+    config_class = DeepseekOcrCLIPConfig
 
 
 class DeepseekOcrProjectorConfig(PreTrainedConfig):
@@ -304,7 +317,6 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -315,12 +327,13 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
         routed_scaling_factor: Optional[float] = 1.0,
         topk_group: Optional[int] = None,
         topk_method: Optional[str] = "greedy",
+        norm_topk_prob: Optional[bool] = False,
         num_experts_per_tok: Optional[int] = None,
         moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
         rope_theta = kwargs.get("rope_theta", 10_000.0)
-        norm_topk_prob = kwargs.get("norm_topk_prob", False)
+        norm_topk_prob = kwargs.get("norm_topk_prob", norm_topk_prob)
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -419,8 +432,6 @@ class DeepseekOcrConfig(PreTrainedConfig):
             )
         elif isinstance(text_config, dict):
             text_config.pop("auto_map", None)
-            if "head_dim" not in text_config and "hidden_size" in text_config and "num_attention_heads" in text_config:
-                text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
             self.text_config = DeepseekOcrTextConfig(**text_config)
         else:
             self.text_config = text_config
@@ -463,19 +474,12 @@ class DeepseekOcrProjector(PreTrainedModel):
     Projector that maps concatenated SAM + CLIP features to language model space.
     """
 
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_attention_backend = True
-
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
     def forward(self, x):
         return self.layers(x)
-
-    def set_attention_implementation(self, *_args, **_kwargs):
-        return self
 
 
 class DeepseekOcrVisionAttention(SamVisionAttention):
@@ -552,7 +556,12 @@ class DeepseekOcrVisionEmbeddings(CLIPVisionEmbeddings):
             patch_embeds = patch_embeds
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        position_embeddings = self.position_embedding(self.position_ids)
+        num_positions = self.position_embedding.num_embeddings
+        position_ids = self.position_ids
+        if position_ids.shape[-1] != num_positions or position_ids.min() < 0 or position_ids.max() >= num_positions:
+            position_ids = torch.arange(num_positions, device=self.position_embedding.weight.device).unsqueeze(0)
+            self.position_ids = position_ids
+        position_embeddings = self.position_embedding(position_ids)
         if position_embeddings.shape[1] != embeddings.shape[1]:
             class_pos_embed = position_embeddings[:, :1]
             patch_pos_embed = position_embeddings[:, 1:]
@@ -874,8 +883,19 @@ class DeepseekOcrTextRMSNorm(DeepseekV2RMSNorm):
     pass
 
 
-class DeepseekOcrTextPreTrainedModel(DeepseekV2PreTrainedModel):
-    pass
+class DeepseekOcrTextPreTrainedModel(PreTrainedModel):
+    config: DeepseekOcrTextConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, DeepseekOcrTextExperts):
+            for expert in module:
+                init.normal_(expert.gate_proj.weight, mean=0.0, std=self.config.initializer_range)
+                init.normal_(expert.up_proj.weight, mean=0.0, std=self.config.initializer_range)
+                init.normal_(expert.down_proj.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class DeepseekOcrTextModel(DeepseekV2Model):
@@ -1320,7 +1340,10 @@ __all__ = [
     "DeepseekOcrConfig",
     "DeepseekOcrVisionConfig",
     "DeepseekOcrSamConfig",
+    "DeepseekOcrCLIPConfig",
+    "DeepseekOcrCLIPTextConfig",
     "DeepseekOcrCLIPVisionConfig",
+    "DeepseekOcrCLIPPreTrainedModel",
     "DeepseekOcrProjectorConfig",
     "DeepseekOcrModelOutputWithPast",
     "DeepseekOcrCausalLMOutputWithPast",
@@ -1332,8 +1355,4 @@ __all__ = [
     "DeepseekOcrProjector",
     "DeepseekOcrSamVisionEncoder",
     "DeepseekOcrCLIPVisionModel",
-    "DeepseekOCRForCausalLM",
 ]
-
-
-DeepseekOCRForCausalLM = DeepseekOcrForConditionalGeneration

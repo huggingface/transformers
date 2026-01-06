@@ -125,9 +125,9 @@ class DeepseekOcrProcessor(ProcessorMixin):
 
     # hacky hacky, so that from_pretrained does not yell because there is no processor config in the hub repo
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
         try:
-            return super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return super()._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         except OSError as error:
             if "preprocessor_config" not in str(error):
                 raise

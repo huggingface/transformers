@@ -21,7 +21,6 @@
 from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 
 
 class DeepseekOcrSamConfig(PreTrainedConfig):
@@ -72,6 +71,11 @@ class DeepseekOcrSamConfig(PreTrainedConfig):
         self.out_channels = output_channels
 
 
+class DeepseekOcrCLIPTextConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip_text"
+    base_config_key = "text_config"
+
+
 class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr_clip_vision"
     base_config_key = "clip_vision_config"
@@ -103,6 +107,11 @@ class DeepseekOcrCLIPVisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
+
+
+class DeepseekOcrCLIPConfig(PreTrainedConfig):
+    model_type = "deepseek_ocr_clip"
+    sub_configs = {"text_config": DeepseekOcrCLIPTextConfig, "vision_config": DeepseekOcrCLIPVisionConfig}
 
 
 class DeepseekOcrProjectorConfig(PreTrainedConfig):
@@ -264,7 +273,6 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
         tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
         attention_bias: Optional[bool] = False,
         attention_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
@@ -275,12 +283,13 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         routed_scaling_factor: Optional[float] = 1.0,
         topk_group: Optional[int] = None,
         topk_method: Optional[str] = "greedy",
+        norm_topk_prob: Optional[bool] = False,
         num_experts_per_tok: Optional[int] = None,
         moe_intermediate_size: Optional[int] = 1407,
         **kwargs,
     ):
         rope_theta = kwargs.get("rope_theta", 10_000.0)
-        norm_topk_prob = kwargs.get("norm_topk_prob", False)
+        norm_topk_prob = kwargs.get("norm_topk_prob", norm_topk_prob)
         self.first_k_dense_replace = first_k_dense_replace
         self.n_group = n_group
         self.n_routed_experts = n_routed_experts
@@ -405,8 +414,6 @@ class DeepseekOcrConfig(PreTrainedConfig):
             )
         elif isinstance(text_config, dict):
             text_config.pop("auto_map", None)
-            if "head_dim" not in text_config and "hidden_size" in text_config and "num_attention_heads" in text_config:
-                text_config["head_dim"] = text_config["hidden_size"] // text_config["num_attention_heads"]
             self.text_config = DeepseekOcrTextConfig(**text_config)
         else:
             self.text_config = text_config
@@ -442,6 +449,8 @@ __all__ = [
     "DeepseekOcrConfig",
     "DeepseekOcrVisionConfig",
     "DeepseekOcrSamConfig",
+    "DeepseekOcrCLIPConfig",
+    "DeepseekOcrCLIPTextConfig",
     "DeepseekOcrCLIPVisionConfig",
     "DeepseekOcrProjectorConfig",
 ]
