@@ -207,26 +207,25 @@ class CsmGenerationMixin(GenerationMixin):
             else self.__call__
         )
 
-        is_prefill = True
-        while self._has_unfinished_sequences(
-            this_peer_finished,
-            synced_gpus,
-            device=input_ids.device,
-        ):
-            # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+        # *************** Csm specific ***************
+        model_kwargs.update({"output_hidden_states": True})
 
-            # prepare variable output controls (note: some models won't accept all output controls)
-            model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-            # *************** Csm specific ***************
-            model_inputs.update({"output_hidden_states": True})
-            # ============================================
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
-            if is_prefill:
-                outputs = self(**model_inputs, return_dict=True)
-                is_prefill = False
-            else:
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
+            if prefill_consumed:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                # prepare variable output controls (note: some models won't accept all output controls)
+                model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
                 outputs = model_forward(**model_inputs, return_dict=True)
+            prefill_consumed = True
 
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(

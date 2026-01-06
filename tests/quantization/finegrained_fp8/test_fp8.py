@@ -30,14 +30,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @contextmanager
@@ -145,7 +142,7 @@ class FP8QuantizerTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = FineGrainedFP8Config()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -158,7 +155,7 @@ class FP8QuantizerTest(unittest.TestCase):
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
         self.assertEqual(nb_linears, nb_fp8_linear)
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = FineGrainedFP8Config()
         model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)

@@ -210,7 +210,7 @@ class PagedAttentionCache:
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
+        self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -387,6 +387,29 @@ class PagedAttentionCache:
                     allocated_blocks=cm.block_table[state.request_id],
                     prompt_ids=(state.initial_tokens + state.generated_tokens),
                 )
+
+    def copy_cache(self, source_blocks: list[int], forked_blocks: list[int]) -> None:
+        """Copy the cache from the source blocks to the forked blocks."""
+        source_blocks = torch.tensor(source_blocks, device=self.device, dtype=torch.int32)
+        forked_blocks = torch.tensor(forked_blocks, device=self.device, dtype=torch.int32)
+        for key_cache, value_cache in zip(self.key_cache, self.value_cache):
+            key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            key_cache[forked_blocks] = key_cache[source_blocks]
+            value_cache[forked_blocks] = value_cache[source_blocks]
+        # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
+        # This will allow for  better .update and a single copy instead of one per cache tensor
+
+    def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
+        """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
+        # These lists will be the accumulators for the source and destination blocks for the cache copy
+        source_blocks, destination_blocks = [], []
+        # Main fork loop
+        for cm in self.group_cache_managers:
+            src_blocks, dst_blocks = cm.fork_blocks(source_request_id, destination_request_ids, self._block_manager)
+            source_blocks.extend(src_blocks)
+            destination_blocks.extend(dst_blocks)
+        return source_blocks, destination_blocks
 
 
 # TODO: rework computation with the groups and their sizes

@@ -148,21 +148,20 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test the `get_keys_to_not_convert` function.
         """
-        from accelerate import init_empty_weights
 
         from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
         from transformers.quantizers.base import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = MptForCausalLM(config)
         # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
         self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
 
         model_id = "Salesforce/blip2-opt-2.7b"
         config = AutoConfig.from_pretrained(model_id, revision="1ef7f63a8f0a144c13fdca8103eb7b4691c74cec")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = Blip2ForConditionalGeneration(config)
         self.assertEqual(
             get_keys_to_not_convert(model).sort(),
@@ -171,13 +170,13 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "model.decoder.embed_tokens"].sort())
 
         model_id = "FacebookAI/roberta-large"
         config = AutoConfig.from_pretrained(model_id, revision="716877d372b884cad6d419d828bac6c85b3b18d9")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForMaskedLM.from_config(config)
         self.assertEqual(
             get_keys_to_not_convert(model).sort(),
@@ -446,7 +445,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
             hf_quantizer = AutoHfQuantizer.from_config(BitsAndBytesConfig(load_in_8bit=True), pre_quantized=False)
-            hf_quantizer.preprocess_model(model=model, config=model.config)
+            hf_quantizer.preprocess_model(model=model, config=model.config, device_map=expanded_device_map)
             quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
 
             expected_keys = [name for name, _ in model.named_parameters()] + [

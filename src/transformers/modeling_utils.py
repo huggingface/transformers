@@ -25,7 +25,7 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
@@ -62,7 +62,7 @@ from .integrations.accelerate import (
     accelerate_dispatch,
     check_and_set_device_map,
     expand_device_map,
-    init_empty_weights,
+    get_device,
     load_offloaded_parameter,
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
@@ -109,6 +109,7 @@ from .utils import (
     is_accelerate_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_grouped_mm_available,
     is_kernels_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
@@ -152,7 +153,6 @@ logger = logging.get_logger(__name__)
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-_init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 
@@ -169,51 +169,6 @@ def is_local_dist_rank_0():
         and torch.distributed.is_initialized()
         and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
-
-
-TORCH_INIT_FUNCTIONS = {
-    "uniform_": nn.init.uniform_,
-    "normal_": nn.init.normal_,
-    "trunc_normal_": nn.init.trunc_normal_,
-    "constant_": nn.init.constant_,
-    "xavier_uniform_": nn.init.xavier_uniform_,
-    "xavier_normal_": nn.init.xavier_normal_,
-    "kaiming_uniform_": nn.init.kaiming_uniform_,
-    "kaiming_normal_": nn.init.kaiming_normal_,
-    "uniform": nn.init.uniform,
-    "normal": nn.init.normal,
-    "xavier_uniform": nn.init.xavier_uniform,
-    "xavier_normal": nn.init.xavier_normal,
-    "kaiming_uniform": nn.init.kaiming_uniform,
-    "kaiming_normal": nn.init.kaiming_normal,
-    "orthogonal_": nn.init.orthogonal_,
-}
-
-
-@contextmanager
-def no_init_weights():
-    """
-    Context manager to globally disable weight initialization to speed up loading large models.
-    """
-    global _init_weights
-    old_init_weights = _init_weights
-
-    _init_weights = False
-
-    def _skip_init(*args, **kwargs):
-        pass
-
-    # Save the original initialization functions
-    for name, init_func in TORCH_INIT_FUNCTIONS.items():
-        setattr(torch.nn.init, name, _skip_init)
-
-    try:
-        yield
-    finally:
-        _init_weights = old_init_weights
-        # Restore the original initialization functions
-        for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            setattr(torch.nn.init, name, init_func)
 
 
 @contextmanager
@@ -497,10 +452,13 @@ def remove_tied_weights_from_state_dict(
 
 
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
-    """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
-    module, param_type = get_module_from_name(model, param_name)
-    # This will check potential shape mismatch if skipped before
-    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+    """Cast a single parameter or buffer `param_name` into the `model`, with value `tensor`."""
+    parent, param_type = get_module_from_name(model, param_name)
+    if param_type in parent._parameters and not isinstance(tensor, nn.Parameter):
+        tensor = nn.Parameter(tensor, requires_grad=tensor.is_floating_point())
+    # We need to use setattr here, as we set non-persistent buffers as well with this function (`load_state_dict`
+    # does not allow to do it)
+    setattr(parent, param_type, tensor)
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
@@ -1321,6 +1279,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
             self.config._attn_implementation, is_init_check=True
         )
+        # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
+        # setting it recursively)
+        self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
+            self.config._experts_implementation
+        )
         if self.can_generate():
             self.generation_config = GenerationConfig.from_model_config(config)
 
@@ -1508,9 +1471,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        # If passing `experts_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
+
         init_contexts = []
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
+
         if is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model across all gpus, to avoid the overhead in time
@@ -1772,6 +1740,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return True
 
+    def _grouped_mm_can_dispatch(self) -> bool:
+        """
+        Check the availability of Grouped MM for a given model.
+        """
+
+        if not self._can_set_experts_implementation():
+            raise ValueError(f"{self.__class__.__name__} does not support setting experts implementation.")
+
+        if not is_grouped_mm_available():
+            raise ImportError(
+                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
+            )
+
+        # If no error raised by this point, we can return `True`
+        return True
+
     def _flex_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flex Attention for a given model.
@@ -1880,6 +1864,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attn_implementation
 
+    def _check_and_adjust_experts_implementation(self, experts_implementation: Optional[str]) -> str:
+        """
+        Check that the `experts_implementation` exists and is supported by the models.
+
+        Args:
+            experts_implementation (`str` or `None`):
+                The experts implementation to check for existence/validity.
+        Returns:
+            `str`: The final experts implementation to use.
+        """
+        applicable_experts_implementation = self.get_correct_experts_implementation(experts_implementation)
+        return applicable_experts_implementation
+
     def get_correct_attn_implementation(self, requested_attention: Optional[str], is_init_check: bool = False) -> str:
         applicable_attention = "sdpa" if requested_attention is None else requested_attention
         if applicable_attention not in ["eager"] + ALL_ATTENTION_FUNCTIONS.valid_keys():
@@ -1914,6 +1911,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return applicable_attention
 
+    def get_correct_experts_implementation(self, requested_experts: Optional[str]) -> str:
+        applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+            message = (
+                f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
+            )
+            raise ValueError(message)
+
+        # Perform relevant checks
+        if applicable_experts == "grouped_mm":
+            try:
+                self._grouped_mm_can_dispatch()
+            except (ValueError, ImportError) as e:
+                if requested_experts == "grouped_mm":
+                    raise e
+                applicable_experts = "eager"
+
+        return applicable_experts
+
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
@@ -1931,6 +1948,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             # If no attention layer, assume `True`. Most probably a multimodal model or inherits from existing models
             return True
+
+    @classmethod
+    def _can_set_experts_implementation(cls) -> bool:
+        """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
+        opening the file, but avoids maintaining yet another property flag.
+        """
+        class_file = sys.modules[cls.__module__].__file__
+        with open(class_file, "r") as f:
+            code = f.read()
+        # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
+        return "@use_experts_implementation" in code
 
     def set_attn_implementation(self, attn_implementation: Union[str, dict]):
         """
@@ -2030,6 +2058,50 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 else:
                     if hasattr(subconfig, "_attn_was_changed"):
                         del subconfig._attn_was_changed
+
+    def set_experts_implementation(self, experts_implementation: Union[str, dict]):
+        """
+        Set the requested `experts_implementation` for this model.
+
+        Args:
+            experts_implementation (`str` or `dict`):
+                The experts implementation to set for this model. It can be either a `str`, in which case it will be
+                dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
+                submodel will dispatch the corresponding value.
+        """
+        requested_implementation = (
+            experts_implementation
+            if not isinstance(experts_implementation, dict)
+            else experts_implementation.get("", self.config._experts_implementation)
+        )
+
+        if requested_implementation != self.config._experts_implementation:
+            requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
+            # Apply the change (on the internal attr, to avoid setting it recursively)
+            self.config._experts_implementation_internal = requested_implementation
+
+        # Apply it to all submodels as well
+        for submodule in self.modules():
+            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+            # e.g. ForCausalLM has a Model inside, but no need to check it again)
+            if (
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule.config.__class__ != self.config.__class__
+            ):
+                # Set the experts on the submodule
+                sub_implementation = requested_implementation
+                if isinstance(experts_implementation, dict):
+                    for subconfig_key in self.config.sub_configs:
+                        # We need to check for exact object match here, with `is`
+                        if getattr(self.config, subconfig_key) is submodule.config:
+                            sub_implementation = experts_implementation.get(
+                                subconfig_key, submodule.config._experts_implementation
+                            )
+                            break
+                # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
+                sub_implementation = submodule.get_correct_experts_implementation(sub_implementation)
+                submodule.config._experts_implementation_internal = sub_implementation
 
     def enable_input_require_grads(self):
         """
@@ -2206,7 +2278,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
 
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.ConvTranspose1d, nn.ConvTranspose2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+            if getattr(module, "weight", None) is not None:
+                init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -2253,9 +2326,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
 
         self._init_weights(module)
-        # If we are not currently under meta device (which would virtually skip `_init_weights`), mark as initialized
-        if get_torch_context_manager_or_global_device() != torch.device("meta"):
-            module._is_hf_initialized = True
+        module._is_hf_initialized = True
 
     @torch.no_grad()
     @init.guard_torch_init_functions()
@@ -2350,7 +2421,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_mapping = self._tied_weights_keys
         # If the config does not specify any tying, return empty dict
-        if not self.config.tie_word_embeddings and not self.config.tie_encoder_decoder:
+        if not self.config.tie_word_embeddings:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
@@ -2987,7 +3058,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
         initialization logic in `_init_weights`.
         """
-        if _init_weights:
+        # If we are initializing on meta device, there is no point in trying to run inits
+        if get_torch_context_manager_or_global_device() != torch.device("meta"):
             # Initialize weights
             self.initialize_weights()
             # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
@@ -3532,15 +3604,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            init_contexts.append(no_init_weights())
             # We cannot initialize the model on meta device with deepspeed when not quantized
             if not is_quantized and not _is_ds_init_called:
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-                init_contexts.extend([deepspeed.zero.Init(config_dict_or_path=deepspeed_config()), set_zero3_state()])
+                init_contexts.extend(
+                    [
+                        init.no_init_weights(),
+                        deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                        set_zero3_state(),
+                    ]
+                )
             elif is_quantized:
-                init_contexts.extend([init_empty_weights(), set_quantized_state()])
+                init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.extend([no_init_weights(), init_empty_weights()])
+            init_contexts.append(torch.device("meta"))
 
         return init_contexts
 
@@ -3684,6 +3761,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                   "org/model@main"
                   "org/model:custom_kernel"
                   "org/model@v1.2.3:custom_kernel"
+            experts_implementation (`str`, *optional*):
+                The experts implementation to use in the model (if relevant). Can be any of:
+
+                - `"eager"` (sequential implementation of the experts matrix multiplications).
+                - `"batched_mm"` (using [`torch.bmm`](https://pytorch.org/docs/stable/generated/torch.bmm.html)).
+                - `"grouped_mm"` (using [`torch._grouped_mm`](https://docs.pytorch.org/docs/main/generated/torch.nn.functional.grouped_mm.html)).
+
+                By default, if available, `grouped_mm` will be used for torch>=2.9.0. The default is otherwise the sequential `"eager"` implementation.
 
             > Parameters for big model inference
 
@@ -3907,6 +3992,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
 
+        if "experts_implementation" in kwargs:
+            config._experts_implementation = kwargs.pop("experts_implementation")
+
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent
         )
@@ -3995,6 +4083,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             sharded_metadata=sharded_metadata,
             device_map=device_map,
             disk_offload_folder=offload_folder,
+            offload_buffers=offload_buffers,
             dtype=dtype,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
@@ -4002,7 +4091,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weight_mapping=weight_conversions,
         )
 
-        model.eval()  # Set model in evaluation mode to deactivate DropOut modules by default
+        model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
@@ -4018,8 +4107,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 **kwargs,
             )
 
-        # for device_map="auto" : dispatch model with hooks on all devices if necessary
-        if device_map is not None and device_mesh is None:
+        # If the device_map has more than 1 device: dispatch model with hooks on all devices
+        if device_map is not None and len(set(device_map.values())) > 1:
             accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
 
         if hf_quantizer is not None:
@@ -4058,6 +4147,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         sharded_metadata: Optional[dict] = None,
         device_map: Optional[dict] = None,
         disk_offload_folder: Optional[str] = None,
+        offload_buffers: bool = False,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
@@ -4095,7 +4185,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
 
-        tp_plan = getattr(model, "_tp_plan", None)
         error_msgs = []
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
@@ -4104,9 +4193,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
                 state_dict = merged_state_dict
-            error_msgs += _load_state_dict_into_zero3_model(model, state_dict)
+            error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
-            missing_keys, unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set(), set()
+            unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set()
         else:
             all_pointer = set()
             # Checkpoints are safetensors
@@ -4130,17 +4219,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, conversion_errors = (
                 convert_and_load_state_dict_in_model(
-                    model,
-                    merged_state_dict,
-                    weight_mapping,
-                    tp_plan,
-                    hf_quantizer,
-                    dtype,
-                    device_map,
-                    model.dtype_plan,
-                    device_mesh,
-                    disk_offload_index,
-                    disk_offload_folder,
+                    model=model,
+                    state_dict=merged_state_dict,
+                    weight_mapping=weight_mapping,
+                    tp_plan=model._tp_plan,
+                    hf_quantizer=hf_quantizer,
+                    dtype=dtype,
+                    device_map=device_map,
+                    dtype_plan=model.dtype_plan,
+                    device_mesh=device_mesh,
+                    disk_offload_index=disk_offload_index,
+                    disk_offload_folder=disk_offload_folder,
+                    offload_buffers=offload_buffers,
                 )
             )
 
@@ -4151,12 +4241,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
 
-        # Move missing (and potentially mismatched) keys back to cpu from meta device (because they won't be moved when
-        # loading the weights as they are not in the loaded state dict)
-        miss_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_cpu(miss_and_mismatched, dtype, hf_quantizer)
+        # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
+        # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
+        missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
+        model._move_missing_keys_from_meta_to_device(missing_and_mismatched, device_map, device_mesh, hf_quantizer)
 
-        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialzed` flag)
+        # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
         model._initialize_missing_keys(is_quantized)
 
         # Tie the weights
@@ -4164,34 +4254,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Adjust missing and unexpected keys
         missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
-
-        # Post-processing for tensor parallelism
-        if device_mesh is not None:
-            # When using TP, the device map is a single device for all parameters
-            tp_device = list(device_map.values())[0]
-            # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
-            # not part of the state_dict (persistent=False)
-            for buffer in model.buffers():  # TODO to avoid this buffer could be added to the ckpt
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
-
-            # In this case, the top-most task module weights were not moved to device and parallelized as they
-            # were not part of the loaded weights: do it now
-            if missing_keys:
-                state_dict = model.state_dict()
-                for name in missing_keys:
-                    param = state_dict[name]
-                    # Shard the param
-                    shard_and_distribute_module(
-                        model,
-                        param.to(tp_device),
-                        param,
-                        name,
-                        None,
-                        False,
-                        device_mesh.get_local_rank(),
-                        device_mesh,
-                    )
 
         log_state_dict_report(
             model=model,
@@ -4390,32 +4452,54 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
 
-    def _move_missing_keys_from_meta_to_cpu(
-        self, missing_keys: list[str], dtype: torch.dtype, hf_quantizer: Optional[HfQuantizer]
+    def _move_missing_keys_from_meta_to_device(
+        self,
+        missing_keys: list[str],
+        device_map: dict | None,
+        device_mesh: "torch.distributed.device_mesh.DeviceMesh | None",
+        hf_quantizer: HfQuantizer | None,
     ) -> None:
-        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
-        from meta device to cpu.
+        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
+        back from meta device to their device according to the `device_map` if any, else cpu. Takes care of sharding those
+        missing parameters if `device_mesh` is provided, i.e. we are using TP.
+        All non-persistent buffers are also moved back to the correct device (they are not part of the state_dict, but are
+        not missing either).
         """
         is_quantized = hf_quantizer is not None
+        # This is the only case where we do not initialize the model on meta device, so we don't have to do anything here
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            return
 
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            # We only do it for the parameters, as the buffers are not initialized on the meta device by default
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+                value = torch.empty_like(param, device="cpu")
+                _load_parameter_into_model(self, key, value)
+            for key, buffer in self.named_buffers():
+                value = torch.empty_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
-        model_state_dict = self.state_dict()
         # The tied weight keys are in the "missing" usually, but they should not be moved (they will be tied anyway)
         # This is especially important because if they are moved, they will lose the `_is_hf_initialized` flag, and they
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
-            param = model_state_dict[key]
-            # Buffers are not initialized on the meta device, so we still need this check to avoid overwriting them
-            if param.device == torch.device("meta"):
-                value = torch.empty_like(param, dtype=dtype, device="cpu")
+            param = self.get_parameter_or_buffer(key)
+            param_device = get_device(device_map, key, valid_torch_device=True)
+            value = torch.empty_like(param, device=param_device)
+            # For TP, we may need to shard the param
+            if device_mesh is not None:
+                shard_and_distribute_module(
+                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                )
+            # Otherwise, just move it to device
+            else:
                 _load_parameter_into_model(self, key, value)
+        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
+        for key, buffer in self.named_non_persistent_buffers():
+            buffer_device = get_device(device_map, key, valid_torch_device=True)
+            value = torch.empty_like(buffer, device=buffer_device)
+            _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:
         """
@@ -4443,8 +4527,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
-        Also, set the `_is_hf_initialized` on tied weight keys, to avoid initializing them as they are going to
-        be tied anyway.
         """
         # Old checkpoints may have keys for rotary_emb.inv_freq forach layer, however we moved this buffer to the main model
         # (so the buffer name has changed). Remove them in such a case. This is another exception that was not added to
@@ -4502,6 +4584,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return module.get_extra_state()
 
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
+
+    def named_non_persistent_buffers(
+        self, recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[tuple[str, torch.Tensor]]:
+        """Similar to `named_buffers`, but only yield non-persistent ones. It is handy as it's not perfectly straightforward
+        to know if they are persistent or not"""
+        for name, tensor in self.named_buffers(recurse=recurse, remove_duplicate=remove_duplicate):
+            # We have to grab the parent here, as the attribute `_non_persistent_buffers_set` is on the immediate
+            # parent only
+            parent, buf_name = name.rsplit(".", 1) if "." in name else ("", name)
+            parent = self.get_submodule(parent)
+            if buf_name in parent._non_persistent_buffers_set:
+                yield name, tensor
 
     def train(self, mode: bool = True):
         out = super().train(mode)
@@ -4565,13 +4660,7 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-
-    tp_plan = getattr(model, "_tp_plan", []) or []
-    tp_plan_regex = (
-        re.compile("|".join([re.escape(plan) for plan in tp_plan]))
-        if _torch_distributed_available and torch.distributed.is_initialized()
-        else None
-    )
+    tp_plan = model._tp_plan if torch.distributed.is_available() and torch.distributed.is_initialized() else []
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -4587,9 +4676,9 @@ def get_total_byte_count(
 
         param_byte_count = param.numel() * dtype_size
 
-        if tp_plan_regex is not None:
-            generic_name = re.sub(r"\.\d+\.", ".*.", param_name)
-            param_byte_count //= torch.distributed.get_world_size() if tp_plan_regex.search(generic_name) else 1
+        if len(tp_plan) > 0:
+            is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
+            param_byte_count //= torch.distributed.get_world_size() if is_part_of_plan else 1
 
         total_byte_count[device] += param_byte_count
     return total_byte_count
@@ -4614,8 +4703,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
     - Loading speed bottleneck is now almost only tensor copy (i.e. changing the dtype) and moving the tensors to the devices.
     However, we cannot really improve on those aspects obviously, as the data needs to be moved/copied in the end.
     """
-    factor = 2
-
     # Remove disk, cpu and meta devices, and cast to proper torch.device
     accelerator_device_map = {
         param: torch.device(device) for param, device in expanded_device_map.items() if is_accelerator_device(device)
@@ -4644,7 +4731,8 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
                 index
             ) - torch_accelerator_module.memory_allocated(index)
             byte_count = int(max(0, byte_count - unused_memory))
-        _ = torch.empty(byte_count // factor, dtype=torch.float16, device=device, requires_grad=False)
+        # We divide by 2 here as we allocate in fp16
+        _ = torch.empty(byte_count // 2, dtype=torch.float16, device=device, requires_grad=False)
 
 
 class AttentionInterface(GeneralInterface):

@@ -44,10 +44,41 @@ from ...utils import (
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
     compute_segments,
-    convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
+
+
+# Adapted from transformers.models.maskformer.image_processing_maskformer_fast.convert_segmentation_map_to_binary_masks_fast
+def convert_segmentation_map_to_binary_masks_fast(
+    segmentation_map: "torch.Tensor",
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
+):
+    if ignore_index is not None:
+        segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    all_labels = torch.unique(segmentation_map)
+
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]  # drop background label if applicable
+
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+    if binary_masks:
+        binary_masks = torch.stack(binary_masks, dim=0)
+    else:
+        binary_masks = torch.zeros((0, *segmentation_map.shape), device=segmentation_map.device)
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = torch.zeros(all_labels.shape[0], device=segmentation_map.device)
+
+        for i, label in enumerate(all_labels):
+            class_id = instance_id_to_semantic_id[(label.item() + 1 if ignore_index is not None else label.item())]
+            labels[i] = class_id - 1 if ignore_index is not None else class_id
+    else:
+        labels = all_labels
+    return binary_masks.float(), labels.long()
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -194,14 +225,14 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = convert_segmentation_map_to_binary_masks(
+                masks, classes = convert_segmentation_map_to_binary_masks_fast(
                     segmentation_map,
                     instance_id,
                     ignore_index=ignore_index,
                 )
 
-                mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
+                mask_labels.append(masks)
+                class_labels.append(classes)
 
             # we cannot batch them since they don't share a common class size
             outputs["mask_labels"] = mask_labels

@@ -47,10 +47,14 @@ class Lfm2MoeModelTester(CausalLMModelTester):
     def __init__(
         self,
         parent,
+        num_dense_layers=1,
+        num_hidden_layers=2,
         layer_types=["full_attention", "conv"],
     ):
         super().__init__(parent)
         self.layer_types = layer_types
+        self.num_dense_layers = num_dense_layers
+        self.num_hidden_layers = num_hidden_layers
 
 
 @require_torch
@@ -160,7 +164,10 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Lfm2MoeForCausalLM.from_pretrained(
-                "LiquidAI/LFM2-8B-A1B", device_map="auto", dtype=torch.bfloat16
+                "LiquidAI/LFM2-8B-A1B",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                experts_implementation="eager",
             )
         return cls.model
 

@@ -27,6 +27,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
+    require_torch_gpu,
 )
 
 
@@ -103,10 +104,9 @@ class PeVideoEncoderTester:
                 self.config_kwargs["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        valid_lengths = ids_tensor([self.batch_size], self.num_frames)
-        padding_mask_videos = (
-            torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_lengths[:, None]
-        )
+        # Generate valid_lengths in range [1, num_frames] to ensure at least one valid frame
+        valid_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
+        padding_mask_videos = torch.arange(self.num_frames, device=torch_device).unsqueeze(0) < valid_lengths[:, None]
         padding_mask_videos = padding_mask_videos.int()
         config = self.get_config()
 
@@ -185,6 +185,10 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="PeAudioModel uses some timm stuff not compatible")
     def test_save_load(self):
+        pass
+
+    @unittest.skip(reason="TimmWrapperModel does not support model parallelism")
+    def test_model_parallelism(self):
         pass
 
     @unittest.skip(reason="@eustlb this is not really expected")
@@ -358,6 +362,10 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
         pass
+
+    @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

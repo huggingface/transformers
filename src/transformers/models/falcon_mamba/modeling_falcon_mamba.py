@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -814,6 +814,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         cache_params: Optional[FalconMambaCache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        is_first_iteration: Optional[bool] = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
