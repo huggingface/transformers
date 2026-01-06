@@ -74,6 +74,8 @@
       title: Overview
     - local: attention_interface
       title: Attention backends
+    - local: experts_interface
+      title: Experts backends
     - local: continuous_batching
       title: Continuous batching
     - local: kernel_doc/overview
@@ -1053,6 +1055,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
