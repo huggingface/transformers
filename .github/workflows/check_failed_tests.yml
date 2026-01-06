@@ -115,7 +115,7 @@ jobs:
         if: ${{ env.process == 'true' && inputs.pr_number != '' }}
         uses: actions/github-script@v6
         with:
-          script: |
+          script: |            
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,

@@ -88,9 +88,9 @@ jobs:
         run: |
           python -m pip install GitPython
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" | tee output.txt
-          echo 'models=$(tail -n 1 output.txt)' >> $GITHUB_ENV
+          echo "models=$(tail -n 1 output.txt)" >> $GITHUB_ENV
           python utils/pr_slow_ci_models.py --message "$PR_COMMENT" --quantization | tee output2.txt
-          echo 'quantizations=$(tail -n 1 output2.txt)' >> $GITHUB_ENV
+          echo "quantizations=$(tail -n 1 output2.txt)" >> $GITHUB_ENV
 
       - name: Show models to test
         id: models_to_run
@@ -121,27 +121,6 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "repos/${github_repository}/issues/${pr_number}/comments" \
-            -f body="💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
-
-  # Report back if we are not able to get the tests (for example, security check is failing)
-  report_error_earlier:
-    name: Report error earlier
-    if: ${{ always() && needs.get-pr-info.result == 'success' && needs.get-tests.result != 'success' }}
-    needs: [get-pr-number, get-pr-info, get-tests]
-    permissions:
-      pull-requests: write
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Reply to the comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
             -f body="💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
 
   reply_to_comment:
@@ -248,21 +227,21 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import json
           import os
-
+          
           def filter_and_format_report(data):
             """
             Filter out entries where commit is `None` (failing tests who status is not certain) and format as text
             """
             lines = []
-
+            
             for model, model_result in data.items():
                 model_lines = []
                 for device, failures in model_result.items():
-
+                    
                     # Filter out None commits and extract just the test names
                     test_names = [
-                        failure['test']
-                        for failure in failures
+                        failure['test'] 
+                        for failure in failures 
                         if isinstance(failure, dict) and failure.get('commit') is not None
                     ]
 
@@ -271,32 +250,32 @@ jobs:
                         if idx == 0:
                             job_link = failures[idx]['job_link']
                             model_lines.append(f"- [{model}]({job_link}):")
-
+          
                         model_lines.append(f"    {test_name}")
 
                 # Only add model section if it has tests
                 if len(model_lines) > 0:
                     lines.extend(model_lines)
                     lines.append("")  # Empty line between models
-
+            
             return "\n".join(lines).strip()
-
+          
           # Load and filter reports
           model_report_str = os.environ.get('MODEL_REPORT', '{}')
           quant_report_str = os.environ.get('QUANT_REPORT', '{}')
-
+          
           model_report = json.loads(model_report_str) if model_report_str else {}
           quant_report = json.loads(quant_report_str) if quant_report_str else {}
-
+          
           formatted_model = filter_and_format_report(model_report)
           formatted_quant = filter_and_format_report(quant_report)
-
+          
           # Write to files
           with open('model_ci.txt', 'w') as f:
               f.write(formatted_model)
               if formatted_model:
                   f.write('\n')
-
+          
           with open('quantization_ci.txt', 'w') as f:
               f.write(formatted_quant)
               if formatted_quant:
@@ -336,7 +315,7 @@ jobs:
                 cat model_ci.txt
                 echo ''
               fi
-
+              
               # Check if quantization_ci.txt has content
               if [ -s quantization_ci.txt ]; then
                 echo '### Quantization CI Report'
