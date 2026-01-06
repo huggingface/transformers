@@ -29,8 +29,6 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 if is_timm_available():
     import timm
 
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
-
 
 @dataclass
 @auto_docstring(

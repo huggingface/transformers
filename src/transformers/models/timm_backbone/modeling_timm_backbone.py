@@ -27,8 +27,6 @@ from .configuration_timm_backbone import TimmBackboneConfig
 if is_timm_available():
     import timm
 
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
-
 
 if is_torch_available():
     from torch import Tensor
