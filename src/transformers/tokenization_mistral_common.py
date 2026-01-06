@@ -1851,8 +1851,9 @@ class MistralCommonBackend(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonBackend.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer/AutoProcessor case
+        # These kwargs are passed by AutoTokenizer/AutoProcessor but are not used by MistralCommonBackend
         if kwargs and not set(kwargs.keys()).issubset(
-            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto", "subfolder"}
         ):
             raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonBackend.from_pretrained`.")
 
