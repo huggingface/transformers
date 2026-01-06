@@ -66,8 +66,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("aimv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("align", "BertTokenizer" if is_tokenizers_available() else None),
-
-
         ("audioflamingo3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("aya_vision", "CohereTokenizer" if is_tokenizers_available() else None),
         ("bark", "BertTokenizer" if is_tokenizers_available() else None),
@@ -81,19 +79,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("big_bird", "BigBirdTokenizer" if is_tokenizers_available() else None),
         ("bigbird_pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("biogpt", "BioGptTokenizer"),
-
         ("blenderbot", "BlenderbotTokenizer" if is_tokenizers_available() else None),
         ("blenderbot-small", "BlenderbotSmallTokenizer"),
         ("blip", "BertTokenizer" if is_tokenizers_available() else None),
         ("blip-2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-
-
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
         ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
         ("canine", "CanineTokenizer"),
-
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
         ("clip", "CLIPTokenizer" if is_tokenizers_available() else None),
@@ -103,35 +97,24 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("codegen", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("cohere", "CohereTokenizer" if is_tokenizers_available() else None),
         ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
-
         ("colqwen2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("convbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("cpm", "CpmTokenizer" if is_tokenizers_available() else None),
         ("cpmant", "CpmAntTokenizer"),
-
         ("ctrl", "CTRLTokenizer"),
         ("data2vec-audio", "Wav2Vec2CTCTokenizer"),
         ("data2vec-text", "RobertaTokenizer"),
         ("dbrx", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("deberta", "DebertaTokenizer" if is_tokenizers_available() else None),
         ("deberta-v2", "DebertaV2Tokenizer" if is_tokenizers_available() else None),
-
-
-
-
         ("dia", "DiaTokenizer"),
-
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("dpr", "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
-
-
-
         ("esm", "EsmTokenizer"),
         ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
-
         ("falcon_mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -141,7 +124,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("fnet", "FNetTokenizerFast" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
-
         ("gemma", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("gemma3", "GemmaTokenizerFast" if is_tokenizers_available() else None),
@@ -149,20 +131,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("gemma3n", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("gemma3n_text", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("git", "BertTokenizer" if is_tokenizers_available() else None),
-
-
-
-
-
-
-
         ("gpt-sw3", "GPTSw3Tokenizer" if is_sentencepiece_available() else None),
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_bigcode", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_neo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
-
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("granite", "GPT2Tokenizer"),
         ("granitemoe", "GPT2Tokenizer"),
@@ -170,7 +144,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("granitemoeshared", "GPT2Tokenizer"),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("ibert", "RobertaTokenizer"),
@@ -181,11 +154,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("internvl", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-
-
-
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-
         ("lasr_ctc", "ParakeetTokenizerFast" if is_tokenizers_available() else None),
         ("lasr_encoder", "ParakeetTokenizerFast" if is_tokenizers_available() else None),
         ("layoutlm", "BertTokenizer" if is_tokenizers_available() else None),
@@ -193,15 +162,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
-
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("llama", "LlamaTokenizer" if is_tokenizers_available() else None),
-
-
-
-
-
-
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
@@ -240,13 +202,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
             if is_mistral_common_available()
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
-
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
-
-
-
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
@@ -255,7 +213,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
-
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),
@@ -272,15 +229,10 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("ovis2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-
-
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),
-
         ("phi", "GPT2Tokenizer" if is_tokenizers_available() else None),
-
-
         ("phobert", "PhobertTokenizer"),
         ("pix2struct", "T5Tokenizer" if is_tokenizers_available() else None),
         (
@@ -320,7 +272,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("shieldgemma2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
         ("siglip", "SiglipTokenizer" if is_sentencepiece_available() else None),
         ("siglip2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-
         ("speech_to_text", "Speech2TextTokenizer" if is_sentencepiece_available() else None),
         ("speecht5", "SpeechT5Tokenizer" if is_sentencepiece_available() else None),
         ("splinter", "SplinterTokenizer"),
@@ -335,9 +286,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
         ("umt5", "T5Tokenizer" if is_tokenizers_available() else None),
-
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
-
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("vits", "VitsTokenizer"),
         (
@@ -360,8 +309,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("xlstm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
         ("xmod", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
-
-
     ]
 )
 
