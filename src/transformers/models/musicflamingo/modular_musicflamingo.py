@@ -74,6 +74,8 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
+            audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+                The start time of the audio segments in seconds.
         """
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
         input_features_lengths = input_features_mask.sum(-1)
@@ -167,6 +169,71 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The start time of the audio segments in seconds.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
+
+        >>> model_id = "nvidia/music-flamingo-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = MusicFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+
+        >>> conversations = [
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {"type": "text", "text": "Transcribe the input speech."},
+        >>>                 {
+        >>>                     "type": "audio",
+        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
+        >>>                 },
+        >>>             ],
+        >>>         }
+        >>>     ],
+        >>>     [
+        >>>         {
+        >>>             "role": "user",
+        >>>             "content": [
+        >>>                 {
+        >>>                     "type": "text",
+        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+        >>>                 },
+        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
+        >>>             ],
+        >>>         }
+        >>>     ],
+        >>> ]
+
+        >>> inputs = processor.apply_chat_template(
+        >>>     conversations,
+        >>>     tokenize=True,
+        >>>     add_generation_prompt=True,
+        >>>     return_dict=True,
+        >>> ).to(model.device)
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=500)
+
+        >>> decoded_outputs = processor.batch_decode(
+        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        >>> )
+        >>> print(decoded_outputs)
+        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
+        ```"""
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 

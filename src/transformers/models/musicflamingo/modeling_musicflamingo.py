@@ -339,6 +339,8 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
+            audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+                The start time of the audio segments in seconds.
         """
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
         input_features_lengths = input_features_mask.sum(-1)
@@ -509,11 +511,13 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+        audio_times (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            The start time of the audio segments in seconds.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -524,7 +528,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         ```python
         >>> from transformers import MusicFlamingoForConditionalGeneration, AutoProcessor
 
-        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> model_id = "nvidia/music-flamingo-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = MusicFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
@@ -570,6 +574,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         >>> print(decoded_outputs)
         ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
         ```"""
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
