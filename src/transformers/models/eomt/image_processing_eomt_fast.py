@@ -44,10 +44,41 @@ from ...utils import (
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
     compute_segments,
-    convert_segmentation_map_to_binary_masks,
     get_size_with_aspect_ratio,
     remove_low_and_no_objects,
 )
+
+
+# Adapted from transformers.models.maskformer.image_processing_maskformer_fast.convert_segmentation_map_to_binary_masks_fast
+def convert_segmentation_map_to_binary_masks_fast(
+    segmentation_map: "torch.Tensor",
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
+):
+    if ignore_index is not None:
+        segmentation_map = torch.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    all_labels = torch.unique(segmentation_map)
+
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]  # drop background label if applicable
+
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+    if binary_masks:
+        binary_masks = torch.stack(binary_masks, dim=0)
+    else:
+        binary_masks = torch.zeros((0, *segmentation_map.shape), device=segmentation_map.device)
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = torch.zeros(all_labels.shape[0], device=segmentation_map.device)
+
+        for i, label in enumerate(all_labels):
+            class_id = instance_id_to_semantic_id[(label.item() + 1 if ignore_index is not None else label.item())]
+            labels[i] = class_id - 1 if ignore_index is not None else class_id
+    else:
+        labels = all_labels
+    return binary_masks.float(), labels.long()
 
 
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
@@ -162,8 +193,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         )
         ignore_index = kwargs.pop("ignore_index", None)
         images_kwargs = kwargs.copy()
-        processed_images, patch_offsets = self._preprocess(images, **images_kwargs)
-        outputs = BatchFeature({"pixel_values": processed_images})
+        outputs = self._preprocess(images, **images_kwargs)
 
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
@@ -183,9 +213,9 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 }
             )
 
-            processed_segmentation_maps, _ = self._preprocess(
+            processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            )
+            ).pixel_values
             processed_segmentation_maps = processed_segmentation_maps.squeeze(1).to(torch.int64)
             # Convert to list of binary masks and labels
             mask_labels, class_labels = [], []
@@ -195,21 +225,21 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = convert_segmentation_map_to_binary_masks(
+                masks, classes = convert_segmentation_map_to_binary_masks_fast(
                     segmentation_map,
                     instance_id,
                     ignore_index=ignore_index,
                 )
 
-                mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
+                mask_labels.append(masks)
+                class_labels.append(classes)
 
             # we cannot batch them since they don't share a common class size
             outputs["mask_labels"] = mask_labels
             outputs["class_labels"] = class_labels
 
-        if patch_offsets:
-            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in patch_offsets]
+        if outputs.patch_offsets:
+            outputs["patch_offsets"] = [torch.tensor(offsets) for offsets in outputs.patch_offsets]
 
         return outputs
 
@@ -274,11 +304,13 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_images_grouped[shape] = stacked_images
-        images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        processed_images = torch.stack(images, dim=0) if return_tensors else images
-
-        return processed_images, patch_offsets
+        return BatchFeature(
+            data={"pixel_values": processed_images, "patch_offsets": patch_offsets},
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["patch_offsets"],
+        )
 
     def merge_image_patches(
         self,

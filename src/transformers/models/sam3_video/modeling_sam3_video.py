@@ -33,7 +33,7 @@ from .configuration_sam3_video import Sam3VideoConfig
 
 
 if is_kernels_available():
-    from kernels import get_kernel
+    from ...integrations.hub_kernels import get_kernel
 
 logger = logging.get_logger(__name__)
 
@@ -505,8 +505,6 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3VideoModel(Sam3VideoPreTrainedModel):
-    all_tied_weights_keys = {}
-
     def __init__(self, config: Sam3VideoConfig):
         super().__init__(config)
         self.config = config
@@ -541,6 +539,8 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         self.high_iou_thresh = config.high_iou_thresh
 
         self.tracker_neck = Sam3VisionNeck(config.detector_config.vision_config)
+
+        self.post_init()
 
     def get_vision_features_for_tracker(self, vision_embeds: torch.Tensor):
         hidden_states = vision_embeds.last_hidden_state

@@ -97,7 +97,7 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
 
 class LasrProcessor(ParakeetProcessor):
-    tokenizer_class = "ParakeetTokenizerFast"
+    pass
 
 
 class LasrEncoderConfig(ParakeetEncoderConfig):
@@ -291,6 +291,10 @@ class LasrCTCConfig(ParakeetCTCConfig):
             **kwargs,
         )
 
+    @property
+    def inputs_to_logits_ratio(self):
+        return self.encoder_config.subsampling_conv_stride**2
+
 
 class LasrEncoderSubsampling(nn.Module):
     def __init__(self, config: LasrEncoderConfig):
@@ -422,6 +426,9 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
 
 
 class LasrPreTrainedModel(ParakeetPreTrainedModel):
+    # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
+    _supports_flex_attn = False
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
 

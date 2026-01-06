@@ -45,9 +45,7 @@ def generate_without_cb(
         key = " ".join(map(str, input_ids))  # This will be used to identify the output after batched generation
         input_ids = torch.tensor([input_ids]).to("cuda")
         attention_mask = torch.ones_like(input_ids)
-        outputs = model.generate(
-            input_ids, attention_mask=attention_mask, generation_config=generation_config, use_model_defaults=False
-        )
+        outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
         decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
     return decoded_outputs
@@ -179,16 +177,21 @@ if __name__ == "__main__":
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
+    parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
     # Benchmark parameters
     parser.add_argument("--samples", type=int, default=500, help="Number of samples to generate")
+    parser.add_argument(
+        "--input-length", type=int, default=None, help="Length of input sequences. Leave to None to mimic real eval."
+    )
     parser.add_argument("--max-new-tokens", type=int, default=512, help="Maximum number of new tokens to generate")
+    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
 
     parser.add_argument("--add-prefix", action="store_true", help="Add a prefix to the samples")
     parser.add_argument("--compare", action="store_true", help="Compare CB generation with classic generate")
     parser.add_argument("--profile", type=str, default=None)
     parser.add_argument("--metrics", action="store_true")
-    parser.add_argument("--force-max-length", action="store_true", help="Force generation to stop at max length")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
 
     # Display parameters
     parser.add_argument("--displayed", type=int, default=0, help="Number of samples to display")
@@ -208,6 +211,10 @@ if __name__ == "__main__":
             )
         else:
             args.attn = "kernels-community/flash-attn3"
+
+    # Set seed
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     # Create model
     model_id = "google/gemma-2-2b-it" if args.sliding_window > 0 else "meta-llama/Llama-3.1-8B-Instruct"
@@ -251,6 +258,12 @@ if __name__ == "__main__":
     else:
         possible_prefixes = [None]
 
+    tokenizer_kwargs = {"add_generation_prompt": True}
+    if args.input_length is not None:
+        tokenizer_kwargs["max_length"] = args.input_length
+        tokenizer_kwargs["truncation"] = True
+        tokenizer_kwargs["padding"] = True
+
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
         messages = []
@@ -261,9 +274,18 @@ if __name__ == "__main__":
             else:
                 question = prefix + "\n\n" + question
         messages.append({"role": "user", "content": question})
-        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        inputs = tokenizer.apply_chat_template(messages, **tokenizer_kwargs)
         inputs = inputs if isinstance(inputs, list) else inputs["input_ids"]
         batched_inputs.append(inputs)
+
+    # If num_return_sequences > 1, automatically enable do_sample with a warning
+    do_sample = args.do_sample
+    if args.num_return_sequences != 1 and not args.do_sample:
+        logger.warning(
+            f"num_return_sequences={args.num_return_sequences} > 1, automatically enabling do_sample=True. "
+            "Set --do-sample explicitly to suppress this warning."
+        )
+        do_sample = True
 
     # Prepare generation config
     generation_cfg = GenerationConfig(
@@ -271,11 +293,12 @@ if __name__ == "__main__":
         use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
-        do_sample=args.do_sample,
+        do_sample=do_sample,
         temperature=0.8,
         top_p=0.9,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
+        num_return_sequences=args.num_return_sequences,
     )
 
     # Add a compile config if requested
@@ -283,6 +306,7 @@ if __name__ == "__main__":
         generation_cfg.compile_config = CompileConfig(
             fullgraph=True,
             mode="max-autotune-no-cudagraphs",
+            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
         )
 
     # If we need to compare, we need to generate the reference outputs

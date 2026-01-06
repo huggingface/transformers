@@ -565,7 +565,9 @@ class Sam2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.pos_embed)
             if module.pos_embed_window is not None:
                 init.zeros_(module.pos_embed_window)
-        if isinstance(module, Sam2Model):
+        elif isinstance(module, Sam2PositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam2Model):
             if module.no_memory_embedding is not None:
                 init.zeros_(module.no_memory_embedding)
 
@@ -599,6 +601,8 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
                 )
                 self.blocks.append(block)
                 total_block_idx += 1
+
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_embed

@@ -42,7 +42,7 @@ from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 @auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 224}
     default_to_square = False
     crop_size = {"height": 256, "width": 256}
@@ -182,7 +182,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Stack all processed images if return_tensors is specified
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

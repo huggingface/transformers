@@ -129,7 +129,12 @@ if is_torch_available():
         _prepare_4d_attention_mask,
         _prepare_4d_causal_attention_mask,
     )
-    from transformers.modeling_utils import _find_disjoint, _find_identical
+    from transformers.modeling_utils import (
+        FLASH_ATTN_KERNEL_FALLBACK,
+        _find_disjoint,
+        _find_identical,
+        get_total_byte_count,
+    )
     from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
@@ -393,6 +398,23 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    @require_torch
+    def test_get_total_byte_count_does_not_require_process_group(self):
+        model = BaseModel(PreTrainedConfig())
+        model._tp_plan = {"linear.weight": "rowwise"}
+        accelerator_device_map = {"linear.weight": torch.device("cpu")}
+
+        with (
+            patch("transformers.modeling_utils.torch.distributed.is_available", return_value=True),
+            patch("transformers.modeling_utils.torch.distributed.is_initialized", return_value=False),
+            patch("transformers.modeling_utils.torch.distributed.get_world_size") as mock_world_size,
+        ):
+            total_byte_count = get_total_byte_count(model, accelerator_device_map, None)
+
+        mock_world_size.assert_not_called()
+        self.assertIn(torch.device("cpu"), total_byte_count)
+        self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -1678,7 +1700,7 @@ class ModelUtilsTest(TestCasePlus):
         Calling `model.save_pretrained` with generation parameters should raise a `ValueError`
         """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        self.assertTrue(model.generation_config.repetition_penalty == 1.0)
+        self.assertTrue(model.generation_config.repetition_penalty is None)
         self.assertFalse(hasattr(model.config, "repetition_penalty"))
 
         # If the user attempts to save a custom generation parameter, we raise an Error
@@ -1787,11 +1809,8 @@ class ModelUtilsTest(TestCasePlus):
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
-        # The default for `num_beams` is 1 and `early_stopping` is False
-        # NOTE: accessible only from generation config, EVEN IF they are saved
-        # in `config.json` file in the hub
-        self.assertTrue(model.generation_config.num_beams == 1)
-        self.assertTrue(model.generation_config.early_stopping is False)
+        self.assertTrue(model.generation_config.num_beams is None)
+        self.assertTrue(model.generation_config.early_stopping is None)
         self.assertFalse(hasattr(model.config, "num_beams"))
         self.assertFalse(hasattr(model.config, "early_stopping"))
 
@@ -1805,7 +1824,7 @@ class ModelUtilsTest(TestCasePlus):
         # we will throw an error, nudging user to save attributes in the generation_config
         model.config.num_beams = 5
         model.config.early_stopping = True
-        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        self.assertTrue(model.generation_config.num_beams is None)  # default value
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError):
                 model.save_pretrained(tmp_dir)
@@ -1872,22 +1891,19 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        # Mock injection point which is right after the call to `_set_default_dtype`
-        original_set_default_dtype = MistralForCausalLM._set_default_dtype
+        # Mock injection point which is right after the call to `torch.set_default_dtype`
+        original_set_default_dtype = torch.set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
-            side_effect=debug,
-        ):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", dtype=torch.float16)
         # default should still be float32
-        assert torch.get_default_dtype() == torch.float32
+        self.assertTrue(torch.get_default_dtype() == torch.float32)
         torch.set_default_dtype(old_dtype)
 
     def test_restore_default_dtype_from_config(self):
@@ -1899,29 +1915,23 @@ class ModelUtilsTest(TestCasePlus):
         # set default type to float32
         torch.set_default_dtype(torch.float32)
 
-        config = AutoConfig.from_pretrained(
-            TINY_MISTRAL,
-        )
+        config = AutoConfig.from_pretrained(TINY_MISTRAL)
 
-        # Mock injection point which is right after the call to `_set_default_dtype`
-        original_set_default_dtype = MistralForCausalLM._set_default_dtype
+        # Mock injection point which is right after the call to `torch.set_default_dtype`
+        original_set_default_dtype = torch.set_default_dtype
 
         def debug(*args, **kwargs):
             # call the method as usual, than raise a RuntimeError
             original_set_default_dtype(*args, **kwargs)
             raise RuntimeError
 
-        with mock.patch(
-            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_dtype",
-            side_effect=debug,
-        ):
+        with patch("torch.set_default_dtype", new=debug):
             with self.assertRaises(RuntimeError):
                 config.dtype = torch.float16
-                _ = AutoModelForCausalLM.from_config(
-                    config,
-                )
+                _ = AutoModelForCausalLM.from_config(config)
+
         # default should still be float32
-        assert torch.get_default_dtype() == torch.float32
+        self.assertTrue(torch.get_default_dtype() == torch.float32)
         torch.set_default_dtype(old_dtype)
 
     def test_unknown_quantization_config(self):
@@ -3037,7 +3047,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 )
 
         self.assertTrue(
-            "You do not have `flash_attn` installed, using `kernels-community/flash-attn2` from the `kernels` library instead!"
+            f"You do not have `flash_attn` installed, using `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}` from the `kernels` library instead!"
             in cl.out
         )
 
@@ -3049,7 +3059,8 @@ class TestAttentionImplementation(unittest.TestCase):
 
         with self.assertRaises(ImportError) as cm:
             _ = AutoModel.from_pretrained(
-                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="kernels-community/flash-attn2"
+                "hf-tiny-model-private/tiny-random-MCTCTModel",
+                attn_implementation=FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"],
             )
 
         self.assertTrue("`kernels` is either not installed or uses an incompatible version." in str(cm.exception))

@@ -452,6 +452,8 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         self.encoder = Idefics2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings
 
@@ -710,6 +712,8 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         # Create Transformer Blocks
         self.layers = nn.ModuleList([Idefics2PerceiverLayer(config, idx) for idx in range(self.depth)])
         self.norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
+
+        self.post_init()
 
     @auto_docstring
     def forward(
@@ -1115,6 +1119,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -1130,10 +1135,11 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if image_hidden_states is not None or cache_position[0] != 0:
+        if image_hidden_states is not None or not is_first_iteration:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
