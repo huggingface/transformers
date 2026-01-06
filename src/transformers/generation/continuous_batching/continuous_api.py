@@ -620,9 +620,6 @@ class ContinuousBatchProcessor:
         if copy_source:
             self.cache.copy_cache(copy_source, copy_destination)
 
-        if self.cache.get_num_free_blocks() == 0:
-            raise ValueError("No more free blocks")
-
     @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""

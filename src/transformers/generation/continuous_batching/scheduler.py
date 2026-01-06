@@ -223,9 +223,10 @@ class FIFOScheduler(Scheduler):
 
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)
-            # If we can't allocate blocks, do not schedule the request and break if the cache is full
+            # If we can't allocate blocks, do not schedule the request
             if not self._allocate_blocks_if_needed(state):
-                if self.cache.get_num_free_blocks() == 0:
+                # If the request was waiting, all requests afterwards will need allocation, so we break if the cache is full
+                if state.request_id in self.waiting_requests and num_free_blocks == 0:
                     break
                 continue
 
@@ -250,6 +251,10 @@ class FIFOScheduler(Scheduler):
             # Early exit of the loop if we have no token budget left
             if token_budget == 0:
                 break
+
+        # If no requests were scheduled and the cache is full, we raise an error
+        if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
+            raise RuntimeError("No requests can be scheduled and the cache is full")
 
         self.waiting_requests_order = deque(
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
@@ -289,9 +294,10 @@ class PrefillFirstScheduler(Scheduler):
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)
-            # If we can't allocate blocks, do not schedule the request and break if the cache is full
+            # If we can't allocate blocks, do not schedule the request
             if not self._allocate_blocks_if_needed(state):
-                if self.cache.get_num_free_blocks() == 0:
+                # If the request was waiting, all requests afterwards will need allocation, so we break if the cache is full
+                if state.request_id in self.waiting_requests and self.cache.get_num_free_blocks() == 0:
                     break
                 continue
 
@@ -316,6 +322,10 @@ class PrefillFirstScheduler(Scheduler):
             # Early exit of the loop if we have no token budget left
             if token_budget == 0:
                 break
+
+        # If no requests were scheduled and the cache is full, we raise an error
+        if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
+            raise RuntimeError("No requests can be scheduled and the cache is full")
 
         self.waiting_requests_order = deque(
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
