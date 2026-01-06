@@ -164,7 +164,10 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Lfm2MoeForCausalLM.from_pretrained(
-                "LiquidAI/LFM2-8B-A1B", device_map="auto", dtype=torch.bfloat16
+                "LiquidAI/LFM2-8B-A1B",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                experts_implementation="eager",
             )
         return cls.model
 
