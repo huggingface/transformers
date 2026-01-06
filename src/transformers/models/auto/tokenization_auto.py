@@ -626,11 +626,14 @@ class AutoTokenizer:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
         if config is None:
-            config_tokenizer_class = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get(
-                "tokenizer_class"
-            , None)
+            try:
+                config_tokenizer_class = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get(
+                    "tokenizer_class"
+                , None)
+            except Exception:
+                config_tokenizer_class = tokenizer_config.get("tokenizer_class", None)
         else:
-            config_tokenizer_class = getattr(config, "tokenizer_class")
+            config_tokenizer_class = getattr(config, "tokenizer_class", None)
 
         try:
             config_model_type = (
