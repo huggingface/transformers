@@ -2459,7 +2459,7 @@ class Gemma3nModel(PaliGemmaModel):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Union[tuple, Gemma3nAudioEncoderModelOutput]:
         """
         Projects the last hidden state from the audio encoder into language model space.
 

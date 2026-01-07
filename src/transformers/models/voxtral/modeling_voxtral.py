@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -336,7 +336,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
         )
 
@@ -401,7 +401,9 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         return self.language_model.get_decoder()
 
     @can_return_tuple
-    def get_audio_features(self, input_features: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_audio_features(
+        self, input_features: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
 

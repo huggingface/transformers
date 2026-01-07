@@ -23,7 +23,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
@@ -337,7 +337,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
             hidden_states = encoder_layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
@@ -358,7 +358,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
