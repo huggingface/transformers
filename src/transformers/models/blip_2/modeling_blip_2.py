@@ -2025,13 +2025,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         if use_image_text_matching_head:
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            if self.config.image_token_index is not None:
-                input_ids = input_ids[:, self.config.num_query_tokens :]
-            else:
-                query_attention_mask = torch.ones(
-                    query_tokens.size()[:-1], dtype=torch.long, device=query_tokens.device
-                )
-                attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
+            input_ids = input_ids[:, self.config.num_query_tokens :]
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
@@ -2063,9 +2057,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
             image_embeds = image_embeds.to(dtype=self.vision_projection.weight.dtype)
 
-            if self.config.image_token_index is not None:
-                input_ids = input_ids[:, self.config.num_query_tokens :]
-                attention_mask = attention_mask[:, self.config.num_query_tokens :]
+            input_ids = input_ids[:, self.config.num_query_tokens :]
+            attention_mask = attention_mask[:, self.config.num_query_tokens :]
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
