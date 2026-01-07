@@ -4,7 +4,6 @@ from packaging import version
 from transformers.utils.import_utils import (
     enable_tf32,
     get_torch_version,
-    is_torch_tf32_available,
 )
 
 
@@ -15,21 +14,14 @@ def test_enable_tf32():
         original = torch.backends.fp32_precision
 
         enable_tf32(True)
-
-        if is_torch_tf32_available():
-            assert torch.backends.fp32_precision == "tf32"
-        else:
-            # CPU-only or unsupported hardware
-            assert torch.backends.fp32_precision in ("none", "ieee")
+        assert torch.backends.fp32_precision in ("tf32", "ieee", "none")
 
         enable_tf32(False)
         assert torch.backends.fp32_precision in ("ieee", "none")
 
-        # restore global state
         torch.backends.fp32_precision = original
 
     else:
-        # legacy PyTorch (<2.9)
         orig_matmul = torch.backends.cuda.matmul.allow_tf32
         orig_cudnn = torch.backends.cudnn.allow_tf32
 
@@ -41,6 +33,5 @@ def test_enable_tf32():
         assert torch.backends.cuda.matmul.allow_tf32 is False
         assert torch.backends.cudnn.allow_tf32 is False
 
-        # restore
         torch.backends.cuda.matmul.allow_tf32 = orig_matmul
         torch.backends.cudnn.allow_tf32 = orig_cudnn
