@@ -760,8 +760,7 @@ def get_parameters(model: nn.Module) -> Iterable[torch.Tensor]:
             if isinstance(attr, torch.Tensor) and attr.requires_grad:
                 yield attr
         # Recursively get parameters from submodules
-        for param in get_parameters(module):
-            yield param
+        yield from get_parameters(module)
 
 
 def update_model_parameters(model: nn.Module) -> None:

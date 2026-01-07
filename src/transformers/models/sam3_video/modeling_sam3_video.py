@@ -1827,8 +1827,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             else:
                 yield_list = [out]  # output the current frame
 
-            for yield_out in yield_list:
-                yield yield_out
+            yield from yield_list
 
 
 @torch.jit.script

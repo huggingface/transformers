@@ -1261,8 +1261,7 @@ class BaseWatermarkingConfig(ABC):
         return output
 
     def __iter__(self):
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
+        yield from copy.deepcopy(self.__dict__).items()
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
