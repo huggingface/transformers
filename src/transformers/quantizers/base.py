@@ -63,7 +63,7 @@ def _assign_is_quantized(model):
 
     model.config._is_quantized = True
     for child in model.children():
-        if isinstance(model, PreTrainedModel):
+        if isinstance(child, PreTrainedModel):
             child.config._is_quantized = True
 
 
