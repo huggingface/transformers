@@ -34,9 +34,7 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = ParakeetTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    @unittest.skip(
-        reason="This test does not apply to ParakeetTokenizer. More details in the test docstring itself."
-    )
+    @unittest.skip(reason="This test does not apply to ParakeetTokenizer. More details in the test docstring itself.")
     def test_added_tokens_do_lower_case(self):
         """
         Precompiled normalization from sentencepiece is `nmt_nfkc_cf` that includes lowercasing. Yet, ParakeetTokenizer does not have a do_lower_case attribute.

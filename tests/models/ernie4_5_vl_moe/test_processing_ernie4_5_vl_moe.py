@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import AutoProcessor, LlamaTokenizerFast, TokenizersBackend
+from transformers import AutoProcessor, TokenizersBackend
 from transformers.testing_utils import require_av, require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
