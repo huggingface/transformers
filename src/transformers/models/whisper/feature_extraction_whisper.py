@@ -143,16 +143,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         """
         Ensure window and mel_filters tensors are cached on the target device.
         This avoids recreating these tensors on every call, significantly improving
-        GPU performance by eliminating repeated CPU->GPU transfers.
+        GPU performance by eliminating repeated CPU->CPU transfers.
 
         Returns:
-            Tuple of (window, mel_filters) tensors on the target device.
+            Tuple of (window, mel_filters_transposed) tensors on the target device.
         """
         if self._cached_device != device:
             self._cached_window = torch.hann_window(self.n_fft, device=device)
-            # mel_filters shape: [n_mels, n_freqs] - correct for matmul with [batch, n_freqs, frames]
+            # mel_filter_bank returns [n_freqs, n_mels], transpose to [n_mels, n_freqs] for matmul
             self._cached_mel_filters = (
-                torch.from_numpy(self.mel_filters).to(device=device, dtype=torch.float32)
+                torch.from_numpy(self.mel_filters).to(device=device, dtype=torch.float32).T.contiguous()
             )
             self._cached_device = device
         return self._cached_window, self._cached_mel_filters
@@ -185,8 +185,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         elif waveform.device.type != device.split(":")[0] if ":" in device else device:
             waveform = waveform.to(device, torch.float32)
 
-        # Use cached window and mel_filters
-        window, mel_filters = self._ensure_gpu_cache(device)
+        # Use cached window and mel_filters (transposed)
+        window, mel_filters_T = self._ensure_gpu_cache(device)
 
         # Note: it would be better to dither the chunked waveform,
         # so overlapping signal does not get the same dithering.
@@ -200,7 +200,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = stft[..., :-1].abs() ** 2
 
         # Apply mel filterbank: [n_mels, n_freqs] @ [batch, n_freqs, frames] -> [batch, n_mels, frames]
-        mel_spec = torch.matmul(mel_filters, magnitudes)
+        mel_spec = torch.matmul(mel_filters_T, magnitudes)
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         if waveform.dim() == 2:
