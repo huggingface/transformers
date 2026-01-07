@@ -72,7 +72,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -84,10 +84,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -134,10 +134,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         size: SizeDict,
         rescale_factor: float,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         if do_reduce_labels:
@@ -170,7 +170,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
 

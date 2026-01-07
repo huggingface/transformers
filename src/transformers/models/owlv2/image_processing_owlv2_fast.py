@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -56,7 +56,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -198,7 +198,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
+        disable_grouping: bool | None,
         constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -285,10 +285,10 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

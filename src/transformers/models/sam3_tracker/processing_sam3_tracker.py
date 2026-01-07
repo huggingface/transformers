@@ -20,7 +20,6 @@
 
 
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -50,20 +49,20 @@ class Sam3TrackerProcessor(ProcessorMixin):
             The value used for padding input points.
     """
 
-    def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
+    def __init__(self, image_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs):
         super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: ImageInput | None = None,
+        segmentation_maps: ImageInput | None = None,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
@@ -387,11 +386,11 @@ class Sam3TrackerProcessor(ProcessorMixin):
 
     def _validate_single_input(
         self,
-        data: Union[torch.Tensor, np.ndarray, list],
+        data: torch.Tensor | np.ndarray | list,
         expected_depth: int,
         input_name: str,
         expected_format: str,
-        expected_coord_size: Optional[int] = None,
+        expected_coord_size: int | None = None,
     ) -> list:
         """
                 Validate a single input by ensuring proper nesting and raising an error if the input is not valid.

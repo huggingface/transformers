@@ -175,8 +175,8 @@ def _generate_crop_boxes(
     target_size: int,  # Is it tuple here?
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
-    points_per_crop: Optional[int] = 32,
-    crop_n_points_downscale_factor: Optional[list[int]] = 1,
+    points_per_crop: int | None = 32,
+    crop_n_points_downscale_factor: list[int] | None = 1,
 ) -> tuple[list[list[int]], list[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -389,12 +389,12 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        mask_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        mask_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -435,7 +435,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -447,10 +447,10 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -494,7 +494,7 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> "torch.Tensor":
         return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
@@ -505,8 +505,8 @@ class Sam2ImageProcessorFast(BaseImageProcessorFast):
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[list[int]] = 1,
+        points_per_crop: int | None = 32,
+        crop_n_points_downscale_factor: list[int] | None = 1,
         device: Optional["torch.device"] = None,
     ):
         """

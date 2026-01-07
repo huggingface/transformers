@@ -405,11 +405,7 @@ class KyutaiSpeechToTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        config: KyutaiSpeechToTextConfig,
-        layer_idx: int | None = None,
-        use_flexible_linear=False,
-        use_rope=True,
+        self, config: KyutaiSpeechToTextConfig, layer_idx: int | None = None, use_flexible_linear=False, use_rope=True
     ):
         super().__init__()
         self.config = config
