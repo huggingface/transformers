@@ -43,16 +43,19 @@ if __name__ == "__main__":
     results.append(run_and_parse_cb_example("--samples 100"))
     results.append(run_and_parse_cb_example("--samples 500"))
 
+    # Benchmark with very little number of blocks
+    results.append(run_and_parse_cb_example("--samples 20 --num-blocks 16"))
+
     # Benchmark with compile: default, flash attention 2 and sdpa
-    results.append(run_and_parse_cb_example("--samples 100 --compile"))
-    results.append(run_and_parse_cb_example("--samples 100 --compile --attn flash_attention_2"))
-    results.append(run_and_parse_cb_example("--samples 100 --compile --attn sdpa"))
+    results.append(run_and_parse_cb_example("--samples 100"))
+    results.append(run_and_parse_cb_example("--samples 100 --attn flash_attention_2"))
+    results.append(run_and_parse_cb_example("--samples 100 --attn sdpa"))
 
     # Benchmark with parallel decoding
-    results.append(run_and_parse_cb_example("--samples 50 --compile --num-return-sequences 8 --do-sample"))
-    results.append(run_and_parse_cb_example("--samples 100 --compile --num-return-sequences 4 --do-sample"))
+    results.append(run_and_parse_cb_example("--samples 50 --num-return-sequences 8 --do-sample"))
+    results.append(run_and_parse_cb_example("--samples 100 --num-return-sequences 4 --do-sample"))
 
-    # Benchmark with prefix sharing
+    # Benchmark with prefix sharing and compile (best performance, but not reproducible due to compilation)
     results.append(run_and_parse_cb_example("--samples 500 --add-prefix --compile"))
 
     print()
