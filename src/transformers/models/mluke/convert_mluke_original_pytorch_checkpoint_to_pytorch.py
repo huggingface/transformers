@@ -170,7 +170,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     input_ids = encoding["input_ids"][0].tolist()
     mask_position_id = input_ids.index(tokenizer.convert_tokens_to_ids("<mask>"))
     predicted_id = outputs.logits[0][mask_position_id].argmax(dim=-1)
-    assert "Japan" == tokenizer.decode(predicted_id)
+    assert tokenizer.decode(predicted_id) == "Japan"
 
     predicted_entity_id = outputs.entity_logits[0][0].argmax().item()
     multilingual_predicted_entities = [

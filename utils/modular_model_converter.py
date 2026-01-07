@@ -1264,7 +1264,7 @@ class ModularFileMapper(ModuleMapper):
                     imported_object = self.python_module.code_for_node(imported_.name)
                     self.model_specific_imported_objects[imported_object] = import_module
         if m.matches(node.module, m.Name()):
-            if "transformers" == import_module:
+            if import_module == "transformers":
                 raise ValueError(
                     f"You are importing from {import_module} directly using global imports. Import from the correct local path"
                 )

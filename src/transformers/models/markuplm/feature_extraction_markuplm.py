@@ -52,7 +52,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
             siblings = parent.find_all(child.name, recursive=False)
             xpath_tags.append(child.name)
             xpath_subscripts.append(
-                0 if 1 == len(siblings) else next(i for i, s in enumerate(siblings, 1) if s is child)
+                0 if len(siblings) == 1 else next(i for i, s in enumerate(siblings, 1) if s is child)
             )
             child = parent
         xpath_tags.reverse()

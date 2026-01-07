@@ -481,7 +481,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # tie_word_embeddings is true otherwise false
     exceptions = ["falcon", "bloom"]
     parsed_parameters["config"]["tie_word_embeddings"] = (
-        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
+        all(tensor.name != "output.weight" for tensor in reader.tensors) or architecture in exceptions
     )
 
     # Set GGUF-specific default values

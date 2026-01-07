@@ -978,7 +978,7 @@ else:
             batch_size, sequence_length, nh, DH = x.shape
             if nh != self.num_heads:
                 raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
-            if DH != self.head_dim:
+            if self.head_dim != DH:
                 raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
 
             x = self._layer_normalize(x)

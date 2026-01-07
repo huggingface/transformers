@@ -77,7 +77,7 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
         # Try to load with `torchcodec` but do not enforce users to install it. If not found
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
         # needed. Do not raise any errors if not installed or versions do not match
-        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
+        if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)

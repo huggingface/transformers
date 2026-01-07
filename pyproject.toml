@@ -36,8 +36,6 @@ select = [
 ignore = [
     "E501",  # Checks for lines that exceed the specified maximum character length.
     "E741",  # Checks for the use of the characters 'l', 'O', or 'I' as variable names.
-    "F823",  # Checks for undefined local variables.
-    "SIM300",  # Checks for conditions that position a constant on the left-hand side of the comparison operator, rather than the right-hand side.
     "SIM212",  # Checks for if expressions that check against a negated condition.
     "SIM1",  # All SIM1XX rules
     "SIM905",  # Checks for static str.split calls that can be replaced with list literals.

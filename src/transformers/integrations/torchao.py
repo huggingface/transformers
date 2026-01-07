@@ -251,7 +251,7 @@ class TorchAoDeserialize(ConversionOps):
         if is_unsafe_serialization:
             return {full_layer_name: weight}
         # Sanity check for the new serialization format
-        elif not (TORCHAO_VERSION >= version.parse("0.15.0") and is_metadata_torchao(self.hf_quantizer.metadata)):
+        elif not (version.parse("0.15.0") <= TORCHAO_VERSION and is_metadata_torchao(self.hf_quantizer.metadata)):
             raise ValueError("To use `safetensors` serialization, you should have `torchao>=0.15.0` installed")
 
         unflattened_state_dict, leftover_state_dict = unflatten_tensor_state_dict(

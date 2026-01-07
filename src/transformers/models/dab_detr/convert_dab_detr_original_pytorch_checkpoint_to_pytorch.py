@@ -126,7 +126,7 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
         # load default config
         config = DabDetrConfig()
     # set other attributes
-    if "dab-detr-resnet-50-dc5" == model_name:
+    if model_name == "dab-detr-resnet-50-dc5":
         config.temperature_height = 10
         config.temperature_width = 10
     if "fixxy" in model_name:

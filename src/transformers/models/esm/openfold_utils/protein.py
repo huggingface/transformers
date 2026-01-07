@@ -79,7 +79,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
     atom_positions = None
     atom_mask = None
     for g in groups:
-        if "[PRIMARY]" == g[0]:
+        if g[0] == "[PRIMARY]":
             seq = g[1][0].strip()
             for i in range(len(seq)):
                 if seq[i] not in residue_constants.restypes:
@@ -87,7 +87,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
             aatype = np.array(
                 [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
             )
-        elif "[TERTIARY]" == g[0]:
+        elif g[0] == "[TERTIARY]":
             tertiary: list[list[float]] = []
             for axis in range(3):
                 tertiary.append(list(map(float, g[1][axis].split())))
@@ -96,7 +96,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
             for i, atom in enumerate(atoms):
                 atom_positions[:, residue_constants.atom_order[atom], :] = np.transpose(tertiary_np[:, i::3])
             atom_positions *= PICO_TO_ANGSTROM
-        elif "[MASK]" == g[0]:
+        elif g[0] == "[MASK]":
             mask = np.array(list(map({"-": 0, "+": 1}.get, g[1][0].strip())))
             atom_mask = np.zeros(
                 (
