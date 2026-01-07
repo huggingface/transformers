@@ -175,6 +175,7 @@ class MistralCommonBackend(PushToHubMixin):
     - [`~MistralCommonBackend.decode`]: Decode a list of integers to a string.
     - [`~MistralCommonBackend.batch_decode`]: Decode a batch of list of integers to a list of strings.
     - [`~MistralCommonBackend.convert_tokens_to_ids`]: Convert a list of tokens to a list of integers.
+    - [`~MistralCommonTokenizer.convert_tokens_to_string`]: Convert a list of tokens to a string.
     - [`~MistralCommonBackend.convert_ids_to_tokens`]: Convert a list of integers to a list of tokens.
     - [`~MistralCommonBackend.tokenize`]: Tokenize a string.
     - [`~MistralCommonBackend.get_special_tokens_mask`]: Get the special tokens mask for a list of tokens.
@@ -699,6 +700,13 @@ class MistralCommonBackend(PushToHubMixin):
         if one_token:
             return ids[0]
         return ids
+
+    def convert_tokens_to_string(self, tokens) -> str:
+        """Converts a sequence of tokens (string) in a single string."""
+        ids = []
+        for token in tokens:
+            ids.append(self._tekken_piece_to_id(token, False))
+        return self.decode(ids)
 
     def _text_to_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
         """
