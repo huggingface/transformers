@@ -21,7 +21,7 @@ from ..models.auto.auto_factory import _get_model_class
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.modeling_auto import MODEL_FOR_PRETRAINING_MAPPING, MODEL_MAPPING
 from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES, AutoProcessor
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES, AutoTokenizer
+from ..models.auto.tokenization_auto import AutoTokenizer
 from .import_utils import is_torch_available
 
 
