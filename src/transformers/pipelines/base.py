@@ -780,7 +780,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self,
         model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer | None = None,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
+        feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
         processor: ProcessorMixin | None = None,
         modelcard: ModelCard | None = None,
