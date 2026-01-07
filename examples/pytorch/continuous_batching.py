@@ -262,6 +262,7 @@ if __name__ == "__main__":
         tokenizer_kwargs["max_length"] = args.input_length
         tokenizer_kwargs["truncation"] = True
         tokenizer_kwargs["padding"] = True
+        tokenizer.pad_token_id = tokenizer.eos_token_id
 
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
