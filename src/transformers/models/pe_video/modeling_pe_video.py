@@ -35,7 +35,8 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, TransformersKwargs, Unpack, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForImageClassification
 from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig

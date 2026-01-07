@@ -21,7 +21,8 @@ import torch.nn.functional as F
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
-from ...utils import ModelOutput, TransformersKwargs, Unpack, auto_docstring, can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForImageClassification
 from ..pe_audio_video.modeling_pe_audio_video import (
