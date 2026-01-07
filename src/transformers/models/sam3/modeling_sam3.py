@@ -40,7 +40,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import TransformersKwargs, check_model_inputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
@@ -2150,6 +2150,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -2157,11 +2158,8 @@ class Sam3Model(Sam3PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
-        return_dict (`bool`, *optional*, default to `False`):
-            Whether to return a `ModelOutput` instead of a pooled embedding.
-
         Returns:
             text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Text embeddings that can be passed as `text_embeds` to the forward method.
@@ -2187,17 +2185,11 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
         """
-        text_features = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        last_hidden_state = text_features.last_hidden_state
-        text_features = self.text_projection(last_hidden_state)
+        text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
 
-        if return_dict:
-            return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
-                pooler_output=text_features,
-            )
-
-        return text_features
+        return text_outputs
 
     @auto_docstring
     def get_vision_features(
