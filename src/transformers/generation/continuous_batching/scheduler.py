@@ -17,7 +17,7 @@ from collections import deque
 
 from ...utils.metrics import attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import RequestState, RequestStatus
+from .requests import RequestState, RequestStatus, logger
 
 
 class Scheduler(ABC):
@@ -104,7 +104,7 @@ class Scheduler(ABC):
         )
 
     @traced
-    def _allocate_blocks_if_needed(self, state: RequestState) -> bool:
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int) -> bool:
         """Allocate additional cache blocks for a request if the currently allocated blocks are insufficient to
         accommodate the next tokens. It calculates how many blocks are needed based on the request's current
         cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
@@ -113,7 +113,6 @@ class Scheduler(ABC):
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
-        len_next_tokens = len(state.tokens_to_process)
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
@@ -123,10 +122,7 @@ class Scheduler(ABC):
             state.allocated_blocks += allocated
         return True
 
-    @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(
-        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: set[str]
-    ) -> None:
+    def _infer_request_tokens(self, state: RequestState, request_ids_to_remove_from_waiting: set[str]) -> list[int]:
         """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
         pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
@@ -150,7 +146,9 @@ class Scheduler(ABC):
         # Otherwise, the tokens to process are the prompt ids, which are the full prompt or the last predicted tokens
         else:
             request_tokens = state.tokens_to_process
+        return request_tokens
 
+    def _schedule_request(self, state: RequestState, request_tokens: list[int], token_budget: int, request_ids_to_remove_from_waiting: set[str]) -> None:
         # If the request has one or more children we make sure not to prefill it entrirely
         if state.num_children > 0 and token_budget >= len(request_tokens) - 1:
             token_budget = len(request_tokens) - 1
@@ -220,18 +218,25 @@ class FIFOScheduler(Scheduler):
             num_free_blocks = self.cache.get_num_free_blocks()
             outside_safety_margin = num_free_blocks < safety_margins
             if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+                logger.info(
+                    f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
+                )
                 break
 
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.tokens_to_process)
-            # If we can't allocate blocks, do not schedule the request
-            if not self._allocate_blocks_if_needed(state):
+
+            # Before changing the status of the request and scheduling it, we check if there is enough cache
+            request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
+            request_len = min(len(request_tokens), token_budget)
+            if not self._allocate_blocks_if_needed(state, request_len):
                 # If the request was waiting, all requests afterwards will need allocation, so we break if the cache is full
+                logger.info(f"--- Breaking mid-loop for request {state.request_id} because the cache is full")
                 if state.request_id in self.waiting_requests and num_free_blocks == 0:
                     break
                 continue
 
-            # Add the request to the scheduled requests
+            # If this point is reached, it means we can safely schedule the request
+            self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.tokens_to_process)  # it may change after scheduling
             scheduled_requests.append(state)
 
             # Update the token budget
@@ -253,13 +258,14 @@ class FIFOScheduler(Scheduler):
             if token_budget == 0:
                 break
 
-        # If no requests were scheduled and the cache is full, we signal it by returning None
-        if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
-            return None
-
+        # We remove waiting requests before checking requests were scheduled, because there might have been prefill matches
         self.waiting_requests_order = deque(
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
         )
+
+        # If no requests were scheduled and the cache is full, we signal it by returning None
+        if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
+            return None
 
         return scheduled_requests
 
@@ -294,7 +300,7 @@ class PrefillFirstScheduler(Scheduler):
         request_ids_to_remove_from_waiting = set()
 
         for state in candidates:
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            self._compute_tokens_needed(state, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)
             # If we can't allocate blocks, do not schedule the request
             if not self._allocate_blocks_if_needed(state):

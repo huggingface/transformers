@@ -705,10 +705,9 @@ class ContinuousBatchProcessor:
         if self._pad_inputs:
             padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
             max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
+            # The space planned for query tokens will be added later, so we remove it from the space planned for KV
             padded_read_index_size = pad_by_intervals(
-                max_read_index_size - self.max_batch_tokens,
-                self.cache.num_blocks * self.cache.block_size,
-                self.kv_padding_intervals,
+                max_read_index_size, self.cache.num_blocks * self.cache.block_size, self.kv_padding_intervals
             )
         else:
             padded_q, padded_read_index_size = 0, 0
@@ -1134,13 +1133,13 @@ class ContinuousBatchingManager:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
-        # Debug logging of the current memory usage
-        if logger.level <= logging.DEBUG:
-            device, total, reserved, allocated = get_device_and_memory_breakdown()
-            available_memory = total - max(allocated, reserved)
-            logger.debug(
-                f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
-            )
+        # Debug logging of the current memory usage -- commented out because it's often not used even in debug
+        # if logger.level < logging.DEBUG:
+        #     device, total, reserved, allocated = get_device_and_memory_breakdown()
+        #     available_memory = total - max(allocated, reserved)
+        #     logger.debug(
+                # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
+        #     )
 
         self._generation_step()
         batch_processor.update_batch()
