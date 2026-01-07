@@ -19,11 +19,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import check_model_inputs
@@ -33,8 +35,10 @@ from ..glm4_moe.modeling_glm4_moe import (
     apply_rotary_pos_emb,  # noqa: F401
 )
 from ..mixtral.modeling_mixtral import (
+    MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
+    MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
     MixtralTopKRouter,
@@ -240,6 +244,10 @@ class MiniMaxM2TopKRouter(MixtralTopKRouter):
         return router_logits, router_scores, top_k_index
 
 
+class MiniMaxM2Experts(MixtralExperts):
+    pass
+
+
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
     def __init__(self, config):
         super().__init__()
@@ -271,6 +279,20 @@ class MiniMaxM2Attention(FlexOlmoAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
+
+class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, MiniMaxM2Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, MiniMaxM2TopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+        elif isinstance(module, MiniMaxM2SparseMoeBlock):
+            init.zeros_(module.e_score_correction_bias)
 
 
 class MiniMaxM2Model(MixtralModel):

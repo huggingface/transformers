@@ -431,6 +431,8 @@ class MiniMaxM2PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MiniMaxM2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
+        elif isinstance(module, MiniMaxM2SparseMoeBlock):
+            init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring
