@@ -621,6 +621,13 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
         elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
             init.normal_(module.weight)
+        elif isinstance(module, Wav2Vec2BertRotaryPositionalEmbedding):
+            dim = self.config.hidden_size // self.config.num_attention_heads
+            base = self.config.rotary_embedding_base
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+            init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, Wav2Vec2BertRelPositionalEmbedding):
+            init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
 
     # Ignore copy
     def _get_feat_extract_output_lengths(

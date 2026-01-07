@@ -75,7 +75,7 @@ deps = {
     "tensorboard": "tensorboard",
     "timeout-decorator": "timeout-decorator",
     "tiktoken": "tiktoken",
-    "timm": "timm>=1.0.20",
+    "timm": "timm>=1.0.23",
     "tokenizers": "tokenizers>=0.22.0,<=0.23.0",
     "torch": "torch>=2.2",
     "torchaudio": "torchaudio",

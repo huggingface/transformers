@@ -972,7 +972,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly
-    model_input_names: list[str] = ["input_ids", "token_type_ids", "attention_mask"]
+    model_input_names: list[str] = ["input_ids", "attention_mask"]
     padding_side: str = "right"
     truncation_side: str = "right"
     slow_tokenizer_class = None
@@ -2152,9 +2152,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
 
-        # tokenizers backend don't need to save added_tokens_decoder
+        # tokenizers backend don't need to save added_tokens_decoder and additional_special_tokens
         if any(base.__name__ == "TokenizersBackend" for base in self.__class__.__mro__):
             tokenizer_config.pop("added_tokens_decoder", None)
+            tokenizer_config.pop("additional_special_tokens", None)
 
         # Remove the Fast at the end if we can save the slow tokenizer
         if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
