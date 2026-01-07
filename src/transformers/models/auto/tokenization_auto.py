@@ -610,21 +610,15 @@ class AutoTokenizer:
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
             config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
-        else:
-            config = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-            )
-
-        config_model_type = None
-        if config is None:
+        elif config is None:
             try:
-                config_model_type = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get(
-                    "model_type", None
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception:
-                pass
-        else:
-            config_model_type = config.model_type
+                config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        config_model_type = config.model_type
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
@@ -634,7 +628,12 @@ class AutoTokenizer:
             and TOKENIZER_MAPPING_NAMES.get(config_model_type, None) != tokenizer_config_class
         ):
             # new model, but we ignore it unless the model type is the same
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            try:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            except Exception:
+                return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
+                    pretrained_model_name_or_path, *inputs, **kwargs
+                )
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
@@ -692,9 +691,8 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif "tokenizer_class" in config:
-            tokenizer_class_candidate = config.tokenizer_class
-            tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate.replace("Fast", ""))
+        elif getattr(config, "tokenizer_class"):
+            tokenizer_class = tokenizer_class_from_name(config.tokenizer_class.replace("Fast", ""))
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
@@ -709,7 +707,7 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__)
+        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
