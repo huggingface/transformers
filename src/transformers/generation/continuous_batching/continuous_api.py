@@ -33,7 +33,7 @@ from ...generation.logits_process import LogitsProcessor
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -1138,7 +1138,7 @@ class ContinuousBatchingManager:
         #     device, total, reserved, allocated = get_device_and_memory_breakdown()
         #     available_memory = total - max(allocated, reserved)
         #     logger.debug(
-                # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
+        # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
         #     )
 
         self._generation_step()

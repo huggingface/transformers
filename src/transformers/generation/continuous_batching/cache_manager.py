@@ -352,7 +352,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         if block_table:
             last_block_id = block_table[-1]
         else:
-            self.block_table[request_id] = block_table # TODO: check the impact of making this a deque
+            self.block_table[request_id] = block_table  # TODO: check the impact of making this a deque
             last_block_id = None
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id, self.uses_block_sharing, self._index)

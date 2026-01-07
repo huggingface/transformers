@@ -148,7 +148,13 @@ class Scheduler(ABC):
             request_tokens = state.tokens_to_process
         return request_tokens
 
-    def _schedule_request(self, state: RequestState, request_tokens: list[int], token_budget: int, request_ids_to_remove_from_waiting: set[str]) -> None:
+    def _schedule_request(
+        self,
+        state: RequestState,
+        request_tokens: list[int],
+        token_budget: int,
+        request_ids_to_remove_from_waiting: set[str],
+    ) -> None:
         # If the request has one or more children we make sure not to prefill it entrirely
         if state.num_children > 0 and token_budget >= len(request_tokens) - 1:
             token_budget = len(request_tokens) - 1
@@ -222,7 +228,6 @@ class FIFOScheduler(Scheduler):
                     f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
                 )
                 break
-
 
             # Before changing the status of the request and scheduling it, we check if there is enough cache
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
