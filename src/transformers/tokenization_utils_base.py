@@ -972,7 +972,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     # first name has to correspond to main model input name
     # to make sure `tokenizer.pad(...)` works correctly
-    model_input_names: list[str] = ["input_ids", "token_type_ids", "attention_mask"]
+    model_input_names: list[str] = ["input_ids", "attention_mask"]
     padding_side: str = "right"
     truncation_side: str = "right"
     slow_tokenizer_class = None
