@@ -105,8 +105,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
         # GPU tensor cache for efficient repeated calls
-        self._cached_window: Optional["torch.Tensor"] = None
-        self._cached_mel_filters: Optional["torch.Tensor"] = None
+        self._cached_window: Optional[torch.Tensor] = None
+        self._cached_mel_filters: Optional[torch.Tensor] = None
         self._cached_device: Optional[str] = None
 
     def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
