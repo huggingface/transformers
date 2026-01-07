@@ -102,6 +102,7 @@ from .logits_process import (
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
 from .stopping_criteria import (
+    AsyncStoppingCriteriaList,
     ConfidenceCriteria,
     EosTokenCriteria,
     MaxLengthCriteria,
@@ -2660,6 +2661,10 @@ class GenerationMixin(ContinuousMixin):
             tokenizer=generation_mode_kwargs.get("tokenizer"),
         )
 
+        # Wrap stopping criteria with async wrapper if requested
+        if generation_config.async_stopping_criteria:
+            prepared_stopping_criteria = AsyncStoppingCriteriaList(prepared_stopping_criteria)
+
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
@@ -2923,13 +2928,23 @@ class GenerationMixin(ContinuousMixin):
             if streamer is not None:
                 streamer.put(next_tokens.cpu())
 
-            unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
-            this_peer_finished = unfinished_sequences.max() == 0
+            # Check stopping criteria - use async method if available
+            if hasattr(stopping_criteria, "check"):
+                unfinished_sequences, this_peer_finished = stopping_criteria.check(
+                    input_ids, scores, unfinished_sequences
+                )
+            else:
+                unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
+                this_peer_finished = unfinished_sequences.max() == 0
             cur_len += 1
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
+
+        # Finalize async stopping criteria if used
+        if hasattr(stopping_criteria, "finalize"):
+            stopping_criteria.finalize(unfinished_sequences)
 
         if streamer is not None:
             streamer.end()

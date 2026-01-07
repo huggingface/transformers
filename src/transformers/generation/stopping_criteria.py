@@ -509,6 +509,225 @@ class StoppingCriteriaList(list):
         return None
 
 
+class AsyncStoppingCriteriaList:
+    """
+    A wrapper around StoppingCriteriaList that performs stopping criteria checks asynchronously
+    on a separate CUDA stream, reducing GPU-CPU synchronization overhead.
+
+    The async approach works by:
+    1. Running stopping criteria checks on a separate CUDA stream
+    2. Writing the "should stop" flag to pinned (page-locked) CPU memory
+    3. The CPU can poll this memory location without explicit CUDA synchronization
+    4. Only when stopping is needed do we fully sync to get the is_done tensor
+
+    This reduces the number of GPU-CPU syncs from once per token to only when actually stopping.
+
+    Args:
+        stopping_criteria (`StoppingCriteriaList`):
+            The underlying stopping criteria to wrap.
+    """
+
+    def __init__(self, stopping_criteria: StoppingCriteriaList):
+        self.stopping_criteria = stopping_criteria
+        self._check_stream = None
+        self._check_event = None
+        self._pending_is_done = None
+        # Pinned memory for async communication - GPU writes, CPU reads without sync
+        self._should_stop_pinned = None
+        self._should_stop_np = None  # Numpy view for sync-free reading
+        self._last_checked_len = 0
+        self._check_in_flight = False
+
+    def _ensure_stream(self, device):
+        """Lazily create the CUDA stream, events, and pinned memory."""
+        if self._check_stream is None and device.type == "cuda":
+            self._check_stream = torch.cuda.Stream(device=device)
+            self._check_event = torch.cuda.Event()
+            # Event for syncing the async stream with current stream operations
+            self._sync_event = torch.cuda.Event()
+            # Pinned memory tensor - GPU can write to it, CPU can read without sync
+            self._should_stop_pinned = torch.zeros(1, dtype=torch.int32, pin_memory=True)
+            # GPU tensor for async communication - created once to avoid stream issues
+            self._should_stop_gpu = torch.zeros(1, dtype=torch.int32, device=device)
+            # Numpy view for reading without PyTorch sync overhead
+            self._should_stop_np = self._should_stop_pinned.numpy()
+
+    def check(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        unfinished_sequences: torch.LongTensor,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, bool]:
+        """
+        Check stopping criteria asynchronously.
+
+        The async approach reduces GPU-CPU syncs by:
+        1. Running stopping criteria on a separate CUDA stream
+        2. Using pinned memory to communicate results without explicit sync
+        3. Only syncing when stopping is actually needed
+
+        For max_length-only stopping, this falls back to a simple CPU check.
+
+        Returns:
+            Tuple of (updated_unfinished_sequences, this_peer_finished).
+        """
+        device = input_ids.device
+        cur_len = input_ids.shape[1]
+
+        # For non-CUDA devices, fall back to synchronous behavior
+        if device.type != "cuda":
+            is_done = self.stopping_criteria(input_ids, scores, **kwargs)
+            unfinished_sequences = unfinished_sequences & ~is_done
+            this_peer_finished = unfinished_sequences.max() == 0
+            return unfinished_sequences, bool(this_peer_finished)
+
+        # CPU-side max_length check - no GPU sync needed at all!
+        max_length = self.stopping_criteria.max_length
+        if max_length is not None:
+            if cur_len >= max_length:
+                # We've hit max_length - stop without GPU check
+                # Update unfinished_sequences on GPU
+                is_done = torch.ones(unfinished_sequences.shape, device=device, dtype=torch.bool)
+                unfinished_sequences = unfinished_sequences & ~is_done
+                return unfinished_sequences, True
+            elif cur_len < max_length - 1:
+                # Far from max_length - only check if async result shows EOS
+                return self._check_async_only(input_ids, scores, unfinished_sequences, cur_len, **kwargs)
+
+        # Near max_length or no max_length - do sync check
+        is_done = self.stopping_criteria(input_ids, scores, **kwargs)
+        unfinished_sequences = unfinished_sequences & ~is_done
+        this_peer_finished = unfinished_sequences.max() == 0
+        return unfinished_sequences, bool(this_peer_finished)
+
+    def _check_async_only(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        unfinished_sequences: torch.LongTensor,
+        cur_len: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, bool]:
+        """
+        Check async result only, don't do sync check.
+
+        The async check runs on a separate CUDA stream. We only poll when the
+        event signals completion (event.query() returns True). This means if
+        the model is very fast, we generate many tokens while a single async
+        check runs in parallel.
+        """
+        device = input_ids.device
+        self._ensure_stream(device)
+
+        # Check if async operation completed (non-blocking query)
+        if self._check_in_flight and self._check_event.query():
+            self._check_in_flight = False
+
+            # Read pinned memory via numpy - no PyTorch sync needed!
+            # The event.query() returning True guarantees the write is complete.
+            should_stop_value = int(self._should_stop_np[0])
+
+            if should_stop_value == 1:
+                # EOS or other stopping criteria triggered - need to sync to get is_done
+                torch.cuda.current_stream(device).wait_stream(self._check_stream)
+
+                if self._pending_is_done is not None:
+                    unfinished_sequences = unfinished_sequences & ~self._pending_is_done
+                    this_peer_finished = unfinished_sequences.max() == 0
+                    self._pending_is_done = None
+                    if bool(this_peer_finished):
+                        return unfinished_sequences, True
+
+            # Start new async check for future tokens
+            self._should_stop_np[0] = 0
+            self._start_async_check(input_ids, scores, unfinished_sequences, cur_len, **kwargs)
+
+        elif not self._check_in_flight:
+            # No check in flight - start one
+            self._start_async_check(input_ids, scores, unfinished_sequences, cur_len, **kwargs)
+
+        return unfinished_sequences, False
+
+    def _start_async_check(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        unfinished_sequences: torch.LongTensor,
+        cur_len: int,
+        **kwargs,
+    ):
+        """Start an async stopping criteria check on a separate CUDA stream."""
+        # Clone to isolate async check from main generation - prevents race conditions
+        # where main stream modifies input_ids while async stream is reading
+        input_ids_for_check = input_ids.clone()
+        scores_for_check = scores.clone() if scores is not None else None
+
+        # Record current stream state so async stream can wait for clone to complete
+        self._sync_event.record(torch.cuda.current_stream(input_ids.device))
+
+        with torch.cuda.stream(self._check_stream):
+            # Wait for current stream operations (including clone) to complete
+            self._check_stream.wait_event(self._sync_event)
+
+            is_done = self.stopping_criteria(input_ids_for_check, scores_for_check, **kwargs)
+
+            # Check if any sequence should stop
+            any_should_stop = is_done.any()
+
+            # Write result to pinned memory (GPU -> pinned CPU, async)
+            # We use a simple copy: 1 if should stop, 0 otherwise
+            self._should_stop_gpu.copy_(any_should_stop.int().unsqueeze(0))
+            self._should_stop_pinned.copy_(self._should_stop_gpu, non_blocking=True)
+
+            # Store is_done for later if we need to sync
+            self._pending_is_done = is_done
+
+        self._check_event.record(self._check_stream)
+        self._check_in_flight = True
+        self._last_checked_len = cur_len
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        """
+        Legacy interface for compatibility. Prefer using check() for async behavior.
+        This falls back to synchronous behavior.
+        """
+        return self.stopping_criteria(input_ids, scores, **kwargs)
+
+    def finalize(self, unfinished_sequences: torch.LongTensor) -> tuple[torch.LongTensor, bool]:
+        """
+        Wait for any pending async check to complete and return the final result.
+        Call this when generation is about to end to ensure we don't miss a stop signal.
+
+        Args:
+            unfinished_sequences: Current unfinished sequences tensor
+
+        Returns:
+            Tuple of (final_unfinished_sequences, this_peer_finished)
+        """
+        if self._check_in_flight and self._check_event is not None:
+            self._check_event.synchronize()
+            if self._pending_is_done is not None:
+                unfinished_sequences = unfinished_sequences & ~self._pending_is_done
+            self._pending_is_done = None
+            self._pending_should_stop = None
+            self._check_in_flight = False
+        this_peer_finished = unfinished_sequences.max() == 0
+        return unfinished_sequences, bool(this_peer_finished)
+
+    def __iter__(self):
+        """Iterate over the underlying stopping criteria."""
+        return iter(self.stopping_criteria)
+
+    def __len__(self):
+        """Return the number of stopping criteria."""
+        return len(self.stopping_criteria)
+
+    @property
+    def max_length(self) -> int | None:
+        return self.stopping_criteria.max_length
+
+
 def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int) -> StoppingCriteriaList:
     stopping_max_length = stopping_criteria.max_length
     new_stopping_criteria = deepcopy(stopping_criteria)
