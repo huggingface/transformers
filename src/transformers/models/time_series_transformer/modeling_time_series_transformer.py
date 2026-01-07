@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 # Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #

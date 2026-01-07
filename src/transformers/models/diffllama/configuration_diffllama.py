@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 weak-kajuma and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on Llama implementations in this library and Microsoft's

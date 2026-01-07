@@ -36,10 +36,8 @@ select = [
 ignore = [
     "E501",  # Checks for lines that exceed the specified maximum character length.
     "E741",  # Checks for the use of the characters 'l', 'O', or 'I' as variable names.
-    "SIM212",  # Checks for if expressions that check against a negated condition.
     "SIM1",  # All SIM1XX rules
     "SIM905",  # Checks for static str.split calls that can be replaced with list literals.
-    "UP009",  # Checks for unnecessary UTF-8 encoding declarations.
     "UP015",  # Checks for redundant open mode arguments.
     "UP031",  # Checks for printf-style string formatting, and offers to replace it with str.format calls.
     "UP045",  # Check for typing.Optional annotations that can be rewritten based on PEP 604 syntax.

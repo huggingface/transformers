@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research and The HuggingFace Inc. team.
 # All rights reserved.
 #

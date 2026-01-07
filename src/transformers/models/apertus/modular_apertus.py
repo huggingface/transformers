@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
 #

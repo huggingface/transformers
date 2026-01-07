@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Kyutai and HuggingFace Inc. teams. All rights reserved.
 #
 #

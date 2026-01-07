@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2021 THUML @ Tsinghua University
 # Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.

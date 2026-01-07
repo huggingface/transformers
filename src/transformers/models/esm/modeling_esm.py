@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 # Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
 #

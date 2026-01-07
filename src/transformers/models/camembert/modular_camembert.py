@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 Inria, Facebook AI Research and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #

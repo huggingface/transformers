@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Tel AViv University, AllenAI and The HuggingFace Inc. team. All rights reserved.
 # All rights reserved.
 #

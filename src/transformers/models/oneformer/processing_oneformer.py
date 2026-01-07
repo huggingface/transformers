@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SHI Labs and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

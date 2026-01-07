@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Bo Peng and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #

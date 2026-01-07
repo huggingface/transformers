@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.

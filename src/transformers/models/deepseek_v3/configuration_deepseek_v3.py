@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 bzantium and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on the DeepSeekV3 implementations from the DeepSeek AI team. (https://huggingface.co/deepseek-ai/DeepSeek-V3)

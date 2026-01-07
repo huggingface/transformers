@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The GLM4 & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #

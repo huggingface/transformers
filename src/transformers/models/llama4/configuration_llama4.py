@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The LLAMA4 and HuggingFace Inc. team. All rights reserved.
 #
 #
