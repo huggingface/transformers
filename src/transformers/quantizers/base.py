@@ -58,6 +58,15 @@ def get_keys_to_not_convert(model) -> list:
     return list(modules_to_not_convert)
 
 
+def _assign_is_quantized(model):
+    from ..modeling_utils import PreTrainedModel
+
+    model.config._is_quantized = True
+    for child in model.children():
+        if isinstance(model, PreTrainedModel):
+            child.config._is_quantized = True
+
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -176,6 +185,8 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+        else:
+            _assign_is_quantized(model)
 
         return self._process_model_after_weight_loading(model, **kwargs)
 
