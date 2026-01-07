@@ -66,7 +66,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         model_max_length (`int`, *optional*, defaults to 2048):
                 The maximum sentence length the model accepts.
     """
-
+    model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
     def __init__(
         self,
         bos_token=chr(CLS),
