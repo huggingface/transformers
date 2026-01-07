@@ -1091,7 +1091,7 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, CausalLMOutputWithPast]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

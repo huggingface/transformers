@@ -1495,7 +1495,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, ClvpEncoderOutput]:
+    ) -> Union[tuple, ClvpEncoderOutput]:
         r"""
         This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
         projection layer to the pooled output of the CLVP text encoder model.
