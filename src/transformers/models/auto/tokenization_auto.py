@@ -150,6 +150,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("instructblip", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
+        ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("lasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
