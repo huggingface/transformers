@@ -74,6 +74,7 @@ class InternVLProcessor(ProcessorMixin):
         self.end_image_token_id = tokenizer.end_image_token_id
         self.image_token = tokenizer.context_image_token
         self.video_token = tokenizer.video_token
+        self.video_token_id = tokenizer.video_token_id
         self.image_token_id = tokenizer.context_image_token_id
         self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
@@ -259,13 +260,15 @@ class InternVLProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (list[list[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -283,6 +286,15 @@ class InternVLProcessor(ProcessorMixin):
             ]
             # Add 2 for BOI and EOI tokens
             num_image_tokens = [2 + (self.image_seq_length * num_patches) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            # Add 2 for BOI and EOI tokens
+            num_image_tokens = [2 + self.image_seq_length for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
