@@ -441,7 +441,6 @@ class NougatTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
 
-
         super().__init__(
             errors=errors,
             unk_token=unk_token,
@@ -462,7 +461,6 @@ class NougatTokenizer(TokenizersBackend):
         # Enable truncation and padding
         self._tokenizer.enable_truncation(max_length=4096)
         self._tokenizer.enable_padding(length=4096, pad_id=self.pad_token_id, pad_token=str(pad_token))
-
 
     def remove_hallucinated_references(self, text: str) -> str:
         """

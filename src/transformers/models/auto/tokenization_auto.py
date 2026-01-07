@@ -168,6 +168,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mamba2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("marian", "MarianTokenizer" if is_sentencepiece_available() else None),
+        ("markuplm", "MarkupLMTokenizer" if is_tokenizers_available() else None),
         ("mbart", "MBartTokenizer" if is_tokenizers_available() else None),
         ("mbart50", "MBart50Tokenizer" if is_tokenizers_available() else None),
         ("mega", "RobertaTokenizer"),
@@ -623,9 +624,13 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use `TokenizersBackend`
         if (
             tokenizer_config_class is not None
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type, "") .replace("Fast", "")!= tokenizer_config_class.replace("Fast", "")
+            and config_model_type is not None
+            and config_model_type != ""
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
+            != tokenizer_config_class.replace("Fast", "")
         ):
             # new model, but we ignore it unless the model type is the same
             try:
