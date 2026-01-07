@@ -94,7 +94,6 @@ class GemmaTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.Sequence(
             [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
         )
-        # Normalization replaces literal spaces with "▁", so splitting on " " would be a no-op.
         self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
         super().__init__(
             unk_token=unk_token,
