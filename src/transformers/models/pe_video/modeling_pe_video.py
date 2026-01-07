@@ -20,7 +20,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -35,8 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, Unpack, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForImageClassification
 from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
@@ -571,27 +570,37 @@ class PeVideoModel(PeVideoPreTrainedModel):
 
         self.post_init()
 
-    def get_text_features(self, input_ids, attention_mask=None):
-        # TODO: should it be named feature or embeds
-        text_outputs: MaskedLMOutput = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            return_dict=True,
-        )
+        @can_return_tuple
+        @auto_docstring
+        def get_text_features(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            **kwargs: Unpack[TransformersKwargs],
+        ) -> Union[tuple, BaseModelOutputWithPooling]:
+            text_outputs: BaseModelOutputWithPooling = self.text_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+            text_outputs.pooler_output = self.text_video_head(text_outputs.last_hidden_state)
+            return text_outputs
 
-        text_features = text_outputs.last_hidden_state
-        text_features = self.text_video_head(text_features)
-        return text_features
-
-    def get_video_features(self, pixel_values_videos, padding_mask_videos=None):
-        # TODO: should it be named feature or embeds
-        video_outputs: BaseModelOutputWithPooling = self.video_encoder(
-            pixel_values_videos=pixel_values_videos,
-            padding_mask_videos=padding_mask_videos,
-            return_dict=True,
-        )
-        video_features = self.video_head(video_outputs.pooler_output)
-        return video_features
+        @can_return_tuple
+        @auto_docstring
+        def get_video_features(
+            self,
+            pixel_values_videos: torch.Tensor,
+            padding_mask_videos: Optional[torch.Tensor] = None,
+            **kwargs: Unpack[TransformersKwargs],
+        ) -> Union[tuple, BaseModelOutputWithPooling]:
+            video_outputs: BaseModelOutputWithPooling = self.video_encoder(
+                pixel_values_videos=pixel_values_videos,
+                padding_mask_videos=padding_mask_videos,
+                **kwargs,
+            )
+            video_outputs.pooler_output = self.video_head(video_outputs.pooler_output)
+            return video_outputs
 
     @can_return_tuple
     def forward(
