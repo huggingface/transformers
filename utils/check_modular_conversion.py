@@ -63,6 +63,9 @@ def process_file(
 
 
 def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
+    """From a modular file, convert it and return all the contents of the file as string.
+    We need this function, because `ruff` needs the final filename to apply all rules correctly, so to get the
+    output as a string, we need to save a temporary file with similar name, run ruff, and re-read the temporary file"""
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
     # Temporary save the files with similar names to run `ruff` correctly, then re-read the result after linting/formatting
