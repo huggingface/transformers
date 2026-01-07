@@ -79,7 +79,6 @@ class TensorProcessor:
         This is particularly useful to resolve one-to-many
         HF-GGUF mappings sometimes appear in some MoE models.
         """
-        pass
 
     def process(self, weights, name, **kwargs):
         return GGUFTensor(weights, name, {})
@@ -382,7 +381,7 @@ def get_gguf_hf_weights_map(
         hf_name = processor.preprocess_name(hf_name)
 
         name, suffix = hf_name, ""
-        if hf_name.endswith(".weight") or hf_name.endswith(".bias"):
+        if hf_name.endswith((".weight", ".bias")):
             name, suffix = hf_name.rsplit(".", 1)
             suffix = "." + suffix
 

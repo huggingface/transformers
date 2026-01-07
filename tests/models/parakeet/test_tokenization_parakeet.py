@@ -40,7 +40,6 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         Precompiled normalization from sentencepiece is `nmt_nfkc_cf` that includes lowercasing. Yet, ParakeetTokenizer does not have a do_lower_case attribute.
         This result in the test failing.
         """
-        pass
 
     @unittest.skip(reason="This needs a slow tokenizer. Parakeet does not have one!")
     def test_encode_decode_with_spaces(self):

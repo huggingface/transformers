@@ -153,7 +153,7 @@ class FunnelAttentionStructure(nn.Module):
             pos = torch.arange(0, seq_len, dtype=torch.int64, device=device).to(dtype)
             pooled_pos = pos
             position_embeds_list = []
-            for block_index in range(0, self.config.num_blocks):
+            for block_index in range(self.config.num_blocks):
                 # For each block with block_index > 0, we need two types position embeddings:
                 #   - Attention(pooled-q, unpooled-kv)
                 #   - Attention(pooled-q, pooled-kv)

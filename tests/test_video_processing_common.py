@@ -357,7 +357,7 @@ class VideoProcessingTestMixin:
 
             # Sample with `fps` requires metadata to infer number of frames from total duration
             with self.assertRaises(ValueError):
-                metadata = VideoMetadata(**{"total_num_frames": 8})
+                metadata = VideoMetadata(total_num_frames=8)
                 video_processing.sample_frames(metadata=metadata, fps=3)
 
             metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]

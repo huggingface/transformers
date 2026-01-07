@@ -270,7 +270,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         lowercased_token = token.lower()
         if token.startswith("@"):
             return "@USER"
-        elif lowercased_token.startswith("http") or lowercased_token.startswith("www"):
+        elif lowercased_token.startswith(("http", "www")):
             return "HTTPURL"
         elif len(token) == 1:
             if token in self.special_puncts:

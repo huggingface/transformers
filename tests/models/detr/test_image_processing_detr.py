@@ -186,7 +186,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
             "return_tensors": "pt",
         }
 
-        image_processor_params = {**image_processor_dict, **{"format": "_INVALID_FORMAT_"}}
+        image_processor_params = {**image_processor_dict, "format": "_INVALID_FORMAT_"}
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class(**image_processor_params)
 

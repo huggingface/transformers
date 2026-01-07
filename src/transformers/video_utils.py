@@ -699,7 +699,7 @@ def load_video(
             f.download([video])
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
-    elif video.startswith("http://") or video.startswith("https://"):
+    elif video.startswith(("http://", "https://")):
         file_obj = BytesIO(httpx.get(video, follow_redirects=True).content)
     elif os.path.isfile(video):
         file_obj = video
@@ -708,7 +708,7 @@ def load_video(
 
     # can also load with decord, but not cv2/torchvision
     # both will fail in case of url links
-    video_is_url = video.startswith("http://") or video.startswith("https://")
+    video_is_url = video.startswith(("http://", "https://"))
     if video_is_url and backend == "opencv":
         raise ValueError("If you are trying to load a video from URL, you cannot use 'opencv' as backend")
 

@@ -232,7 +232,7 @@ def create_rename_keys(config):
             )
         )
 
-    for j in range(0, 3):
+    for j in range(3):
         rename_keys.append((f"encoder.input_proj.{j}.0.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.1.{last}", f"model.encoder_input_proj.{j}.1.{last}"))

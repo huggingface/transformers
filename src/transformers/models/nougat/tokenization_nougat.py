@@ -179,7 +179,7 @@ def truncate_repetitions(text: str, min_len: int = 30) -> str:
     for repetition_length in range(min_len, int(text_length / 2)):
         # check if there is a repetition at the end
         same = True
-        for i in range(0, repetition_length):
+        for i in range(repetition_length):
             if text_lower[text_length - repetition_length - i - 1] != text_lower[text_length - i - 1]:
                 same = False
                 break

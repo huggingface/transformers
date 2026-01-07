@@ -1218,7 +1218,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
         """
-        pass
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """

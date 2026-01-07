@@ -1577,7 +1577,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         cache_buffers = [
             (name, buffer)
             for name, buffer in exported_program.named_buffers()
-            if name.startswith("key_cache_") or name.startswith("value_cache_")
+            if name.startswith(("key_cache_", "value_cache_"))
         ]
 
         # Verify cache buffers

@@ -82,7 +82,7 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
     model = BertForMaskedLM(config)
 
     # Layers
-    for layer_index in range(0, config.num_hidden_layers):
+    for layer_index in range(config.num_hidden_layers):
         layer: BertLayer = model.bert.encoder.layer[layer_index]
 
         # Self-attention
