@@ -146,13 +146,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         GPU performance by eliminating repeated CPU->GPU transfers.
 
         Returns:
-            Tuple of (window, mel_filters_transposed) tensors on the target device.
+            Tuple of (window, mel_filters) tensors on the target device.
         """
         if self._cached_device != device:
             self._cached_window = torch.hann_window(self.n_fft, device=device)
-            # Pre-transpose and make contiguous for optimal matmul performance
+            # mel_filters shape: [n_mels, n_freqs] - correct for matmul with [batch, n_freqs, frames]
             self._cached_mel_filters = (
-                torch.from_numpy(self.mel_filters).to(device=device, dtype=torch.float32).T.contiguous()
+                torch.from_numpy(self.mel_filters).to(device=device, dtype=torch.float32)
             )
             self._cached_device = device
         return self._cached_window, self._cached_mel_filters
@@ -186,7 +186,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             waveform = waveform.to(device, torch.float32)
 
         # Use cached window and mel_filters
-        window, mel_filters_T = self._ensure_gpu_cache(device)
+        window, mel_filters = self._ensure_gpu_cache(device)
 
         # Note: it would be better to dither the chunked waveform,
         # so overlapping signal does not get the same dithering.
@@ -199,8 +199,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
-        # Use pre-transposed mel_filters for efficient matmul
-        mel_spec = torch.matmul(mel_filters_T, magnitudes)
+        # Apply mel filterbank: [n_mels, n_freqs] @ [batch, n_freqs, frames] -> [batch, n_mels, frames]
+        mel_spec = torch.matmul(mel_filters, magnitudes)
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         if waveform.dim() == 2:
