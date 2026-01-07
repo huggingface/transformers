@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from numba.tests.test_globals import tmp
 
 import importlib
 import json
@@ -32,6 +33,7 @@ from transformers import (
     BertTokenizerFast,
     CTRLTokenizer,
     GPT2Tokenizer,
+    HerbertTokenizer,
     PreTrainedTokenizerFast,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
@@ -593,3 +595,26 @@ class NopConfig(PreTrainedConfig):
                     pass
             finally:
                 os.chdir(prev_dir)
+
+    def test_tokenization_class_priority(self):
+        from transformers import AutoProcessor
+
+        tok = AutoTokenizer.from_pretrained("mlx-community/MiniMax-M2.1-4bit")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
+        self.assertTrue(tok.__class__ == HerbertTokenizer)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tok.save_pretrained(tmp_dir)
+            tok2 = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertTrue(tok2.__class__ == HerbertTokenizer)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
