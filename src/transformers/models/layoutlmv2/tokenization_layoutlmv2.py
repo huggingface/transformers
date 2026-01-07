@@ -160,6 +160,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model = models.WordPiece
+    model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
 
     def __init__(
         self,
