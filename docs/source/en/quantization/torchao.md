@@ -87,7 +87,7 @@ Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of
 We'll show examples for recommended quantization methods based on hardwares, e.g. A100 GPU, H100 GPU, CPU.
 
 > [!WARNING]
-> torchao automatically compiles the model during the first inference. The model is recompiled every time batch size or `max_new_tokens` is modified. Pass `disable_compile=True` in [`~GenerationMixin.generate`] to quantize without compilation.
+> torchao automatically compiles the model during the first inference if we set `cache_implementation="static"`. The model is recompiled every time batch size or `max_new_tokens` is modified. Pass `disable_compile=True` in [`~GenerationMixin.generate`] to quantize without compilation.
 
 ### H100 GPU
 
