@@ -192,9 +192,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 f" {size.keys()}."
             )
 
-        image = F.resize(
+        image = super().resize(
             image,
-            size=new_size,
+            size=SizeDict(height=new_size[0], width=new_size[1]),
             interpolation=interpolation,
             **kwargs,
         )
@@ -432,6 +432,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
         data.update({"pixel_values": torch.stack(images, dim=0)})
+
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [

@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING, Any, Union, overload
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
+from ..models.auto import AutoImageProcessor
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
 
@@ -10,10 +11,17 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+    from torch.export import Dim
 
     from ..models.auto.modeling_auto import (
         MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    )
+    from .exportable import (
+        ExportableModule,
+        export_pipeline_to_onnx,
+        export_pipeline_to_torch,
+        export_pipeline_to_torchscript,
     )
 
 if TYPE_CHECKING:
@@ -195,3 +203,207 @@ class ObjectDetectionPipeline(Pipeline):
             "ymax": ymax,
         }
         return bbox
+
+    def get_exportable_module(
+        self,
+        include_preprocessing: bool = True,
+        include_postprocessing: bool = True,
+    ) -> "ExportableModule":
+        """
+        Get an exportable version of this pipeline that can be exported to ONNX or torch.export.
+
+        The exportable module bundles preprocessing and postprocessing into the model's forward pass,
+        allowing deployment without Python dependencies.
+
+        Args:
+            include_preprocessing (`bool`, *optional*, defaults to `True`):
+                Whether to include preprocessing in the exported model. If False, the exported model
+                will expect preprocessed `pixel_values` as input.
+            include_postprocessing (`bool`, *optional*, defaults to `True`):
+                Whether to include postprocessing in the exported model. If False, the exported model
+                will return raw model outputs instead of formatted detections.
+
+        Returns:
+            `ExportableModule`: A torch.nn.Module that wraps the pipeline for export.
+
+        Example:
+            ```python
+            >>> from transformers import pipeline
+            >>> import torch
+
+            >>> pipe = pipeline("object-detection", model="facebook/detr-resnet-50")
+            >>> exportable = pipe.get_exportable_module()
+
+            >>> # Create example inputs
+            >>> from PIL import Image
+            >>> import requests
+            >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+            >>> images = exportable.get_tensors_inputs(image)
+            >>> example_inputs = {
+            ...     "images": images,
+            ...     "post_process_kwargs": {"target_sizes": torch.tensor([[image.height, image.width]])}
+            ... }
+
+            >>> # Export with torch.export
+            >>> exported_program = torch.export.export(exportable, args=(), kwargs=example_inputs, strict=False)
+            ```
+        """
+        # If the current processor is slow, reload as fast
+        # TODO @yoni: remove this once we load the fast processor by default
+        processor = self.image_processor
+
+        # Check if processor supports the needed features for two-stage preprocessing
+        if not processor.is_fast:
+            logger.warning(
+                "Current image processor does not support two-stage preprocessing (slow processor). "
+                "Reloading with use_fast=True for export compatibility."
+            )
+            processor = AutoImageProcessor.from_pretrained(self.model.config._name_or_path, use_fast=True)
+
+        return ExportableModule(
+            model=self.model,
+            processor=processor,
+            post_process_function_name="post_process_object_detection",
+            include_preprocessing=include_preprocessing,
+            include_postprocessing=include_postprocessing,
+        )
+
+    def export(
+        self,
+        example_image: Union[str, "Image.Image"],
+        format: str = "torch",
+        save_path: Optional[str] = None,
+        dynamic_shapes: Union[dict, bool] = True,
+        include_preprocessing: bool = True,
+        include_postprocessing: bool = True,
+        optimize: bool = True,
+        threshold: float = 0.5,
+        **export_kwargs,
+    ) -> Union["torch.export.ExportedProgram", "torch.jit.ScriptModule", str]:
+        """
+        Export the pipeline to a specified format (torch.export, ONNX, or TorchScript).
+
+        This method creates an exportable module and exports it in the specified format,
+        bundling preprocessing and postprocessing into a single artifact for deployment.
+
+        Args:
+            example_image (`str` or `PIL.Image`):
+                An example image used for tracing the model. Can be a path, URL, or PIL Image.
+            format (`str`, *optional*, defaults to `"torch"`):
+                Export format. One of:
+                - `"torch"`: Export using torch.export (recommended for PyTorch 2.0+)
+                - `"onnx"`: Export to ONNX format
+                - `"torchscript"`: Export to TorchScript
+            save_path (`str`, *optional*):
+                Path to save the exported model. Required for ONNX export.
+            dynamic_shapes (`dict` or `bool`, *optional*, defaults to `True`):
+                Whether to use dynamic shapes for export. If `True`, uses default dynamic shapes
+                allowing variable image sizes. If `dict`, uses the provided configuration.
+            include_preprocessing (`bool`, *optional*, defaults to `True`):
+                Whether to include preprocessing in the exported model.
+            include_postprocessing (`bool`, *optional*, defaults to `True`):
+                Whether to include postprocessing in the exported model.
+            optimize (`bool`, *optional*, defaults to `True`):
+                Whether to optimize the exported model (ONNX only).
+            threshold (`float`, *optional*, defaults to `0.5`):
+                The score threshold used for filtering detections in postprocessing.
+                This value will be used during export and should match the threshold used during inference.
+            **export_kwargs:
+                Additional arguments passed to the export function.
+
+        Returns:
+            Depending on the format:
+            - `"torch"`: Returns `torch.export.ExportedProgram`
+            - `"onnx"`: Returns path to the saved ONNX file (str)
+            - `"torchscript"`: Returns `torch.jit.ScriptModule`
+
+        Note:
+            For torch.export, the exported model has a **fixed input signature**. The exported model
+            will include `post_process_kwargs` with both `target_sizes` and `threshold` parameters.
+            When using the exported model, you must provide the same structure:
+
+            ```python
+            outputs = exported_model(
+                images=images,
+                post_process_kwargs={"target_sizes": sizes, "threshold": 0.5}
+            )
+            ```
+
+        Example:
+            ```python
+            >>> from transformers import pipeline
+
+            >>> pipe = pipeline("object-detection", model="facebook/detr-resnet-50")
+
+            >>> # Export to torch.export with dynamic shapes
+            >>> exported_program = pipe.export(
+            ...     example_image="http://images.cocodataset.org/val2017/000000039769.jpg",
+            ...     format="torch",
+            ...     dynamic_shapes=True,
+            ... )
+
+            >>> # Export to ONNX
+            >>> onnx_path = pipe.export(
+            ...     example_image="http://images.cocodataset.org/val2017/000000039769.jpg",
+            ...     format="onnx",
+            ...     save_path="model.onnx",
+            ...     dynamic_shapes=True,
+            ...     optimize=True,
+            ... )
+            ```
+        """
+        example_image = load_image(example_image)
+
+        # Create exportable module
+        exportable_module = self.get_exportable_module(
+            include_preprocessing=include_preprocessing,
+            include_postprocessing=include_postprocessing,
+        )
+
+        # Prepare example inputs
+        images = exportable_module.get_tensors_inputs(example_image, device=self.device)
+        example_inputs = {
+            "images": images.to(self.device),
+            "post_process_kwargs": {
+                "target_sizes": torch.tensor([[example_image.height, example_image.width]], device=self.device),
+                "threshold": threshold,  # Use provided threshold parameter
+            },
+        }
+
+        # Create dynamic shapes configuration if requested
+        if dynamic_shapes is True:
+            # Default dynamic shapes for object detection
+            height_dim = Dim("height", min=32, max=4096)
+            width_dim = Dim("width", min=32, max=4096)
+            dynamic_shapes = {
+                "images": {2: height_dim, 3: width_dim},
+                "post_process_kwargs": {
+                    "target_sizes": None,  # Dynamic: can change per image
+                    "threshold": None,  # Static: scalar float, marked as None (no constraints)
+                },
+            }
+
+        if format == "torch":
+            return export_pipeline_to_torch(
+                exportable_module,
+                example_inputs,
+                save_path=save_path,
+                dynamic_shapes=dynamic_shapes,
+                **export_kwargs,
+            )
+        elif format == "onnx":
+            return export_pipeline_to_onnx(
+                exportable_module,
+                example_inputs,
+                save_path=save_path,
+                dynamic_shapes=dynamic_shapes,
+                optimize=optimize,
+                **export_kwargs,
+            )
+        elif format == "torchscript":
+            return export_pipeline_to_torchscript(
+                exportable_module, example_inputs, save_path=save_path, **export_kwargs
+            )
+        else:
+            raise ValueError(f"Unsupported export format: {format}. Choose from: torch, onnx, torchscript")
