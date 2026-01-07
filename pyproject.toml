@@ -49,7 +49,6 @@ ignore = [
     "UP004",  # Checks for classes that inherit from object.
     "UP045",  # Check for typing.Optional annotations that can be rewritten based on PEP 604 syntax.
     "UP007",  # Check for type annotations that can be rewritten based on PEP 604 syntax.
-    "UP038",  # Dangerous and removed in newer versions - would replace `isinstance(x, (y,z))` -> `isinstance(x, y | z)` which is bad practice
 ]
 extend-safe-fixes = [
     "UP006",  # Checks for the use of generics that can be replaced with standard library variants based on PEP 585.
