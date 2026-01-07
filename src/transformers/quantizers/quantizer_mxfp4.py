@@ -271,8 +271,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
             else:
                 return [
                     WeightConverter(
-                        source_patterns=["_blocks", "_scales"],
-                        target_patterns="",
+                        source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
+                        target_patterns="gate_up_proj",
+                        operations=[Mxfp4Deserialize(self)],
+                    ),
+                    WeightConverter(
+                        source_patterns=["down_proj_blocks", "down_proj_scales"],
+                        target_patterns="down_proj",
                         operations=[Mxfp4Deserialize(self)],
                     )
                 ]

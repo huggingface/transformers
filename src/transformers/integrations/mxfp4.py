@@ -116,7 +116,6 @@ class Mxfp4Quantize(ConversionOps):
 
                 return {}
 
-
 class Mxfp4Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -145,6 +144,8 @@ class Mxfp4Dequantize(ConversionOps):
         dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"], param_data["_blocks"].device)
         return {full_layer_name: dequantized}
 
+    def reverse_op(self) -> ConversionOps:
+        return Mxfp4Quantize(self.hf_quantizer)
 
 class Mxfp4Deserialize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -159,26 +160,27 @@ class Mxfp4Deserialize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
-        if "_blocks" in input_dict.keys():
-            if isinstance(input_dict["_blocks"], list):
-                param_data["_blocks"] = input_dict["_blocks"][0]
+        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+
+        if f"{proj}_blocks" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_blocks"], list):
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"][0]
             else:
-                param_data["_blocks"] = input_dict["_blocks"]
-        if "_scales" in input_dict.keys():
-            if isinstance(input_dict["_scales"], list):
-                param_data["_scales"] = input_dict["_scales"][0]
+                param_data[f"{proj}_blocks"] = input_dict[f"{proj}_blocks"]
+        if f"{proj}_scales" in input_dict.keys():
+            if isinstance(input_dict[f"{proj}_scales"], list):
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"][0]
             else:
-                param_data["_scales"] = input_dict["_scales"]
+                param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
         # Eagerly set tensors on the module and perform swizzle
         module, _ = get_module_from_name(model, full_layer_name)
-        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
         swizzle_mxfp4_convertops(
-            param_data["_blocks"],
-            param_data["_scales"],
+            param_data[f"{proj}_blocks"],
+            param_data[f"{proj}_scales"],
             module,
             proj,
-            param_data["_blocks"].device,
+            param_data[f"{proj}_blocks"].device,
             triton_kernels_hub,
         )
         missing_keys.discard(f"{full_layer_name}")
@@ -188,7 +190,93 @@ class Mxfp4Deserialize(ConversionOps):
         # We don't use set_param_for_module since it expects mainly a torch.nn.Parameter or a safetensors pointer
         return {}
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Mxfp4ReverseDeserialize(self.hf_quantizer)
 
+
+def get_state_dict_and_metadata(self, model):
+    from ..integrations import Mxfp4GptOssExperts
+
+    state_dict = model.state_dict()
+
+    # Get num_local_experts from model config
+    num_local_experts = getattr(model.config, "num_local_experts", 32)
+    hidden_size = getattr(model.config, "hidden_size", 2880)
+
+    for name, module in model.named_modules():
+        if (
+            isinstance(module, Mxfp4GptOssExperts)
+            and hasattr(module, "gate_up_proj")
+            and hasattr(module, "down_proj")
+        ):
+            state_dict[f"{name}.gate_up_proj_blocks"] = (
+                module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
+                .transpose(-1, -2)
+                .reshape(num_local_experts, -1, 90, 16)
+            )
+            state_dict[f"{name}.gate_up_proj_scales"] = (
+                module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                    module.gate_up_proj_precision_config.weight_scale.storage.data
+                ).transpose(-1, -2)
+            )
+            state_dict[f"{name}.down_proj_blocks"] = (
+                module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
+                .transpose(-1, -2)
+                .reshape(num_local_experts, hidden_size, 90, -1)
+            )
+            state_dict[f"{name}.down_proj_scales"] = (
+                module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                    module.down_proj_precision_config.weight_scale.storage.data
+                ).transpose(-1, -2)
+            )
+
+    metadata = {}
+    return state_dict, metadata
+
+class Mxfp4ReverseDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        model: Optional[torch.nn.Module] = None,
+        full_layer_name: str | None = None,
+        missing_keys: Optional[list[str]] = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        num_local_experts = getattr(model.config, "num_local_experts", 32)
+        print("model.config", model.model.layers[0].mlp.experts.gate_up_proj)
+        module, _ = get_module_from_name(model, full_layer_name)
+        hidden_size = getattr(model.config, "hidden_size", 2880)
+        state_dict = {}
+        if (
+            isinstance(module, Mxfp4GptOssExperts)
+            and hasattr(module, "gate_up_proj")
+            and hasattr(module, "down_proj")
+        ):
+            state_dict[f"{name}.gate_up_proj_blocks"] = (
+                module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
+                .transpose(-1, -2)
+                .reshape(num_local_experts, -1, 90, 16)
+            )
+            state_dict[f"{name}.gate_up_proj_scales"] = (
+                module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                    module.gate_up_proj_precision_config.weight_scale.storage.data
+                ).transpose(-1, -2)
+            )
+            state_dict[f"{name}.down_proj_blocks"] = (
+                module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
+                .transpose(-1, -2)
+                .reshape(num_local_experts, hidden_size, 90, -1)
+            )
+            state_dict[f"{name}.down_proj_scales"] = (
+                module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
+                    module.down_proj_precision_config.weight_scale.storage.data
+                ).transpose(-1, -2)
+            )
+        
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
     downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
