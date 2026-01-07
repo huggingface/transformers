@@ -656,7 +656,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto", experts_implementation="eager"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -719,7 +719,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto", experts_implementation="eager"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
@@ -757,7 +757,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_multiturn(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto", experts_implementation="eager"
         )
 
         messages = [
@@ -803,7 +803,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_w_audio(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto", experts_implementation="eager"
         )
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
@@ -861,6 +861,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
+            experts_implementation="eager",
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
