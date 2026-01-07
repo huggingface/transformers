@@ -789,6 +789,11 @@ def is_detectron2_available() -> bool:
 
 
 @lru_cache
+def is_diffusers_available() -> bool:
+    return _is_package_available("diffusers")
+
+
+@lru_cache
 def is_rjieba_available() -> bool:
     return _is_package_available("rjieba")
 
@@ -1762,6 +1767,13 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+DIFFUSERS_IMPORT_ERROR = """
+{0} requires the diffusers library. But that was not found in your environment. You can install them with pip:
+`pip install diffusers`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PRETTY_MIDI_IMPORT_ERROR = """
 {0} requires the pretty_midi library. But that was not found in your environment. You can install them with pip:
 `pip install pretty_midi`
@@ -1807,6 +1819,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("diffusers", (is_diffusers_available, DIFFUSERS_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),

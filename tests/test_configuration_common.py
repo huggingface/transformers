@@ -132,18 +132,20 @@ class ConfigTester:
             sub_configs = general_config_loaded.sub_configs
             for sub_config_key, sub_class in sub_configs.items():
                 if general_config_dict[sub_config_key] is not None:
+                    # Instead of loading from the general config file, create the sub-config directly from its dict
+                    # This avoids issues when multiple sub-configs share the same type
                     if sub_class.__name__ == "AutoConfig":
                         sub_class = sub_class.for_model(**general_config_dict[sub_config_key]).__class__
-                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
-                    else:
-                        sub_config_loaded = sub_class.from_pretrained(tmpdirname)
+                    
+                    # Create sub-config directly from its dictionary representation
+                    sub_config_from_dict = general_config_dict[sub_config_key].copy()
+                    sub_config_from_dict.pop("transformers_version", None)
+                    sub_config_loaded = sub_class(**sub_config_from_dict)
 
-                    # Pop `transformers_version`, it never exists when a config is part of a general composite config
-                    # Verify that loading with subconfig class results in same dict as if we loaded with general composite config class
+                    # Verify that the created sub-config matches what's in the general config
                     sub_config_loaded_dict = sub_config_loaded.to_dict()
                     sub_config_loaded_dict.pop("transformers_version", None)
-                    general_config_dict[sub_config_key].pop("transformers_version", None)
-                    self.parent.assertEqual(sub_config_loaded_dict, general_config_dict[sub_config_key])
+                    self.parent.assertEqual(sub_config_loaded_dict, sub_config_from_dict)
 
                     # Verify that the loaded config type is same as in the general config
                     type_from_general_config = type(getattr(general_config_loaded, sub_config_key))

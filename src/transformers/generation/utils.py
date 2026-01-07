@@ -1797,6 +1797,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
+        # Add custom keys not in global defaults
+        for key, value in self.generation_config.to_dict().items():
+            if not hasattr(generation_config, key):
+                setattr(generation_config, key, value)
+
         # Due to some values being boolean and not `None`, we need additional logic to overwrite
         # them explicitly (`defaults_only=False`) on the condition that it's only a previous
         # default value
