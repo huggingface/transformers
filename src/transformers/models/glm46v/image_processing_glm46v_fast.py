@@ -19,7 +19,7 @@
 # limitations under the License.
 
 
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -57,7 +57,7 @@ class Glm46VImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: SizeDict | None = None,
+        size: Optional[SizeDict] = None,
         **kwargs,
     ) -> dict:
         """
@@ -78,13 +78,13 @@ class Glm46VImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         """

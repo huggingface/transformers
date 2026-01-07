@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -135,7 +135,7 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: tuple | int | dict | None = None,
+        patch_size: Optional[Union[tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
@@ -213,10 +213,10 @@ class Cohere2VisionImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
+        disable_grouping: Optional[bool],
+        return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:

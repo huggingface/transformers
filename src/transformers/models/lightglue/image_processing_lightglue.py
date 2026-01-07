@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import torch
@@ -65,7 +65,7 @@ class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 def is_grayscale(
     image: np.ndarray,
-    input_data_format: str | ChannelDimension | None = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
@@ -79,7 +79,7 @@ def is_grayscale(
 
 def convert_to_grayscale(
     image: ImageInput,
-    input_data_format: str | ChannelDimension | None = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
@@ -171,7 +171,7 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: dict[str, int] | None = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -193,8 +193,8 @@ class LightGlueImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ):
         """
@@ -231,15 +231,15 @@ class LightGlueImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_grayscale: bool | None = None,
-        return_tensors: str | TensorType | None = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_grayscale: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
         """

@@ -123,7 +123,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: ImageInput | None = None,
+        segmentation_maps: Optional[ImageInput] = None,
         **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -135,10 +135,10 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: ImageInput | None,
+        segmentation_maps: Optional[ImageInput],
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: Optional[Union[str, "torch.device"]] = None,
         **kwargs: Unpack[DPTImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -226,7 +226,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps.
 

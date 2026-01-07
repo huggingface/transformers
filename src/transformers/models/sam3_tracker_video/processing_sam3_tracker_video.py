@@ -20,7 +20,7 @@
 
 
 from copy import deepcopy
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -63,13 +63,13 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: ImageInput | None = None,
-        segmentation_maps: ImageInput | None = None,
-        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
-        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
-        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
-        original_sizes: list[list[float]] | torch.Tensor | None = None,
-        return_tensors: str | TensorType | None = None,
+        images: Optional[ImageInput] = None,
+        segmentation_maps: Optional[ImageInput] = None,
+        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
+        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
+        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
+        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
@@ -393,11 +393,11 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
 
     def _validate_single_input(
         self,
-        data: torch.Tensor | np.ndarray | list,
+        data: Union[torch.Tensor, np.ndarray, list],
         expected_depth: int,
         input_name: str,
         expected_format: str,
-        expected_coord_size: int | None = None,
+        expected_coord_size: Optional[int] = None,
     ) -> list:
         """
                 Validate a single input by ensuring proper nesting and raising an error if the input is not valid.

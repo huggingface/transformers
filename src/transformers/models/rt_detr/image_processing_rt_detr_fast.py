@@ -307,7 +307,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotation: dict[str, Any] | None = None,
+        annotation: Optional[dict[str, Any]] = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):

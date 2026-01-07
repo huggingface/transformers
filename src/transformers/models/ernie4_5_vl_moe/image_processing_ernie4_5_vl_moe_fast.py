@@ -85,7 +85,7 @@ class Ernie4_5_VL_MoeImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: SizeDict | None = None,
+        size: Optional[SizeDict] = None,
         **kwargs,
     ) -> dict:
         """

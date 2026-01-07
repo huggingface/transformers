@@ -19,6 +19,8 @@
 # limitations under the License.
 
 
+from typing import Optional, Union
+
 import numpy as np
 import torch
 
@@ -88,7 +90,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
 
     def _further_process_kwargs(
         self,
-        size: SizeDict | None = None,
+        size: Optional[SizeDict] = None,
         **kwargs,
     ) -> dict:
         """
@@ -181,17 +183,17 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         videos: list[torch.Tensor],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: SizeDict | None = None,
+        size: Optional[SizeDict] = None,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
-        return_tensors: str | TensorType | None = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
+        patch_size: Optional[int] = None,
+        temporal_patch_size: Optional[int] = None,
+        merge_size: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
