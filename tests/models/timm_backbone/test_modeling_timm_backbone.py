@@ -135,8 +135,12 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="TimmBackbone initialization is managed on the timm side")
+    @unittest.skip(reason="TimmBackbone uses a pretrained model initialization in __init__, not random weights")
     def test_can_init_all_missing_weights(self):
+        pass
+
+    @unittest.skip(reason="TimmBackbone uses a pretrained model initialization in __init__, not random weights")
+    def test_init_weights_can_init_buffers(self):
         pass
 
     @unittest.skip(reason="TimmBackbone models doesn't have inputs_embeds")

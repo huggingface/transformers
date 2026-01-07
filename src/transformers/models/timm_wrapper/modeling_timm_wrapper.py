@@ -29,8 +29,6 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 if is_timm_available():
     import timm
 
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
-
 
 @dataclass
 @auto_docstring(
@@ -117,7 +115,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
         # Also, reinit all non-persistemt buffers if any!
-        _maybe_reinit_non_persistent_buffer(module)
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
