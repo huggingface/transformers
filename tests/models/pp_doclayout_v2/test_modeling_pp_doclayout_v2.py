@@ -143,7 +143,6 @@ class PPDocLayoutV2ModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
-        # config.num_labels = self.num_labels
 
         return config, pixel_values
 
@@ -191,7 +190,84 @@ class PPDocLayoutV2ModelTester:
             "rel_bias_scale": 100,
             "relative_head_num": 1,
             "relative_head_size": 64,
-            "tril_mask": True,
+        }
+        id2label = {
+            0: "abstract",
+            1: "algorithm",
+            2: "aside_text",
+            3: "chart",
+            4: "content",
+            5: "formula",
+            6: "doc_title",
+            7: "figure_title",
+            8: "footer",
+            9: "footer",
+            10: "footnote",
+            11: "formula_number",
+            12: "header",
+            13: "header",
+            14: "image",
+            15: "formula",
+            16: "number",
+            17: "paragraph_title",
+            18: "reference",
+            19: "reference_content",
+            20: "seal",
+            21: "table",
+            22: "text",
+            23: "text",
+            24: "vision_footnote",
+        }
+        num_labels = 25
+        threshold_mapping = {
+            "abstract": 0.50,
+            "algorithm": 0.50,
+            "aside_text": 0.50,
+            "chart": 0.50,
+            "content": 0.50,
+            "formula": 0.40,
+            "doc_title": 0.40,
+            "figure_title": 0.50,
+            "footer": 0.50,
+            "footnote": 0.50,
+            "formula_number": 0.50,
+            "header": 0.50,
+            "image": 0.50,
+            "number": 0.50,
+            "paragraph_title": 0.40,
+            "reference": 0.50,
+            "reference_content": 0.50,
+            "seal": 0.45,
+            "table": 0.50,
+            "text": 0.40,
+            "vision_footnote": 0.50,
+        }
+        order_map = {
+            "abstract": 4,
+            "algorithm": 2,
+            "aside_text": 14,
+            "chart": 1,
+            "content": 5,
+            "display_formula": 7,
+            "doc_title": 8,
+            "figure_title": 6,
+            "footer": 11,
+            "footer_image": 11,
+            "footnote": 9,
+            "formula_number": 13,
+            "header": 10,
+            "header_image": 10,
+            "image": 1,
+            "inline_formula": 2,
+            "number": 3,
+            "paragraph_title": 0,
+            "reference": 2,
+            "reference_content": 2,
+            "seal": 12,
+            "table": 1,
+            "text": 2,
+            "vertical_text": 15,
+            "vision_footnote": 6,
         }
         return PPDocLayoutV2Config(
             backbone_config=backbone_config,
@@ -227,6 +303,10 @@ class PPDocLayoutV2ModelTester:
             anchor_image_size=self.anchor_image_size,
             image_size=self.image_size,
             disable_custom_kernels=self.disable_custom_kernels,
+            id2label=id2label,
+            num_labels=num_labels,
+            threshold_mapping=threshold_mapping,
+            order_map=order_map,
         )
 
     def prepare_config_and_inputs_for_common(self):

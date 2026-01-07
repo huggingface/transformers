@@ -61,7 +61,6 @@ class ReadingOrderConfig(PreTrainedConfig):
         rel_bias_scale=100,
         relative_head_num=1,
         relative_head_size=64,
-        tril_mask=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -97,93 +96,6 @@ class ReadingOrderConfig(PreTrainedConfig):
         self.rel_bias_scale = rel_bias_scale
         self.relative_head_num = relative_head_num
         self.relative_head_size = relative_head_size
-        self.tril_mask = tril_mask
-
-
-def _default_id2label() -> dict[int, str]:
-    return {
-        0: "abstract",
-        1: "algorithm",
-        2: "aside_text",
-        3: "chart",
-        4: "content",
-        5: "formula",
-        6: "doc_title",
-        7: "figure_title",
-        8: "footer",
-        9: "footer",
-        10: "footnote",
-        11: "formula_number",
-        12: "header",
-        13: "header",
-        14: "image",
-        15: "formula",
-        16: "number",
-        17: "paragraph_title",
-        18: "reference",
-        19: "reference_content",
-        20: "seal",
-        21: "table",
-        22: "text",
-        23: "text",
-        24: "vision_footnote",
-    }
-
-
-def _default_threshold_mapping() -> dict[str, float]:
-    return {
-        "abstract": 0.50,
-        "algorithm": 0.50,
-        "aside_text": 0.50,
-        "chart": 0.50,
-        "content": 0.50,
-        "formula": 0.40,
-        "doc_title": 0.40,
-        "figure_title": 0.50,
-        "footer": 0.50,
-        "footnote": 0.50,
-        "formula_number": 0.50,
-        "header": 0.50,
-        "image": 0.50,
-        "number": 0.50,
-        "paragraph_title": 0.40,
-        "reference": 0.50,
-        "reference_content": 0.50,
-        "seal": 0.45,
-        "table": 0.50,
-        "text": 0.40,
-        "vision_footnote": 0.50,
-    }
-
-
-def _default_order_map() -> dict[str, int]:
-    return {
-        "abstract": 4,
-        "algorithm": 2,
-        "aside_text": 14,
-        "chart": 1,
-        "content": 5,
-        "display_formula": 7,
-        "doc_title": 8,
-        "figure_title": 6,
-        "footer": 11,
-        "footer_image": 11,
-        "footnote": 9,
-        "formula_number": 13,
-        "header": 10,
-        "header_image": 10,
-        "image": 1,
-        "inline_formula": 2,
-        "number": 3,
-        "paragraph_title": 0,
-        "reference": 2,
-        "reference_content": 2,
-        "seal": 12,
-        "table": 1,
-        "text": 2,
-        "vertical_text": 15,
-        "vision_footnote": 6,
-    }
 
 
 class PPDocLayoutV2Config(PreTrainedConfig):
@@ -291,8 +203,6 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        id2label (`dict[int, str]`, *optional*):
-            Mapping from class id to class name.
         threshold_mapping (`dict[str, float]`, *optional*):
             Mapping from class name to class priority.
         order_map (`dict[str, float]`, *optional*):
@@ -372,7 +282,6 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         # label
-        id2label=None,
         threshold_mapping=None,
         order_map=None,
         reading_order_config=None,
@@ -462,14 +371,8 @@ class PPDocLayoutV2Config(PreTrainedConfig):
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-        if kwargs.get("num_labels") and not id2label:
-            self.id2label = None
-            self.num_labels = kwargs["num_labels"]
-        else:
-            self.id2label = {int(k): v for k, v in id2label.items()} if id2label else _default_id2label()
-            self.num_labels = len(self.id2label)
-        self.threshold_mapping = threshold_mapping if threshold_mapping else _default_threshold_mapping()
-        self.order_map = order_map if order_map else _default_order_map()
+        self.threshold_mapping = threshold_mapping
+        self.order_map = order_map
 
 
 __all__ = ["PPDocLayoutV2Config"]

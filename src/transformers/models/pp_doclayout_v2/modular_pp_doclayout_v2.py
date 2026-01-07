@@ -42,11 +42,12 @@ from ...image_utils import (
 from ...utils import (
     ModelOutput,
     auto_docstring,
+    can_return_tuple,
     filter_out_non_signature_kwargs,
     logging,
 )
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ...utils.generic import TensorType
+from ...utils.generic import OutputRecorder, TensorType, check_model_inputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3Attention,
@@ -67,92 +68,6 @@ from ..rt_detr.modeling_rt_detr import (
 
 
 logger = logging.get_logger(__name__)
-
-
-def _default_id2label() -> dict[int, str]:
-    return {
-        0: "abstract",
-        1: "algorithm",
-        2: "aside_text",
-        3: "chart",
-        4: "content",
-        5: "formula",
-        6: "doc_title",
-        7: "figure_title",
-        8: "footer",
-        9: "footer",
-        10: "footnote",
-        11: "formula_number",
-        12: "header",
-        13: "header",
-        14: "image",
-        15: "formula",
-        16: "number",
-        17: "paragraph_title",
-        18: "reference",
-        19: "reference_content",
-        20: "seal",
-        21: "table",
-        22: "text",
-        23: "text",
-        24: "vision_footnote",
-    }
-
-
-def _default_threshold_mapping() -> dict[str, float]:
-    return {
-        "abstract": 0.50,
-        "algorithm": 0.50,
-        "aside_text": 0.50,
-        "chart": 0.50,
-        "content": 0.50,
-        "formula": 0.40,
-        "doc_title": 0.40,
-        "figure_title": 0.50,
-        "footer": 0.50,
-        "footnote": 0.50,
-        "formula_number": 0.50,
-        "header": 0.50,
-        "image": 0.50,
-        "number": 0.50,
-        "paragraph_title": 0.40,
-        "reference": 0.50,
-        "reference_content": 0.50,
-        "seal": 0.45,
-        "table": 0.50,
-        "text": 0.40,
-        "vision_footnote": 0.50,
-    }
-
-
-def _default_order_map() -> dict[str, int]:
-    return {
-        "abstract": 4,
-        "algorithm": 2,
-        "aside_text": 14,
-        "chart": 1,
-        "content": 5,
-        "display_formula": 7,
-        "doc_title": 8,
-        "figure_title": 6,
-        "footer": 11,
-        "footer_image": 11,
-        "footnote": 9,
-        "formula_number": 13,
-        "header": 10,
-        "header_image": 10,
-        "image": 1,
-        "inline_formula": 2,
-        "number": 3,
-        "paragraph_title": 0,
-        "reference": 2,
-        "reference_content": 2,
-        "seal": 12,
-        "table": 1,
-        "text": 2,
-        "vertical_text": 15,
-        "vision_footnote": 6,
-    }
 
 
 class ReadingOrderConfig(PreTrainedConfig):
@@ -189,7 +104,6 @@ class ReadingOrderConfig(PreTrainedConfig):
         rel_bias_scale=100,
         relative_head_num=1,
         relative_head_size=64,
-        tril_mask=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -225,7 +139,6 @@ class ReadingOrderConfig(PreTrainedConfig):
         self.rel_bias_scale = rel_bias_scale
         self.relative_head_num = relative_head_num
         self.relative_head_size = relative_head_size
-        self.tril_mask = tril_mask
 
 
 class PPDocLayoutV2Config(PreTrainedConfig):
@@ -333,8 +246,6 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        id2label (`dict[int, str]`, *optional*):
-            Mapping from class id to class name.
         threshold_mapping (`dict[str, float]`, *optional*):
             Mapping from class name to class priority.
         order_map (`dict[str, float]`, *optional*):
@@ -414,7 +325,6 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         # label
-        id2label=None,
         threshold_mapping=None,
         order_map=None,
         reading_order_config=None,
@@ -504,63 +414,11 @@ class PPDocLayoutV2Config(PreTrainedConfig):
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-        if kwargs.get("num_labels") and not id2label:
-            self.id2label = None
-            self.num_labels = kwargs["num_labels"]
-        else:
-            self.id2label = {int(k): v for k, v in id2label.items()} if id2label else _default_id2label()
-            self.num_labels = len(self.id2label)
-        self.threshold_mapping = threshold_mapping if threshold_mapping else _default_threshold_mapping()
-        self.order_map = order_map if order_map else _default_order_map()
+        self.threshold_mapping = threshold_mapping
+        self.order_map = order_map
 
 
-def postprocess(outputs, threshold, target_sizes):
-    boxes = outputs.pred_boxes
-    logits = outputs.logits
-    order_logits = outputs.order_logits
-
-    order_seqs = get_order(order_logits)
-
-    cxcy, wh = torch.split(boxes, 2, dim=-1)
-    boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
-
-    if target_sizes is not None:
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if isinstance(target_sizes, list):
-            img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
-        else:
-            img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-    num_top_queries = logits.shape[1]
-    num_classes = logits.shape[2]
-
-    scores = torch.nn.functional.sigmoid(logits)
-    scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
-    labels = index % num_classes
-    index = index // num_classes
-    boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
-    order_seqs = order_seqs.gather(dim=1, index=index)
-
-    results = []
-    for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
-        order_seq = order_seq[score >= threshold]
-        order_seq, indices = torch.sort(order_seq)
-        results.append(
-            {
-                "scores": score[score >= threshold][indices],
-                "labels": label[score >= threshold][indices],
-                "boxes": box[score >= threshold][indices],
-                "order_seq": order_seq,
-            }
-        )
-
-    return results
-
-
-def get_order(order_logits):
+def get_order_seqs(order_logits):
     # order_logits: (B, N, N) upper-triangular meaningful
     order_scores = torch.sigmoid(order_logits)
     B, N, _ = order_scores.shape
@@ -785,7 +643,51 @@ class PPDocLayoutV2ImageProcessor(BaseImageProcessor):
             `list[Dict]`: An ordered list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        return postprocess(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        boxes = outputs.pred_boxes
+        logits = outputs.logits
+        order_logits = outputs.order_logits
+
+        order_seqs = get_order_seqs(order_logits)
+
+        cxcy, wh = torch.split(boxes, 2, dim=-1)
+        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = logits.shape[1]
+        num_classes = logits.shape[2]
+
+        scores = torch.nn.functional.sigmoid(logits)
+        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
+        labels = index % num_classes
+        index = index // num_classes
+        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        order_seqs = order_seqs.gather(dim=1, index=index)
+
+        results = []
+        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+            order_seq = order_seq[score >= threshold]
+            order_seq, indices = torch.sort(order_seq)
+            results.append(
+                {
+                    "scores": score[score >= threshold][indices],
+                    "labels": label[score >= threshold][indices],
+                    "boxes": box[score >= threshold][indices],
+                    "order_seq": order_seq,
+                }
+            )
+
+        return results
 
 
 class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
@@ -851,7 +753,51 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        return postprocess(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        boxes = outputs.pred_boxes
+        logits = outputs.logits
+        order_logits = outputs.order_logits
+
+        order_seqs = get_order_seqs(order_logits)
+
+        cxcy, wh = torch.split(boxes, 2, dim=-1)
+        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = logits.shape[1]
+        num_classes = logits.shape[2]
+
+        scores = torch.nn.functional.sigmoid(logits)
+        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
+        labels = index % num_classes
+        index = index // num_classes
+        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        order_seqs = order_seqs.gather(dim=1, index=index)
+
+        results = []
+        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+            order_seq = order_seq[score >= threshold]
+            order_seq, indices = torch.sort(order_seq)
+            results.append(
+                {
+                    "scores": score[score >= threshold][indices],
+                    "labels": label[score >= threshold][indices],
+                    "boxes": box[score >= threshold][indices],
+                    "order_seq": order_seq,
+                }
+            )
+
+        return results
 
 
 class GlobalPointer(nn.Module):
@@ -859,12 +805,11 @@ class GlobalPointer(nn.Module):
         super().__init__()
         self.heads = config.relative_head_num
         self.head_size = config.relative_head_size
-        self.tril_mask = config.tril_mask
         self.dense = nn.Linear(config.hidden_size, self.heads * 2 * self.head_size)
 
     def forward(self, inputs, attn_mask_1d):
-        B, N, _ = inputs.shape
-        proj = self.dense(inputs).reshape([B, N, self.heads, 2, self.head_size])
+        batch_size, sequence, _ = inputs.shape
+        proj = self.dense(inputs).reshape([batch_size, sequence, self.heads, 2, self.head_size])
         qw, kw = proj[..., 0, :], proj[..., 1, :]
 
         qw_t = qw.transpose(1, 2)
@@ -875,11 +820,10 @@ class GlobalPointer(nn.Module):
         pair_mask = 1.0 - (a.unsqueeze(1).unsqueeze(2) * a.unsqueeze(1).unsqueeze(3))
         logits = logits - pair_mask * 1e4
 
-        if self.tril_mask:
-            lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
-            lower = lower.bool().unsqueeze(0).unsqueeze(0)
-            logits = logits - lower.to(logits.dtype) * 1e4
-            pair_mask = torch.logical_or(pair_mask.bool(), lower)
+        lower = torch.tril(torch.ones([sequence, sequence], dtype=torch.float32, device=logits.device))
+        lower = lower.bool().unsqueeze(0).unsqueeze(0)
+        logits = logits - lower.to(logits.dtype) * 1e4
+        pair_mask = torch.logical_or(pair_mask.bool(), lower)
 
         return logits, pair_mask.bool()
 
@@ -887,7 +831,6 @@ class GlobalPointer(nn.Module):
 def box_rel_encoding(src_boxes: torch.Tensor, tgt_boxes: torch.Tensor = None, eps: float = 1e-5):
     if tgt_boxes is None:
         tgt_boxes = src_boxes
-    assert src_boxes.shape[-1] == 4 and tgt_boxes.shape[-1] == 4
     xy1, wh1 = src_boxes[..., :2], src_boxes[..., 2:]
     xy2, wh2 = tgt_boxes[..., :2], tgt_boxes[..., 2:]
     delta_xy = torch.abs(xy1.unsqueeze(-2) - xy2.unsqueeze(-3))
@@ -897,14 +840,9 @@ def box_rel_encoding(src_boxes: torch.Tensor, tgt_boxes: torch.Tensor = None, ep
     return pos
 
 
-def get_sine_pos_embed(
-    x: torch.Tensor, num_pos_feats: int, temperature: float = 10000.0, scale: float = 100.0, exchange_xy: bool = False
-):
-    if exchange_xy and x.shape[-1] >= 2:
-        x = torch.stack([x[..., 1], x[..., 0]] + [x[..., i] for i in range(2, x.shape[-1])], dim=-1)
-
+def get_sine_pos_embed(inputs: torch.Tensor, num_pos_feats: int, temperature: float = 10000.0, scale: float = 100.0):
     half = num_pos_feats // 2
-    dim_t = temperature ** (2 * torch.arange(half, dtype=x.dtype, device=x.device) / half)
+    dim_t = temperature ** (2 * torch.arange(half, dtype=inputs.dtype, device=inputs.device) / half)
 
     def _encode(t: torch.Tensor):
         t = t * scale
@@ -913,7 +851,7 @@ def get_sine_pos_embed(
         cos = torch.cos(t)
         return torch.cat([sin, cos], dim=-1)
 
-    embs = [_encode(x[..., i]) for i in range(x.shape[-1])]
+    embs = [_encode(inputs[..., i]) for i in range(inputs.shape[-1])]
     out = torch.cat(embs, dim=-1)
     return out
 
@@ -1034,18 +972,22 @@ class LayoutLMv3EncoderCustom(LayoutLMv3Encoder):
         self.rel_bias_module = PositionRelationEmbedding(config)
 
     def _cal_2d_pos_emb(self, bbox):
-        x1, y1, x2, y2 = (
+        x_min, y_min, x_max, y_max = (
             bbox[..., 0],
             bbox[..., 1],
             bbox[..., 2],
             bbox[..., 3],
         )
-        w = (x2 - x1).clamp(min=1e-3)
-        h = (y2 - y1).clamp(min=1e-3)
-        cx = (x1 + x2) * 0.5
-        cy = (y1 + y2) * 0.5
-        bbox = torch.stack([cx, cy, w, h], dim=-1)
-        result = self.rel_bias_module(bbox)
+
+        width = (x_max - x_min).clamp(min=1e-3)
+        height = (y_max - y_min).clamp(min=1e-3)
+
+        center_x = (x_min + x_max) * 0.5
+        center_y = (y_min + y_max) * 0.5
+
+        center_wh_bbox = torch.stack([center_x, center_y, width, height], dim=-1)
+
+        result = self.rel_bias_module(center_wh_bbox)
 
         return result
 
@@ -1104,6 +1046,17 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
     config: PPDocLayoutV2Config
     base_model_prefix = "pp_doclayout_v2"
     _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
+
+    _can_record_outputs = {
+        "hidden_states": [
+            OutputRecorder(PPDocLayoutV2DecoderLayer, index=0),  # noqa
+            OutputRecorder(PPDocLayoutV2HybridEncoder, index=0),  # noqa
+        ],
+        "attentions": [
+            OutputRecorder(PPDocLayoutV2MultiheadAttention, index=1),  # noqa
+            OutputRecorder(PPDocLayoutV2MultiscaleDeformableAttention, index=1),  # noqa
+        ],
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1259,6 +1212,8 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
+    @check_model_inputs
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1267,9 +1222,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.FloatTensor], PPDocLayoutV2ForObjectDetectionOutput]:
         r"""
@@ -1329,12 +1281,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
         Order 12: number: 0.88 [106.0, 2257.5, 135.84, 2282.18]
         Order 13: footer: 0.93 [338.4, 2255.52, 986.15, 2284.37]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
@@ -1342,13 +1288,10 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
-        intermediate_reference_points = outputs.intermediate_reference_points if return_dict else outputs[3]
-        intermediate_logits = outputs.intermediate_logits if return_dict else outputs[2]
+        intermediate_reference_points = outputs.intermediate_reference_points
+        intermediate_logits = outputs.intermediate_logits
         raw_bboxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
 
@@ -1387,9 +1330,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
 
         if labels is not None:
             raise ValueError("PPDocLayoutV2ForObjectDetection does not support training")
-
-        if not return_dict:
-            return (logits, pred_boxes, order_logits) + outputs
 
         return PPDocLayoutV2ForObjectDetectionOutput(
             logits=logits,
