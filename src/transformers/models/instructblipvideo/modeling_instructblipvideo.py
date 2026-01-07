@@ -212,17 +212,6 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
-@auto_docstring
-class BaseModelOutputWithQformerOutputs(BaseModelOutputWithPooling):
-    """
-    qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
-        Outputs of the Q-Former (Querying Transformer).
-    """
-
-    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
-
-
 # Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
 def eager_attention_forward(
     module: nn.Module,
@@ -428,7 +417,7 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithQformerOutputs]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -445,7 +434,7 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        return BaseModelOutputWithQformerOutputs(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
         )
@@ -1131,6 +1120,20 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         )
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+    """
+    vision_outputs (`BaseModelOutputWithPooling`):
+        Outputs of the vision encoder.
+    qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+        Outputs of the Q-Former (Querying Transformer).
+    """
+
+    vision_outputs: Optional[torch.FloatTensor] = None
+    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
+
+
 @auto_docstring(
     custom_intro="""
     InstructBlipVideo Model for generating text given an image and an optional text prompt. The model consists of a vision
@@ -1314,8 +1317,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # NOTE: @Tom this is not particularly clean, e.g. having to manually remove qformer outputs from vision outputs
-        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
@@ -1325,8 +1327,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         )
         language_model_inputs = video_features.pooler_output
         qformer_outputs = video_features.qformer_outputs
-        vision_outputs = video_features
-        vision_outputs.qformer_outputs = None  # to avoid redundancy in the output
+        vision_outputs = video_features.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1418,7 +1419,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
@@ -1471,11 +1472,19 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         batch_size, frames, channel, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
 
-        vision_outputs: BaseModelOutputWithQformerOutputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
             **kwargs,
+        )
+        vision_outputs = BaseModelOutputWithVisionQformerOutputs(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=vision_outputs.pooler_output,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            vision_outputs=vision_outputs,
+            qformer_outputs=None,
         )
         image_embeds = vision_outputs[0]
 

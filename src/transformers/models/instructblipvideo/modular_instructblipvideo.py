@@ -22,7 +22,7 @@ from transformers.models.instructblip.configuration_instructblip import (
     InstructBlipVisionConfig,
 )
 from transformers.models.instructblip.modeling_instructblip import (
-    BaseModelOutputWithQformerOutputs,
+    BaseModelOutputWithVisionQformerOutputs,
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
     InstructBlipModel,
@@ -34,6 +34,7 @@ from transformers.models.instructblip.modeling_instructblip import (
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
 from ...utils import can_return_tuple, logging
@@ -307,11 +308,19 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         batch_size, frames, channel, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * frames, channel, height, width)
 
-        vision_outputs: BaseModelOutputWithQformerOutputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
             **kwargs,
+        )
+        vision_outputs = BaseModelOutputWithVisionQformerOutputs(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=vision_outputs.pooler_output,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            vision_outputs=vision_outputs,
+            qformer_outputs=None,
         )
         image_embeds = vision_outputs[0]
 
@@ -450,8 +459,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # NOTE: @Tom this is not particularly clean, e.g. having to manually remove qformer outputs from vision outputs
-        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
@@ -461,8 +469,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         )
         language_model_inputs = video_features.pooler_output
         qformer_outputs = video_features.qformer_outputs
-        vision_outputs = video_features
-        vision_outputs.qformer_outputs = None  # to avoid redundancy in the output
+        vision_outputs = video_features.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -554,7 +561,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        video_features: BaseModelOutputWithQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,

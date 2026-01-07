@@ -47,12 +47,15 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 @auto_docstring
-class BaseModelOutputWithQformerOutputs(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     """
+    vision_outputs (`BaseModelOutputWithPooling`):
+        Outputs of the vision encoder.
     qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
         Outputs of the Q-Former (Querying Transformer).
     """
 
+    vision_outputs: Optional[torch.FloatTensor] = None
     qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
 
 
@@ -410,7 +413,7 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithQformerOutputs]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -427,7 +430,7 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        return BaseModelOutputWithQformerOutputs(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
         )
@@ -1202,11 +1205,19 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         """
         # step 1: forward the images through the vision encoder,
         # to get image embeddings of shape (batch_size, seq_len, hidden_size)
-        vision_outputs: BaseModelOutputWithQformerOutputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
             **kwargs,
+        )
+        vision_outputs = BaseModelOutputWithVisionQformerOutputs(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=vision_outputs.pooler_output,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            vision_outputs=vision_outputs,
+            qformer_outputs=None,
         )
         image_embeds = vision_outputs[0]
 
@@ -1329,8 +1340,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
 
-        # NOTE: @Tom this is not particularly clean, e.g. having to manually remove qformer outputs from vision outputs
-        image_features: BaseModelOutputWithQformerOutputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
@@ -1339,8 +1349,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         )
         language_model_inputs = image_features.pooler_output
         qformer_outputs = image_features.qformer_outputs
-        vision_outputs = image_features
-        vision_outputs.qformer_outputs = None  # to avoid redundancy in the output
+        vision_outputs = image_features.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1425,7 +1434,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        image_features: BaseModelOutputWithQformerOutputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
