@@ -181,6 +181,10 @@ class Ovis2PreTrainedModel(PreTrainedModel):
 
 class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
+    _can_record_outputs = {
+        "hidden_states": Ovis2VisionEncoderLayer,
+        "attentions": Ovis2VisionAttention,
+    }
 
     def __init__(self, config: Ovis2VisionConfig):
         super().__init__(config)
