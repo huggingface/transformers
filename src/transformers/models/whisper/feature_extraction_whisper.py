@@ -174,6 +174,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         Returns:
             Log-mel spectrogram as numpy array or torch tensor depending on return_tensors.
         """
+        import time
+
+        start_time = time.perf_counter()
+        logger.info(f"[WhisperFeatureExtractor] Starting feature extraction on device: {device}")
+
         # Handle both numpy and tensor inputs
         if isinstance(waveform, np.ndarray):
             waveform = torch.from_numpy(waveform).to(device, torch.float32)
@@ -206,11 +211,20 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec = (log_spec + 4.0) / 4.0
 
         if return_tensors:
+            # Sync for accurate timing when using GPU
+            if device != "cpu":
+                torch.cuda.synchronize()
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(f"[WhisperFeatureExtractor] Feature extraction completed in {elapsed_ms:.2f} ms (device={device}, return_tensors=True)")
             return log_spec
 
         # Only transfer to CPU if needed for numpy output
         if device != "cpu":
+            torch.cuda.synchronize()  # Sync before timing measurement
             log_spec = log_spec.detach().cpu()
+        
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"[WhisperFeatureExtractor] Feature extraction completed in {elapsed_ms:.2f} ms (device={device}, return_tensors=False)")
         return log_spec.numpy()
 
     @staticmethod
