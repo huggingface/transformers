@@ -52,7 +52,7 @@ class MiniMaxM2TopKRouter(nn.Module):
 
     def forward(self, hidden_states, e_score_correction_bias):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
         # Main difference to other Moe, using Sigmoid activation instead of Softmax
         routing_weights = nn.functional.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + e_score_correction_bias
