@@ -271,7 +271,9 @@ if is_torch_greater_or_equal("2.3.0"):
 
 
 def load_state_dict(
-    checkpoint_file: Union[str, os.PathLike], map_location: Union[str, torch.device] = "cpu", weights_only: bool = True
+    checkpoint_file: Union[str, os.PathLike],
+    map_location: Union[str, torch.device] = "cpu",
+    weights_only: bool = True,
 ) -> dict[str, torch.Tensor]:
     """
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
@@ -372,7 +374,8 @@ def _find_identical(tensors: list[set[str]], state_dict: dict[str, torch.Tensor]
 
 
 def remove_tied_weights_from_state_dict(
-    state_dict: dict[str, torch.Tensor], model: "PreTrainedModel"
+    state_dict: dict[str, torch.Tensor],
+    model: "PreTrainedModel",
 ) -> dict[str, torch.Tensor]:
     """
     Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
@@ -492,12 +495,12 @@ def _get_resolved_checkpoint_files(
     commit_hash = download_kwargs.get("commit_hash")
     if transformers_explicit_filename is not None:
         if not transformers_explicit_filename.endswith(".safetensors") and not transformers_explicit_filename.endswith(
-            ".safetensors.index.json"
+            ".safetensors.index.json",
         ):
             raise ValueError(
                 "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
                 "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
-                f"{transformers_explicit_filename}"
+                f"{transformers_explicit_filename}",
             )
 
     is_sharded = False
@@ -511,44 +514,52 @@ def _get_resolved_checkpoint_files(
                 archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
+                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)),
             ):
                 # Load from a safetensors checkpoint
                 archive_file = os.path.join(
-                    pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant)
+                    pretrained_model_name_or_path,
+                    subfolder,
+                    _add_variant(SAFE_WEIGHTS_NAME, variant),
                 )
             elif use_safetensors is not False and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant))
+                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)),
             ):
                 # Load from a sharded safetensors checkpoint
                 archive_file = os.path.join(
-                    pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)
+                    pretrained_model_name_or_path,
+                    subfolder,
+                    _add_variant(SAFE_WEIGHTS_INDEX_NAME, variant),
                 )
                 is_sharded = True
             elif not use_safetensors and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant))
+                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant)),
             ):
                 # Load from a PyTorch checkpoint
                 archive_file = os.path.join(
-                    pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_NAME, variant)
+                    pretrained_model_name_or_path,
+                    subfolder,
+                    _add_variant(WEIGHTS_NAME, variant),
                 )
             elif not use_safetensors and os.path.isfile(
-                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant))
+                os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)),
             ):
                 # Load from a sharded PyTorch checkpoint
                 archive_file = os.path.join(
-                    pretrained_model_name_or_path, subfolder, _add_variant(WEIGHTS_INDEX_NAME, variant)
+                    pretrained_model_name_or_path,
+                    subfolder,
+                    _add_variant(WEIGHTS_INDEX_NAME, variant),
                 )
                 is_sharded = True
             elif use_safetensors:
                 raise OSError(
                     f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
-                    f" {pretrained_model_name_or_path}."
+                    f" {pretrained_model_name_or_path}.",
                 )
             else:
                 raise OSError(
                     f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)}, or {_add_variant(WEIGHTS_NAME, variant)},"
-                    f" found in directory {pretrained_model_name_or_path}."
+                    f" found in directory {pretrained_model_name_or_path}.",
                 )
         elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             archive_file = pretrained_model_name_or_path
@@ -594,20 +605,23 @@ def _get_resolved_checkpoint_files(
                     elif use_safetensors:
                         if revision == "main" and not is_offline_mode():
                             resolved_archive_file, revision, is_sharded = auto_conversion(
-                                pretrained_model_name_or_path, **cached_file_kwargs
+                                pretrained_model_name_or_path,
+                                **cached_file_kwargs,
                             )
                         cached_file_kwargs["revision"] = revision
                         if resolved_archive_file is None:
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
-                                "and thus cannot be loaded with `safetensors`. Please do not set `use_safetensors=True`."
+                                "and thus cannot be loaded with `safetensors`. Please do not set `use_safetensors=True`.",
                             )
                     else:
                         # This repo has no safetensors file of any kind, we switch to PyTorch.
                         filename = _add_variant(WEIGHTS_NAME, variant)
                         resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, filename, **cached_file_kwargs
+                            pretrained_model_name_or_path,
+                            filename,
+                            **cached_file_kwargs,
                         )
                 if resolved_archive_file is None and filename == _add_variant(WEIGHTS_NAME, variant):
                     # Maybe the checkpoint is sharded, we try to grab the index name in this case.
@@ -667,17 +681,19 @@ def _get_resolved_checkpoint_files(
                             "local_files_only": local_files_only,
                         }
                         if variant is not None and has_file(
-                            pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
+                            pretrained_model_name_or_path,
+                            WEIGHTS_NAME,
+                            **has_file_kwargs,
                         ):
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
-                                f" {variant}. Use `variant=None` to load this model from those weights."
+                                f" {variant}. Use `variant=None` to load this model from those weights.",
                             )
                         else:
                             raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
+                                f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}.",
                             )
 
             except OSError:
@@ -690,7 +706,7 @@ def _get_resolved_checkpoint_files(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)}."
+                    f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)}.",
                 ) from e
 
         if is_local:
@@ -775,26 +791,34 @@ def _get_dtype(
                         dtype = get_state_dict_dtype(state_dict)
                     else:
                         state_dict = load_state_dict(
-                            checkpoint_files[0], map_location="meta", weights_only=weights_only
+                            checkpoint_files[0],
+                            map_location="meta",
+                            weights_only=weights_only,
                         )
                         dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `dtype` attribute can't be found in model's config object, "
-                        "will use dtype={dtype} as derived from model's weights"
+                        "will use dtype={dtype} as derived from model's weights",
                     )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
             else:
                 raise ValueError(
-                    "`dtype` provided as a `str` can only be `'auto'`, or a string representation of a valid `torch.dtype`"
+                    "`dtype` provided as a `str` can only be `'auto'`, or a string representation of a valid `torch.dtype`",
                 )
 
             # cast it to a proper `torch.dtype` object
             dtype = getattr(torch, dtype) if isinstance(dtype, str) else dtype
-        elif not isinstance(dtype, (dict, torch.dtype)):
+        elif not isinstance(
+            dtype,
+            (
+                dict,
+                torch.dtype,
+            ),
+        ):
             raise ValueError(
                 f"`dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `dtype` "
-                f"for each sub-config in composite configs, but received {dtype}"
+                f"for each sub-config in composite configs, but received {dtype}",
             )
     else:
         # set torch.get_default_dtype() (usually fp32) as the default dtype if `None` is provided
@@ -880,7 +904,8 @@ class ModuleUtilsMixin:
     def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
         if device is not None:
             warnings.warn(
-                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `device` argument is deprecated and will be removed in v5 of Transformers.",
+                FutureWarning,
             )
         else:
             device = attention_mask.device
@@ -929,7 +954,8 @@ class ModuleUtilsMixin:
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
             if device is not None:
                 warnings.warn(
-                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                    "The `device` argument is deprecated and will be removed in v5 of Transformers.",
+                    FutureWarning,
                 )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -941,13 +967,15 @@ class ModuleUtilsMixin:
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
                 extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
-                    input_shape, attention_mask, device
+                    input_shape,
+                    attention_mask,
+                    device,
                 )
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
-                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})",
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -1040,7 +1068,7 @@ class EmbeddingAccessMixin:
                 return base_model.get_input_embeddings()
 
         raise NotImplementedError(
-            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+            f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass.",
         )
 
     def set_input_embeddings(self, value: nn.Module):
@@ -1070,7 +1098,7 @@ class EmbeddingAccessMixin:
             self.base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError(
-                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
+                f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass.",
             )
 
     def get_output_embeddings(self):
@@ -1270,19 +1298,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise TypeError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
                 "`PreTrainedConfig`. To create a model from a pretrained model use "
-                f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`",
             )
         self.config = config
 
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
-            self.config._attn_implementation, is_init_check=True
+            self.config._attn_implementation,
+            is_init_check=True,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._experts_implementation_internal = self._check_and_adjust_experts_implementation(
-            self.config._experts_implementation
+            self.config._experts_implementation,
         )
         if self.can_generate():
             self.generation_config = GenerationConfig.from_model_config(config)
@@ -1372,7 +1401,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if parallel_style not in ALL_PARALLEL_STYLES:
                 raise ValueError(
                     f"Unsupported tensor parallel style '{parallel_style}' for layer '{layer_pattern}'. "
-                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}"
+                    f"Supported styles are {list(ALL_PARALLEL_STYLES.keys())}",
                 )
 
         # Validate that the layer patterns match existing model structure. We check this by getting all parameter
@@ -1389,7 +1418,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if not pattern_matched:
                 warnings.warn(
                     f"Layer pattern '{layer_pattern}' does not match any parameters in the model. This rule may not "
-                    "be applied during tensor parallelization, or may lead to dimension mismatches"
+                    "be applied during tensor parallelization, or may lead to dimension mismatches",
                 )
 
         # Set the plan
@@ -1533,7 +1562,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "\n  - If you are the owner of the model architecture code, please modify your model class such that "
                 "it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception)."
                 "\n  - If you are not the owner of the model architecture class, please contact the model code owner "
-                "to update it."
+                "to update it.",
             )
         # Otherwise, can't generate
         return False
@@ -1556,7 +1585,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 f"{self.__class__.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
-                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new",
             )
 
         if not is_flash_attn_2_available():
@@ -1570,7 +1599,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if is_torch_xpu_available():
                 logger.info(
-                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
+                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU.",
                 )
                 return True
 
@@ -1582,31 +1611,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if torch.version.cuda:
                     if flash_attention_version < version.parse("2.1.0"):
                         raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}"
+                            f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}",
                         )
                     elif not torch.cuda.is_available():
                         raise ValueError(
-                            f"{preface} Flash Attention 2 is not available on CPU. Please make sure torch can access a CUDA device."
+                            f"{preface} Flash Attention 2 is not available on CPU. Please make sure torch can access a CUDA device.",
                         )
                     else:
                         raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
                 elif torch.version.hip:
                     if flash_attention_version < version.parse("2.0.4"):
                         raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.0.4. Detected version {flash_attention_version}. {install_message}"
+                            f"{preface} you need flash_attn package version to be greater or equal than 2.0.4. Detected version {flash_attention_version}. {install_message}",
                         )
                     else:
                         raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
 
         if dtype is None:
             logger.warning_once(
-                "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
+                "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour",
             )
         elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 2 only supports torch.float16 and torch.bfloat16 dtypes, but"
                 f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", dtype=torch.float16)`'
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", dtype=torch.float16)`',
             )
 
         # With the early check, the parameters are not yet initialized correctly
@@ -1616,18 +1645,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if torch.cuda.is_available():
                     logger.warning_once(
                         "You are attempting to use Flash Attention 2 with a model not initialized on GPU. Make sure to move the model to GPU"
-                        " after initializing it on CPU with `model.to('cuda')`."
+                        " after initializing it on CPU with `model.to('cuda')`.",
                     )
                 elif is_torch_mlu_available():
                     logger.warning_once(
                         "You are attempting to use Flash Attention 2 with a model not initialized on MLU. Make sure to move the model to MLU"
-                        " after initializing it on CPU with `model.to('mlu')`."
+                        " after initializing it on CPU with `model.to('mlu')`.",
                     )
                 else:
                     raise ValueError(
                         "You are attempting to use Flash Attention 2 with a model not initialized on GPU and with no GPU available. "
                         "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                        "or initialising the model on CPU and then moving it to GPU."
+                        "or initialising the model on CPU and then moving it to GPU.",
                     )
 
         # If no error raise by this point, we can return `True`
@@ -1650,7 +1679,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 f"{self.__class__.__name__} does not support Flash Attention 3 yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
-                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new",
             )
 
         if not is_flash_attn_3_available():
@@ -1663,24 +1692,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 major, _ = torch.cuda.get_device_capability()
                 if major < 9:
                     raise ValueError(
-                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
+                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0.",
                     )
                 else:
                     raise ImportError(f"{preface} Flash Attention 3 is not available.")
             else:
                 raise ValueError(
-                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
+                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device.",
                 )
 
         if dtype is None:
             logger.warning_once(
-                "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
+                "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour",
             )
         elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
                 "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
                 f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", dtype=torch.float16)`'
+                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", dtype=torch.float16)`',
             )
 
         if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
@@ -1689,7 +1718,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check for attention dropout, which is incompatible with FA3
         if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
             raise ValueError(
-                f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
+                f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3.",
             )
 
         # With the early check, the parameters are not yet initialized correctly
@@ -1699,13 +1728,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if torch.cuda.is_available():
                     logger.warning_once(
                         "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
-                        " after initializing it on CPU with `model.to('cuda')`."
+                        " after initializing it on CPU with `model.to('cuda')`.",
                     )
                 else:
                     raise ValueError(
                         "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
                         "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                        "or initialising the model on CPU and then moving it to GPU."
+                        "or initialising the model on CPU and then moving it to GPU.",
                     )
 
         return True
@@ -1725,7 +1754,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(
                 f"{self.__class__.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
-                ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
+                ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`',
             )
 
         if (
@@ -1734,7 +1763,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and version.parse(torch.__version__) < version.parse("2.4.1")
         ):
             logger.warning_once(
-                "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
+                "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends.",
             )
             torch.backends.cuda.enable_flash_sdp(False)
 
@@ -1750,7 +1779,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if not is_grouped_mm_available():
             raise ImportError(
-                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0."
+                "PyTorch Grouped MM requirements in Transformers are not met. Please install torch>=2.9.0.",
             )
 
         # If no error raised by this point, we can return `True`
@@ -1773,18 +1802,20 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/34809."
                 " If you believe this error is a bug, please open an issue in Transformers GitHub repository"
                 ' and load your model with the argument `attn_implementation="eager"` meanwhile.'
-                ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
+                ' Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`',
             )
         if not is_torch_flex_attn_available():
             raise ImportError(
-                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0."
+                "PyTorch Flex Attention requirements in Transformers are not met. Please install torch>=2.5.0.",
             )
 
         # If no error raise by this point, we can return `True`
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: Optional[str], is_init_check: bool = False
+        self,
+        attn_implementation: Optional[str],
+        is_init_check: bool = False,
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -1841,7 +1872,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if requested_original_flash_attn:
                     logger.warning_once(
                         f"You do not have `flash_attn` installed, using `{applicable_attn_implementation}` "
-                        "from the `kernels` library instead!"
+                        "from the `kernels` library instead!",
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
@@ -1855,7 +1886,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 raise e
         else:
             applicable_attn_implementation = self.get_correct_attn_implementation(
-                applicable_attn_implementation, is_init_check
+                applicable_attn_implementation,
+                is_init_check,
             )
 
             # preload flash attention here to allow compile with fullgraph
@@ -1982,11 +2014,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 logger.warning(
                     f"{self.__class__.__name__} does not support setting its attention implementation dynamically, because it "
                     "does not follow the functional approach based on AttentionInterface "
-                    "(see https://huggingface.co/docs/transformers/en/attention_interface)"
+                    "(see https://huggingface.co/docs/transformers/en/attention_interface)",
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False
+                    requested_implementation,
+                    is_init_check=False,
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
@@ -2007,7 +2040,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     logger.warning(
                         f"{submodule.__class__.__name__} does not support setting its attention implementation dynamically, because it "
                         "does not follow the functional approach based on AttentionInterface "
-                        "(see https://huggingface.co/docs/transformers/en/attention_interface)"
+                        "(see https://huggingface.co/docs/transformers/en/attention_interface)",
                     )
                 # Set the attn on the submodule
                 else:
@@ -2017,7 +2050,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                             # We need to check for exact object match here, with `is`
                             if getattr(self.config, subconfig_key) is submodule.config:
                                 sub_implementation = attn_implementation.get(
-                                    subconfig_key, submodule.config._attn_implementation
+                                    subconfig_key,
+                                    submodule.config._attn_implementation,
                                 )
                                 break
                     # Check the module can use correctly, otherwise we raise an error if requested attention can't be set for submodule
@@ -2046,13 +2080,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         raise ValueError(
                             f'Specified `attn_implementation="{sub_implementation}"` is not supported for {subconfig_key}. '
                             'The only possible arguments are "eager" (manual attention implementation)'
-                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}"
+                            f"or one of the following: {list(ALL_ATTENTION_FUNCTIONS.valid_keys())}",
                         )
                     subconfig._attn_implementation_internal = sub_implementation
                     logger.warning(
                         f"We set the attention implementation for the sub-config `{subconfig_key}` to `{sub_implementation}` "
                         "without finding the associated sub-model. For this reason we could not check if the model supports it. "
-                        "You may encounter undefined behavior."
+                        "You may encounter undefined behavior.",
                     )
                 # Unset the attribute in this case, to avoid issues in the future
                 else:
@@ -2096,7 +2130,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         # We need to check for exact object match here, with `is`
                         if getattr(self.config, subconfig_key) is submodule.config:
                             sub_implementation = experts_implementation.get(
-                                subconfig_key, submodule.config._experts_implementation
+                                subconfig_key,
+                                submodule.config._experts_implementation,
                             )
                             break
                 # Check the module can use correctly, otherwise we raise an error if requested experts can't be set for submodule
@@ -2144,7 +2179,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.warning_once(
                 f"{self.__class__.__name__} does not expose input embeddings. Gradients cannot flow back to the token "
                 "embeddings when using adapters or gradient checkpointing. Override `get_input_embeddings` to fully "
-                "support those features, or set `_input_embed_layer` to the attribute name that holds the embeddings."
+                "support those features, or set `_input_embed_layer` to the attribute name that holds the embeddings.",
             )
 
     def disable_input_require_grads(self):
@@ -2451,7 +2486,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             ):
                 raise ValueError(
                     f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. "
-                    f"We found {source_params} to tie into {target_params}"
+                    f"We found {source_params} to tie into {target_params}",
                 )
             # we cycle source as it should be dispatch in many target if regex
             for target_n, source_n in zip(target_params, cycle(source_params)):
@@ -2498,7 +2533,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     logger.warning(
                         f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                         f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
+                        "You should update the config with `tie_word_embeddings=False` to silence this warning",
                     )
                     # Remove from internal attribute to correctly reflect actual tied weights
                     self.all_tied_weights_keys.pop(target_param_name)
@@ -2529,7 +2564,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         logger.warning(
                             f"This checkpoint seem corrupted. The tied weights mapping for this model specifies to tie "
                             f"{source_param_name} to {target_param_name}, but both are absent from the checkpoint, "
-                            "and we could not find another related tied weight for those keys"
+                            "and we could not find another related tied weight for those keys",
                         )
 
             # Perform the actual tying
@@ -2581,7 +2616,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     if module._no_split_modules is None:
                         raise ValueError(
                             f"{module.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
-                            "class needs to implement the `_no_split_modules` attribute."
+                            "class needs to implement the `_no_split_modules` attribute.",
                         )
                     else:
                         _no_split_modules = _no_split_modules | set(module._no_split_modules)
@@ -2650,7 +2685,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, mean_resizing=True):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(
-            old_embeddings, new_num_tokens, pad_to_multiple_of, mean_resizing
+            old_embeddings,
+            new_num_tokens,
+            pad_to_multiple_of,
+            mean_resizing,
         )
         if hasattr(old_embeddings, "_hf_hook"):
             hook = old_embeddings._hf_hook
@@ -2735,7 +2773,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if pad_to_multiple_of is not None:
             if not isinstance(pad_to_multiple_of, int):
                 raise ValueError(
-                    f"Asking to pad the embedding matrix to a multiple of `{pad_to_multiple_of}`, which is not and integer. Please make sure to pass an integer"
+                    f"Asking to pad the embedding matrix to a multiple of `{pad_to_multiple_of}`, which is not and integer. Please make sure to pass an integer",
                 )
             if new_num_tokens is None:
                 new_num_tokens = old_embeddings.weight.shape[0]
@@ -2745,7 +2783,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
-                " https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc"
+                " https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc",
             )
 
         if new_num_tokens is None:
@@ -2767,7 +2805,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise TypeError(
                 f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You"
                 " should either use a different resize function or make sure that `old_embeddings` are an instance of"
-                f" {nn.Embedding}."
+                f" {nn.Embedding}.",
             )
 
         # Build new embeddings
@@ -2794,7 +2832,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.warning_once(
                 "The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
-                "To disable this, use `mean_resizing=False`"
+                "To disable this, use `mean_resizing=False`",
             )
 
             added_num_tokens = new_num_tokens - old_num_tokens
@@ -2803,11 +2841,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 with deepspeed.zero.GatheredParameters([old_embeddings.weight], modifier_rank=None):
                     self._init_added_embeddings_weights_with_mean(
-                        old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
+                        old_embeddings,
+                        new_embeddings,
+                        old_num_tokens,
+                        added_num_tokens,
                     )
             else:
                 self._init_added_embeddings_weights_with_mean(
-                    old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
+                    old_embeddings,
+                    new_embeddings,
+                    old_num_tokens,
+                    added_num_tokens,
                 )
 
         # Copy token embeddings from the previous weights
@@ -2906,7 +2950,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise TypeError(
                 f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. You"
                 " should either use a different resize function or make sure that `old_lm_head` are an instance of"
-                f" {nn.Linear}."
+                f" {nn.Linear}.",
             )
 
         # Build new lm head
@@ -2935,7 +2979,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.warning_once(
                 "The new lm_head weights will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. "
                 "As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. "
-                "To disable this, use `mean_resizing=False`"
+                "To disable this, use `mean_resizing=False`",
             )
 
             added_num_tokens = new_num_tokens - old_num_tokens
@@ -2947,14 +2991,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     params += [old_lm_head.bias]
                 with deepspeed.zero.GatheredParameters(params, modifier_rank=None):
                     self._init_added_lm_head_weights_with_mean(
-                        old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
+                        old_lm_head,
+                        new_lm_head,
+                        old_lm_head_dim,
+                        old_num_tokens,
+                        added_num_tokens,
+                        transposed,
                     )
                     if has_new_lm_head_bias:
                         self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
 
             else:
                 self._init_added_lm_head_weights_with_mean(
-                    old_lm_head, new_lm_head, old_lm_head_dim, old_num_tokens, added_num_tokens, transposed
+                    old_lm_head,
+                    new_lm_head,
+                    old_lm_head_dim,
+                    old_num_tokens,
+                    added_num_tokens,
+                    transposed,
                 )
                 if has_new_lm_head_bias:
                     self._init_added_lm_head_bias_with_mean(old_lm_head, new_lm_head, added_num_tokens)
@@ -2967,17 +3021,29 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._copy_lm_head_original_to_resized(
-                    new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+                    new_lm_head,
+                    old_lm_head,
+                    num_tokens_to_copy,
+                    transposed,
+                    has_new_lm_head_bias,
                 )
         else:
             self._copy_lm_head_original_to_resized(
-                new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+                new_lm_head,
+                old_lm_head,
+                num_tokens_to_copy,
+                transposed,
+                has_new_lm_head_bias,
             )
 
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
-        self, old_embeddings, new_embeddings, old_num_tokens, added_num_tokens
+        self,
+        old_embeddings,
+        new_embeddings,
+        old_num_tokens,
+        added_num_tokens,
     ):
         old_embeddings_weight = old_embeddings.weight.data.to(torch.float32)
         mean_embeddings = torch.mean(old_embeddings_weight, axis=0)
@@ -2990,10 +3056,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_covariance_psd:
             # If covariances is positive definite, a distribution can be created. and we can sample new weights from it.
             distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embeddings, covariance_matrix=epsilon * covariance
+                mean_embeddings,
+                covariance_matrix=epsilon * covariance,
             )
             new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
-                sample_shape=(added_num_tokens,)
+                sample_shape=(added_num_tokens,),
             ).to(old_embeddings.weight.dtype)
         else:
             # Otherwise, just initialize with the mean. because distribution will not be created.
@@ -3029,7 +3096,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         new_lm_head.bias.data[-1 * added_num_tokens :].normal_(mean=bias_mean, std=1e-9 * bias_std)
 
     def _copy_lm_head_original_to_resized(
-        self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+        self,
+        new_lm_head,
+        old_lm_head,
+        num_tokens_to_copy,
+        transposed,
+        has_new_lm_head_bias,
     ):
         # Copy old lm head weights to new lm head
         if not transposed:
@@ -3044,13 +3116,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         raise NotImplementedError(
             f"`resize_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
-            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`",
         )
 
     def get_position_embeddings(self) -> Union[nn.Embedding, tuple[nn.Embedding]]:
         raise NotImplementedError(
             f"`get_position_embeddings` is not implemented for {self.__class__}`. To implement it, you should "
-            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`"
+            f"overwrite this method in the class {self.__class__} in `modeling_{self.__class__.__module__}.py`",
         )
 
     def init_weights(self):
@@ -3094,7 +3166,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warning(
                 "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
-                "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
+                "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model.",
             )
 
         needs_embedding_grads = self.main_input_name == "input_ids"
@@ -3126,7 +3198,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if not is_gradient_checkpointing_set:
             raise ValueError(
                 f"{self.__class__.__name__} is not compatible with gradient checkpointing. Make sure all the architecture support it by setting a boolean attribute"
-                " `gradient_checkpointing` to modules of the model that uses checkpointing."
+                " `gradient_checkpointing` to modules of the model that uses checkpointing.",
             )
 
     def gradient_checkpointing_disable(self):
@@ -3142,7 +3214,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             else:
                 logger.warning(
                     "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
-                    "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
+                    "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model.",
                 )
                 self.apply(partial(self._set_gradient_checkpointing, value=False))
 
@@ -3228,19 +3300,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
             raise ValueError(
                 f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
-                " the logger on the traceback to understand the reason why the quantized model is not serializable."
+                " the logger on the traceback to understand the reason why the quantized model is not serializable.",
             )
 
         if "save_config" in kwargs:
             warnings.warn(
-                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
+                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead.",
             )
             is_main_process = kwargs.pop("save_config")
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
         if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
-                "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
+                "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher.",
             )
 
         if os.path.isfile(save_directory):
@@ -3286,13 +3358,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             if _hf_peft_config_loaded:
                 logger.info(
-                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
+                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved.",
                 )
                 state_dict = model_to_save.get_adapter_state_dict(state_dict=state_dict)
 
                 if save_peft_format:
                     logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`."
+                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be prepended with `base_model.model`.",
                     )
                     peft_state_dict = {}
                     for key, value in state_dict.items():
@@ -3304,7 +3376,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if len(active_adapter) > 1:
                     raise ValueError(
                         "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
-                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
+                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`",
                     )
                 active_adapter = active_adapter[0]
 
@@ -3325,7 +3397,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             is_offloaded = True
             warnings.warn(
                 "Attempting to save a model with offloaded modules. Ensure that unallocated cpu memory "
-                "exceeds the `shard_size` (50GB default)"
+                "exceeds the `shard_size` (50GB default)",
             )
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
@@ -3360,7 +3432,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         filename_pattern = weights_name.replace(".bin", "{suffix}.bin").replace(".safetensors", "{suffix}.safetensors")
         state_dict_split = split_torch_state_dict_into_shards(
-            state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+            state_dict,
+            filename_pattern=filename_pattern,
+            max_shard_size=max_shard_size,
         )
         # Save index if sharded
         index = None
@@ -3392,7 +3466,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Save the model
         for shard_file, tensor_names in logging.tqdm(
-            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+            state_dict_split.filename_to_tensors.items(),
+            desc="Writing model shards",
         ):
             filename = os.path.join(save_directory, shard_file)
             shard_state_dict = {}
@@ -3436,7 +3511,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             logger.info(
                 f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
                 f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
-                f"index located at {save_index_file}."
+                f"index located at {save_index_file}.",
             )
 
         if push_to_hub:
@@ -3511,7 +3586,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if getattr(self, "is_loaded_in_8bit", False):
                 raise ValueError(
                     "Calling `cuda()` is not supported for `8-bit` quantized models. "
-                    " Please use the model as it is, since the model has already been set to the correct devices."
+                    " Please use the model as it is, since the model has already been set to the correct devices.",
                 )
         return super().cuda(*args, **kwargs)
 
@@ -3561,19 +3636,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a bitsandbytes model in a new `dtype`. Make sure to load the model using `from_pretrained` using the"
-                    " desired `dtype` by passing the correct `dtype` argument."
+                    " desired `dtype` by passing the correct `dtype` argument.",
                 )
 
             if getattr(self, "is_loaded_in_8bit", False):
                 raise ValueError(
                     "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
-                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                    " model has already been set to the correct devices and casted to the correct `dtype`.",
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             if dtype_present_in_args:
                 raise ValueError(
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
-                    " `dtype` by passing the correct `dtype` argument."
+                    " `dtype` by passing the correct `dtype` argument.",
                 )
         return super().to(*args, **kwargs)
 
@@ -3582,7 +3657,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(self, "is_quantized", False):
             raise ValueError(
                 "`.half()` is not supported for quantized model. Please use the model as it is, since the"
-                " model has already been casted to the correct `dtype`."
+                " model has already been casted to the correct `dtype`.",
             )
         else:
             return super().half(*args)
@@ -3592,7 +3667,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if getattr(self, "is_quantized", False):
             raise ValueError(
                 "`.float()` is not supported for quantized model. Please use the model as it is, since the"
-                " model has already been casted to the correct `dtype`."
+                " model has already been casted to the correct `dtype`.",
             )
         else:
             return super().float(*args)
@@ -3612,7 +3687,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         init.no_init_weights(),
                         deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                         set_zero3_state(),
-                    ]
+                    ],
                 )
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
@@ -3625,7 +3700,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(
-                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`"
+                    "`use_kernels=True` requires kernels>=0.9.0. Please install the latest version with `pip install -U kernels`",
                 )
             from kernels import use_kernel_mapping
 
@@ -3933,19 +4008,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
             raise ValueError(
-                "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
+                "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies.",
             )
 
         if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
             logger.info(
                 "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
                 "If your plan is to load the model on each device, you should set device_map={"
-                ": PartialState().process_index} where PartialState comes from accelerate library"
+                ": PartialState().process_index} where PartialState comes from accelerate library",
             )
 
         if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
             device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
+                tp_plan,
+                tp_size=tp_size,
+                device_mesh=device_mesh,
+                device_map=device_map,
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -3996,25 +4074,29 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             config._experts_implementation = kwargs.pop("experts_implementation")
 
         hf_quantizer, config, device_map = get_hf_quantizer(
-            config, quantization_config, device_map, weights_only, user_agent
+            config,
+            quantization_config,
+            device_map,
+            weights_only,
+            user_agent,
         )
 
         if gguf_file:
             if hf_quantizer is not None:
                 raise ValueError(
-                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
+                    "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure you did not passed a `quantization_config` or that you did not load a quantized model from the Hub.",
                 )
             if device_map is not None and (
                 (isinstance(device_map, dict) and "disk" in device_map.values()) or "disk" in device_map
             ):
                 raise RuntimeError(
                     "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
-                    "loaded from GGUF files."
+                    "loaded from GGUF files.",
                 )
 
         if kernel_config is not None and not use_kernels:
             logger.warning_once(
-                "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True."
+                "A kernel_config was provided but use_kernels is False; setting use_kernels=True automatically. To suppress this warning, explicitly set use_kernels to True.",
             )
             use_kernels = True
 
@@ -4044,7 +4126,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(
-            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+            dtype,
+            checkpoint_files,
+            config,
+            sharded_metadata,
+            state_dict,
+            weights_only,
+            hf_quantizer,
         )
 
         config.name_or_path = pretrained_model_name_or_path
@@ -4114,7 +4202,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
             hf_quantizer.postprocess_model(
-                model
+                model,
             )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
 
         if _adapter_model_path is not None:
@@ -4276,7 +4364,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
         module_keys = module_keys.union(
-            {".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()}
+            {".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()},
         )
 
         retrieved_modules = []
@@ -4391,7 +4479,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
                 f"`loss_type={loss_type}` was set in the config but it is unrecognized. "
-                f"Using the default loss: `ForCausalLMLoss`."
+                f"Using the default loss: `ForCausalLMLoss`.",
             )
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
@@ -4403,7 +4491,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     def kernelize(self, mode=None):
         if not is_kernels_available():
             raise ValueError(
-                "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                "Kernels are not available. To use kernels, please install kernels using `pip install kernels`",
             )
         from kernels import Device, Mode, kernelize
 
@@ -4426,7 +4514,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             if getattr(self, "_use_kernels", False):
                 logger.warning_once(
-                    "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
+                    "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active.",
                 )
             self._use_kernels = False
 
@@ -4490,7 +4578,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # For TP, we may need to shard the param
             if device_mesh is not None:
                 shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                    self,
+                    value,
+                    param,
+                    key,
+                    None,
+                    False,
+                    device_mesh.get_local_rank(),
+                    device_mesh,
                 )
             # Otherwise, just move it to device
             else:
@@ -4515,7 +4610,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # keep_vars=True as we need the original tensors, so that the "_is_hf_initialized" is present on them
             not_initialized_parameters = list(
-                {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
+                {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)},
             )
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
@@ -4523,7 +4618,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self.initialize_weights()
 
     def _adjust_missing_and_unexpected_keys(
-        self, missing_keys: set[str], unexpected_keys: set[str]
+        self,
+        missing_keys: set[str],
+        unexpected_keys: set[str],
     ) -> tuple[set[str], set[str]]:
         """Adjust the `missing_keys` and `unexpected_keys` based on current model's exception rules, to avoid
         raising unneeded warnings/errors.
@@ -4586,7 +4683,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
 
     def named_non_persistent_buffers(
-        self, recurse: bool = True, remove_duplicate: bool = True
+        self,
+        recurse: bool = True,
+        remove_duplicate: bool = True,
     ) -> Iterator[tuple[str, torch.Tensor]]:
         """Similar to `named_buffers`, but only yield non-persistent ones. It is handy as it's not perfectly straightforward
         to know if they are persistent or not"""
@@ -4611,7 +4710,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
 if PreTrainedModel.push_to_hub.__doc__ is not None:
     PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
-        object="model", object_class="AutoModel", object_files="model file"
+        object="model",
+        object_class="AutoModel",
+        object_files="model file",
     )
 
 
@@ -4651,7 +4752,9 @@ def is_accelerator_device(device: Union[str, int, torch.device]) -> bool:
 
 
 def get_total_byte_count(
-    model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: Optional[HfQuantizer] = None
+    model: PreTrainedModel,
+    accelerator_device_map: dict,
+    hf_quantizer: Optional[HfQuantizer] = None,
 ):
     """
     This utility function calculates the total bytes count needed to load the model on each device.
@@ -4728,7 +4831,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
             byte_count = min(byte_count, max(0, int(device_memory - 1.2 * 1024**3)))
             # If there is *unused* reserved cuda/xpu memory, we can skip/reduce the allocation.
             unused_memory = torch_accelerator_module.memory_reserved(
-                index
+                index,
             ) - torch_accelerator_module.memory_allocated(index)
             byte_count = int(max(0, byte_count - unused_memory))
         # We divide by 2 here as we allocate in fp16
