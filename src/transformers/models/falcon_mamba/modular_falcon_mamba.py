@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch FALCONMAMBA model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -287,9 +285,9 @@ class FalconMambaMixer(MambaMixer):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -401,9 +399,9 @@ class FalconMambaMixer(MambaMixer):
     def slow_forward(
         self,
         input_states,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
@@ -504,9 +502,9 @@ class FalconMambaMixer(MambaMixer):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         is_fast_path_available = all(
             (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)

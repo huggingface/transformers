@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for ALBERT model."""
 
-from typing import Optional, Union
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -85,7 +83,7 @@ class AlbertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         do_lower_case: bool = True,
         keep_accents: bool = False,
         bos_token: str = "[CLS]",

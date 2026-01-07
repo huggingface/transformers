@@ -13,8 +13,6 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
-from typing import Optional, Union
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -104,7 +102,7 @@ class CamembertTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         add_prefix_space=True,
         vocab_file=None,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file

@@ -16,7 +16,7 @@
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from ...utils import logging
 from .auto_factory import (
@@ -1981,7 +1981,7 @@ class AutoModelForCausalLM(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(
         cls: type["AutoModelForCausalLM"],
-        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        pretrained_model_name_or_path: str | os.PathLike[str],
         *model_args,
         **kwargs,
     ) -> "_BaseModelWithGenerate":
@@ -2185,7 +2185,7 @@ class AutoModelForImageTextToText(_BaseAutoModelClass):
     @classmethod
     def from_pretrained(
         cls: type["AutoModelForImageTextToText"],
-        pretrained_model_name_or_path: Union[str, os.PathLike[str]],
+        pretrained_model_name_or_path: str | os.PathLike[str],
         *model_args,
         **kwargs,
     ) -> "_BaseModelWithGenerate":

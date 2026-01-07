@@ -13,8 +13,6 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
@@ -138,11 +136,11 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         use_gated_mlp: bool = False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
-        out_features: Optional[list[str]] = None,
-        out_indices: Optional[list[int]] = None,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
+        out_features: list[str] | None = None,
+        out_indices: list[int] | None = None,
         apply_layernorm: bool = True,
         reshape_hidden_states: bool = True,
         **kwargs,

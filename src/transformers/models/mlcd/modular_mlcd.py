@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -205,9 +204,9 @@ class MLCDAttention(CLIPAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
 
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
@@ -257,7 +256,7 @@ class MLCDEncoderLayer(CLIPEncoderLayer):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor]:
         """
@@ -307,9 +306,9 @@ class MLCDEncoder(CLIPEncoder):
         self,
         inputs_embeds: torch.FloatTensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -400,9 +399,9 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -438,9 +437,9 @@ class MLCDVisionModel(CLIPVisionModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Example:
 

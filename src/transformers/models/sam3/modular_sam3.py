@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 
 from ...image_utils import (
@@ -59,7 +57,7 @@ class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
     mask_size = {"height": 288, "width": 288}
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple]] = None, threshold: float = 0.5
+        self, outputs, target_sizes: list[tuple] | None = None, threshold: float = 0.5
     ):
         """
         Converts the output of [`Sam3Model`] into semantic segmentation maps.
@@ -117,9 +115,7 @@ class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
 
         return semantic_segmentation
 
-    def post_process_object_detection(
-        self, outputs, threshold: float = 0.3, target_sizes: Optional[list[tuple]] = None
-    ):
+    def post_process_object_detection(self, outputs, threshold: float = 0.3, target_sizes: list[tuple] | None = None):
         """
         Converts the raw output of [`Sam3Model`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
@@ -175,7 +171,7 @@ class Sam3ImageProcessorFast(Sam2ImageProcessorFast):
         outputs,
         threshold: float = 0.3,
         mask_threshold: float = 0.5,
-        target_sizes: Optional[list[tuple]] = None,
+        target_sizes: list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`Sam3Model`] into instance segmentation predictions with bounding boxes and masks.

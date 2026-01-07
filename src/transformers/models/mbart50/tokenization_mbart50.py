@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -85,7 +84,7 @@ class MBart50Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         src_lang=None,
         tgt_lang=None,
         eos_token="</s>",
@@ -255,7 +254,7 @@ class MBart50Tokenizer(TokenizersBackend):
         self,
         src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "ro_RO",
         **kwargs,
     ) -> BatchEncoding:
@@ -302,7 +301,7 @@ class MBart50Tokenizer(TokenizersBackend):
         )
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:

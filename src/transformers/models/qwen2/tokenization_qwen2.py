@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for Qwen2."""
 
-from typing import Optional, Union
-
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -42,8 +40,8 @@ class Qwen2Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         vocab_file=None,
         merges_file=None,
         unk_token: str = "<|endoftext|>",

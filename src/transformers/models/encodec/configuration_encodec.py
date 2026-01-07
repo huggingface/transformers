@@ -14,7 +14,6 @@
 """EnCodec model configuration"""
 
 import math
-from typing import Optional
 
 import numpy as np
 
@@ -164,7 +163,7 @@ class EncodecConfig(PreTrainedConfig):
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
-    def chunk_length(self) -> Optional[int]:
+    def chunk_length(self) -> int | None:
         if self.chunk_length_s is None:
             return None
         else:
@@ -172,7 +171,7 @@ class EncodecConfig(PreTrainedConfig):
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
-    def chunk_stride(self) -> Optional[int]:
+    def chunk_stride(self) -> int | None:
         if self.chunk_length_s is None or self.overlap is None:
             return None
         else:

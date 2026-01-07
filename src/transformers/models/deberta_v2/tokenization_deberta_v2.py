@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization class for model DeBERTa-v2."""
 
-from typing import Optional, Union
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
@@ -77,7 +75,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         do_lower_case=False,
         split_by_punct=False,
         bos_token="[CLS]",

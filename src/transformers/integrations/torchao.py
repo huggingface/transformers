@@ -15,7 +15,6 @@
 import importlib.metadata
 import re
 import types
-from typing import Optional
 
 import torch
 from packaging import version
@@ -40,7 +39,7 @@ if is_torchao_available():
 logger = logging.get_logger(__name__)
 
 
-def fuzzy_match_size(config_name: str) -> Optional[str]:
+def fuzzy_match_size(config_name: str) -> str | None:
     """
     Extract the size digit from strings like "4weight", "8weight".
     Returns the digit as an integer if found, otherwise None.
@@ -81,7 +80,7 @@ class TorchAoQuantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -210,7 +209,7 @@ class TorchAoDeserialize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor],
         source_patterns: list[str] | None = None,
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,

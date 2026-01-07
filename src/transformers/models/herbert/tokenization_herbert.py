@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -65,15 +64,15 @@ class HerbertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
         sep_token: str = "</s>",
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
+        vocab_file: str | None = None,
+        merges_file: str | None = None,
         **kwargs,
     ):
         self._vocab = vocab if vocab is not None else {str(unk_token): 0}

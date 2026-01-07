@@ -13,8 +13,6 @@
 # limitations under the License.
 """Longformer configuration"""
 
-from typing import Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -87,7 +85,7 @@ class LongformerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
         sep_token_id: int = 2,
         pad_token_id: int = 1,
         bos_token_id: int = 0,

@@ -20,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -331,9 +331,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):

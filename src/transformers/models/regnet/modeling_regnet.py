@@ -14,7 +14,6 @@
 """PyTorch RegNet model."""
 
 import math
-from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -42,7 +41,7 @@ class RegNetConvLayer(nn.Module):
         kernel_size: int = 3,
         stride: int = 1,
         groups: int = 1,
-        activation: Optional[str] = "relu",
+        activation: str | None = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
@@ -299,8 +298,8 @@ class RegNetModel(RegNetPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
@@ -351,10 +350,10 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""

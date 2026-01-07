@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch Pixio model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -315,8 +313,8 @@ class PixioModel(PixioPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         if output_hidden_states is None:
@@ -348,7 +346,7 @@ class PixioBackbone(Dinov2Backbone):
     @check_model_inputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: Optional[bool] = None, **kwargs
+        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
     ) -> BackboneOutput:
         r"""
         Examples:

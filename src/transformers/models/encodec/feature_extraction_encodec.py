@@ -13,8 +13,6 @@
 # limitations under the License.
 """Feature extractor class for EnCodec."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -56,8 +54,8 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
-        chunk_length_s: Optional[float] = None,
-        overlap: Optional[float] = None,
+        chunk_length_s: float | None = None,
+        overlap: float | None = None,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -66,7 +64,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
-    def chunk_length(self) -> Optional[int]:
+    def chunk_length(self) -> int | None:
         if self.chunk_length_s is None:
             return None
         else:
@@ -74,7 +72,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property
-    def chunk_stride(self) -> Optional[int]:
+    def chunk_stride(self) -> int | None:
         if self.chunk_length_s is None or self.overlap is None:
             return None
         else:
@@ -82,12 +80,12 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
-        truncation: Optional[bool] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        raw_audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy | None = None,
+        truncation: bool | None = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).

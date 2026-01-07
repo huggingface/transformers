@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization class for RoFormer backed by 🤗 Tokenizers."""
 
-from typing import Optional
-
 from tokenizers import Tokenizer, decoders, models, normalizers, pre_tokenizers, processors
 from tokenizers.pre_tokenizers import BertPreTokenizer, PreTokenizer
 
@@ -50,7 +48,7 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
 
     def __init__(
         self,
-        vocab: Optional[dict[str, int]] = None,
+        vocab: dict[str, int] | None = None,
         do_lower_case=True,
         unk_token="[UNK]",
         sep_token="[SEP]",
@@ -131,7 +129,7 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
         return output
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create token type IDs for RoFormer sequence pairs.
@@ -147,7 +145,7 @@ class RoFormerTokenizer(PreTrainedTokenizerFast):
 
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

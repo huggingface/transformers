@@ -352,7 +352,7 @@ def get_supported_tasks() -> list[str]:
     return PIPELINE_REGISTRY.get_supported_tasks()
 
 
-def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> str:
+def get_task(model: str, token: str | None = None, **deprecated_kwargs) -> str:
     if is_offline_mode():
         raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:

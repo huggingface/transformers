@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 
-from typing import Optional, Union
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
@@ -98,8 +96,8 @@ class GPTNeoXTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors: str = "replace",
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|endoftext|>",

@@ -17,7 +17,6 @@ import gc
 import json
 import os
 import re
-from typing import Optional
 
 import torch
 from huggingface_hub import snapshot_download
@@ -116,7 +115,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def ensure_model_downloaded(
-    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+    repo_id: str | None = None, revision: str | None = None, local_dir: str | None = None
 ) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.

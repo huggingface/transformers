@@ -17,7 +17,6 @@
 import html
 import os
 import re
-from typing import Optional
 
 import regex
 
@@ -300,7 +299,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
     #     tokens_generated_so_far = re.sub('(@@ ?$)', '', string=tokens_generated_so_far)
     #     return ''.join(tokens_generated_so_far)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, ...]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
         """
         Save the vocabulary and merges files to a directory.
         """

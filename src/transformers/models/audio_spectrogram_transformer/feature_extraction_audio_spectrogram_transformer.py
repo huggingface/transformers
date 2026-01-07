@@ -15,8 +15,6 @@
 Feature extractor class for Audio Spectrogram Transformer.
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
@@ -159,9 +157,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

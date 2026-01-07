@@ -13,8 +13,6 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
-from typing import Optional, Union
-
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -98,8 +96,8 @@ class DebertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors="replace",
         bos_token="[CLS]",
         eos_token="[SEP]",

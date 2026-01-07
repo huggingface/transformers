@@ -15,7 +15,6 @@
 
 import json
 import os
-from typing import Optional
 
 from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
@@ -87,7 +86,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

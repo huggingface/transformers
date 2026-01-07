@@ -13,8 +13,6 @@
 # limitations under the License.
 """Feature extractor class for Dia"""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -58,12 +56,12 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
-        truncation: Optional[bool] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        raw_audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy | None = None,
+        truncation: bool | None = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).

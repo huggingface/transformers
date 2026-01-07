@@ -15,7 +15,6 @@
 """Tokenization classes for Splinter."""
 
 import collections
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -81,7 +80,7 @@ class SplinterTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -90,7 +89,7 @@ class SplinterTokenizer(TokenizersBackend):
         mask_token: str = "[MASK]",
         question_token: str = "[QUESTION]",
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[bool] = None,
+        strip_accents: bool | None = None,
         **kwargs,
     ):
         self._vocab = (

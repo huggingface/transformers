@@ -13,8 +13,6 @@
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -462,8 +460,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        model_config: Optional[dict] = None,
-        vocoder_config: Optional[dict] = None,
+        model_config: dict | None = None,
+        vocoder_config: dict | None = None,
         **kwargs,
     ):
         if model_config is None:

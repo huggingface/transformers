@@ -13,8 +13,6 @@
 # limitations under the License.
 """Time Series Transformer model configuration"""
 
-from typing import Optional, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -129,19 +127,19 @@ class TimeSeriesTransformerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        prediction_length: Optional[int] = None,
-        context_length: Optional[int] = None,
+        prediction_length: int | None = None,
+        context_length: int | None = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
         lags_sequence: list[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: Optional[Union[str, bool]] = "mean",
+        scaling: str | bool | None = "mean",
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
         num_time_features: int = 0,
-        cardinality: Optional[list[int]] = None,
-        embedding_dimension: Optional[list[int]] = None,
+        cardinality: list[int] | None = None,
+        embedding_dimension: list[int] | None = None,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,

@@ -13,8 +13,6 @@
 # limitations under the License
 """Tokenization classes for the BARThez model."""
 
-from typing import Optional, Union
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import Unigram
 
@@ -91,7 +89,7 @@ class BarthezTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",

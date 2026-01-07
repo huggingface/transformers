@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
-from typing import Optional, Union
-
 import torch
 import torch.utils.checkpoint
 
@@ -199,9 +197,9 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -358,8 +356,8 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -435,10 +433,10 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""

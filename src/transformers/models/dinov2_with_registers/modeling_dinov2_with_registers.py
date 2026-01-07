@@ -21,7 +21,6 @@
 
 import collections.abc
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -143,7 +142,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -175,8 +174,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -305,7 +304,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class Dinov2WithRegistersDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -432,7 +431,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -471,9 +470,9 @@ class Dinov2WithRegistersModel(Dinov2WithRegistersPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -526,8 +525,8 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
@@ -587,7 +586,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""

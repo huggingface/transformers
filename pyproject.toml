@@ -40,8 +40,6 @@ ignore = [
     "SIM905",  # Checks for static str.split calls that can be replaced with list literals.
     "UP015",  # Checks for redundant open mode arguments.
     "UP031",  # Checks for printf-style string formatting, and offers to replace it with str.format calls.
-    "UP045",  # Check for typing.Optional annotations that can be rewritten based on PEP 604 syntax.
-    "UP007",  # Check for type annotations that can be rewritten based on PEP 604 syntax.
 ]
 extend-safe-fixes = [
     "UP006",  # Checks for the use of generics that can be replaced with standard library variants based on PEP 585.
@@ -55,6 +53,11 @@ extend-safe-fixes = [
 # type validation does not work with `x | y` syntax, so we have to exclude all these files....
 # TODO: really needs to be upstreamed in huggingface_hub
 "src/transformers/processing_utils.py" = ["UP045", "UP007"]
+"src/transformers/image_processing_utils_fast.py" = ["UP045", "UP007"]
+"src/transformers/video_processing_utils.py" = ["UP045", "UP007"]
+"src/transformers/models/**/image_processing_*.py" = ["UP045", "UP007"]
+"src/transformers/models/**/processing_*.py" = ["UP045", "UP007"]
+"src/transformers/models/**/video_processing_*.py" = ["UP045", "UP007"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2

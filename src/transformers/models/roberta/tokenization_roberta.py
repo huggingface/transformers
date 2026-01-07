@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-from typing import Optional, Union
-
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -113,8 +111,8 @@ class RobertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors: str = "replace",
         bos_token: str = "<s>",
         eos_token: str = "</s>",

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -133,22 +132,22 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 22016,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 32,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 128000,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 22016,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 128000,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -14,7 +14,6 @@
 """Xcodec model configuration"""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -87,7 +86,7 @@ class XcodecConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        target_bandwidths: Optional[list[float]] = None,
+        target_bandwidths: list[float] | None = None,
         sample_rate: int = 16000,
         kernel_size: int = 3,
         channel_ratios: list[float] = [1, 1],
@@ -95,10 +94,10 @@ class XcodecConfig(PreTrainedConfig):
         block_dilations: list[int] = [1, 1],
         unit_kernel_size: int = 3,
         codebook_size: int = 1024,
-        codebook_dim: Optional[int] = None,
+        codebook_dim: int | None = None,
         initializer_range: float = 0.02,
-        acoustic_model_config: Optional[Union[dict, DacConfig]] = None,
-        semantic_model_config: Optional[Union[dict, HubertConfig]] = None,
+        acoustic_model_config: dict | DacConfig | None = None,
+        semantic_model_config: dict | HubertConfig | None = None,
         **kwargs,
     ):
         if acoustic_model_config is None:

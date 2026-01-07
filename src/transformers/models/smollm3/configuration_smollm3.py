@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -126,29 +125,29 @@ class SmolLM3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 128256,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 36,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 128004,
-        bos_token_id: Optional[int] = 128000,
-        eos_token_id: Optional[int] = 128001,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        no_rope_layers: Optional[int] = None,
-        no_rope_layer_interval: Optional[int] = 4,
-        layer_types: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
+        vocab_size: int | None = 128256,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 36,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 128004,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128001,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = None,
+        no_rope_layers: int | None = None,
+        no_rope_layer_interval: int | None = 4,
+        layer_types: int | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

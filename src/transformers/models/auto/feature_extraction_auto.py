@@ -16,7 +16,6 @@
 import importlib
 import os
 from collections import OrderedDict
-from typing import Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PreTrainedConfig
@@ -114,12 +113,12 @@ def feature_extractor_class_from_name(class_name: str):
 
 
 def get_feature_extractor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):

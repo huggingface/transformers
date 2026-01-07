@@ -21,7 +21,6 @@
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -78,8 +77,8 @@ class JanusVQVAEOutput(ModelOutput):
         Embedding loss.
     """
 
-    decoded_pixel_values: Optional[torch.FloatTensor] = None
-    embedding_loss: Optional[torch.FloatTensor] = None
+    decoded_pixel_values: torch.FloatTensor | None = None
+    embedding_loss: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -108,11 +107,11 @@ class JanusBaseModelOutputWithPast(ModelOutput):
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -139,12 +138,12 @@ class JanusCausalLMOutputWithPast(ModelOutput):
         image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 class JanusVisionEmbeddings(nn.Module):
@@ -239,7 +238,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -295,7 +294,7 @@ class JanusVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
@@ -411,7 +410,7 @@ class JanusVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = inputs_embeds
@@ -466,7 +465,7 @@ class JanusAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -572,10 +571,10 @@ class JanusVisionModel(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1119,15 +1118,15 @@ class JanusModel(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> JanusBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1195,16 +1194,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> JanusCausalLMOutputWithPast:
         r"""
@@ -1293,9 +1292,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
+        inputs: torch.Tensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        logits_processor: LogitsProcessorList | None = None,
         **kwargs,
     ):
         # 1. Handle generation config and model kwargs

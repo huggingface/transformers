@@ -13,8 +13,6 @@
 # limitations under the License.
 """ConvNeXT model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
@@ -83,16 +81,16 @@ class DINOv3ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     def __init__(
         self,
         num_channels: int = 3,
-        hidden_sizes: Optional[list[int]] = None,
-        depths: Optional[list[int]] = None,
+        hidden_sizes: list[int] | None = None,
+        depths: list[int] | None = None,
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-6,
         layer_scale_init_value: float = 1e-6,
         drop_path_rate: float = 0.0,
         image_size: int = 224,
-        out_features: Optional[list[str]] = None,
-        out_indices: Optional[list[int]] = None,
+        out_features: list[str] | None = None,
+        out_indices: list[int] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)

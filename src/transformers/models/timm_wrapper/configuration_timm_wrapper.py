@@ -14,7 +14,7 @@
 
 """Configuration for TimmWrapper models"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_timm_available, logging, requires_backends
@@ -69,7 +69,7 @@ class TimmWrapperConfig(PreTrainedConfig):
         architecture: str = "resnet50",
         initializer_range: float = 0.02,
         do_pooling: bool = True,
-        model_args: Optional[dict[str, Any]] = None,
+        model_args: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.architecture = architecture

@@ -13,8 +13,6 @@
 # limitations under the License.
 """Mpt configuration"""
 
-from typing import Optional, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -189,7 +187,7 @@ class MptConfig(PreTrainedConfig):
         learned_pos_emb: bool = True,
         attn_config: MptAttentionConfig = None,
         init_device: str = "cpu",
-        logit_scale: Optional[Union[float, str]] = None,
+        logit_scale: float | str | None = None,
         no_bias: bool = True,
         verbose: int = 0,
         embedding_fraction: float = 1.0,

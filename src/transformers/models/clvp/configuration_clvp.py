@@ -14,7 +14,6 @@
 """CLVP model configuration"""
 
 import os
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -129,7 +128,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, config_type: str = "text_config", **kwargs
     ):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 

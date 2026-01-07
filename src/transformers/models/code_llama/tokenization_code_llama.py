@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -113,8 +111,8 @@ class CodeLlamaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",
@@ -126,7 +124,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
         fill_token="<FILL_ME>",
         additional_special_tokens=None,
         use_default_system_prompt: bool = False,
-        add_prefix_space: Optional[bool] = True,
+        add_prefix_space: bool | None = True,
         add_bos_token: bool = True,
         **kwargs,
     ):

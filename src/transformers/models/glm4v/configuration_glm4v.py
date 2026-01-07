@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -198,20 +197,20 @@ class Glm4vTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151552,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 13696,
-        num_hidden_layers: Optional[int] = 40,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        vocab_size: int | None = 151552,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 13696,
+        num_hidden_layers: int | None = 40,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

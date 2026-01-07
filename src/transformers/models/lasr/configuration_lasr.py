@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 
@@ -207,7 +206,7 @@ class LasrCTCConfig(PreTrainedConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LasrEncoderConfig] = None,
+        encoder_config: dict | LasrEncoderConfig = None,
         pad_token_id=0,
         **kwargs,
     ):

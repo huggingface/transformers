@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for CLIP."""
 
-from typing import Optional, Union
-
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
@@ -57,8 +55,8 @@ class CLIPTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|startoftext|>",
         eos_token: str = "<|endoftext|>",

@@ -19,7 +19,7 @@ import dataclasses
 import re
 import string
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -56,17 +56,17 @@ class Protein:
     b_factors: np.ndarray  # [num_res, num_atom_type]
 
     # Chain indices for multi-chain predictions
-    chain_index: Optional[np.ndarray] = None
+    chain_index: np.ndarray | None = None
 
     # Optional remark about the protein. Included as a comment in output PDB
     # files
-    remark: Optional[str] = None
+    remark: str | None = None
 
     # Templates used to generate this protein (prediction-only)
-    parents: Optional[Sequence[str]] = None
+    parents: Sequence[str] | None = None
 
     # Chain corresponding to each parent
-    parents_chain_index: Optional[Sequence[int]] = None
+    parents_chain_index: Sequence[int] | None = None
 
 
 def from_proteinnet_string(proteinnet_str: str) -> Protein:
@@ -300,11 +300,11 @@ def ideal_atom_mask(prot: Protein) -> np.ndarray:
 def from_prediction(
     features: FeatureDict,
     result: ModelOutput,
-    b_factors: Optional[np.ndarray] = None,
-    chain_index: Optional[np.ndarray] = None,
-    remark: Optional[str] = None,
-    parents: Optional[Sequence[str]] = None,
-    parents_chain_index: Optional[Sequence[int]] = None,
+    b_factors: np.ndarray | None = None,
+    chain_index: np.ndarray | None = None,
+    remark: str | None = None,
+    parents: Sequence[str] | None = None,
+    parents_chain_index: Sequence[int] | None = None,
 ) -> Protein:
     """Assembles a protein from a prediction.
 

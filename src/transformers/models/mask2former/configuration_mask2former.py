@@ -13,8 +13,6 @@
 # limitations under the License.
 """Mask2Former model configuration"""
 
-from typing import Optional, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -133,7 +131,7 @@ class Mask2FormerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
         feature_size: int = 256,
         mask_feature_size: int = 256,
         hidden_dim: int = 256,
@@ -160,11 +158,11 @@ class Mask2FormerConfig(PreTrainedConfig):
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
         feature_strides: list[int] = [4, 8, 16, 32],
-        output_auxiliary_logits: Optional[bool] = None,
-        backbone: Optional[str] = None,
+        output_auxiliary_logits: bool | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:

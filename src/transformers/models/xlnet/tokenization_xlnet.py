@@ -13,8 +13,6 @@
 # limitations under the License.
 """Tokenization classes for XLNet model."""
 
-from typing import Optional, Union
-
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
@@ -101,7 +99,7 @@ class XLNetTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         unk_id: int = 0,
         do_lower_case=False,
         remove_space=True,

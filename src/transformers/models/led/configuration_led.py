@@ -13,8 +13,6 @@
 # limitations under the License.
 """LED model configuration"""
 
-from typing import Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -126,7 +124,7 @@ class LEDConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
         **kwargs,
     ):
         self.vocab_size = vocab_size

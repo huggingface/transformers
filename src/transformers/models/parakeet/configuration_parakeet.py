@@ -13,8 +13,6 @@
 # limitations under the License.
 """Parakeet model configuration."""
 
-from typing import Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -200,7 +198,7 @@ class ParakeetCTCConfig(PreTrainedConfig):
         vocab_size=1025,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        encoder_config: dict | ParakeetEncoderConfig = None,
         pad_token_id=1024,
         **kwargs,
     ):

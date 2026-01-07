@@ -13,8 +13,6 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Optional, Union
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -150,11 +148,11 @@ class OneFormerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
-        backbone: Optional[str] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -172,7 +170,7 @@ class OneFormerConfig(PreTrainedConfig):
         is_training: bool = False,
         use_auxiliary_loss: bool = True,
         output_auxiliary_logits: bool = True,
-        strides: Optional[list] = [4, 8, 16, 32],
+        strides: list | None = [4, 8, 16, 32],
         task_seq_len: int = 77,
         text_encoder_width: int = 256,
         text_encoder_context_length: int = 77,

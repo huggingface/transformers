@@ -17,7 +17,6 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import Optional
 
 import numpy as np
 
@@ -265,8 +264,8 @@ class CanonicalHFIndex(HFIndexBase):
         vector_size: int,
         dataset_name: str = "wiki_dpr",
         dataset_split: str = "train",
-        index_name: Optional[str] = None,
-        index_path: Optional[str] = None,
+        index_name: str | None = None,
+        index_path: str | None = None,
         use_dummy_dataset=False,
         dataset_revision=None,
     ):

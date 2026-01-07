@@ -16,7 +16,7 @@ Feature extractor class for Musicgen Melody
 """
 
 import copy
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -181,14 +181,14 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = True,
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
+        padding: str | None = True,
+        max_length: int | None = None,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

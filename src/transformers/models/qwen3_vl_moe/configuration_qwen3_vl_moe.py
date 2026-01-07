@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -124,27 +123,27 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5632,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 16,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 128000,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 1408,
-        num_experts_per_tok: Optional[int] = 4,
-        num_experts: Optional[int] = 60,
-        mlp_only_layers: Optional[list[int]] = None,
-        rope_parameters: Optional[RopeParameters] = None,
-        head_dim: Optional[int] = None,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 5632,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 128000,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 1408,
+        num_experts_per_tok: int | None = 4,
+        num_experts: int | None = 60,
+        mlp_only_layers: list[int] | None = None,
+        rope_parameters: RopeParameters | None = None,
+        head_dim: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Sequence
-from typing import Optional
 
 import numpy as np
 
@@ -65,7 +64,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
     def __call__(
         self,
         audios: AudioInput,
-        device: Optional[str] = "cpu",
+        device: str | None = "cpu",
     ) -> BatchFeature:
         requires_backends(self, ["torchaudio"])
 

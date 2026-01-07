@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 import torch
 from torch import nn
@@ -34,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast):
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
+        self, outputs, target_sizes: list[tuple[int, int]] | None = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`Mask2FormerForUniversalSegmentation`] into semantic segmentation maps. Only supports
@@ -94,9 +93,9 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
-        return_coco_annotation: Optional[bool] = False,
-        return_binary_maps: Optional[bool] = False,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
+        return_binary_maps: bool | None = False,
     ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
@@ -215,8 +214,8 @@ class Mask2FormerImageProcessorFast(MaskFormerImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[set[int]] = None,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image panoptic segmentation

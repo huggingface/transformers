@@ -17,7 +17,6 @@ import json
 import os
 import re
 import unicodedata
-from typing import Optional
 
 from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
@@ -376,7 +375,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         return text
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -402,7 +401,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         return token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -429,7 +428,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return ([0] * len(token_ids_0)) + [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

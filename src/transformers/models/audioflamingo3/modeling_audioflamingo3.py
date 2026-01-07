@@ -21,7 +21,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -48,8 +47,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs,
 ):
@@ -80,8 +79,8 @@ class AudioFlamingo3Attention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        layer_idx: Optional[int] = None,
-        config: Optional[AudioFlamingo3Config] = None,
+        layer_idx: int | None = None,
+        config: AudioFlamingo3Config | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -115,15 +114,15 @@ class AudioFlamingo3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -321,7 +320,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        input_features_mask: Optional[torch.Tensor] = None,
+        input_features_mask: torch.Tensor | None = None,
         **kwargs,
     ):
         r"""
@@ -476,17 +475,17 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""

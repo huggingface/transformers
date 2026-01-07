@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for MPNet."""
 
-from typing import Optional, Union
-
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
 
@@ -90,7 +88,7 @@ class MPNetTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case=True,
         bos_token="<s>",
         eos_token="</s>",

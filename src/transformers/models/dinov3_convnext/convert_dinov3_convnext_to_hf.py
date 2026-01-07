@@ -19,7 +19,6 @@ URL: https://github.com/facebookresearch/dinov3/tree/main
 import argparse
 import os
 import re
-from typing import Optional
 
 import requests
 import torch
@@ -105,7 +104,7 @@ def get_image_processor(resize_size: int = 224):
     )
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
