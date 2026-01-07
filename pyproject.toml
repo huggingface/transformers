@@ -55,6 +55,7 @@ extend-safe-fixes = [
 "src/transformers/processing_utils.py" = ["UP045", "UP007"]
 "src/transformers/image_processing_utils_fast.py" = ["UP045", "UP007"]
 "src/transformers/video_processing_utils.py" = ["UP045", "UP007"]
+"src/transformers/image_utils.py" = ["UP045", "UP007"]
 "src/transformers/video_utils.py" = ["UP045", "UP007"]
 "src/transformers/models/**/image_processing_*.py" = ["UP045", "UP007"]
 "src/transformers/models/**/processing_*.py" = ["UP045", "UP007"]
