@@ -45,7 +45,6 @@ ignore = [
     "UP015",  # Checks for redundant open mode arguments.
     "UP031",  # Checks for printf-style string formatting, and offers to replace it with str.format calls.
     "UP028",  # Checks for for loops that can be replaced with yield from expressions.
-    "UP004",  # Checks for classes that inherit from object.
     "UP045",  # Check for typing.Optional annotations that can be rewritten based on PEP 604 syntax.
     "UP007",  # Check for type annotations that can be rewritten based on PEP 604 syntax.
 ]
