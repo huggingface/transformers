@@ -69,36 +69,6 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
-def _default_id2label() -> dict[int, str]:
-    return {
-        0: "abstract",
-        1: "algorithm",
-        2: "aside_text",
-        3: "chart",
-        4: "content",
-        5: "formula",
-        6: "doc_title",
-        7: "figure_title",
-        8: "footer",
-        9: "footer",
-        10: "footnote",
-        11: "formula_number",
-        12: "header",
-        13: "header",
-        14: "image",
-        15: "formula",
-        16: "number",
-        17: "paragraph_title",
-        18: "reference",
-        19: "reference_content",
-        20: "seal",
-        21: "table",
-        22: "text",
-        23: "text",
-        24: "vision_footnote",
-    }
-
-
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PP-DocLayoutV3`]. It is used to instantiate a
@@ -212,8 +182,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the architecture has an encoder decoder structure.
         gp_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
-        tril_mask (`bool`, *optional*, defaults to `True`):
-            Whether to mask out the upper triangular part of the attention matrix.
         id2label (`dict[int, str]`, *optional*):
             Mapping from class id to class name.
 
@@ -293,7 +261,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         gp_head_size=64,
-        tril_mask=True,
         # label
         id2label=None,
         **kwargs,
@@ -379,80 +346,25 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
         self.gp_head_size = gp_head_size
-        self.tril_mask = tril_mask
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-        if kwargs.get("num_labels") and not id2label:
-            self.id2label = None
-            self.num_labels = kwargs["num_labels"]
-        else:
-            self.id2label = {int(k): v for k, v in id2label.items()} if id2label else _default_id2label()
-            self.num_labels = len(self.id2label)
 
-
-def postprocess(outputs, threshold, target_sizes):
-    boxes = outputs.pred_boxes
-    logits = outputs.logits
-    order_logits = outputs.order_logits
-
-    order_seqs = get_order(order_logits)
-
-    cxcy, wh = torch.split(boxes, 2, dim=-1)
-    boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
-
-    if target_sizes is not None:
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if isinstance(target_sizes, list):
-            img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
-        else:
-            img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-    num_top_queries = logits.shape[1]
-    num_classes = logits.shape[2]
-
-    scores = torch.nn.functional.sigmoid(logits)
-    scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
-    labels = index % num_classes
-    index = index // num_classes
-    boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
-    order_seqs = order_seqs.gather(dim=1, index=index)
-
-    results = []
-    for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
-        order_seq = order_seq[score >= threshold]
-        order_seq, indices = torch.sort(order_seq)
-        results.append(
-            {
-                "scores": score[score >= threshold][indices],
-                "labels": label[score >= threshold][indices],
-                "boxes": box[score >= threshold][indices],
-                "order_seq": order_seq,
-            }
-        )
-
-    return results
-
-
-def get_order(order_logits):
-    # order_logits: (B, N, N) upper-triangular meaningful
+def get_order_seqs(order_logits):
     order_scores = torch.sigmoid(order_logits)
-    B, N, _ = order_scores.shape
+    batch_size, sequence_length, _ = order_scores.shape
 
-    one = torch.ones((N, N), dtype=order_scores.dtype, device=order_scores.device)
+    one = torch.ones((sequence_length, sequence_length), dtype=order_scores.dtype, device=order_scores.device)
     upper = torch.triu(one, 1)
     lower = torch.tril(one, -1)
 
     Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)  # (B, N)
+    order_votes = Q.sum(dim=1)
 
-    order_pointers = torch.argsort(order_votes, dim=1)  # (B, N)
+    order_pointers = torch.argsort(order_votes, dim=1)
     order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(B, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(N, device=order_pointers.device)[None, :]
+    batch = torch.arange(batch_size, device=order_pointers.device)[:, None]
+    order_seq[batch, order_pointers] = torch.arange(sequence_length, device=order_pointers.device)[None, :]
 
     return order_seq
 
@@ -662,7 +574,51 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
             `list[Dict]`: An ordered list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        return postprocess(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        boxes = outputs.pred_boxes
+        logits = outputs.logits
+        order_logits = outputs.order_logits
+
+        order_seqs = get_order_seqs(order_logits)
+
+        cxcy, wh = torch.split(boxes, 2, dim=-1)
+        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = logits.shape[1]
+        num_classes = logits.shape[2]
+
+        scores = torch.nn.functional.sigmoid(logits)
+        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
+        labels = index % num_classes
+        index = index // num_classes
+        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        order_seqs = order_seqs.gather(dim=1, index=index)
+
+        results = []
+        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+            order_seq = order_seq[score >= threshold]
+            order_seq, indices = torch.sort(order_seq)
+            results.append(
+                {
+                    "scores": score[score >= threshold][indices],
+                    "labels": label[score >= threshold][indices],
+                    "boxes": box[score >= threshold][indices],
+                    "order_seq": order_seq,
+                }
+            )
+
+        return results
 
 
 class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
@@ -728,14 +684,57 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        return postprocess(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        boxes = outputs.pred_boxes
+        logits = outputs.logits
+        order_logits = outputs.order_logits
+
+        order_seqs = get_order_seqs(order_logits)
+
+        cxcy, wh = torch.split(boxes, 2, dim=-1)
+        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = logits.shape[1]
+        num_classes = logits.shape[2]
+
+        scores = torch.nn.functional.sigmoid(logits)
+        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
+        labels = index % num_classes
+        index = index // num_classes
+        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        order_seqs = order_seqs.gather(dim=1, index=index)
+
+        results = []
+        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+            order_seq = order_seq[score >= threshold]
+            order_seq, indices = torch.sort(order_seq)
+            results.append(
+                {
+                    "scores": score[score >= threshold][indices],
+                    "labels": label[score >= threshold][indices],
+                    "boxes": box[score >= threshold][indices],
+                    "order_seq": order_seq,
+                }
+            )
+
+        return results
 
 
 class GlobalPointer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.head_size = config.gp_head_size
-        self.tril_mask = config.tril_mask
         self.dense = nn.Linear(config.d_model, self.head_size * 2)
         self.dropout = nn.Dropout(0.1)
 
@@ -747,9 +746,8 @@ class GlobalPointer(nn.Module):
 
         logits = torch.einsum("bmd,bnd->bmn", qw, kw) / (self.head_size**0.5)  # [B, N, N]
 
-        if self.tril_mask:
-            lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
-            logits = logits - lower.unsqueeze(0).to(logits.dtype) * 1e4
+        lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
+        logits = logits - lower.unsqueeze(0).to(logits.dtype) * 1e4
 
         return logits
 
@@ -816,54 +814,51 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight.data[module.padding_idx])
 
 
-def bbox_xyxy_to_cxcywh(x):
-    x1 = x[..., 0]
-    y1 = x[..., 1]
-    x2 = x[..., 2]
-    y2 = x[..., 3]
-    return torch.stack([(x1 + x2) / 2, (y1 + y2) / 2, (x2 - x1), (y2 - y1)], dim=-1)
-
-
-def mask_to_box_coordinate(mask, normalize=False, format="xyxy", dtype=torch.float32):
-    assert mask.ndim == 4, f"Error: The 'mask' variable must be a 4-dimensional array, but got {mask.ndim} dimensions."
-    assert format in ["xyxy", "xywh"], (
-        f"Error: The 'format' variable must be either 'xyxy' or 'xywh', but got '{format}'."
-    )
-
+def mask_to_box_coordinate(mask, dtype=torch.float32):
     mask = mask.bool()
 
-    h, w = mask.shape[-2:]
-    y, x = torch.meshgrid(torch.arange(h, device=mask.device), torch.arange(w, device=mask.device), indexing="ij")
-    x = x.to(dtype)
-    y = y.to(dtype)
+    height, width = mask.shape[-2:]
 
-    x_mask = x * mask
-    x_max = x_mask.flatten(start_dim=-2).max(dim=-1).values + 1
+    y_coords, x_coords = torch.meshgrid(
+        torch.arange(height, device=mask.device), torch.arange(width, device=mask.device), indexing="ij"
+    )
+    x_coords = x_coords.to(dtype)
+    y_coords = y_coords.to(dtype)
+
+    x_coords_masked = x_coords * mask
+    x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     x_min = (
-        torch.where(mask, x_mask, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, x_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
     )
 
-    y_mask = y * mask
-    y_max = y_mask.flatten(start_dim=-2).max(dim=-1).values + 1
+    y_coords_masked = y_coords * mask
+    y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     y_min = (
-        torch.where(mask, y_mask, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, y_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
     )
 
-    out_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
-    mask_any = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
-    out_bbox = out_bbox * mask_any
+    unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
-    if normalize:
-        norm_tensor = torch.tensor([w, h, w, h], device=mask.device, dtype=dtype)
-        out_bbox /= norm_tensor
+    is_mask_non_empty = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
+    unnormalized_bbox = unnormalized_bbox * is_mask_non_empty
 
-    return out_bbox if format == "xyxy" else bbox_xyxy_to_cxcywh(out_bbox)
+    norm_tensor = torch.tensor([width, height, width, height], device=mask.device, dtype=dtype)
+    normalized_bbox_xyxy = unnormalized_bbox / norm_tensor
+
+    x_min_norm, y_min_norm, x_max_norm, y_max_norm = normalized_bbox_xyxy.unbind(dim=-1)
+
+    center_x = (x_min_norm + x_max_norm) / 2
+    center_y = (y_min_norm + y_max_norm) / 2
+    box_width = x_max_norm - x_min_norm
+    box_height = y_max_norm - y_min_norm
+
+    return torch.stack([center_x, center_y, box_width, box_height], dim=-1)
 
 
 @dataclass
@@ -1564,7 +1559,7 @@ class PPDocLayoutV3Model(RTDetrModel):
             target = torch.concat([denoising_class, target], 1)
 
         if self.mask_enhanced:
-            reference_points = mask_to_box_coordinate(enc_out_masks > 0, normalize=True, format="xywh")
+            reference_points = mask_to_box_coordinate(enc_out_masks > 0)
             reference_points_unact = inverse_sigmoid(reference_points)
 
         if denoising_bbox_unact is not None:
@@ -1675,7 +1670,6 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values
     """
-
     logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
     order_logits: Optional[torch.FloatTensor] = None

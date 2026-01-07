@@ -29,68 +29,21 @@ from ...image_utils import PILImageResampling
 from ...utils.generic import TensorType
 
 
-def postprocess(outputs, threshold, target_sizes):
-    boxes = outputs.pred_boxes
-    logits = outputs.logits
-    order_logits = outputs.order_logits
-
-    order_seqs = get_order(order_logits)
-
-    cxcy, wh = torch.split(boxes, 2, dim=-1)
-    boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
-
-    if target_sizes is not None:
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if isinstance(target_sizes, list):
-            img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
-        else:
-            img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-    num_top_queries = logits.shape[1]
-    num_classes = logits.shape[2]
-
-    scores = torch.nn.functional.sigmoid(logits)
-    scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
-    labels = index % num_classes
-    index = index // num_classes
-    boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
-    order_seqs = order_seqs.gather(dim=1, index=index)
-
-    results = []
-    for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
-        order_seq = order_seq[score >= threshold]
-        order_seq, indices = torch.sort(order_seq)
-        results.append(
-            {
-                "scores": score[score >= threshold][indices],
-                "labels": label[score >= threshold][indices],
-                "boxes": box[score >= threshold][indices],
-                "order_seq": order_seq,
-            }
-        )
-
-    return results
-
-
-def get_order(order_logits):
-    # order_logits: (B, N, N) upper-triangular meaningful
+def get_order_seqs(order_logits):
     order_scores = torch.sigmoid(order_logits)
-    B, N, _ = order_scores.shape
+    batch_size, sequence_length, _ = order_scores.shape
 
-    one = torch.ones((N, N), dtype=order_scores.dtype, device=order_scores.device)
+    one = torch.ones((sequence_length, sequence_length), dtype=order_scores.dtype, device=order_scores.device)
     upper = torch.triu(one, 1)
     lower = torch.tril(one, -1)
 
     Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)  # (B, N)
+    order_votes = Q.sum(dim=1)
 
-    order_pointers = torch.argsort(order_votes, dim=1)  # (B, N)
+    order_pointers = torch.argsort(order_votes, dim=1)
     order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(B, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(N, device=order_pointers.device)[None, :]
+    batch = torch.arange(batch_size, device=order_pointers.device)[:, None]
+    order_seq[batch, order_pointers] = torch.arange(sequence_length, device=order_pointers.device)[None, :]
 
     return order_seq
 
@@ -158,7 +111,51 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        return postprocess(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        boxes = outputs.pred_boxes
+        logits = outputs.logits
+        order_logits = outputs.order_logits
+
+        order_seqs = get_order_seqs(order_logits)
+
+        cxcy, wh = torch.split(boxes, 2, dim=-1)
+        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+            if isinstance(target_sizes, list):
+                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        num_top_queries = logits.shape[1]
+        num_classes = logits.shape[2]
+
+        scores = torch.nn.functional.sigmoid(logits)
+        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
+        labels = index % num_classes
+        index = index // num_classes
+        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+        order_seqs = order_seqs.gather(dim=1, index=index)
+
+        results = []
+        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
+            order_seq = order_seq[score >= threshold]
+            order_seq, indices = torch.sort(order_seq)
+            results.append(
+                {
+                    "scores": score[score >= threshold][indices],
+                    "labels": label[score >= threshold][indices],
+                    "boxes": box[score >= threshold][indices],
+                    "order_seq": order_seq,
+                }
+            )
+
+        return results
 
 
 __all__ = ["PPDocLayoutV3ImageProcessorFast"]

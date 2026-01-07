@@ -27,36 +27,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-def _default_id2label() -> dict[int, str]:
-    return {
-        0: "abstract",
-        1: "algorithm",
-        2: "aside_text",
-        3: "chart",
-        4: "content",
-        5: "formula",
-        6: "doc_title",
-        7: "figure_title",
-        8: "footer",
-        9: "footer",
-        10: "footnote",
-        11: "formula_number",
-        12: "header",
-        13: "header",
-        14: "image",
-        15: "formula",
-        16: "number",
-        17: "paragraph_title",
-        18: "reference",
-        19: "reference_content",
-        20: "seal",
-        21: "table",
-        22: "text",
-        23: "text",
-        24: "vision_footnote",
-    }
-
-
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PP-DocLayoutV3`]. It is used to instantiate a
@@ -170,8 +140,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the architecture has an encoder decoder structure.
         gp_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
-        tril_mask (`bool`, *optional*, defaults to `True`):
-            Whether to mask out the upper triangular part of the attention matrix.
         id2label (`dict[int, str]`, *optional*):
             Mapping from class id to class name.
 
@@ -251,7 +219,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         gp_head_size=64,
-        tril_mask=True,
         # label
         id2label=None,
         **kwargs,
@@ -337,16 +304,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
         self.gp_head_size = gp_head_size
-        self.tril_mask = tril_mask
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-        if kwargs.get("num_labels") and not id2label:
-            self.id2label = None
-            self.num_labels = kwargs["num_labels"]
-        else:
-            self.id2label = {int(k): v for k, v in id2label.items()} if id2label else _default_id2label()
-            self.num_labels = len(self.id2label)
 
 
 __all__ = ["PPDocLayoutV3Config"]

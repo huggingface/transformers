@@ -44,7 +44,6 @@ class GlobalPointer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.head_size = config.gp_head_size
-        self.tril_mask = config.tril_mask
         self.dense = nn.Linear(config.d_model, self.head_size * 2)
         self.dropout = nn.Dropout(0.1)
 
@@ -56,9 +55,8 @@ class GlobalPointer(nn.Module):
 
         logits = torch.einsum("bmd,bnd->bmn", qw, kw) / (self.head_size**0.5)  # [B, N, N]
 
-        if self.tril_mask:
-            lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
-            logits = logits - lower.unsqueeze(0).to(logits.dtype) * 1e4
+        lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
+        logits = logits - lower.unsqueeze(0).to(logits.dtype) * 1e4
 
         return logits
 
@@ -321,6 +319,7 @@ class PPDocLayoutV3DecoderOutput(ModelOutput):
     hidden_states: Optional[tuple[torch.FloatTensor]] = None
     attentions: Optional[tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+
     dec_out_order_logits: Optional[torch.FloatTensor] = None
     dec_out_masks: Optional[torch.FloatTensor] = None
 
@@ -385,6 +384,7 @@ class PPDocLayoutV3ModelOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[dict] = None
+
     out_order_logits: Optional[torch.FloatTensor] = None
     out_masks: Optional[torch.FloatTensor] = None
 
@@ -1535,54 +1535,51 @@ def get_contrastive_denoising_training_group(
     return input_query_class, input_query_bbox, attn_mask, denoising_meta_values
 
 
-def bbox_xyxy_to_cxcywh(x):
-    x1 = x[..., 0]
-    y1 = x[..., 1]
-    x2 = x[..., 2]
-    y2 = x[..., 3]
-    return torch.stack([(x1 + x2) / 2, (y1 + y2) / 2, (x2 - x1), (y2 - y1)], dim=-1)
-
-
-def mask_to_box_coordinate(mask, normalize=False, format="xyxy", dtype=torch.float32):
-    assert mask.ndim == 4, f"Error: The 'mask' variable must be a 4-dimensional array, but got {mask.ndim} dimensions."
-    assert format in ["xyxy", "xywh"], (
-        f"Error: The 'format' variable must be either 'xyxy' or 'xywh', but got '{format}'."
-    )
-
+def mask_to_box_coordinate(mask, dtype=torch.float32):
     mask = mask.bool()
 
-    h, w = mask.shape[-2:]
-    y, x = torch.meshgrid(torch.arange(h, device=mask.device), torch.arange(w, device=mask.device), indexing="ij")
-    x = x.to(dtype)
-    y = y.to(dtype)
+    height, width = mask.shape[-2:]
 
-    x_mask = x * mask
-    x_max = x_mask.flatten(start_dim=-2).max(dim=-1).values + 1
+    y_coords, x_coords = torch.meshgrid(
+        torch.arange(height, device=mask.device), torch.arange(width, device=mask.device), indexing="ij"
+    )
+    x_coords = x_coords.to(dtype)
+    y_coords = y_coords.to(dtype)
+
+    x_coords_masked = x_coords * mask
+    x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     x_min = (
-        torch.where(mask, x_mask, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, x_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
     )
 
-    y_mask = y * mask
-    y_max = y_mask.flatten(start_dim=-2).max(dim=-1).values + 1
+    y_coords_masked = y_coords * mask
+    y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     y_min = (
-        torch.where(mask, y_mask, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, y_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
     )
 
-    out_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
-    mask_any = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
-    out_bbox = out_bbox * mask_any
+    unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
-    if normalize:
-        norm_tensor = torch.tensor([w, h, w, h], device=mask.device, dtype=dtype)
-        out_bbox /= norm_tensor
+    is_mask_non_empty = torch.any(mask, dim=(-2, -1)).unsqueeze(-1)
+    unnormalized_bbox = unnormalized_bbox * is_mask_non_empty
 
-    return out_bbox if format == "xyxy" else bbox_xyxy_to_cxcywh(out_bbox)
+    norm_tensor = torch.tensor([width, height, width, height], device=mask.device, dtype=dtype)
+    normalized_bbox_xyxy = unnormalized_bbox / norm_tensor
+
+    x_min_norm, y_min_norm, x_max_norm, y_max_norm = normalized_bbox_xyxy.unbind(dim=-1)
+
+    center_x = (x_min_norm + x_max_norm) / 2
+    center_y = (y_min_norm + y_max_norm) / 2
+    box_width = x_max_norm - x_min_norm
+    box_height = y_max_norm - y_min_norm
+
+    return torch.stack([center_x, center_y, box_width, box_height], dim=-1)
 
 
 @auto_docstring(
@@ -1904,7 +1901,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             target = torch.concat([denoising_class, target], 1)
 
         if self.mask_enhanced:
-            reference_points = mask_to_box_coordinate(enc_out_masks > 0, normalize=True, format="xywh")
+            reference_points = mask_to_box_coordinate(enc_out_masks > 0)
             reference_points_unact = inverse_sigmoid(reference_points)
 
         if denoising_bbox_unact is not None:
