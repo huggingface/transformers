@@ -36,7 +36,11 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     def test_gemma_pretokenizer_split_is_redundant(self):
-        tok = AutoTokenizer.from_pretrained(self.from_pretrained_id, use_fast=True)
+        model_id = self.from_pretrained_id
+        if isinstance(model_id, (list, tuple)):
+            model_id = model_id[0]
+
+        tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
         bt = tok.backend_tokenizer
 
         # Gemma fast tokenizer normalizes " " -> "▁", so splitting on literal spaces is redundant.
