@@ -237,13 +237,6 @@
   title: Community integrations
 - isExpanded: false
   sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
-- isExpanded: false
-  sections:
   - sections:
     - sections:
       - local: tasks/sequence_classification
