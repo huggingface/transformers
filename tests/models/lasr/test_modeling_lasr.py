@@ -17,7 +17,14 @@ import tempfile
 import unittest
 
 from transformers import is_datasets_available, is_torch_available, pipeline
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_read_token,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -295,6 +302,7 @@ class LasrForCTCModelTest(ModelTesterMixin, unittest.TestCase):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
 
+@require_read_token
 class LasrForCTCIntegrationTest(unittest.TestCase):
     _dataset = None
 
@@ -323,6 +331,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
+    @require_torch_accelerator
     def test_model_integration(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -350,6 +359,7 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
     @slow
+    @require_torch_accelerator
     def test_model_integration_batched(self):
         # fmt: off
         EXPECTED_TOKENS = torch.tensor([
@@ -388,7 +398,9 @@ class LasrForCTCIntegrationTest(unittest.TestCase):
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
+    # TODO: @eustlb, this test is here for now but should eventually be moved to test_pipelines_automatic_speech_recognition.py
     @slow
+    @require_torch_accelerator
     def test_model_integration_pipe_with_chunk(self):
         EXPECTED_TRANSCRIPTIONS = [
             {"text": ". is the apsle of the middle classes and we are glad to welcome his goible.</s>"}
