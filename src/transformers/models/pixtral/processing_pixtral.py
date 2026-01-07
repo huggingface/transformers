@@ -87,25 +87,6 @@ class PixtralProcessor(ProcessorMixin):
             Special token used to denote the end of an image input.
     """
 
-    @classmethod
-    def _load_tokenizer_from_pretrained(
-        cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
-    ):
-        """
-        Override for BC. Pixtral requires a modified pre_tokenizer with ByteLevel prepended to handle
-        the specific tokenization format expected by pretrained Pixtral models.
-        """
-        from tokenizers import pre_tokenizers
-
-        from ...models.llama import LlamaTokenizer
-
-        tokenizer = LlamaTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        # Add ByteLevel pre_tokenizer before the existing one
-        tokenizer._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [pre_tokenizers.ByteLevel(False), tokenizer._tokenizer.pre_tokenizer]
-        )
-        return tokenizer
-
     def __init__(
         self,
         image_processor=None,
@@ -169,7 +150,7 @@ class PixtralProcessor(ProcessorMixin):
 
         output_kwargs = self._merge_kwargs(
             PixtralProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            tokenizer_init_kwargs=getattr(self.tokenizer, "init_kwargs", {}),
             **kwargs,
         )
 
@@ -216,6 +197,8 @@ class PixtralProcessor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        # Remove return_token_type_ids as MistralCommonBackend doesn't support it
+        output_kwargs["text_kwargs"].pop("return_token_type_ids", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 

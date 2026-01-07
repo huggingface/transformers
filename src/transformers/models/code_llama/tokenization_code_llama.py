@@ -158,7 +158,7 @@ class CodeLlamaTokenizer(TokenizersBackend):
                 unk_token=str(unk_token),
             )
         )
-        prepend_scheme = "first" if self.add_prefix_space else "none"
+        prepend_scheme = "first" if self.add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
             replacement="▁", prepend_scheme=prepend_scheme, split=False
         )

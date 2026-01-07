@@ -1157,13 +1157,12 @@ class ModelTesterMixin:
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
             addition_year = int(match_object.group(1))
+        # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
+        # TODO: relax this as we patch more and more models
+        if addition_year < 2023:
+            self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
-            # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
-            # TODO: relax this as we patch more and more models
-            if addition_year < 2023:
-                self.skipTest(reason=f"{model_class} is not a prioritized model for now.")
-
             # This context manager makes sure that we get the same results deterministically for random new weights
             with seeded_weight_init():
                 # First, initialize the model from __init__ -> this ensure everything is correctly initialized, even if
@@ -1282,14 +1281,6 @@ class ModelTesterMixin:
                 buf_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
                     buffer, model_from_init
                 )
-
-                # We cannot control timm model weights initialization, so skip in this case
-                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
-                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
-                ):
-                    different_buffers.discard(buffer)
-                    continue
-
                 # Add it to the traceback
                 traceback = (
                     f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
