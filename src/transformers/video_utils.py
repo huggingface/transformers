@@ -119,7 +119,7 @@ class VideoMetadata(Mapping):
 
 
 VideoMetadataType = Union[
-    VideoMetadata, dict | list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
+    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
 ]
 
 
