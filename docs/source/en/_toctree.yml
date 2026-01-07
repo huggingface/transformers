@@ -123,16 +123,6 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - sections:
-    - local: perf_torch_compile
-      title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    title: Optimization
   - local: agents
     title: Agents
   - local: tools
@@ -238,11 +228,6 @@
   - local: quantization/contribute
     title: Contribute
   title: Quantization
-- isExpanded: false
-  sections:
-  - local: kernel_doc/overview
-    title: Kernels in transformers
-  title: Kernels
 - isExpanded: false
   sections:
   - sections:
