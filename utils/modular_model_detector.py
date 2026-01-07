@@ -137,6 +137,8 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 MODELS_ROOT = Path("src/transformers/models")
 EMBEDDINGS_PATH = "embeddings.safetensors"
+EMBEDDINGS_INT8_PATH = "embeddings_int8.safetensors"
+EMBEDDINGS_BINARY_PATH = "embeddings_binary.safetensors"
 INDEX_MAP_PATH = "code_index_map.json"
 TOKENS_PATH = "code_index_tokens.json"
 HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
@@ -144,6 +146,7 @@ HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
+_POPCOUNT_TABLE = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
 
 
 def _normalize(string: str | None) -> str:
@@ -243,7 +246,7 @@ class CodeSimilarityAnalyzer:
         hub_dataset (`str`): The Hub dataset repository ID containing the code embeddings index.
     """
 
-    def __init__(self, hub_dataset: str):
+    def __init__(self, hub_dataset: str, precision: str = "float32"):
         for name in ("huggingface_hub", "httpx", "urllib3", "transformers"):
             logging.getLogger(name).setLevel(logging.ERROR)
         huggingface_hub_logging.set_verbosity_error()
@@ -253,10 +256,12 @@ class CodeSimilarityAnalyzer:
 
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
+        self.precision = precision
         self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
         self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
 
         self.device = self.model.device
+        self.dtype = self.model.dtype
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
@@ -266,24 +271,28 @@ class CodeSimilarityAnalyzer:
             return Path(filename)
         return self.index_dir / filename
 
+    def _required_index_files(self) -> tuple[str, ...]:
+        if self.precision == "int8":
+            return (EMBEDDINGS_INT8_PATH, INDEX_MAP_PATH, TOKENS_PATH)
+        if self.precision == "binary":
+            return (EMBEDDINGS_BINARY_PATH, INDEX_MAP_PATH, TOKENS_PATH)
+        return (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)
+
     def ensure_local_index(self) -> None:
         """Ensure index files are available locally, preferring Hub cache snapshots."""
-        if self.index_dir is not None and all(
-            (self.index_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)
-        ):
+        required_files = self._required_index_files()
+        if self.index_dir is not None and all((self.index_dir / fname).exists() for fname in required_files):
             return
 
         workspace_dir = Path.cwd()
-        if all((workspace_dir / fname).exists() for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)):
+        if all((workspace_dir / fname).exists() for fname in required_files):
             self.index_dir = workspace_dir
             return
 
         logging.info(f"downloading index from hub cache: {self.hub_dataset}")
         snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
         snapshot_dir = Path(snapshot_path)
-        missing = [
-            fname for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH) if not (snapshot_dir / fname).exists()
-        ]
+        missing = [fname for fname in required_files if not (snapshot_dir / fname).exists()]
         if missing:
             raise FileNotFoundError("Missing expected files in Hub snapshot: " + ", ".join(missing))
         self.index_dir = snapshot_dir
@@ -292,7 +301,7 @@ class CodeSimilarityAnalyzer:
         """Upload index files to the Hub dataset repository."""
         api = HfApi()
         api.create_repo(repo_id=self.hub_dataset, repo_type="dataset", exist_ok=True)
-        for fname in (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH):
+        for fname in self._required_index_files():
             logging.info(f"pushing {fname} -> {self.hub_dataset}")
             api.upload_file(
                 path_or_fileobj=fname,
@@ -413,6 +422,18 @@ class CodeSimilarityAnalyzer:
                 torch.cuda.empty_cache()
         return np.vstack(output) if output else np.zeros((0, 0), dtype="float32")
 
+    def _quantize_int8(self, embeddings: np.ndarray, scales: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+        if scales is None:
+            max_abs = np.max(np.abs(embeddings), axis=0)
+            max_abs = np.maximum(max_abs, 1e-8)
+            scales = (max_abs / 127.0).astype("float32")
+        quantized = np.round(embeddings / scales).clip(-127, 127).astype("int8")
+        return quantized, scales
+
+    def _quantize_binary(self, embeddings: np.ndarray) -> np.ndarray:
+        bits = (embeddings > 0).astype("uint8")
+        return np.packbits(bits, axis=1)
+
     # ---------- build & search ----------
 
     def build_index(self) -> None:
@@ -442,7 +463,15 @@ class CodeSimilarityAnalyzer:
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
-        safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
+        if self.precision == "int8":
+            quantized, scales = self._quantize_int8(embeddings)
+            safetensors_save({"embeddings": quantized, "scale": scales}, EMBEDDINGS_INT8_PATH)
+        elif self.precision == "binary":
+            packed = self._quantize_binary(embeddings)
+            dim = np.array([embeddings.shape[1]], dtype="int32")
+            safetensors_save({"embeddings": packed, "dim": dim}, EMBEDDINGS_BINARY_PATH)
+        else:
+            safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
         with open(INDEX_MAP_PATH, "w", encoding="utf-8") as file:
             json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
         with open(TOKENS_PATH, "w", encoding="utf-8") as file:
@@ -472,6 +501,63 @@ class CodeSimilarityAnalyzer:
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
             output.append((identifier, float(similarities[match_id])))
+            if len(output) >= k:
+                break
+        return output
+
+    def _topk_int8(
+        self,
+        query_embedding_row: np.ndarray,
+        base_embeddings: np.ndarray,
+        scales: np.ndarray,
+        identifier_map: dict[int, str],
+        self_model_normalized: str,
+        self_name: str,
+        k: int,
+    ) -> list[tuple[str, float]]:
+        weighted_query = (query_embedding_row * scales).astype("float32")
+        similarities = weighted_query @ base_embeddings.T.astype("float32")
+        indices = np.argpartition(-similarities, k + 32)[: k + 32]
+        indices = indices[np.argsort(-similarities[indices])]
+        output = []
+        for match_id in indices:
+            identifier = identifier_map[int(match_id)]
+            parent_relative_path, match_name = identifier.split(":", 1)
+            parent_model = Path(parent_relative_path).parts[0]
+            if match_name == self_name:
+                continue
+            if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+                continue
+            output.append((identifier, float(similarities[match_id])))
+            if len(output) >= k:
+                break
+        return output
+
+    def _topk_binary(
+        self,
+        query_packed: np.ndarray,
+        base_embeddings: np.ndarray,
+        total_bits: int,
+        identifier_map: dict[int, str],
+        self_model_normalized: str,
+        self_name: str,
+        k: int,
+    ) -> list[tuple[str, float]]:
+        xor = np.bitwise_xor(base_embeddings, query_packed)
+        distances = _POPCOUNT_TABLE[xor].sum(axis=1).astype("int32")
+        indices = np.argpartition(distances, k + 32)[: k + 32]
+        indices = indices[np.argsort(distances[indices])]
+        output = []
+        for match_id in indices:
+            identifier = identifier_map[int(match_id)]
+            parent_relative_path, match_name = identifier.split(":", 1)
+            parent_model = Path(parent_relative_path).parts[0]
+            if match_name == self_name:
+                continue
+            if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+                continue
+            similarity = 1.0 - float(distances[match_id]) / float(total_bits)
+            output.append((identifier, similarity))
             if len(output) >= k:
                 break
         return output
@@ -534,8 +620,21 @@ class CodeSimilarityAnalyzer:
         if allow_hub_fallback:
             self.ensure_local_index()
 
-        base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_PATH)))
-        base_embeddings = base["embeddings"]
+        base = None
+        base_embeddings = None
+        scales = None
+        total_bits = None
+        if self.precision == "int8":
+            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_INT8_PATH)))
+            base_embeddings = base["embeddings"]
+            scales = base["scale"]
+        elif self.precision == "binary":
+            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_BINARY_PATH)))
+            base_embeddings = base["embeddings"]
+            total_bits = int(base["dim"][0])
+        else:
+            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_PATH)))
+            base_embeddings = base["embeddings"]
         with open(self._resolve_index_path(INDEX_MAP_PATH), "r", encoding="utf-8") as file:
             identifier_map = {int(key): value for key, value in json.load(file).items()}
         identifiers = [identifier_map[i] for i in range(len(identifier_map))]
@@ -559,9 +658,36 @@ class CodeSimilarityAnalyzer:
         output = {}
         for i, query_identifier in enumerate(query_identifiers):
             query_name = query_identifier.split(":")[-1]
-            embedding_top = self._topk_embedding(
-                query_embeddings[i], base_embeddings, identifier_map, self_model_normalized, query_name, top_k_per_item
-            )
+            if self.precision == "int8":
+                embedding_top = self._topk_int8(
+                    query_embeddings[i],
+                    base_embeddings,
+                    scales,
+                    identifier_map,
+                    self_model_normalized,
+                    query_name,
+                    top_k_per_item,
+                )
+            elif self.precision == "binary":
+                packed_query = self._quantize_binary(query_embeddings[[i]])[0]
+                embedding_top = self._topk_binary(
+                    packed_query,
+                    base_embeddings,
+                    total_bits,
+                    identifier_map,
+                    self_model_normalized,
+                    query_name,
+                    top_k_per_item,
+                )
+            else:
+                embedding_top = self._topk_embedding(
+                    query_embeddings[i],
+                    base_embeddings,
+                    identifier_map,
+                    self_model_normalized,
+                    query_name,
+                    top_k_per_item,
+                )
             embedding_set = {identifier for identifier, _ in embedding_top}
             kind = definitions_kind.get(query_identifier, "function")
             entry = {"kind": kind, "embedding": embedding_top}
@@ -702,9 +828,17 @@ def main():
         "--hub-dataset", type=str, default=HUB_DATASET_DEFAULT, help="Hub dataset repo id to pull/push the index."
     )
     parser.add_argument("--use_jaccard", type=bool, default=False, help="Whether or not to use jaccard index")
+    parser.add_argument("--top-k", type=int, default=5, help="Top-k matches to return per symbol.")
+    parser.add_argument(
+        "--precision",
+        choices=["float32", "int8", "binary"],
+        default="float32",
+        help="Embedding precision for building/loading the index.",
+    )
+    parser.add_argument("--output-json", type=str, default=None, help="Write results to JSON for tooling.")
     args = parser.parse_args()
 
-    analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
+    analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset, precision=args.precision)
 
     if args.build:
         analyzer.build_index()
@@ -721,7 +855,7 @@ def main():
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
 
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=5, allow_hub_fallback=True, use_jaccard=args.use_jaccard
+        Path(modeling_file), top_k_per_item=args.top_k, allow_hub_fallback=True, use_jaccard=args.use_jaccard
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
@@ -745,6 +879,66 @@ def main():
             f"{ANSI_HIGHLIGHT_CANDIDATE}Closest overall candidate: {MODELS_ROOT / best_candidate_path}"
             f" (release: {best_release}, total score: {aggregate_scores[best_candidate_path]:.4f}){ANSI_RESET}"
         )
+
+    if args.output_json:
+        payload = {
+            "modeling_file": str(Path(modeling_file)),
+            "precision": args.precision,
+            "release_date": release_date,
+            "best_candidate": None,
+            "results": {},
+        }
+        if best_candidate_path is not None:
+            best_model = Path(best_candidate_path).parts[0] if Path(best_candidate_path).parts else "?"
+            payload["best_candidate"] = {
+                "relative_path": best_candidate_path,
+                "full_path": str(MODELS_ROOT / best_candidate_path),
+                "release_date": dates.get(best_model, "unknown release date"),
+                "score": aggregate_scores.get(best_candidate_path, 0.0),
+            }
+        for query_name, data in results.items():
+            entry = {"kind": data.get("kind", "function"), "embedding": []}
+            for identifier, score in data.get("embedding", []):
+                try:
+                    relative_path, match_name = identifier.split(":", 1)
+                except ValueError:
+                    continue
+                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+                full_path, line = _resolve_definition_location(relative_path, match_name)
+                entry["embedding"].append(
+                    {
+                        "identifier": identifier,
+                        "relative_path": relative_path,
+                        "match_name": match_name,
+                        "score": score,
+                        "release_date": dates.get(model_id, "unknown release date"),
+                        "full_path": full_path,
+                        "line": int(line) if line.isdigit() else None,
+                    }
+                )
+            if args.use_jaccard:
+                entry["jaccard"] = []
+                for identifier, score in data.get("jaccard", []):
+                    try:
+                        relative_path, match_name = identifier.split(":", 1)
+                    except ValueError:
+                        continue
+                    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+                    full_path, line = _resolve_definition_location(relative_path, match_name)
+                    entry["jaccard"].append(
+                        {
+                            "identifier": identifier,
+                            "relative_path": relative_path,
+                            "match_name": match_name,
+                            "score": score,
+                            "release_date": dates.get(model_id, "unknown release date"),
+                            "full_path": full_path,
+                            "line": int(line) if line.isdigit() else None,
+                        }
+                    )
+                entry["intersection"] = sorted(data.get("intersection", []))
+            payload["results"][query_name] = entry
+        Path(args.output_json).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
     for query_name, data in results.items():
