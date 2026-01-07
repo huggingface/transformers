@@ -348,16 +348,17 @@ class FullAttentionCacheAllocator(CacheAllocator):
         allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
         requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
-        if request_id not in self.block_table:
-            self.block_table[request_id] = []  # TODO: check the impact of making this a deque
-            last_block_id = None
+        block_table = self.block_table.get(request_id, [])
+        if block_table:
+            last_block_id = block_table[-1]
         else:
-            last_block_id = self.block_table[request_id][-1]
+            self.block_table[request_id] = block_table # TODO: check the impact of making this a deque
+            last_block_id = None
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id, self.uses_block_sharing, self._index)
         if allocated_blocks is None:
             return None
-        self.block_table[request_id].extend(allocated_blocks)
+        block_table.extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
