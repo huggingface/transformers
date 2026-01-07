@@ -187,7 +187,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # so overlapping signal does not get the same dithering.
         # But, chunking is happening inside pytorch, so it is here.
         if self.dither != 0.0:
-            waveform = waveform + self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
+            waveform = waveform + self.dither * torch.randn(
+                waveform.shape, dtype=waveform.dtype, device=waveform.device
+            )
 
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
@@ -373,9 +375,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         keep_on_gpu = use_torch and device != "cpu" and return_tensors == "pt"
 
         if use_torch:
-            input_features = self._torch_extract_fbank_features(
-                input_features[0], device, return_tensors=keep_on_gpu
-            )
+            input_features = self._torch_extract_fbank_features(input_features[0], device, return_tensors=keep_on_gpu)
         else:
             input_features = self._np_extract_fbank_features(input_features[0], device)
 
