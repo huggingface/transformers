@@ -932,6 +932,10 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     config: Glm4vMoeVisionConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vMoeVisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": Glm4vMoeVisionBlock,
+        "attentions": Glm4vMoeVisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)

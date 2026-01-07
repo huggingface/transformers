@@ -736,6 +736,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
     config: Glm4vVisionConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Glm4vVisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": Glm4vVisionBlock,
+        "attentions": Glm4vVisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)
