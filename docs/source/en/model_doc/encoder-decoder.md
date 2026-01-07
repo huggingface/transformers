@@ -71,7 +71,7 @@ print(tokenizer.decode(summary[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen." | transformers run --task summarization --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" --device 0
+echo -e "Plants create energy through a process known as photosynthesis. This involves capturing sunlight and converting carbon dioxide and water into glucose and oxygen." | transformers run summarization --model "patrickvonplaten/bert2bert-cnn_dailymail-fp16" --device 0
 ```
 
 </hfoption>

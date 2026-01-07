@@ -69,7 +69,7 @@ tokenizer.batch_decode(generated_ids)[0]
 <hfoption id="transformers CLI">
 
 ```py
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model facebook/opt-125m --device 0
+echo -e "Plants create energy through a process known as" | transformers run text-generation --model facebook/opt-125m --device 0
 ```
 
 </hfoption>
