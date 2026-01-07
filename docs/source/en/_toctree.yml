@@ -19,6 +19,8 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
@@ -226,13 +228,6 @@
   - local: quantization/contribute
     title: Contribute
   title: Quantization
-- isExpanded: false
-  sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
 - isExpanded: false
   sections:
   - sections:
