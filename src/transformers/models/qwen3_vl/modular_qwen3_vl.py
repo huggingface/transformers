@@ -964,7 +964,7 @@ class Qwen3VLModel(Qwen2_5_VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithDeepstackFeatures:
+    ) -> Union[tuple, BaseModelOutputWithDeepstackFeatures]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -1129,6 +1129,9 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config: Qwen3VLConfig
     _checkpoint_conversion_mapping = {}
+
+    def get_image_features(self, **super_kwargs) -> Union[tuple, BaseModelOutputWithDeepstackFeatures]:
+        return super().get_image_features(**super_kwargs)
 
     @can_return_tuple
     def forward(

@@ -926,7 +926,7 @@ class AriaModel(AriaPreTrainedModel):
         pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -1082,7 +1082,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         pixel_mask: Optional[torch.FloatTensor] = None,
         vision_feature_layer: int = -1,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,

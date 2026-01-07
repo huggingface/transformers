@@ -802,7 +802,7 @@ class Gemma3Model(PaliGemmaModel):
     @can_return_tuple
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
 

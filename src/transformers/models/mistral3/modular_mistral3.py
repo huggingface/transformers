@@ -20,6 +20,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llava.modeling_llava import (
@@ -124,7 +125,7 @@ class Mistral3Model(LlavaModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -241,7 +242,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
         image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             image_sizes=image_sizes,

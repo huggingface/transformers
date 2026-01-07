@@ -33,6 +33,7 @@ from transformers.models.llava_next.modeling_llava_next import (
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -280,7 +281,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 

@@ -884,7 +884,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     @can_return_tuple
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithPooling:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer
@@ -1053,7 +1053,9 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple

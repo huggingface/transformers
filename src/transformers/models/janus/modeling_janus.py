@@ -1112,7 +1112,9 @@ class JanusModel(JanusPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         vision_outputs = self.vision_model(pixel_values, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
 

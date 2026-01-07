@@ -1399,7 +1399,7 @@ class Emu3Model(Emu3PreTrainedModel):
     @can_return_tuple
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ):
+    ) -> Union[tuple, Emu3VQVAEModelOutput]:
         """
         Tokenizes images into discrete tokens with VQGAN module and embeds
         them with text embeddings layer

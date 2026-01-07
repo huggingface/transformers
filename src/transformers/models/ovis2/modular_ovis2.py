@@ -262,7 +262,7 @@ class Ovis2Model(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithVisualIndicatorFeatures]:
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
@@ -377,7 +377,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
 
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithVisualIndicatorFeatures]:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple

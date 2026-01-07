@@ -1195,7 +1195,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithVisionQformerOutputs]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 

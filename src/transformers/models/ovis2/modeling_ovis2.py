@@ -553,7 +553,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithVisualIndicatorFeatures]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -720,7 +720,7 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
 
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithVisualIndicatorFeatures]:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple

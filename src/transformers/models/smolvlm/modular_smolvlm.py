@@ -21,6 +21,7 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
@@ -198,7 +199,7 @@ class SmolVLMModel(Idefics3Model):
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 

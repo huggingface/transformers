@@ -1058,12 +1058,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
-    ]:
+    ) -> Union[tuple, Sam3TrackerVisionEncoderOutput]:
         r"""
         Extract and preprocess image features using the vision encoder.
 

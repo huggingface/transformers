@@ -1514,7 +1514,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithProjectionAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithProjectionAttentions]:
         if "return_attentions" in kwargs:
             warnings.warn(
                 "`return_attentions` is deprecated and will be removed in a future version. Please use `return_dict`"

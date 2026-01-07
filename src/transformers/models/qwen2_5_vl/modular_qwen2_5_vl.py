@@ -45,12 +45,12 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
     Qwen2RMSNorm,
+    Qwen2VLAttention,
     Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
-    Qwen2VLAttention,
     TransformersKwargs,
     VisionAttention,
     VisionRotaryEmbedding,
@@ -179,9 +179,9 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-
 class Qwen2_5_VLAttention(Qwen2VLAttention):
     pass
+
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig

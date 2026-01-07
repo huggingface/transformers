@@ -21,6 +21,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..llava.modeling_llava import (
@@ -101,7 +102,7 @@ class Lfm2VlModel(LlavaModel):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -242,7 +243,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,

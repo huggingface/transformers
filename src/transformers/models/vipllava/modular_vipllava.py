@@ -28,6 +28,7 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_vipllava import VipLlavaConfig
@@ -79,7 +80,7 @@ class VipLlavaModel(LlavaModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -188,7 +189,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values: torch.FloatTensor,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_image_features(
             pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
         )

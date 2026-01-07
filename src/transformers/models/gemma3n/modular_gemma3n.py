@@ -2242,7 +2242,7 @@ class Gemma3nModel(PaliGemmaModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[torch.FloatTensor, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Projects the last hidden state from the vision model into language model space.
 

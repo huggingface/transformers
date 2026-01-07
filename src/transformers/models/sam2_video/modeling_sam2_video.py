@@ -1830,12 +1830,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
-    ]:
+    ) -> Union[tuple, Sam2VideoVisionEncoderOutput]:
         r"""
         Extract and preprocess image features using the vision encoder.
 
