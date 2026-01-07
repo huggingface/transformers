@@ -340,7 +340,7 @@ class Sam3VideoProcessor(ProcessorMixin):
 
             # slice those valid entries from the original outputs
             keep_idx = torch.nonzero(keep, as_tuple=True)[0]
-            keep_idx_gpu = keep_idx.pin_memory().to(device=out_binary_masks.device, non_blocking=True)
+            keep_idx_gpu = keep_idx.to(device=out_binary_masks.device, non_blocking=True)
 
             out_obj_ids = torch.index_select(out_obj_ids, 0, keep_idx)
             out_probs = torch.index_select(out_probs, 0, keep_idx)
