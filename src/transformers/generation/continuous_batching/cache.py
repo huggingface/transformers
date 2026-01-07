@@ -244,7 +244,7 @@ class PagedAttentionCache:
         self.blocks_to_complete: dict[str, int] = {}
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
-    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> int:
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
         needed_blocks = num_requested_blocks * self.num_full_attention_groups
         if self.num_sliding_attention_groups:
             blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)

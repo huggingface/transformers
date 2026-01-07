@@ -29,6 +29,7 @@ from transformers import (
 )
 from transformers.generation.continuous_batching.cache import (
     FullAttentionCacheAllocator,
+    PagedAttentionCache,
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
@@ -176,6 +177,79 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                 f"Expected mask:\n{str_expected_mask}\n"
                 f"Actual mask:\n{str_mask}"
             )
+
+    @parameterized.expand(
+        [
+            # Case 1: Only full attention groups, allocation succeeds
+            # needed_blocks = 2 * 1 = 2, free_blocks = 10 -> 2 <= 10 = True
+            (2, 0, 1, 0, 0, 10, True),
+            # Case 2: Only full attention groups, allocation fails
+            # needed_blocks = 5 * 2 = 10, free_blocks = 5 -> 10 <= 5 = False
+            (5, 0, 2, 0, 0, 5, False),
+            # Case 3: Mixed attention, sliding window not yet full
+            # needed_blocks = 2 * 1 + min(4 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 10 -> 4 <= 10 = True
+            (2, 0, 1, 1, 4, 10, True),
+            # Case 4: Mixed attention, sliding window partially filled
+            # needed_blocks = 3 * 1 + min(4 - 2, 3) * 1 = 3 + 2 = 5, free_blocks = 5 -> 5 <= 5 = True
+            (3, 2, 1, 1, 4, 5, True),
+            # Case 5: Mixed attention, sliding window already full (allocated_blocks >= max_sliding)
+            # blocks_left = max(4 - 5, 0) = 0, needed_blocks = 3 * 1 + 0 = 3, free_blocks = 5 -> 3 <= 5 = True
+            (3, 5, 1, 1, 4, 5, True),
+            # Case 6: Mixed attention, sliding window full, allocation fails due to full attention
+            # blocks_left = max(4 - 4, 0) = 0, needed_blocks = 6 * 1 + 0 = 6, free_blocks = 5 -> 6 <= 5 = False
+            (6, 4, 1, 1, 4, 5, False),
+            # Case 7: Multiple full attention groups
+            # needed_blocks = 3 * 2 = 6, free_blocks = 6 -> 6 <= 6 = True
+            (3, 0, 2, 0, 0, 6, True),
+            # Case 8: Multiple sliding attention groups, not full
+            # needed_blocks = 2 * 1 + min(4 - 1, 2) * 2 = 2 + 4 = 6, free_blocks = 6 -> 6 <= 6 = True
+            (2, 1, 1, 2, 4, 6, True),
+            # Case 9: Edge case - requesting 0 blocks always succeeds
+            # needed_blocks = 0, free_blocks = 0 -> 0 <= 0 = True
+            (0, 0, 1, 1, 4, 0, True),
+            # Case 10: Edge case - exactly enough blocks
+            # needed_blocks = 2 * 1 + min(3 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 4 -> 4 <= 4 = True
+            (2, 0, 1, 1, 3, 4, True),
+        ]
+    )
+    @require_torch_accelerator
+    def test_continuous_batching_will_allocation_be_successful(
+        self,
+        num_requested_blocks: int,
+        allocated_blocks: int,
+        num_full_attention_groups: int,
+        num_sliding_attention_groups: int,
+        max_sliding_window_blocks_per_request: int,
+        num_free_blocks: int,
+        expected_result: bool,
+    ) -> None:
+        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the elevant attributes of
+        a dummy cache."""
+        # Create the cache
+        cache = PagedAttentionCache(
+            config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
+            generation_config=GenerationConfig(num_blocks=8, block_size=16, max_batch_tokens=8),
+            device=torch_device,
+        )
+
+        # Overload cache parameters to match test scenario
+        cache.num_full_attention_groups = num_full_attention_groups
+        cache.num_sliding_attention_groups = num_sliding_attention_groups
+        cache.max_sliding_window_blocks_per_request = max_sliding_window_blocks_per_request
+
+        # Overload the cache get_num_free_blocks method
+        cache.get_num_free_blocks = lambda: num_free_blocks
+
+        # Test the method
+        result = cache.will_allocation_be_successful(num_requested_blocks, allocated_blocks)
+
+        self.assertEqual(
+            result,
+            expected_result,
+            f"Failed for: {num_requested_blocks=}, {allocated_blocks=}, {num_full_attention_groups=}, "
+            f"{num_sliding_attention_groups=}, {max_sliding_window_blocks_per_request=}, {num_free_blocks=}. "
+            f"Expected {expected_result}, got {result}",
+        )
 
 
 class ContinuousBatchingGenerationTest(unittest.TestCase):
