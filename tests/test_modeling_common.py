@@ -933,6 +933,23 @@ class ModelTesterMixin:
                     )
                     self.assertTrue(len(load_result.unexpected_keys) == 0)
 
+    def test_load_contiguous_weights(self):
+        """
+        Checks whether the loaded weights are contiguous or not; inherently checking whether a conversion
+        operation from `core_model_loading` may have affected the original weights.
+        """
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config)
+            self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3566,7 +3583,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
@@ -3577,7 +3594,7 @@ class ModelTesterMixin:
                 inputs_dict.pop("decoder_attention_mask", None)
                 for name, inp in inputs_dict.items():
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
-                        inputs_dict[name] = inp.to(torch.float16)
+                        inputs_dict[name] = inp.to(torch.bfloat16)
 
                 # use no_grad to save some memory
                 with torch.no_grad():
@@ -3914,7 +3931,12 @@ class ModelTesterMixin:
         if attn_implementation is not None:
             config._attn_implementation = attn_implementation
 
-        model = cls(config).to(torch_device)
+        model = cls(config).to(device=torch_device)
+
+        # torch._grouped_mm still only supports bfloat16 when used with torch.compile
+        # bfloat16 is problematic with precisions so we keep an implementation with full precision
+        if model.config._experts_implementation == "grouped_mm":
+            model.set_experts_implementation("batched_mm")
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
