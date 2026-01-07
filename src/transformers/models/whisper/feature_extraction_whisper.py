@@ -211,6 +211,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec = (log_spec + 4.0) / 4.0
 
         if return_tensors:
+            # Move to CPU for compatibility - vLLM serialization requires CPU tensors
+            # The speedup comes from GPU-accelerated STFT/matmul and cached window/mel_filters
+            if log_spec.device.type != "cpu":
+                log_spec = log_spec.cpu()
             # Sync for accurate timing when using GPU
             if device != "cpu":
                 torch.cuda.synchronize()
