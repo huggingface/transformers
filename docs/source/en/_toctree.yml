@@ -127,8 +127,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
   title: Inference
 - isExpanded: false
   sections:
@@ -228,6 +226,15 @@
   - local: quantization/contribute
     title: Contribute
   title: Quantization
+- isExpanded: false
+  sections:
+  - local: community_integrations/vllm
+    title: vLLM
+  - local: community_integrations/sglang
+    title: SGLang
+  - local: community_integrations/transformers_as_backend
+    title: Building a compatible model backend for inference
+  title: Community integrations
 - isExpanded: false
   sections:
   - sections:
