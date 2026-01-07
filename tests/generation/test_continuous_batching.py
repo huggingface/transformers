@@ -212,7 +212,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
         tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
         input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
-        print(f"{input_ids[0] = } {type(input_ids[0]) = }")
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
@@ -504,3 +503,43 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         }).get_expectation()  # fmt: skip
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+
+    @parameterized.expand([True, False])
+    @require_torch_accelerator
+    def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        user_messages = [
+            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+        ]
+        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+        # Generation with continuous batching
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+        model = model.to(torch_device).eval()
+        model.generation_config.max_new_tokens = 30
+        model.generation_config.do_sample = False
+
+        # Generation with continuous batching
+        manager_cm = model.continuous_batching_context_manager(
+            allow_block_sharing=allow_block_sharing, block=True, timeout=5
+        )
+        # Main loop
+        results = []
+        with manager_cm as manager:
+            manager.num_return_sequences = 2
+            manager.add_requests(inputs=input_ids, max_new_tokens=30)
+            requests_left = 2
+            while requests_left:
+                result = manager.get_result(timeout=1)
+                if result and result.is_finished():
+                    results.append(result)
+                    requests_left -= 1
+                else:
+                    if not manager.is_running():
+                        break
+
+        self.assertEqual(len(results), 2, f"Expected 2 results, but got {len(results) = }")
+        self.assertEqual(results[0].generated_tokens, results[1].generated_tokens)
