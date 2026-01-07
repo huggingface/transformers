@@ -122,7 +122,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if isinstance(vocab, list):
                     vocab = list(map(tuple, vocab))  # TODO just for now
             elif cls.model.__name__ == "Unigram":
-                vocab = list(map(tuple, vocab))
+                if vocab and isinstance(vocab[0], (list, tuple)):
+                    vocab = [tuple(item) for item in vocab]
             elif cls.model.__name__ == "WordLevel":
                 vocab = {token: i for i, token in enumerate(vocab)}
             elif cls.model.__name__ == "BPE" or cls.model.__name__ == "WordPiece":
