@@ -199,12 +199,12 @@ class AttentionMaskVisualizer:
             if "token_type_ids" in inputs:  # TODO inspect signature of update causal mask
                 kwargs["token_type_ids"] = inputs["token_type_ids"]
             tokens = processor.tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
-        elif self.config.model_type in TOKENIZER_MAPPING_NAMES:
+        else:
             tokenizer = AutoTokenizer.from_pretrained(self.repo_id)
             tokens = tokenizer.tokenize(input_sentence)
             attention_mask = tokenizer(input_sentence, return_tensors="pt")["attention_mask"]
-        else:
-            raise ValueError(f"Model type {model.config.model_type} does not support attention visualization")
+            if attention_mask is None:
+                raise ValueError(f"Model type {self.config.model_type} does not support attention visualization")
 
         model.config._attn_implementation = "eager"
         model.train()
