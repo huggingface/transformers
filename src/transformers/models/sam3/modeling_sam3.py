@@ -2176,7 +2176,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
         >>> # Pre-compute text embeddings
         >>> text_inputs = processor(text="cat", return_tensors="pt")
-        >>> text_embeds = model.get_text_features(**text_inputs)
+        >>> text_embeds = model.get_text_features(**text_inputs).pooler_output
 
         >>> # Reuse text embeddings for multiple images
         >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
@@ -2294,7 +2294,9 @@ class Sam3Model(Sam3PreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+            text_features = self.get_text_features(
+                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+            ).pooler_output
         else:
             text_features = text_embeds
 
