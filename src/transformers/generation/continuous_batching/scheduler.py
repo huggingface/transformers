@@ -117,7 +117,7 @@ class Scheduler(ABC):
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state)
+            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id, state.allocated_blocks)
             if allocated is None:
                 return False
             state.allocated_blocks += allocated

@@ -222,11 +222,18 @@ class PagedAttentionCache:
         # Block management data structures
         self.allow_block_sharing = allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
+        self.num_full_attention_groups = 0
+        self.num_sliding_attention_groups = 0
+        self.max_sliding_window_blocks_per_request = 0
+
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
                 cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
+                self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                self.num_sliding_attention_groups += 1
+                self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
@@ -237,16 +244,27 @@ class PagedAttentionCache:
         self.blocks_to_complete: dict[str, int] = {}
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> int:
+        needed_blocks = num_requested_blocks * self.num_full_attention_groups
+        if self.num_sliding_attention_groups:
+            blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
+            needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
+        return needed_blocks <= self.get_num_free_blocks()
+
     @traced
-    def allocate_blocks(self, n_blocks: int, state: RequestState) -> int:
+    def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
+        # First check allocation will be successful before starting, to avoid partial allocations
+        if not self.will_allocation_be_successful(n_blocks, allocated_blocks):
+            return None
+        # Allocate blocks across all cache managers
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, state.request_id, self._block_manager)
-            if allocated is None:
-                return None
-            max_allocated = max(max_allocated, allocated)
+            num_allocated_blocks = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
+            if num_allocated_blocks is None:
+                raise ValueError(f"Failed to allocate {n_blocks} blocks for request {request_id}")
+            max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
     @traced
