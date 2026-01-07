@@ -699,7 +699,10 @@ class AutoTokenizer:
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif getattr(config, "tokenizer_class"):
-            tokenizer_class = tokenizer_class_from_name(config.tokenizer_class.replace("Fast", ""))
+            _class = config.tokenizer_class
+            if "PreTrainedTokenizerFast" not in _class:
+                _class = _class.replace("Fast", "")
+            tokenizer_class = tokenizer_class_from_name(_class)
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
