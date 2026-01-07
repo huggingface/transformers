@@ -4083,6 +4083,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             sharded_metadata=sharded_metadata,
             device_map=device_map,
             disk_offload_folder=offload_folder,
+            offload_buffers=offload_buffers,
             dtype=dtype,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
@@ -4146,6 +4147,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         sharded_metadata: Optional[dict] = None,
         device_map: Optional[dict] = None,
         disk_offload_folder: Optional[str] = None,
+        offload_buffers: bool = False,
         dtype: Optional[torch.dtype] = None,
         hf_quantizer: Optional[HfQuantizer] = None,
         device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
@@ -4228,6 +4230,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     device_mesh=device_mesh,
                     disk_offload_index=disk_offload_index,
                     disk_offload_folder=disk_offload_folder,
+                    offload_buffers=offload_buffers,
                 )
             )
 
